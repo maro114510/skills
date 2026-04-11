@@ -1,0 +1,19 @@
+{
+  "name": "maro114510-agent-skills",
+  "owner": {
+    "name": "Atsuki Nohira"
+  },
+  "metadata": {
+    "description": ""
+  },
+  "plugins": [
+    {
+      "name": "agent-skills",
+      "source": {
+        "source": "github",
+        "repo": "maro114510/skills",
+      },
+      "description": ""
+    }
+  ]
+}
