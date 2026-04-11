@@ -1,12 +1,11 @@
 {
   "name": "skills",
-  "description": ""
-  "version": "0.1.0",
+  "description": "Personal skills for Claude Code — create-pr and more.",
+  "version": "0.2.0",
   "author": {
-    "name": "Atsuki Nohira",
+    "name": "Atsuki Nohira"
   },
   "homepage": "https://github.com/maro114510/skills",
   "repository": "https://github.com/maro114510/skills",
-  "license": "MIT",
-  "commands": "./.claude/commands"
+  "license": "MIT"
 }
