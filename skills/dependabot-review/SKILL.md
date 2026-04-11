@@ -4,6 +4,7 @@ description: >
   Dependabot の PR を後方互換性の観点でレビューするスキル。
   「dependabotのPRをレビューして」「依存関係の更新を確認して」「dependabotを見て」
   といった依頼で使うこと。引数に PR 番号または URL を渡す。
+disable-model-invocation: true
 allowed-tools: WebFetch, Bash(gh pr view:*), Bash(gh pr diff:*), Bash(gh pr checks:*), Bash(gh pr review:*)
 argument-hint: "<pr-number or url>"
 ---
