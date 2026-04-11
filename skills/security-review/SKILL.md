@@ -1,0 +1,136 @@
+---
+name: security-review
+description: >
+  PR のセキュリティレビューを行うスキル。PR 番号を引数に受け取り、差分のみを対象に
+  OWASP Top 10・CWE・CVSS に基づく脆弱性を検出して重大度付きで報告する。
+  「セキュリティレビューして」「脆弱性を調べて」「この PR は安全か」「認証ロジックを確認して」
+  「シークレットが漏れていないか」「インジェクションのリスクを見て」「バグバウンティ視点で」
+  「ペネトレーションテスト観点で」といった依頼で積極的に使うこと。
+  引数に PR 番号・ファイルパス・`deps`（依存関係監査）を渡せる。
+allowed-tools: Bash(gh pr view:*), Bash(gh pr diff:*), Bash(git diff:*), Bash(git log:*), Bash(grep:*), Read, Glob
+argument-hint: "<pr-number | file-path> [deps]"
+---
+
+# security-review
+
+PR の差分を対象に、ホワイトハッカー・バグバウンティの視点でセキュリティ上の問題を発見し、
+OWASP・CWE・CVSS に基づく重大度付きで報告する。
+
+## Step 1. スコープ確定と対象コードの取得
+
+`$ARGUMENTS` を解析する:
+
+- 数字（PR 番号）→ `gh pr diff <number>` で差分取得、`gh pr view <number> --json title,files` で文脈把握
+- ファイルパス → Read で対象ファイルを読み込む
+- 引数なし → `git diff origin/main...HEAD` で現ブランチの変更を取得
+- `deps` が含まれる → Step 4（依存関係監査）を実施する
+
+**スコープの鉄則**: 差分（追加・変更行）のみが対象。変更されていない既存コードはスキャン対象外。
+ただしシークレット系は PR 内で追加されたファイル全体も対象とする。
+
+中断条件:
+- PR が存在しない、または差分が空 → ユーザーに報告して停止
+
+## Step 2. 変更の分類と参照ファイルの選択的ロード
+
+差分を読んで変更カテゴリを特定し、**必要な参照のみ**を読み込む。
+
+**カテゴリと対応参照（該当するもののみ読む）:**
+
+| 差分に含まれるもの | 読む参照 |
+|---|---|
+| 認証・セッション・JWT・OAuth | `references/owasp-top10.md`（A06・A07 のみ参照） |
+| SQL・クエリ・コマンド実行・テンプレート | `references/owasp-top10.md`（A03・A05 のみ参照） |
+| 暗号化・ハッシュ・証明書・シークレット | `references/owasp-top10.md`（A04・A10 のみ参照） |
+| アクセス制御・API・CORS | `references/owasp-top10.md`（A01・A02 のみ参照） |
+| ファイルアップロード・デシリアライズ | `references/vulnerability-patterns.md` |
+| 上記のどれかで詳細パターン照合が必要 | `references/vulnerability-patterns.md` |
+
+参照を読む際は該当セクションのみを参照すること。ファイル全体を読む必要はない。
+変更が設定変更・ドキュメント・テストのみの場合は参照を読まずに直接 Step 3 へ進む。
+
+## Step 3. セキュリティ分析
+
+差分の追加行（`+` で始まる行）を中心に以下を確認する。
+
+### 3.1 インジェクション系（差分内のみ）
+
+ユーザー入力がそのまま以下に渡されていないか:
+- SQL / NoSQL クエリの文字列結合
+- シェルコマンド実行（`exec`・`subprocess`・`system` に変数を直接渡す）
+- テンプレートエンジンへの直接埋め込み
+- HTML 出力への未エスケープ出力（XSS）
+
+### 3.2 認証・認可（新規エンドポイント・関数に注目）
+
+- 新規エンドポイントに認証ミドルウェアが適用されているか
+- オブジェクト取得時にオーナー確認があるか（IDOR）
+- JWT を `decode` のみで検証していないか（`verify` と混同）
+- パスワードを平文比較・MD5 でハッシュしていないか
+
+### 3.3 シークレット・認証情報（差分の追加行）
+
+```bash
+# PR差分の追加行のみ対象（全ファイルスキャンは行わない）
+gh pr diff <number> | grep "^+" | grep -iE \
+  "(password|secret|api_key|apikey|token|credential|private_key)\s*[:=]\s*['\"][^'\"]{6,}"
+
+# クラウドキー固有パターン
+gh pr diff <number> | grep "^+" | grep -E "(AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{35}|sk-[a-zA-Z0-9]{48}|ghp_[a-zA-Z0-9]{36})"
+```
+
+### 3.4 その他の確認ポイント
+
+- ファイルパスにユーザー入力が含まれ `../` で脱出できないか（パストラバーサル）
+- `debug=True`・`NODE_ENV=development` が本番設定に混入していないか
+- セキュリティヘッダー（CSP・HSTS・X-Frame-Options）の削除・弱体化
+
+## Step 4. 依存関係監査（`deps` 引数指定時のみ）
+
+`deps` が指定された場合のみ以下を実行する:
+
+```bash
+npm audit --json 2>/dev/null | head -50   # Node.js
+pip-audit 2>/dev/null | head -30          # Python
+govulncheck ./... 2>/dev/null | head -30  # Go
+```
+
+コマンドが存在しない場合は変更された `package.json`・`requirements.txt`・`go.mod` の
+主要パッケージを確認するにとどめる。
+
+## Step 5. 報告書の出力
+
+### 重大度（CVSS ベース）
+
+| 重大度 | CVSS | 基準 |
+|--------|------|------|
+| Critical | 9.0+ | 認証不要・リモートから即座に悪用・RCE・全データ漏洩 |
+| High | 7.0–8.9 | 認証済みユーザーが特権昇格・機密データ漏洩 |
+| Medium | 4.0–6.9 | 条件付き悪用・部分的な情報漏洩 |
+| Low | 0.1–3.9 | 実環境での悪用が困難 |
+| Info | — | 改善推奨（脆弱性ではない） |
+
+### 出力フォーマット
+
+```
+## セキュリティレビュー: PR #<番号> / <対象>
+
+### サマリー
+Critical: N件 / High: N件 / Medium: N件 / Low: N件
+
+### 発見事項
+
+#### [CRITICAL] <タイトル>
+- **場所**: `path/to/file.ts:行番号`
+- **カテゴリ**: OWASP A0X:2021 / CWE-XXX
+- **攻撃シナリオ**: 攻撃者がどう悪用するか（1〜2文）
+- **修正**: 具体的な修正方法またはコード例
+- **参考**: https://cheatsheetseries.owasp.org/...
+
+### 判定
+- 問題なし → マージ可
+- Medium 以下のみ → 今スプリント内に対応したうえでマージ可
+- High 以上あり → Critical・High を解消してから再レビューを依頼
+```
+
+問題が見つからない場合も確認したカテゴリと根拠を明示すること（証拠なき「クリーン」宣言は不可）。
