@@ -8,10 +8,10 @@
   },
   "plugins": [
     {
-      "name": "agent-skills",
+      "name": "skills",
       "source": {
         "source": "github",
-        "repo": "maro114510/skills",
+        "repo": "maro114510/skills"
       },
       "description": ""
     }
