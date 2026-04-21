@@ -53,14 +53,16 @@ The body of SKILL.md is the full prompt given to the model when the skill is inv
 
 A skill may include additional reference files (e.g., `skills/<name>/references/`) for large static documents the prompt pulls in.
 
-## Adding a New Skill
+## Adding or Modifying a Skill
 
-1. Create `skills/<skill-name>/SKILL.md` with the frontmatter above.
+1. Create `skills/<skill-name>/SKILL.md` with the frontmatter above (new skill), or edit the existing `SKILL.md` (modification).
 2. Write the prompt body in Japanese (this repo's convention) or match the target repo's language.
-3. Run `claude plugin validate .` to confirm the manifest is still valid.
-4. Open a PR — CI will validate and test installation automatically.
-
-Do **not** bump the version in `plugin.json` or `marketplace.json` per skill addition; version bumps are release-level decisions.
+3. **Bump the version in `plugin.json`** — `claude plugin update` uses the version number to detect changes, so subscribers will not receive updates without a bump. Use semver:
+   - Patch (`0.3.0` → `0.3.1`): fixing ambiguity or bugs in an existing skill body
+   - Minor (`0.3.0` → `0.4.0`): adding a new skill or adding meaningful new capability to an existing one
+   - Major (`0.3.0` → `1.0.0`): breaking changes to skill interfaces or removing skills
+4. Run `claude plugin validate .` to confirm the manifest is still valid.
+5. Open a PR — CI will validate and test installation automatically.
 
 ## Conventions
 
