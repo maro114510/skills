@@ -48,7 +48,7 @@ OWASP・CWE・CVSS に基づく重大度付きで報告する。
 
 参照を読む際は該当セクションのみを参照すること。ファイル全体を読む必要はない。
 変更が設定変更・ドキュメント・テストのみの場合は参照を読まずに直接 Step 3 へ進む。
-設定変更の例: `.github/workflows/`・`k8s/`・`docker-compose.yml`・`Dockerfile`・`nginx.conf`・`*.yaml`（アプリコード変更を含まないもの）
+設定変更の例: `.github/workflows/`・`k8s/`・`docker-compose.yml`・`Dockerfile`・`nginx.conf`・`*.yaml`（新規ファイル追加・既存ファイル変更ともに含む。アプリコード変更を伴わないもの）
 
 ## Step 3. セキュリティ分析
 
