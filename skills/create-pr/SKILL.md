@@ -7,7 +7,7 @@ description: >
   PR を作りたい、プルリクエストを出したい、レビューに出したい、といった依頼でも使うこと。
 disable-model-invocation: true
 allowed-tools: Bash, Read, Glob, Grep
-argument-hint: "[draft] [base <branch>]"
+argument-hint: "[en|ja] [draft] [base <branch>]"
 ---
 
 # create-pr
@@ -18,10 +18,12 @@ argument-hint: "[draft] [base <branch>]"
 
 `$ARGUMENTS` を解析する:
 
-- 引数なし → ベースブランチ自動検出、通常 PR
+- 引数なし → ベースブランチ自動検出、通常 PR、言語自動検出
+- `en` → PR description の言語を英語に固定（言語自動検出をスキップ）
+- `ja` → PR description の言語を日本語に固定（言語自動検出をスキップ）
 - `draft` → ドラフト PR
 - `base <branch>` → ベースブランチ指定
-- 組み合わせ可（例: `draft base develop`）
+- 組み合わせ可（例: `en draft base develop`、`ja base main`）
 
 ## Step 1. コンテキスト収集 + PR テンプレートの検出
 
@@ -90,11 +92,19 @@ git diff <base>...HEAD
 
 ### 3.1 言語の決定
 
-リポジトリの言語慣習を以下の順で判定し、PR description とユーザーへの全メッセージに適用する:
+PR description とユーザーへの全メッセージに適用する言語を決定する。
 
-1. 既存 PR の description 言語（`gh pr list --limit 5` で確認）
+**引数で言語が指定された場合（`en` または `ja`）**: その言語を使用し、以下の自動検出はスキップする。
+
+**引数に言語指定がない場合**: 必ず以下を Bash で実行して自動検出する（コマンドをユーザーに提示するだけで終わらせない）:
+
+```bash
+gh pr list --limit 5
+```
+
+1. 既存 PR の description 言語（上記コマンドの結果で確認）
 2. コミットメッセージの言語
-3. 判断つかなければ英語
+3. コマンドが失敗またはPRが0件の場合は英語
 
 ### 3.2 テンプレートが存在する場合
 
@@ -168,27 +178,33 @@ Step 1.2 で取得したテンプレートの内容に必ず従う（テンプ�
 
 ## Step 5. メタデータの検討
 
-PR 作成前に以下を確認・提案する。ユーザーの判断を仰いだうえで `gh pr create` のオプションに反映する。
+PR 作成前に以下の gh コマンドを必ず Bash で実行し、結果をもとにユーザーへ選択肢を提案する。
+コマンドをユーザーに提示するだけで実行しないことを禁止する。
+**Step 5 の全確認が完了してからStep 6 に進む**（ユーザーの応答を待ってから `gh pr create` を実行する）。
 
 **5.1 Assignee**
 
-`--assignee @me` を付与することを提案する。
+`--assignee @me` を付与する（デフォルト）。
 
 **5.2 Labels**
+
+必ず以下を Bash で実行する:
 
 ```bash
 gh label list
 ```
 
-変更の種類（feat / fix / refactor 等）と影響範囲を照らし合わせ、適切なラベルを提案する。
+実行結果から変更の種類（feat / fix / refactor 等）と影響範囲に合うラベルをユーザーへ提案し、使用するラベルの確認を取る。
 
 **5.3 Milestone**
 
+必ず以下を Bash で実行する:
+
 ```bash
-gh milestone list
+gh api repos/{owner}/{repo}/milestones
 ```
 
-オープンなマイルストーンがあれば、変更内容との関連を確認して紐づけを提案する。
+オープンなマイルストーンがあれば、変更内容との関連を確認して紐づけをユーザーへ提案し、使用するマイルストーンの確認を取る。
 
 **5.4 Issue リンク**
 
@@ -202,7 +218,9 @@ Step 2.3 で抽出した Issue 番号を description に含めていることを
 git push -u origin <current-branch>
 ```
 
-**6.2 PR 作成**
+**6.2 PR 作成（必須実行）**
+
+以下のコマンドを必ず Bash で実行する。コマンドをそのままユーザーに提示するだけで終わらせることを禁止する:
 
 ```bash
 gh pr create \
@@ -218,6 +236,12 @@ EOF
   [--milestone "<milestone>"]
 ```
 
-**6.3 完了**
+**6.3 完了（必須実行）**
 
-作成後、PR の URL を表示し `gh pr view --web` でブラウザを開く。
+PR 作成後、必ず以下を Bash で実行する。この手順を省略することを禁止する:
+
+```bash
+gh pr view --web
+```
+
+PR の URL をユーザーに表示する。
