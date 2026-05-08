@@ -196,7 +196,7 @@ gh label list
 必ず以下を Bash で実行する:
 
 ```bash
-gh milestone list
+gh api repos/{owner}/{repo}/milestones
 ```
 
 オープンなマイルストーンがあれば、変更内容との関連を確認して紐づけをユーザーへ提案し、使用するマイルストーンの確認を取る。
