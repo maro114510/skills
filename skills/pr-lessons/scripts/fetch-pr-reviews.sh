@@ -13,8 +13,8 @@ set -euo pipefail
 REPO="${1:-}"
 SINCE="${2:-}"
 
-if [ -z "$REPO" ] || [ -z "$SINCE" ]; then
-  echo "Usage: $0 <owner/repo> <since-YYYY-MM-DD>" >&2
+if [ -z "${REPO}" ] || [ -z "${SINCE}" ]; then
+  echo "Usage: ${0} <owner/repo> <since-YYYY-MM-DD>" >&2
   exit 3
 fi
 
@@ -30,10 +30,10 @@ mkdir -p /tmp/pr-lessons/raw
 find /tmp/pr-lessons -maxdepth 1 -name "batch-*.md" -delete
 
 # --- Step 3: PR 一覧取得 ---
-echo "[1/3] PR 一覧を取得中 ($REPO, since $SINCE)..."
+echo "[1/3] PR 一覧を取得中 (${REPO}, since ${SINCE})..."
 gh pr list \
   --author @me \
-  --repo "$REPO" \
+  --repo "${REPO}" \
   --state all \
   --json number,title,url,createdAt,mergedAt,state \
   --limit 200 \
@@ -45,10 +45,10 @@ jq --arg since "${SINCE}T00:00:00Z" \
   > /tmp/pr-lessons/pr-list-filtered.json
 
 COUNT=$(jq length /tmp/pr-lessons/pr-list-filtered.json)
-echo "       $COUNT 件の PR を検出"
+echo "       ${COUNT} 件の PR を検出"
 
-if [ "$COUNT" -eq 0 ]; then
-  echo "ERROR: $SINCE 以降の PR が見つかりません。'since' の日付を早めてください。" >&2
+if [ "${COUNT}" -eq 0 ]; then
+  echo "ERROR: ${SINCE} 以降の PR が見つかりません。'since' の日付を早めてください。" >&2
   exit 1
 fi
 
@@ -59,35 +59,35 @@ SKIPPED_TITLES=()
 TOTAL=0
 
 while IFS= read -r pr_json; do
-  NUMBER=$(echo "$pr_json" | jq -r '.number')
-  TITLE=$(echo "$pr_json"  | jq -r '.title')
+  NUMBER=$(echo "${pr_json}" | jq -r '.number')
+  TITLE=$(echo "${pr_json}"  | jq -r '.title')
 
   # (a) PR 基本情報 + ディスカッションコメント
-  if ! gh pr view "$NUMBER" --repo "$REPO" \
+  if ! gh pr view "${NUMBER}" --repo "${REPO}" \
       --json number,title,body,comments \
       > /tmp/pr-lessons/raw/pr-${NUMBER}-base.json 2>/dev/null; then
-    echo "  SKIP #$NUMBER: データ取得失敗"
-    SKIPPED_NUMS+=("$NUMBER")
-    SKIPPED_TITLES+=("$TITLE")
+    echo "  SKIP #${NUMBER}: データ取得失敗"
+    SKIPPED_NUMS+=("${NUMBER}")
+    SKIPPED_TITLES+=("${TITLE}")
     continue
   fi
 
   # (b) レビュー本体（APPROVED / CHANGES_REQUESTED / COMMENTED）
-  if ! gh api "repos/$REPO/pulls/$NUMBER/reviews" \
+  if ! gh api "repos/${REPO}/pulls/${NUMBER}/reviews" \
       > /tmp/pr-lessons/raw/pr-${NUMBER}-reviews.json 2>/dev/null; then
-    echo "  SKIP #$NUMBER: レビュー取得失敗"
-    SKIPPED_NUMS+=("$NUMBER")
-    SKIPPED_TITLES+=("$TITLE")
+    echo "  SKIP #${NUMBER}: レビュー取得失敗"
+    SKIPPED_NUMS+=("${NUMBER}")
+    SKIPPED_TITLES+=("${TITLE}")
     rm -f /tmp/pr-lessons/raw/pr-${NUMBER}-base.json
     continue
   fi
 
   # (c) インラインレビューコメント
-  if ! gh api "repos/$REPO/pulls/$NUMBER/comments" \
+  if ! gh api "repos/${REPO}/pulls/${NUMBER}/comments" \
       > /tmp/pr-lessons/raw/pr-${NUMBER}-inline.json 2>/dev/null; then
-    echo "  SKIP #$NUMBER: インラインコメント取得失敗"
-    SKIPPED_NUMS+=("$NUMBER")
-    SKIPPED_TITLES+=("$TITLE")
+    echo "  SKIP #${NUMBER}: インラインコメント取得失敗"
+    SKIPPED_NUMS+=("${NUMBER}")
+    SKIPPED_TITLES+=("${TITLE}")
     rm -f /tmp/pr-lessons/raw/pr-${NUMBER}-base.json \
           /tmp/pr-lessons/raw/pr-${NUMBER}-reviews.json
     continue
@@ -118,15 +118,15 @@ while IFS= read -r pr_json; do
     (.discussion | if type == "array" then length else 0 end)
   ' /tmp/pr-lessons/raw/pr-${NUMBER}.json)
 
-  if [ "$HAS_CONTENT" -eq 0 ]; then
-    echo "  SKIP #$NUMBER: レビューなし"
-    SKIPPED_NUMS+=("$NUMBER")
-    SKIPPED_TITLES+=("$TITLE")
+  if [ "${HAS_CONTENT}" -eq 0 ]; then
+    echo "  SKIP #${NUMBER}: レビューなし"
+    SKIPPED_NUMS+=("${NUMBER}")
+    SKIPPED_TITLES+=("${TITLE}")
     rm -f /tmp/pr-lessons/raw/pr-${NUMBER}.json
     continue
   fi
 
-  echo "  OK   #$NUMBER: $TITLE"
+  echo "  OK   #${NUMBER}: ${TITLE}"
   TOTAL=$((TOTAL + 1))
 
 done < <(jq -c '.[]' /tmp/pr-lessons/pr-list-filtered.json)
@@ -135,9 +135,9 @@ done < <(jq -c '.[]' /tmp/pr-lessons/pr-list-filtered.json)
 echo "[3/3] 結果サマリを出力中..."
 
 jq -n \
-  --arg repo   "$REPO" \
-  --arg since  "$SINCE" \
-  --argjson total   "$TOTAL" \
+  --arg repo   "${REPO}" \
+  --arg since  "${SINCE}" \
+  --argjson total   "${TOTAL}" \
   --argjson skipped "${#SKIPPED_NUMS[@]}" \
   '{repo: $repo, since: $since, total_with_reviews: $total, total_skipped: $skipped}' \
   > /tmp/pr-lessons/summary.json
@@ -154,10 +154,10 @@ print(json.dumps([{'number': int(n), 'title': t} for n, t in zip(nums, titles)])
   "$(IFS='|'; echo "${SKIPPED_TITLES[*]:-}")" \
   > /tmp/pr-lessons/skipped.json
 
-echo "       レビューあり: $TOTAL 件 / スキップ: ${#SKIPPED_NUMS[@]} 件"
+echo "       レビューあり: ${TOTAL} 件 / スキップ: ${#SKIPPED_NUMS[@]} 件"
 echo "       Raw files: $(ls /tmp/pr-lessons/raw/pr-*.json 2>/dev/null | wc -l | tr -d ' ') 件"
 
-if [ "$TOTAL" -eq 0 ]; then
+if [ "${TOTAL}" -eq 0 ]; then
   echo "ERROR: 全 PR にレビューがありませんでした。" >&2
   exit 2
 fi
