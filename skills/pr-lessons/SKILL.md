@@ -54,6 +54,8 @@ date -v-90d +%Y-%m-%d
 
 ```bash
 mkdir -p /tmp/pr-lessons/raw
+# 前回実行の残骸を削除（新実行の汚染防止）
+find /tmp/pr-lessons -maxdepth 1 -name "batch-*.md" -delete
 ```
 
 ---
@@ -120,8 +122,9 @@ jq -s '{
 
 一時ファイル（`*-base.json` / `*-reviews.json` / `*-inline.json`）は削除して構わない。
 
-**レビューが一件もない PR はスキップ**: `reviews` と `inline` が両方空配列かつ `discussion` が空の場合。
-スキップした PR 番号は後で一覧を報告する。
+**レビューが一件もない PR はスキップ**: 結合後 JSON の `reviews` と `inline` が両方空配列かつ `discussion`（= `gh pr view` の `comments` フィールドを jq で `discussion` キーにマッピングしたもの）が空の場合。スキップした PR 番号は後で一覧を報告する。
+
+**全 PR がスキップされた場合**: スキップ一覧をユーザーに報告して終了する。`lessons-summary.md` は生成しない。
 
 `gh` が認証エラーで失敗した場合は `gh auth status` を実行し、認証状態をユーザーに報告して停止する。
 
