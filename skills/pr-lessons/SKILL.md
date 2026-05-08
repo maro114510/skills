@@ -20,6 +20,9 @@ argument-hint: "[repo <owner/repo>] [since <YYYY-MM-DD>]"
 自分が作成した PR に付いたレビューコメントを収集・分析し、
 技術・セキュリティ・組織固有の規約という3観点で教訓を抽出した Markdown を生成する。
 
+データ収集（決定論的処理）はスクリプト `scripts/fetch-pr-reviews.sh` に委譲し、
+このプロンプトは「引数解釈」「分析」「Markdown 生成」に集中する。
+
 ---
 
 ## Step 1: 引数のパースとデフォルト値の決定
@@ -50,89 +53,36 @@ date -v-90d +%Y-%m-%d
 
 ---
 
-## Step 2: 作業ディレクトリの準備
+## Step 2: データ収集スクリプトの実行
+
+スクリプトを探して実行する：
 
 ```bash
-mkdir -p /tmp/pr-lessons/raw
-# 前回実行の残骸を削除（新実行の汚染防止）
-find /tmp/pr-lessons -maxdepth 1 -name "batch-*.md" -delete
+# スクリプトのパスを特定（インストール済み or ローカル開発どちらにも対応）
+SCRIPT=$(find ~/.claude/plugins -name "fetch-pr-reviews.sh" -path "*/pr-lessons/*" 2>/dev/null | head -1)
+# プラグイン経由で見つからない場合は git リポジトリから探す
+[ -z "$SCRIPT" ] && SCRIPT=$(find "$(git rev-parse --show-toplevel 2>/dev/null || echo .)" \
+  -name "fetch-pr-reviews.sh" -path "*/pr-lessons/*" 2>/dev/null | head -1)
+
+bash "$SCRIPT" "<owner/repo>" "<since>"
 ```
+
+**スクリプトの終了コードに応じた処理:**
+
+| 終了コード | 意味 | 対応 |
+|---|---|---|
+| 0 | 成功（レビューあり PR が1件以上） | Step 3 へ進む |
+| 1 | 期間内に自分の PR が 0 件 | 期間拡大を提案してユーザーに報告し停止 |
+| 2 | 全 PR がスキップ（レビューなし） | `/tmp/pr-lessons/skipped.json` を Read してスキップ一覧を報告し停止 |
+| 3 | 引数不足 / gh 認証エラー | エラーメッセージをユーザーに報告し停止 |
+
+スクリプト実行後、`/tmp/pr-lessons/summary.json` を Read してリポジトリ名・期間・件数を確認する。
 
 ---
 
-## Step 3: PR 一覧の取得
+## Step 3: バッチ分割と順次 Agent 分析
 
-```bash
-gh pr list \
-  --author @me \
-  --repo <owner/repo> \
-  --state all \
-  --json number,title,url,createdAt,mergedAt,state \
-  --limit 200 \
-  > /tmp/pr-lessons/pr-list.json
-```
-
-取得後、`createdAt` が `<since>` 以降のものだけを `jq` でフィルタリングする：
-
-```bash
-jq '[.[] | select(.createdAt >= "<since>T00:00:00Z")]' \
-  /tmp/pr-lessons/pr-list.json \
-  > /tmp/pr-lessons/pr-list-filtered.json
-```
-
-**フィルタ後に PR が 0 件だった場合:** 期間を広げることを提案してユーザーに報告し、停止する。
-
----
-
-## Step 4: 各 PR のレビューデータ取得
-
-フィルタ後の PR 番号リストを取得し、1件ずつ以下を **順番に** 実行してデータを結合する。
-
-```bash
-# (a) PR 基本情報とディスカッションコメント
-gh pr view <number> --repo <owner/repo> \
-  --json number,title,body,comments \
-  > /tmp/pr-lessons/raw/pr-<number>-base.json
-
-# (b) レビュー本体（APPROVED / CHANGES_REQUESTED / COMMENTED などの review body）
-gh api repos/<owner/repo>/pulls/<number>/reviews \
-  > /tmp/pr-lessons/raw/pr-<number>-reviews.json
-
-# (c) インラインレビューコメント（コード行に対する個別指摘）
-gh api repos/<owner/repo>/pulls/<number>/comments \
-  > /tmp/pr-lessons/raw/pr-<number>-inline.json
-```
-
-3ファイルを jq で結合して1つのファイルに保存する：
-
-```bash
-jq -s '{
-  number:     .[0].number,
-  title:      .[0].title,
-  body:       .[0].body,
-  discussion: .[0].comments,
-  reviews:    .[1],
-  inline:     .[2]
-}' \
-  /tmp/pr-lessons/raw/pr-<number>-base.json \
-  /tmp/pr-lessons/raw/pr-<number>-reviews.json \
-  /tmp/pr-lessons/raw/pr-<number>-inline.json \
-  > /tmp/pr-lessons/raw/pr-<number>.json
-```
-
-一時ファイル（`*-base.json` / `*-reviews.json` / `*-inline.json`）は削除して構わない。
-
-**レビューが一件もない PR はスキップ**: 結合後 JSON の `reviews` と `inline` が両方空配列かつ `discussion`（= `gh pr view` の `comments` フィールドを jq で `discussion` キーにマッピングしたもの）が空の場合。スキップした PR 番号は後で一覧を報告する。
-
-**全 PR がスキップされた場合**: スキップ一覧をユーザーに報告して終了する。`lessons-summary.md` は生成しない。
-
-`gh` が認証エラーで失敗した場合は `gh auth status` を実行し、認証状態をユーザーに報告して停止する。
-
----
-
-## Step 5: バッチ分割と順次 Agent 分析
-
-レビューが存在する PR を **3 件ずつのバッチ** に分割する。
+`/tmp/pr-lessons/raw/` 内の `pr-*.json` ファイルを確認し、PR を **3 件ずつのバッチ** に分割する。
 
 各バッチについて **順次（直列）** で Agent を起動する。並列起動は行わない。
 
@@ -174,9 +124,8 @@ JSON の構造:
 ## 出力フォーマット
 
 以下の Markdown を /tmp/pr-lessons/batch-<B>.md に書き込む（Write ツールを使う）。
-各教訓は H3 見出し＋説明段落＋参照行の3要素で構成し、`---` で区切ること。
+各教訓は H4（####）見出し＋説明段落＋参照行の3要素で構成し、`---` で区切ること。
 
----
 ## バッチ <B>（PR #<N1>「<タイトル>」, #<N2>「<タイトル>」, ...）
 
 ### 技術的な指摘
@@ -184,7 +133,7 @@ JSON の構造:
 #### [教訓タイトル：動詞で始める短いフレーズ]
 
 説明文。なぜ問題か・どうすればよいかを1〜3文で書く。
-コード例があれば バッククォートで示す。
+コード例があればバッククォートで示す。
 
 **参照 PR**: #<番号>「<PR タイトル>」（レビュアー: <名前>）
 
@@ -196,23 +145,11 @@ JSON の構造:
 
 ### セキュリティ・品質保証
 
-#### [教訓タイトル]
-
-説明文。
-
-**参照 PR**: #<番号>「<PR タイトル>」（レビュアー: <名前>）
-
----
+...
 
 ### 組織固有の規約・慣習
 
-#### [教訓タイトル]
-
-説明文。
-
-**参照 PR**: #<番号>「<PR タイトル>」（レビュアー: <名前>）
-
----
+...
 
 レビューコメントが存在しない観点は見出しごと省略してよい。
 教訓が読み取れないコメント（承認のみ、雑談など）は無視してよい。
@@ -220,10 +157,13 @@ JSON の構造:
 
 ---
 
-## Step 6: 全バッチの統合
+## Step 4: 全バッチの統合
 
 全バッチの処理が完了したら、全 `/tmp/pr-lessons/batch-*.md` を Read で読み込み、
 以下のルールで統合し、カレントディレクトリの `lessons-summary.md` に Write で保存する。
+
+統合時、バッチの H4（`####`）教訓見出しを H3（`###`）に昇格し、
+H3（`###`）観点見出しを H2（`##`）に昇格する。
 
 ### 統合ルール
 
@@ -263,35 +203,13 @@ JSON の構造:
 
 ## 2. セキュリティ・品質保証
 
-### [教訓タイトル]
-
-説明文。
-
-**参照 PR**: #xxx「PR タイトル」
-
----
+...
 
 ## 3. この組織固有の規約・文化的な慣習
 
-### [教訓タイトル]
-
-説明文。
-
-**参照 PR**: #xxx「PR タイトル」
+...
 
 ---
 
 *生成日: <today> | スキル: pr-lessons*
 ```
-
----
-
-## エラー処理まとめ
-
-| 状況 | 対応 |
-|---|---|
-| `gh` 認証エラー | `gh auth status` を実行してユーザーに報告、停止 |
-| フィルタ後 PR 0 件 | 期間拡大を提案してユーザーに報告、停止 |
-| 個別 PR の取得失敗 | スキップし、最後にスキップ一覧を報告 |
-| レビューなし PR | スキップ対象に含める |
-| `/tmp/pr-lessons/` が書き込み不可 | ユーザーに報告して停止 |
