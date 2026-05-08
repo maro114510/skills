@@ -7,7 +7,7 @@ description: >
   PR を作りたい、プルリクエストを出したい、レビューに出したい、といった依頼でも使うこと。
 disable-model-invocation: true
 allowed-tools: Bash, Read, Glob, Grep
-argument-hint: "[draft] [base <branch>]"
+argument-hint: "[en|ja] [draft] [base <branch>]"
 ---
 
 # create-pr
@@ -18,10 +18,12 @@ argument-hint: "[draft] [base <branch>]"
 
 `$ARGUMENTS` を解析する:
 
-- 引数なし → ベースブランチ自動検出、通常 PR
+- 引数なし → ベースブランチ自動検出、通常 PR、言語自動検出
+- `en` → PR description の言語を英語に固定（言語自動検出をスキップ）
+- `ja` → PR description の言語を日本語に固定（言語自動検出をスキップ）
 - `draft` → ドラフト PR
 - `base <branch>` → ベースブランチ指定
-- 組み合わせ可（例: `draft base develop`）
+- 組み合わせ可（例: `en draft base develop`、`ja base main`）
 
 ## Step 1. コンテキスト収集 + PR テンプレートの検出
 
@@ -90,8 +92,11 @@ git diff <base>...HEAD
 
 ### 3.1 言語の決定
 
-リポジトリの言語慣習を以下の順で判定し、PR description とユーザーへの全メッセージに適用する。
-まず必ず以下を Bash で実行する（コマンドをユーザーに提示するだけで終わらせない）:
+PR description とユーザーへの全メッセージに適用する言語を決定する。
+
+**引数で言語が指定された場合（`en` または `ja`）**: その言語を使用し、以下の自動検出はスキップする。
+
+**引数に言語指定がない場合**: 必ず以下を Bash で実行して自動検出する（コマンドをユーザーに提示するだけで終わらせない）:
 
 ```bash
 gh pr list --limit 5
