@@ -36,7 +36,7 @@ gh pr list \
   --repo "${REPO}" \
   --state all \
   --json number,title,url,createdAt,mergedAt,state \
-  --limit 200 \
+  --limit 1000 \
   > /tmp/pr-lessons/pr-list.json
 
 jq --arg since "${SINCE}T00:00:00Z" \

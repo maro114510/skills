@@ -101,14 +101,14 @@ bash "$SKILL_DIR/scripts/fetch-pr-reviews.sh" "<owner/repo>" "<since>"
 
 ---
 
-## Step 3: バッチ分割と順次 Agent 分析
+## Step 3: バッチ分割と並列 Agent 分析
 
-`/tmp/pr-lessons/raw/pr-*.json` を確認し、**3 件ずつのバッチ**に分割する。
+`/tmp/pr-lessons/raw/pr-*.json` を確認し、**ファイル名の数値順でソートして 15 件ずつのバッチ**に分割する（端数は最終バッチにまとめる）。
 
 `$SKILL_DIR/references/batch-agent-prompt.md` を Read してプロンプトテンプレートを取得し、
 対象ファイルパスとバッチ番号を差し替えて各 Agent に渡す。
 
-**順次（直列）**で Agent を起動する。並列起動は行わない。
+**並列**で全 Agent を同時に起動する。単一メッセージ内で全バッチの Agent 呼び出しを並べること。
 
 ---
 

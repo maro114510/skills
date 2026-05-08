@@ -6,10 +6,10 @@
 
 以下のファイルに保存された GitHub PR のレビューデータを分析し、教訓を抽出してください。
 
-対象ファイル（Read ツールで読み込む）:
+対象ファイル（Read ツールで読み込む、このバッチに含まれる全件を列挙 / 最大 15 件）:
 - /tmp/pr-lessons/raw/pr-<N1>.json
-- /tmp/pr-lessons/raw/pr-<N2>.json  ← バッチに含まれる場合
-- /tmp/pr-lessons/raw/pr-<N3>.json  ← バッチに含まれる場合
+- /tmp/pr-lessons/raw/pr-<N2>.json
+- （以降、バッチに含まれる残りのファイルをすべて列挙する）
 
 ## JSON の構造
 
