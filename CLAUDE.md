@@ -71,15 +71,15 @@ A skill may include additional reference files (e.g., `skills/<name>/references/
 - **`disable-model-invocation: true`**: Use this when the skill should execute as a single-shot prompt without starting an agentic loop. `create-pr` uses this; the skill instructions themselves direct all tool calls.
 - **Tool minimalism**: Declare only the tools a skill actually needs. Prefer scoped `Bash(cmd:*)` over bare `Bash` when the command set is small and predictable.
 
-## ローカル開発セットアップ
+## Local Development Setup
 
-シェルスクリプトと GitHub Actions ワークフローの静的解析を `pre-commit` フックで自動実行する。
+Static analysis for shell scripts and GitHub Actions workflows runs automatically via pre-commit hooks.
 
 ```bash
-# prek のインストール（初回のみ）
+# Install prek (once)
 # https://github.com/j178/prek
 brew install j178/tap/prek   # macOS
 
-# フック有効化（リポジトリルートで実行）
+# Enable hooks (run from repo root)
 prek install
 ```
