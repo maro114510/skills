@@ -17,11 +17,24 @@ argument-hint: "[repo <owner/repo>] [since <YYYY-MM-DD>]"
 
 # pr-lessons
 
-自分が作成した PR に付いたレビューコメントを収集・分析し、
-技術・セキュリティ・組織固有の規約という3観点で教訓を抽出した Markdown を生成する。
+PR レビュー教訓まとめ。責務の分担：
 
-データ収集（決定論的処理）はスクリプト `scripts/fetch-pr-reviews.sh` に委譲し、
-このプロンプトは「引数解釈」「分析」「Markdown 生成」に集中する。
+| 担当 | 処理内容 |
+|---|---|
+| `scripts/fetch-pr-reviews.sh` | データ収集（決定論的: gh 呼び出し・jq 変換） |
+| `references/batch-agent-prompt.md` | バッチ分析 Agent へのプロンプトテンプレート |
+| `references/summary-format.md` | 最終 Markdown のフォーマット仕様 |
+| この SKILL.md | 引数解釈・スクリプト起動・Agent 管理・統合判断 |
+
+## Step 0: スキルディレクトリの特定
+
+```bash
+SKILL_DIR=$(find ~/.claude/plugins -path "*/pr-lessons" -type d 2>/dev/null | head -1)
+[ -z "$SKILL_DIR" ] && SKILL_DIR=$(find "$(git rev-parse --show-toplevel 2>/dev/null || echo .)" \
+  -path "*/pr-lessons" -type d 2>/dev/null | head -1)
+```
+
+以降 `$SKILL_DIR/scripts/` と `$SKILL_DIR/references/` を使う。
 
 ---
 
@@ -35,181 +48,53 @@ argument-hint: "[repo <owner/repo>] [since <YYYY-MM-DD>]"
 | `since <YYYY-MM-DD>` | `since 2025-02-01` | 取得開始日を明示指定 |
 | 省略 | — | 下記デフォルト値を使用 |
 
-**デフォルト値の算出（Bash で実行）:**
-
 ```bash
 # リポジトリ: git remote から自動判定（SSH/HTTPS 両対応）
 git remote get-url origin \
   | sed 's|.*github.com[:/]\(.*\)\.git|\1|' \
   | sed 's|.*github.com[:/]\(.*\)|\1|'
 
-# 取得開始日: 今日から 90 日前（macOS）
-date -v-90d +%Y-%m-%d
-# Linux の場合:
-# date -d '90 days ago' +%Y-%m-%d
+# 取得開始日: 今日から 90 日前（macOS / Linux 自動判定）
+date -v-90d +%Y-%m-%d 2>/dev/null || date -d '90 days ago' +%Y-%m-%d
 ```
 
 リポジトリが特定できない場合はユーザーに `repo <owner/repo>` を指定するよう案内して停止する。
 
 ---
 
-## Step 2: データ収集スクリプトの実行
-
-スクリプトを探して実行する：
+## Step 2: データ収集
 
 ```bash
-# スクリプトのパスを特定（インストール済み or ローカル開発どちらにも対応）
-SCRIPT=$(find ~/.claude/plugins -name "fetch-pr-reviews.sh" -path "*/pr-lessons/*" 2>/dev/null | head -1)
-# プラグイン経由で見つからない場合は git リポジトリから探す
-[ -z "$SCRIPT" ] && SCRIPT=$(find "$(git rev-parse --show-toplevel 2>/dev/null || echo .)" \
-  -name "fetch-pr-reviews.sh" -path "*/pr-lessons/*" 2>/dev/null | head -1)
-
-bash "$SCRIPT" "<owner/repo>" "<since>"
+bash "$SKILL_DIR/scripts/fetch-pr-reviews.sh" "<owner/repo>" "<since>"
 ```
 
-**スクリプトの終了コードに応じた処理:**
+終了コードに応じた処理：
 
 | 終了コード | 意味 | 対応 |
 |---|---|---|
-| 0 | 成功（レビューあり PR が1件以上） | Step 3 へ進む |
-| 1 | 期間内に自分の PR が 0 件 | 期間拡大を提案してユーザーに報告し停止 |
-| 2 | 全 PR がスキップ（レビューなし） | `/tmp/pr-lessons/skipped.json` を Read してスキップ一覧を報告し停止 |
-| 3 | 引数不足 / gh 認証エラー | エラーメッセージをユーザーに報告し停止 |
+| 0 | 成功 | Step 3 へ |
+| 1 | 期間内に自分の PR が 0 件 | 期間拡大を提案して停止 |
+| 2 | 全 PR がスキップ（レビューなし） | `skipped.json` を Read してスキップ一覧を報告して停止 |
+| 3 | 引数不足 / gh 認証エラー | エラーメッセージを報告して停止 |
 
-スクリプト実行後、`/tmp/pr-lessons/summary.json` を Read してリポジトリ名・期間・件数を確認する。
+成功後に `/tmp/pr-lessons/summary.json` を Read してリポジトリ・期間・件数を確認する。
 
 ---
 
 ## Step 3: バッチ分割と順次 Agent 分析
 
-`/tmp/pr-lessons/raw/` 内の `pr-*.json` ファイルを確認し、PR を **3 件ずつのバッチ** に分割する。
+`/tmp/pr-lessons/raw/pr-*.json` を確認し、**3 件ずつのバッチ**に分割する。
 
-各バッチについて **順次（直列）** で Agent を起動する。並列起動は行わない。
+`$SKILL_DIR/references/batch-agent-prompt.md` を Read してプロンプトテンプレートを取得し、
+対象ファイルパスとバッチ番号を差し替えて各 Agent に渡す。
 
-### Agent に渡すプロンプトのテンプレート
-
-```
-以下のファイルに保存された GitHub PR のレビューデータを分析し、教訓を抽出してください。
-
-対象ファイル（Read ツールで読み込む）:
-- /tmp/pr-lessons/raw/pr-<N1>.json
-- /tmp/pr-lessons/raw/pr-<N2>.json  ← バッチに含まれる場合
-- /tmp/pr-lessons/raw/pr-<N3>.json  ← バッチに含まれる場合
-
-JSON の構造:
-- `reviews[].body`: レビュー全体コメント（state: APPROVED / CHANGES_REQUESTED / COMMENTED）
-- `reviews[].user.login`: レビュアーのログイン名
-- `inline[].body`: インラインコメント（コード行への個別指摘）
-- `inline[].path`: 指摘対象のファイルパス
-- `inline[].diff_hunk`: 指摘箇所の diff コンテキスト
-- `discussion[].body`: PR ディスカッションの一般コメント
-
-## 抽出する教訓の観点
-
-以下の3観点を必ず使うこと。各観点の中で教訓を列挙する。
-
-### 観点1: 技術的な指摘（コード品質・設計）
-コードの構造、命名、型安全性、パフォーマンス、アーキテクチャ、テスト設計、
-エラーハンドリング、DRY 原則など、技術的な内容に関する指摘。
-
-### 観点2: セキュリティ・品質保証
-セキュリティ脆弱性、入力バリデーション不足、シークレット露出リスク、
-エラー時の挙動の不備、境界値・エッジケースの考慮漏れなど。
-
-### 観点3: この組織固有の規約・文化的な慣習
-「このプロジェクトでは」「チームのルールとして」「以前も同様の指摘があった」
-などの文脈で言及された、チーム・組織特有のルール、暗黙知、慣習。
-一般的なベストプラクティスと区別して分類すること。
-
-## 出力フォーマット
-
-以下の Markdown を /tmp/pr-lessons/batch-<B>.md に書き込む（Write ツールを使う）。
-各教訓は H4（####）見出し＋説明段落＋参照行の3要素で構成し、`---` で区切ること。
-
-## バッチ <B>（PR #<N1>「<タイトル>」, #<N2>「<タイトル>」, ...）
-
-### 技術的な指摘
-
-#### [教訓タイトル：動詞で始める短いフレーズ]
-
-説明文。なぜ問題か・どうすればよいかを1〜3文で書く。
-コード例があればバッククォートで示す。
-
-**参照 PR**: #<番号>「<PR タイトル>」（レビュアー: <名前>）
-
----
-
-#### [次の教訓タイトル]
-
-...
-
-### セキュリティ・品質保証
-
-...
-
-### 組織固有の規約・慣習
-
-...
-
-レビューコメントが存在しない観点は見出しごと省略してよい。
-教訓が読み取れないコメント（承認のみ、雑談など）は無視してよい。
-```
+**順次（直列）**で Agent を起動する。並列起動は行わない。
 
 ---
 
 ## Step 4: 全バッチの統合
 
-全バッチの処理が完了したら、全 `/tmp/pr-lessons/batch-*.md` を Read で読み込み、
-以下のルールで統合し、カレントディレクトリの `lessons-summary.md` に Write で保存する。
+`$SKILL_DIR/references/summary-format.md` を Read してフォーマット仕様を確認する。
 
-統合時、バッチの H4（`####`）教訓見出しを H3（`###`）に昇格し、
-H3（`###`）観点見出しを H2（`##`）に昇格する。
-
-### 統合ルール
-
-1. **重複排除**: 同じ趣旨の指摘が複数バッチに存在する場合は1つにまとめ、`（複数PRで指摘: N回）` と注記する
-2. **頻度順**: 同じ観点の中では、指摘回数の多い教訓を上位に配置する
-3. **出典を保持**: 各教訓に「初出 PR: #xxx」を残す
-4. **空の観点は省略**: 教訓が一件もない観点は見出しごと省略する
-
-### 出力フォーマット
-
-```markdown
-# PR レビューから学んだ教訓
-
-| 対象リポジトリ | `<owner/repo>` |
-|---|---|
-| 対象期間 | <since> 〜 <today> |
-| 分析した PR 数 | <N> 件（レビューなしでスキップ: <M> 件） |
-| 分析した PR 一覧 | #101「タイトル」, #102「タイトル」, ... |
-
----
-
-## 1. 技術的な指摘（コード品質・設計）
-
-### [教訓タイトル：動詞で始める短いフレーズ]
-
-説明文（1〜3文）。
-
-**参照 PR**: #xxx「PR タイトル」（レビュアー: xxx / 計 N 回指摘）
-
----
-
-### [次の教訓]
-
-...
-
----
-
-## 2. セキュリティ・品質保証
-
-...
-
-## 3. この組織固有の規約・文化的な慣習
-
-...
-
----
-
-*生成日: <today> | スキル: pr-lessons*
-```
+全 `/tmp/pr-lessons/batch-*.md` を Read で読み込み、フォーマット仕様に従って統合し、
+カレントディレクトリの `lessons-summary.md` に Write で保存する。
