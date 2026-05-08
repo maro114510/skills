@@ -1,0 +1,22 @@
+[
+  {"query": "過去3ヶ月の PR についたレビューコメントをまとめて教訓にして", "should_trigger": true},
+  {"query": "自分の PR で何度も同じ指摘を受けてる気がするから整理したい", "should_trigger": true},
+  {"query": "repo kauche/backend のPRレビューから振り返りを作ってほしい", "should_trigger": true},
+  {"query": "コードレビューのフィードバックを観点別にまとめたい", "should_trigger": true},
+  {"query": "pr-lessons 実行して", "should_trigger": true},
+  {"query": "since 2026-01-01 で自分の PR の指摘事項をまとめて", "should_trigger": true},
+  {"query": "最近のPRで指摘されたセキュリティ関連の教訓だけ出して", "should_trigger": true},
+  {"query": "チームから毎回同じこと言われてる気がする。PR を振り返って整理して", "should_trigger": true},
+  {"query": "開発の振り返りしたい。PR履歴から改善点を抽出して", "should_trigger": true},
+  {"query": "去年のレビューで何を学んだかまとめてくれる？", "should_trigger": true},
+  {"query": "このPR #42 をレビューして main との差分を確認", "should_trigger": false},
+  {"query": "git log を見てコミット履歴をまとめて", "should_trigger": false},
+  {"query": "PRを作成して feature/add-auth ブランチで", "should_trigger": false},
+  {"query": "テストコードを書いてほしい。カバレッジを上げたい", "should_trigger": false},
+  {"query": "GitHub の Issue に書かれたバグ報告をまとめて対応方針を決めたい", "should_trigger": false},
+  {"query": "レビュアーを指定してPRをレビュー依頼したい", "should_trigger": false},
+  {"query": "過去のコミットメッセージから CHANGELOG を自動生成して", "should_trigger": false},
+  {"query": "Slack の #dev チャンネルで受けたデザインフィードバックを整理して", "should_trigger": false},
+  {"query": "チームのコーディング規約ドキュメントを作って", "should_trigger": false},
+  {"query": "このコードのセキュリティ脆弱性を調べて", "should_trigger": false}
+]
