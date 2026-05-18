@@ -3,9 +3,9 @@ name: create-pr
 description: >
   Pull Request を作成するスキル。ブランチの差分とコミット履歴を分析し、変更理由・影響範囲・
   改善点・懸念事項を含む高品質な PR description を生成して `gh pr create` で作成する。
-  /create-pr で呼び出す。引数にはベースブランチやドラフト指定などを渡せる。
+  引数にはベースブランチやドラフト指定などを渡せる。
   PR を作りたい、プルリクエストを出したい、レビューに出したい、といった依頼でも使うこと。
-disable-model-invocation: true
+disable-model-invocation: false
 allowed-tools: Bash, Read, Glob, Grep
 argument-hint: "[en|ja] [draft] [base <branch>]"
 ---
