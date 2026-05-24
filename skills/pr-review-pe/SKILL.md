@@ -7,6 +7,7 @@ description: >
   並行安全性の欠如・ハッピーパス偏重）を重点的にチェックする。
   「さっとレビューして」「軽くレビュー」「PE視点でレビュー」「コードレビューして」
   「PRを見て」「差分を確認して」などの依頼で使うこと。引数に PR 番号または URL を渡す。
+context: fork
 allowed-tools: Bash(gh:*, npm:*, go:*, pip:*), WebFetch
 argument-hint: "<pr-number or url>"
 ---

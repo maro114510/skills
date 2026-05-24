@@ -11,6 +11,7 @@ description: >
   「repo <owner/repo> のPRレビューから振り返りを作って」といった依頼で積極的に使うこと。
   引数に `repo <owner/repo>` でリポジトリ、`since <YYYY-MM-DD>` で取得開始日を指定できる。
   指定がない場合はカレントディレクトリの git リポジトリ・直近3か月がデフォルト。
+context: fork
 allowed-tools: Bash, Read, Write, Agent
 argument-hint: "[repo <owner/repo>] [since <YYYY-MM-DD>]"
 ---

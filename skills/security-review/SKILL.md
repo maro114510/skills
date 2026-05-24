@@ -7,6 +7,7 @@ description: >
   「シークレットが漏れていないか」「インジェクションのリスクを見て」「バグバウンティ視点で」
   「ペネトレーションテスト観点で」といった依頼で積極的に使うこと。
   引数に PR 番号・ファイルパス・`deps`（依存関係監査）を渡せる。
+context: fork
 allowed-tools: Bash(gh pr view:*), Bash(gh pr diff:*), Bash(git diff:*), Bash(git log:*), Bash(grep:*), Read, Glob
 argument-hint: "<pr-number | file-path> [deps]"
 ---
