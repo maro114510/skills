@@ -41,7 +41,7 @@ diff から記録する: 変更 .md ファイル一覧・ドキュメント種�
 pr-doc-review-textlint.sh <changed-md-files>
 ```
 
-結果を記録し、各 specialist への入力として提供する (語リストは `references/layer3-ai-instruction.md` § Ambiguity Vocabulary Detection)。
+結果 (検出語・ファイル名・行番号) を記録し、各 specialist への入力として提供する (語リストは `skills/pr-doc-review-pe/references/layer3-ai-instruction.md` § Ambiguity Vocabulary Detection)。
 
 **AI 仕様判定**: 次のいずれかで AI 向けと判定する。
 
@@ -58,20 +58,20 @@ git grep -n "<キーノウン>" -- '*.go' '*.ts' '*.py' '*.java' '*.kt' '*.rb'
 ```
 
 ヒットしない語はユビキタス言語ドリフト候補、ヒット語は定義とドキュメント記述を照合する。
-この手順は必ず実行し、結果をトランスクリプトに残す。
+この手順は必ず実行し、結果をトランスクリプトに残す。Step 3 ubiquitous-language-reviewer の起動プロンプトにゼロヒット語リストと一致コード行を含める。
 
 ## Step 3: Brainstorm via Agent specialists
 
 以下を `Agent` (subagent_type: general-purpose) で並列起動する。
-各 specialist は冒頭で `Read skills/pr-doc-review-pe/references/<該当>.md` を読む。
+各 specialist は冒頭で各行末の `参照:` ファイルをリポジトリルートからのパスで `Read` する。
 低 confidence でも候補を保持し `doc-path:line` + 引用元 + 仮重要度を返す。
 
-- **rationale-reviewer**: Nygard 5 構成要素・Olaf Zimmermann 7 質問・逆生成代替案 3 件生成・Consequences-negative の欠如。参照: `references/layer2-checklists.md` § Design Soundness。
-- **operational-reviewer**: Rollout / Rollback / Multi-DC / Metrics / カスタマーサポート対応の充足。参照: `references/layer2-checklists.md` § Operational Design。
-- **readability-reviewer**: BLUF / ピラミッド原則 / ワーキングメモリ ≤ 7±2 / split-attention / メタ情報 (Audience・Non-Goals・DoD)。参照: `references/layer2-checklists.md` § Cognitive Load, § Meta Information。
-- **ubiquitous-language-reviewer**: Step 2 の git grep 結果を使い、コードとの概念語乖離・Bounded Context 境界超え・同概念の別名混在を検出。参照: `references/layer2-checklists.md` § Existing-Code Alignment。
-- **premortem-reviewer**: プリモーテム失敗シナリオ 3 件・5-Whys 根因分析・暗黙の仮定の可視化・知識の呪い (ジャーゴン定義漏れ・Tapper-side)。参照: `references/layer2-checklists.md` § Implicit Assumptions, § Curse of Knowledge。
-- **ai-instruction-reviewer** (AI 仕様のみ): what/how 分離 (SPDD)・Golden Rule (文脈なし読者テスト)・ambiguity 語検出・negative-only 指示の positive-example 欠如。参照: `references/layer3-ai-instruction.md`。
+- **rationale-reviewer**: Nygard 5 構成要素・Olaf Zimmermann 7 質問・逆生成代替案 3 件生成・Consequences-negative の欠如。参照: `skills/pr-doc-review-pe/references/layer2-checklists.md` § Design Soundness。
+- **operational-reviewer**: Rollout / Rollback / Multi-DC / Metrics / カスタマーサポート対応の充足。参照: `skills/pr-doc-review-pe/references/layer2-checklists.md` § Operational Design。
+- **readability-reviewer**: BLUF / ピラミッド原則 / ワーキングメモリ ≤ 7±2 / split-attention / メタ情報 (Audience・Non-Goals・DoD)。参照: `skills/pr-doc-review-pe/references/layer2-checklists.md` § Cognitive Load, § Meta Information。
+- **ubiquitous-language-reviewer**: Step 2 の git grep 結果を使い、コードとの概念語乖離・Bounded Context 境界超え・同概念の別名混在を検出。参照: `skills/pr-doc-review-pe/references/layer2-checklists.md` § Existing-Code Alignment。
+- **premortem-reviewer**: プリモーテム失敗シナリオ 3 件・5-Whys 根因分析・暗黙の仮定の可視化・知識の呪い (ジャーゴン定義漏れ・Tapper-side)。参照: `skills/pr-doc-review-pe/references/layer2-checklists.md` § Implicit Assumptions, § Curse of Knowledge。
+- **ai-instruction-reviewer** (AI 仕様のみ): what/how 分離 (SPDD)・Golden Rule (文脈なし読者テスト)・ambiguity 語検出・negative-only 指示の positive-example 欠如。参照: `skills/pr-doc-review-pe/references/layer3-ai-instruction.md`。
 
 specialist 共通: 既存コメント・PR description で対処済みの指摘は除外する。
 
@@ -85,7 +85,8 @@ Filter の前に、以下 3 Pillar を specialist 候補から確認する。
 2. **Release / Rollback / Compat.**: マルチ PR 順序・フィーチャーフラグ・ロールバック経路・データ移行順。
 3. **Observability**: 本番で壊れたとき root cause に到達できる metrics / logs / alerts の充足。
 
-Pillar 発見には `[pillar]` マーカーを付与する。Pillar 発見は Confidence-Low でも Filter で除外しない。
+Pillar 発見には `[pillar]` マーカーを指摘事項の severity に並記する (`**[must][pillar]**` 形式)。Pillar 発見は Confidence-Low でも Filter で除外しない。同一 Pillar に属する複数発見で修正アクションが同一の改善提案にまとめられる場合は 1 件にまとめること。
+Mandatory Pillars テーブルと指摘事項の双方に記録する (テーブル: 発見要約、指摘事項: `[must][pillar]` 詳細)。
 
 ## Step 5: Self-Refine
 
@@ -104,7 +105,7 @@ deep 候補が 0〜2 件しかない specialist は「go deeper: design-layer �
 - **Confidence**: High (2+ source 裏付け) / Medium (1 source) / Low (弱い裏付け)。
 - **Severity**: `[must]` (意思決定不能・整合性破壊・リリースリスク) / `[imo]` (改善望ましい) / `[ask]` (設計意図確認) / `[good]` (優れた判断) / `[next]` (今回スコープ外)。`[nits]` は使わない。
 
-Confidence-Low かつ Pillar でない候補は除外し、除外理由を False-Negative log に記録する。
+Confidence-Low かつ Pillar でない候補は除外し、除外理由を False-Negative log (Step 8 の「除外:」行) に記録する。
 
 ## Step 7: Meta-Review
 
@@ -122,9 +123,9 @@ Confidence-Low かつ Pillar でない候補は除外し、除外理由を False
 
 | Pillar | 発見 / N/A |
 |--------|-----------|
-| [pillar] Existing-code alignment | <発見または N/A: 確認根拠> |
-| [pillar] Release / Rollback / Compat. | <発見または N/A: 確認根拠> |
-| [pillar] Observability | <発見または N/A: 確認根拠> |
+| [pillar] Existing-code alignment | <発見または N/A: scope confirmed — ファイル名・セクションを含む 20 語以上の根拠> |
+| [pillar] Release / Rollback / Compat. | <発見または N/A: scope confirmed — ファイル名・セクションを含む 20 語以上の根拠> |
+| [pillar] Observability | <発見または N/A: scope confirmed — ファイル名・セクションを含む 20 語以上の根拠> |
 
 ### 指摘事項
 
