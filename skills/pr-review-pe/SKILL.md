@@ -6,7 +6,6 @@ description: >
   「コードレビューして」「差分レビュー」「PE 視点でレビュー」「PR を見て」などの依頼で使う。
   引数に PR 番号または GitHub URL を渡す。
   Markdown のみの PR は /pr-doc-review-pe を使うこと。
-context: fork
 allowed-tools: Read, Glob, Grep, Bash(pr-review-pe-identify-pr.sh:*, gh pr diff:*, git log:*, git blame:*, git grep:*, rg:*, npm:*, go:*, pip:*, echo:*), WebFetch, Agent
 argument-hint: "<pr-number or url>"
 ---
