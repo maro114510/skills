@@ -82,7 +82,7 @@ Filter の前に、以下 3 Pillar を specialist 候補から確認する。
 
 1. **Existing-code alignment**: ADR・CLAUDE.md・既存実装パターン・ユビキタス言語との整合。
 2. **Release / Rollback / Compat.**: マルチ PR 順序・フィーチャーフラグ・ロールバック経路・データ移行順。
-3. **Observability**: 本番で壊れたとき root cause に到達できる metrics / logs / alerts の充足。
+3. **Observability**: 本番で壊れたとき root cause に到達できる metrics / logs / alerts / traces の充足。
 
 Pillar 発見には `[pillar]` マーカーを指摘事項の severity に並記する (`**[must][pillar]**` 形式)。Pillar 発見は Confidence-Low でも Filter で除外しない。同一 Pillar に属する複数発見で修正アクションが同一の改善提案にまとめられる場合は 1 件にまとめること。
 Mandatory Pillars テーブルと指摘事項の双方に記録する (テーブル: 発見要約、指摘事項: `[must][pillar]` 詳細)。

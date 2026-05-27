@@ -2,7 +2,7 @@
 name: pr-review-pe
 description: >
   コード差分 PR (Layer-1) 専用の Principal Engineer 視点レビュースキル。
-  正確性・アーキテクチャ・スケーラビリティ・セキュリティ・API 設計・エラーハンドリング/並行/リソース・運用性の 7 観点と、Observability Gap、および AI が書いたコード特有のリスク (ハルシネーション依存パッケージ、テスト確認バイアス、並行安全性欠如、ハッピーパス偏重) を検査する。
+  正確性・アーキテクチャ・スケーラビリティ・セキュリティ・API 設計・エラーハンドリング/並行/リソース・運用性の 7 観点と、Mandatory Pillars (既存コード整合・リリース/ロールバック・Observability)、および AI が書いたコード特有のリスク (ハルシネーション依存パッケージ、テスト確認バイアス、並行安全性欠如、ハッピーパス偏重) を検査する。
   「コードレビューして」「差分レビュー」「PE 視点でレビュー」「PR を見て」などの依頼で使う。
   引数に PR 番号または GitHub URL を渡す。
   Markdown のみの PR は /pr-doc-review-pe を使うこと。
@@ -103,7 +103,20 @@ specialist 返却を 1 件ずつ surface / mid / deep に分類する。
 
 deep 候補が 0〜2 件しかない specialist は「go deeper: design-layer の漏れを 2 件追加で出す」プロンプトで再起動する。
 
-## Step 5: Filter
+## Step 5: Mandatory Pillars 確認
+
+Filter の前に、以下 3 Pillar を specialist 候補から確認する。
+各 Pillar について候補がゼロの場合は、担当 specialist を「force-investigate this pillar: <pillar name>」プロンプトで再起動する。
+再起動後も発見なければ `N/A: scope confirmed — <確認した具体的根拠 (ファイルパス・ADR ID・メトリクス名) を 20 語以上で記録>` とする。
+
+1. **Existing-code alignment**: ADR・CLAUDE.md・既存実装パターン・ユビキタス言語との整合。担当: architecture-reviewer。
+2. **Release / Rollback / Compat.**: マルチ PR 順序・フィーチャーフラグ・ロールバック経路・データ移行順。担当: operational-reviewer。
+3. **Observability**: 本番で壊れたとき root cause に到達できる metrics / logs / alerts / traces の充足。担当: operational-reviewer。
+
+Pillar 発見には `[pillar]` マーカーを指摘事項の severity に並記する (`**[must][pillar]**` 形式)。Pillar 発見は Confidence-Low でも Filter で除外しない。同一 Pillar に属する複数発見で修正アクションが同一の改善提案にまとめられる場合は 1 件にまとめること。
+Mandatory Pillars テーブルと指摘事項の双方に記録する (テーブル: 発見要約、指摘事項: `[must][pillar]` 詳細)。
+
+## Step 6: Filter
 
 各候補を 4 軸 (actionable / specific / verifiable / non-redundant) で評価し、Confidence と Severity を割り当てる。
 
@@ -117,14 +130,14 @@ deep 候補が 0〜2 件しかない specialist は「go deeper: design-layer �
 2. PR description の設計意図と矛盾する指摘も廃棄しない: 3 つの reverse-generated alternative intents (各 1 文) を内部生成し、PR description が選択意図をいずれの代替に対しても正当化できていない場合は `[ask]` でその正当化を求める (出力に代替は列挙しない)。
 3. 引用は diff hunk に限らない: { diff hunk / 関連既存コード / 関連 ADR・RFC / CLAUDE.md・プロジェクト規約 / 関連過去 PR } のうち少なくとも 1 件を引用元として持てば候補に残す。
 
-Confidence-Low かつ risk-exception に該当しない候補は除外し、除外件数と理由を False-Negative log として記録する。
+Confidence-Low かつ risk-exception に該当せず Pillar でない候補は除外し、除外件数と理由を False-Negative log として記録する。
 **deep** に分類された候補が除外される場合は、specialist 名・指摘概要（10 語以内）・除外理由を個別に記録し、最終出力の FN log に含める。
 
-## Step 6: Meta-Review
+## Step 7: Meta-Review
 
 最終出力前に各指摘を再読し、次を訂正または除外する: 曖昧表現、誤読される可能性のある表現、professional でない口調、引用元と本文の対応漏れ、severity と本文の影響規模の不整合。
 
-## Step 7: 出力フォーマット
+## Step 8: 出力フォーマット
 
 ```markdown
 ## PR #NNN レビュー: <タイトル>
@@ -132,9 +145,13 @@ Confidence-Low かつ risk-exception に該当しない候補は除外し、除�
 ### 総評
 （3〜4 文。Layer-1 観点での全体印象・正確性評価・最重要懸念・AI 特有リスクの評価）
 
-### Observability Gap
-本番障害時に root cause に到達できるかの判定と、欠如している telemetry の指摘。
-欠如なしの場合は「N/A: 確認済み — <確認した logs / metrics / traces の根拠>」と書く。
+### Mandatory Pillars
+
+| Pillar | 発見 / N/A |
+|--------|-----------|
+| [pillar] Existing-code alignment | <発見または N/A: scope confirmed — ファイルパス・ADR ID・確認した根拠を 20 語以上> |
+| [pillar] Release / Rollback / Compat. | <発見または N/A: scope confirmed — デプロイ手順・ロールバックパス・確認した根拠を 20 語以上> |
+| [pillar] Observability | <発見または N/A: scope confirmed — logs / metrics / traces の確認根拠を 20 語以上> |
 
 ### 指摘事項
 
