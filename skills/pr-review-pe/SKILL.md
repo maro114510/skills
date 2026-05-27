@@ -90,7 +90,8 @@ deep 候補が 0〜2 件しかない specialist は「go deeper: design-layer �
 2. PR description の設計意図と矛盾する指摘も廃棄しない: 3 つの reverse-generated alternative intents (各 1 文) を内部生成し、PR description が選択意図をいずれの代替に対しても正当化できていない場合は `[ask]` でその正当化を求める (出力に代替は列挙しない)。
 3. 引用は diff hunk に限らない: { diff hunk / 関連既存コード / 関連 ADR・RFC / CLAUDE.md・プロジェクト規約 / 関連過去 PR } のうち少なくとも 1 件を引用元として持てば候補に残す。
 
-Confidence-Low かつ risk-exception に該当しない候補は除外し、除外件数と理由を False-Negative log として内部集計する。
+Confidence-Low かつ risk-exception に該当しない候補は除外し、除外件数と理由を False-Negative log として記録する。
+**deep** に分類された候補が除外される場合は、specialist 名・指摘概要（10 語以内）・除外理由を個別に記録し、最終出力の FN log に含める。
 
 ## Step 6: Meta-Review
 
@@ -122,6 +123,7 @@ Confidence-Low かつ risk-exception に該当しない候補は除外し、除�
 ### 自己検証結果
 Brainstorm N → Self-Refine M → Filter K → Meta-Review L 件
 除外: X 件 (うち Confidence-Low 廃棄: Y、risk-exception 経由復活: Z)
+FN log — deep 除外: <specialist 名 / 指摘概要（10 語以内）/ 除外理由 を改行区切りで列挙。除外なしの場合は「なし」>
 ```
 
 指摘事項がない場合は `### 指摘事項` 内に「指摘事項なし。Approve 推奨。」と書く (見出しは省略しない)。
