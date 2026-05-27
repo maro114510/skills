@@ -40,7 +40,7 @@ diff から記録する: 変更 .md ファイル一覧・ドキュメント種�
 pr-doc-review-textlint.sh <changed-md-files>
 ```
 
-結果 (検出語・ファイル名・行番号) を記録し、各 specialist への入力として提供する (語リストは `skills/pr-doc-review-pe/references/layer3-ai-instruction.md` § Ambiguity Vocabulary Detection)。
+結果 (検出語・ファイル名・行番号) を記録し、各 specialist への入力として提供する (語リストは `skills/pr-doc-review-pe/references/ai-instruction-spec.md` § Ambiguity Vocabulary Detection)。
 
 **AI 仕様判定**: 次のいずれかで AI 向けと判定する。
 
@@ -65,12 +65,12 @@ git grep -n "<キーノウン>" -- '*.go' '*.ts' '*.py' '*.java' '*.kt' '*.rb'
 各 specialist は冒頭で各行末の `参照:` ファイルをリポジトリルートからのパスで `Read` する。
 低 confidence でも候補を保持し `doc-path:line` + 引用元 + 仮重要度を返す。
 
-- **rationale-reviewer**: Nygard 5 構成要素・Olaf Zimmermann 7 質問・逆生成代替案 3 件生成・Consequences-negative の欠如。参照: `skills/pr-doc-review-pe/references/layer2-checklists.md` § Design Soundness。
-- **operational-reviewer**: Rollout / Rollback / Multi-DC / Metrics / カスタマーサポート対応の充足。参照: `skills/pr-doc-review-pe/references/layer2-checklists.md` § Operational Design。
-- **readability-reviewer**: BLUF / ピラミッド原則 / ワーキングメモリ ≤ 7±2 / split-attention / メタ情報 (Audience・Non-Goals・DoD)。参照: `skills/pr-doc-review-pe/references/layer2-checklists.md` § Cognitive Load, § Meta Information。
-- **ubiquitous-language-reviewer**: Step 2 の git grep 結果を使い、コードとの概念語乖離・Bounded Context 境界超え・同概念の別名混在を検出。参照: `skills/pr-doc-review-pe/references/layer2-checklists.md` § Existing-Code Alignment。
-- **premortem-reviewer**: プリモーテム失敗シナリオ 3 件・5-Whys 根因分析・暗黙の仮定の可視化・知識の呪い (ジャーゴン定義漏れ・Tapper-side)。参照: `skills/pr-doc-review-pe/references/layer2-checklists.md` § Implicit Assumptions, § Curse of Knowledge。
-- **ai-instruction-reviewer** (AI 仕様のみ): what/how 分離 (SPDD)・Golden Rule (文脈なし読者テスト)・ambiguity 語検出・negative-only 指示の positive-example 欠如。参照: `skills/pr-doc-review-pe/references/layer3-ai-instruction.md`。
+- **rationale-reviewer**: Nygard 5 構成要素・Olaf Zimmermann 7 質問・逆生成代替案 3 件生成・Consequences-negative の欠如。参照: `skills/pr-doc-review-pe/references/adr-checklist.md`, `skills/pr-doc-review-pe/references/design-doc-checklist.md`。
+- **operational-reviewer**: Rollout / Rollback / Multi-DC / Metrics / カスタマーサポート対応の充足。参照: `skills/pr-doc-review-pe/references/operational-design.md`。
+- **readability-reviewer**: BLUF / ピラミッド原則 / ワーキングメモリ ≤ 7±2 / split-attention / メタ情報 (Audience・Non-Goals・DoD)。参照: `skills/pr-doc-review-pe/references/cognitive-load.md`, `skills/pr-doc-review-pe/references/meta-information.md`。
+- **ubiquitous-language-reviewer**: Step 2 の git grep 結果を使い、コードとの概念語乖離・Bounded Context 境界超え・同概念の別名混在を検出。参照: `skills/pr-doc-review-pe/references/ubiquitous-language.md`。
+- **premortem-reviewer**: プリモーテム失敗シナリオ 3 件・5-Whys 根因分析・暗黙の仮定の可視化・知識の呪い (ジャーゴン定義漏れ・Tapper-side)。参照: `skills/pr-doc-review-pe/references/premortem-and-5whys.md`, `skills/pr-doc-review-pe/references/curse-of-knowledge.md`。
+- **ai-instruction-reviewer** (AI 仕様のみ): what/how 分離 (SPDD)・Golden Rule (文脈なし読者テスト)・ambiguity 語検出・negative-only 指示の positive-example 欠如。参照: `skills/pr-doc-review-pe/references/ai-instruction-spec.md`。
 
 specialist 共通: 既存コメント・PR description で対処済みの指摘は除外する。
 

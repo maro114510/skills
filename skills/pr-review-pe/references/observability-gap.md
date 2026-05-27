@@ -41,6 +41,8 @@ PR の変更が本番で壊れたとき、既存の logs / metrics / traces / al
 ## Sources
 
 - arXiv:2603.26942 — Observability Gap as first-class review concern。
+  https://arxiv.org/abs/2603.26942
 - Google SRE Book — Monitoring Distributed Systems (RED / USE / Golden Signals)。
+  https://sre.google/sre-book/monitoring-distributed-systems/
 - Cindy Sridharan — Distributed Systems Observability (O'Reilly, 2018)。
 - Charity Majors — Observability Engineering (O'Reilly, 2022)。

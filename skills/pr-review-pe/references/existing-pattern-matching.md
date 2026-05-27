@@ -39,6 +39,9 @@ Confidence-Low として保持し、リスク高い領域 (risk-exception passth
 ## Sources
 
 - arXiv:2601.01129 — RovoDev 5-axis review with Confidence / Severity ranking。
+  https://arxiv.org/abs/2601.01129
 - arXiv:2501.15134 — BitsAI-CR detection / filtering separation。
+  https://arxiv.org/abs/2501.15134
 - Anthropic — Code Review Harness Guidance (filtering as post-processing)。
+  https://docs.anthropic.com/
 - Adam Shostack — Threat Modeling 4-question framework (risk-exception analogue)。

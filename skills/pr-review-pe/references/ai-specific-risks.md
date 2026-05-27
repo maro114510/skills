@@ -51,6 +51,10 @@ AI (LLM) が生成したコードに頻発する 5 つの失敗モードを検�
 ## Sources
 
 - arXiv:2406.10279 — Package hallucinations in LLM code generation。
+  https://arxiv.org/abs/2406.10279
 - arXiv:2510.25297 — AI-code blind spots and confirmation bias。
+  https://arxiv.org/abs/2510.25297
 - arXiv:2501.15134 — BitsAI-CR (ByteDance production AI code review)。
-- Anthropic — Code Review Harness Guidance (https://docs.anthropic.com/)。
+  https://arxiv.org/abs/2501.15134
+- Anthropic — Code Review Harness Guidance。
+  https://docs.anthropic.com/
