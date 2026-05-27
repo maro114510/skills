@@ -171,6 +171,7 @@ Step 2 の共有収集（`gh pr diff`・`gh pr view --json commits`）はカウ�
 - `A` = D のうち per-finding tool call ≥2 件を満たした件数（Pillar bypass で 1 件通過した場合は A に含めない）
 - `B` = D のうち evidence 引用付きの complete chain（全 3 ステップが evidence-grounded）を持つ件数（Pillar bypass でチェーン不完全の場合は B に含めない）
 - `C` = 出力に含まれる surface 指摘件数
+- `D=0` の場合（surface のみ）、`tool-evidence` と `why-chain-3` は `N/A` と表示する（0 除算を行わない）
 
 ```markdown
 ## PR #NNN レビュー: <タイトル>
@@ -200,7 +201,7 @@ Step 2 の共有収集（`gh pr diff`・`gh pr view --json commits`）はカウ�
 ### 自己検証結果
 Brainstorm N → Self-Refine M → Filter K → Quality Gates → Meta-Review L 件
 除外: X 件 (うち Confidence-Low 廃棄: Y、risk-exception 経由復活: Z、Why-Chain-3 失敗: W、CRITIC 証拠不足: V、surface quota 超過: U)
-Findings: T (tool-evidence: A/D, why-chain-3: B/D, surface: C/3 quota)
+Findings: T (tool-evidence: A/D or N/A, why-chain-3: B/D or N/A, surface: C/3 quota)
 FN log — deep 除外: <specialist 名 / 指摘概要（10 語以内）/ 除外理由 を改行区切りで列挙。除外なしの場合は「なし」>
 ```
 
