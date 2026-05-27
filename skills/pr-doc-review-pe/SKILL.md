@@ -5,7 +5,6 @@ description: >
   Design Doc / ADR / RFC / 実装計画書 / AI 向け仕様書などの Markdown 中心 PR を対象に、メタ情報・設計健全性・既存コード整合・運用設計・認知負荷・暗黙の仮定・知識の呪いの 7 観点と、AI 向け仕様固有の what/how 分離・Golden Rule・曖昧語検出を検査する。
   「Design Doc レビュー」「ADR を見て」「RFC レビュー」「実装計画書を確認して」「設計レビュー」「ドキュメント PR を見て」「プラン レビュー」「設計書のレビューをして」などの依頼で使う。
   引数に PR 番号または GitHub URL を渡す。
-context: fork
 allowed-tools: Read, Glob, Grep, Bash(pr-review-pe-identify-pr.sh:*, pr-doc-review-textlint.sh:*, gh pr diff:*, gh pr view:*, rg:*, git grep:*, git log:*, echo:*), WebFetch, Agent
 argument-hint: "<pr-number or url>"
 ---
@@ -105,7 +104,8 @@ deep 候補が 0〜2 件しかない specialist は「go deeper: design-layer �
 - **Confidence**: High (2+ source 裏付け) / Medium (1 source) / Low (弱い裏付け)。
 - **Severity**: `[must]` (意思決定不能・整合性破壊・リリースリスク) / `[imo]` (改善望ましい) / `[ask]` (設計意図確認) / `[good]` (優れた判断) / `[next]` (今回スコープ外)。`[nits]` は使わない。
 
-Confidence-Low かつ Pillar でない候補は除外し、除外理由を False-Negative log (Step 8 の「除外:」行) に記録する。
+Confidence-Low かつ Pillar でない候補は除外し、除外理由を False-Negative log として記録する。
+**deep** に分類された候補が除外される場合は、specialist 名・指摘概要（10 語以内）・除外理由を個別に記録し、最終出力の FN log に含める。
 
 ## Step 7: Meta-Review
 
@@ -152,7 +152,8 @@ Confidence-Low かつ Pillar でない候補は除外し、除外理由を False
 
 ### 自己検証結果
 Brainstorm N → Self-Refine M → Filter K → Meta-Review L 件
-除外: X 件 (Confidence-Low 廃棄: Y、risk-exception 復活: Z)
+除外: X 件 (うち Confidence-Low 廃棄: Y、risk-exception 経由復活: Z)
+FN log — deep 除外: <specialist 名 / 指摘概要（10 語以内）/ 除外理由 を改行区切りで列挙。除外なしの場合は「なし」>
 ```
 
 指摘事項がない場合は「指摘事項なし。Approve 推奨。」と書く。`[good]` は `### 良い点` 専用。
