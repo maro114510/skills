@@ -133,11 +133,45 @@ Mandatory Pillars テーブルと指摘事項の双方に記録する (テーブ
 Confidence-Low かつ risk-exception に該当せず Pillar でない候補は除外し、除外件数と理由を False-Negative log として記録する。
 **deep** に分類された候補が除外される場合は、specialist 名・指摘概要（10 語以内）・除外理由を個別に記録し、最終出力の FN log に含める。
 
+### Quality Gates (R-1〜R-3)
+
+上記 Filter の通過候補に対して、さらに以下の 3 gate を順に適用する。
+
+**R-1: Typo Quota** — surface 候補（typo・命名スタイル・段落体裁）は最大 3 件に制限する。
+4 件目以降の surface 候補は出力に含めず FN log に記録する（除外理由: `surface quota 超過`）。
+制限で空いた枠は mid/deep 指摘で埋めることを優先する。
+
+**R-2: Why-Chain-3** — mid/deep 候補ごとに次の 3 ステップ推論チェーンを内部で構築する。
+1. **Problem**: 何が問題か（diff またはコードベースで確認した事実）
+2. **Root Cause**: なぜそれが起きているか（設計判断・実装上の欠落）
+3. **Why it matters**: 本番影響・保守コスト・セキュリティリスク等の具体的な結果
+
+**チェーンの完成基準**: 各ステップは当該指摘に固有の tool 呼び出し結果（Read・Grep・Bash 出力）・diff hunk・またはコードベース引用に紐付けられていなければならない。一般的知識のみで補完されたステップは「根拠なし（evidence-free）」とみなし、そのステップを「不完全」として扱う。
+
+チェーンを 3 ステップ完成させられない候補は FN log に除外する（除外理由: `Why-Chain-3 failure: <不足または evidence-free のステップ名>`）。
+ただし Mandatory Pillar または risk-exception（セキュリティ・データ整合性・API 契約・runtime crash・計算可能なスケーラビリティ後退）に該当する候補はチェーン不完全でも通過させる。
+チェーンの内容は内部処理として保持し、最終出力には露出しない。
+
+**R-3: CRITIC Tool Reference** — mid/deep 候補ごとに per-finding で 2 件以上のツール呼び出しが裏付けとして必要。
+カウント対象: Step 3 以降に当該指摘に固有で実行した Grep / Read / Bash / WebFetch の呼び出し。
+例外: Step 2 の `git blame -L <range> <file>`（指摘のファイル・行範囲に直接対応する場合のみ 1 件としてカウント可）。
+Step 2 の共有収集（`gh pr diff`・`gh pr view --json commits`）はカウント対象外とする。
+裏付け件数が 1 件以下の候補は FN log に除外する（除外理由: `CRITIC: tool-evidence <実件数>/2`）。
+ただし Mandatory Pillar 候補は tool-evidence 1 件でも通過させる（Pillar の完全性を優先）。
+
 ## Step 7: Meta-Review
 
 最終出力前に各指摘を再読し、次を訂正または除外する: 曖昧表現、誤読される可能性のある表現、professional でない口調、引用元と本文の対応漏れ、severity と本文の影響規模の不整合。
 
 ## Step 8: 出力フォーマット
+
+**メトリクス計算ルール（R-4）**:
+- `T` = 全出力指摘件数（surface + mid/deep 合計）
+- `D` = 出力に含まれる mid/deep 指摘件数（surface を除く）
+- `A` = D のうち per-finding tool call ≥2 件を満たした件数（Pillar bypass で 1 件通過した場合は A に含めない）
+- `B` = D のうち evidence 引用付きの complete chain（全 3 ステップが evidence-grounded）を持つ件数（Pillar bypass でチェーン不完全の場合は B に含めない）
+- `C` = 出力に含まれる surface 指摘件数
+- `D=0` の場合（surface のみ）、`tool-evidence` と `why-chain-3` は `N/A` と表示する（0 除算を行わない）
 
 ```markdown
 ## PR #NNN レビュー: <タイトル>
@@ -165,8 +199,9 @@ Confidence-Low かつ risk-exception に該当せず Pillar でない候補は�
 - [good] `path/to/file:15`: 評価できる設計判断 (引用不要)
 
 ### 自己検証結果
-Brainstorm N → Self-Refine M → Filter K → Meta-Review L 件
-除外: X 件 (うち Confidence-Low 廃棄: Y、risk-exception 経由復活: Z)
+Brainstorm N → Self-Refine M → Filter K → Quality Gates → Meta-Review L 件
+除外: X 件 (うち Confidence-Low 廃棄: Y、risk-exception 経由復活: Z、Why-Chain-3 失敗: W、CRITIC 証拠不足: V、surface quota 超過: U)
+Findings: T (tool-evidence: A/D or N/A, why-chain-3: B/D or N/A, surface: C/3 quota)
 FN log — deep 除外: <specialist 名 / 指摘概要（10 語以内）/ 除外理由 を改行区切りで列挙。除外なしの場合は「なし」>
 ```
 
