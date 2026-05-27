@@ -104,7 +104,13 @@ deep 候補が 0〜2 件しかない specialist は「go deeper: design-layer �
 - **Confidence**: High (2+ source 裏付け) / Medium (1 source) / Low (弱い裏付け)。
 - **Severity**: `[must]` (意思決定不能・整合性破壊・リリースリスク) / `[imo]` (改善望ましい) / `[ask]` (設計意図確認) / `[good]` (優れた判断) / `[next]` (今回スコープ外)。`[nits]` は使わない。
 
-Confidence-Low かつ Pillar でない候補は除外し、除外理由を False-Negative log として記録する。
+旧 3 anti-pattern を以下で置換する。
+
+1. 既存パターン一致でも指摘を廃棄しない: Confidence-Low に分類したうえで、`skills/pr-review-pe/references/existing-pattern-matching.md` の risk-exception passthrough リスト (セキュリティ・データ整合性・API 契約・runtime crash・計算可能なスケーラビリティ後退) のいずれかに該当する場合は通常 Confidence・Severity で出力する。
+2. 設計意図と矛盾する指摘も廃棄しない: rationale-reviewer が Step 3 で内部生成した逆生成代替案 (reverse-generated alternative intents、3 件) を参照し、ドキュメントが選択意図をいずれの代替に対しても正当化できていない場合は `[ask]` でその正当化を求める (出力に代替は列挙しない)。
+3. 引用はドキュメント本文に限らない: { ドキュメント引用 / 既存コード・実装 / ADR・RFC / CLAUDE.md・プロジェクト規約 / 関連過去 PR } のうち少なくとも 1 件を引用元として持てば候補に残す。
+
+Confidence-Low かつ risk-exception に該当せず Pillar でない候補は除外し、除外件数と理由を False-Negative log として記録する。
 **deep** に分類された候補が除外される場合は、specialist 名・指摘概要（10 語以内）・除外理由を個別に記録し、最終出力の FN log に含める。
 
 ## Step 7: Meta-Review
