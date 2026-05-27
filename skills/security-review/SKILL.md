@@ -177,7 +177,7 @@ LLM/Agent/MCP 系では、prompt injection や tool poisoning の「入力改ざ
 
 ### 出力フォーマット
 
-```
+```markdown
 ## セキュリティレビュー: PR #<番号> / <対象>
 
 ### サマリー

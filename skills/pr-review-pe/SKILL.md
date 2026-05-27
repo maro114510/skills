@@ -99,7 +99,7 @@ Confidence-Low かつ risk-exception に該当しない候補は除外し、除�
 
 ## Step 7: 出力フォーマット
 
-```
+```markdown
 ## PR #NNN レビュー: <タイトル>
 
 ### 総評
