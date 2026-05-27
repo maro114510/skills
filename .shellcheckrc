@@ -1,0 +1,11 @@
+# shellcheck configuration
+# https://www.shellcheck.net/wiki/Ignore
+
+# All scripts in this repo are bash
+shell=bash
+
+# Catch info-level issues (SC2086 quoting, SC2012 ls→find, etc.)
+severity=info
+
+# Optional checks
+enable=require-double-brackets
