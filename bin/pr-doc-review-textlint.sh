@@ -16,7 +16,7 @@
 #   3. textlint  (via mise)
 #   4. rg        (always available; code blocks NOT excluded)
 
-set -uo pipefail
+set -euo pipefail
 
 if [[ $# -eq 0 ]]; then
   printf 'Usage: pr-doc-review-textlint.sh <file1.md> [file2.md ...]\n' >&2
@@ -31,7 +31,7 @@ AMBIGUITY_RG_PATTERN="適切に|適切な|必要に応じて|十分に|いい感
 # ---- helpers ----
 
 _make_prh_yml() {
-  cat << 'EOF'
+  cat <<'EOF'
 version: 1
 rules:
   - expected: "[要具体化: 条件・範囲・閾値を明記]"
@@ -56,11 +56,12 @@ _run_textlint() {
   local prh rc ec=0
   prh=$(mktemp /tmp/prh.XXXXXX.yml)
   rc=$(mktemp /tmp/textlintrc.XXXXXX.json)
-  _make_prh_yml > "${prh}"
+  # shellcheck disable=SC2064
+  trap "rm -f '${prh}' '${rc}'" RETURN
+  _make_prh_yml >"${prh}"
   printf '{"rules":{"textlint-rule-ja-no-weak-phrase":true,"textlint-rule-prh":{"rulePaths":["%s"]}}}\n' \
-    "${prh}" > "${rc}"
+    "${prh}" >"${rc}"
   "$@" --config "${rc}" --format pretty-error "${FILES[@]}" 2>&1 || ec=$?
-  rm -f "${prh}" "${rc}"
   if [[ ${ec} -ge 2 ]]; then
     printf '(textlint ルールエラー — rg にフォールバック)\n'
     _rg_fallback
@@ -80,13 +81,13 @@ if command -v textlint >/dev/null 2>&1; then
   printf '## 曖昧語チェック (textlint)\n'
   _run_textlint textlint
 
-elif command -v npx >/dev/null 2>&1 \
-     && npx --no-install textlint --version >/dev/null 2>&1; then
+elif command -v npx >/dev/null 2>&1 &&
+  npx --no-install textlint --version >/dev/null 2>&1; then
   printf '## 曖昧語チェック (textlint via npx cached)\n'
   _run_textlint npx textlint
 
-elif command -v mise >/dev/null 2>&1 \
-     && mise exec -- textlint --version >/dev/null 2>&1; then
+elif command -v mise >/dev/null 2>&1 &&
+  mise exec -- textlint --version >/dev/null 2>&1; then
   printf '## 曖昧語チェック (textlint via mise)\n'
   _run_textlint mise exec -- textlint
 

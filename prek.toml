@@ -7,11 +7,18 @@ rev = "v0.10.0"
 
   [[repos.hooks]]
   id = "shellcheck"
-  args = ["--severity=warning", "--shell=bash"]
+
+[[repos]]
+repo = "https://github.com/mvdan/sh"
+rev = "v3.13.1"
+
+  [[repos.hooks]]
+  id = "shfmt"
+  args = ["-d", "-i", "2"]
 
 [[repos]]
 repo = "https://github.com/rhysd/actionlint"
-rev = "v1.7.7"
+rev = "v1.7.12"
 
   [[repos.hooks]]
   id = "actionlint"
