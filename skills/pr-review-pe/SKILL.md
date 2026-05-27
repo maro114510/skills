@@ -6,7 +6,7 @@ description: >
   「コードレビューして」「差分レビュー」「PE 視点でレビュー」「PR を見て」などの依頼で使う。
   引数に PR 番号または GitHub URL を渡す。
   Markdown のみの PR は /pr-doc-review-pe を使うこと。
-allowed-tools: Read, Glob, Grep, Bash(pr-review-pe-identify-pr.sh:*, gh pr diff:*, git log:*, git blame:*, git grep:*, rg:*, npm:*, go:*, pip:*, echo:*), WebFetch, Agent
+allowed-tools: Read, Glob, Grep, Bash(pr-review-pe-identify-pr.sh:*, gh pr view:*, gh pr diff:*, gh api:*, git fetch:*, git -C:*, git log:*, git blame:*, git grep:*, ghq list:*, rg:*, npm:*, go:*, pip:*, echo:*), WebFetch, Agent
 argument-hint: "<pr-number or url>"
 ---
 
@@ -21,32 +21,59 @@ argument-hint: "<pr-number or url>"
 `$ARGUMENTS` を渡すと、PR 番号・GitHub URL・未指定の 3 分岐を解決して `gh pr view` のメタ JSON を返す。
 
 ```bash
+# このスクリプトは PATH に含まれている。スクリプト名のみで呼び出すこと。
+# `bash <path>` 形式や推測パス（.claude/skills/.../bin/ など）は絶対に使わない。
 pr-review-pe-identify-pr.sh "$ARGUMENTS"
 ```
 
 exit code 2 (PR 特定不能) は「現在のブランチに PR が見つかりません。PR 番号または URL を引数で指定してください (例: `9` / `https://github.com/org/repo/pull/9`)。」で停止する。
 exit code 3 (gh 一時障害) も同様に停止し、ユーザーに手動指定を促す。
-返却 JSON の `number` フィールドを以降のステップで `$PR_NUMBER` として使う。
+返却 JSON の `number` フィールドを `$PR_NUMBER`、`headRefName` を `$HEAD`、`baseRefName` を `$BASE` として記録する。
+また URL から `<org>/<repo>` 形式の `$REPO_SLUG` を抽出する。
+
+**ローカルリポジトリ検出**: このスキルは PR と無関係なリポジトリで実行されることが多い。
+`ghq` の慣習に従い対応するローカルパスを探索して `$LOCAL_REPO_PATH` に記録する。
+未検出の場合は `$LOCAL_REPO_PATH=""` とし、以降の git コマンドは `gh` API に差し替える。
+
+```bash
+ghq list --full-path 2>/dev/null | grep -F "/$REPO_SLUG$" | head -1
+```
+
+**絶対遵守**: `$LOCAL_REPO_PATH` が確定するまでカレントディレクトリを起点にしたファイル読み込みや
+git コマンド（`git log`・`git blame`・`Read <相対パス>`・`rg`・`git grep` 等）を実行してはならない。
 
 ## Step 2: データ収集
 
 並列で次の補助情報を取得する。
 
-1. PR 差分 (ハルシネーション防止の基盤): `gh pr diff $PR_NUMBER`。
-2. コミット履歴 (PR description との整合確認): `git log --oneline -n 20 origin/$BASE..$HEAD`。
-3. 変更行の歴史 (必要時のみ): `git blame -L <range> <file>`。
+1. PR 差分 (ハルシネーション防止の基盤): `gh pr diff $PR_NUMBER --repo $REPO_SLUG`。
+2. コミット履歴 (PR description との整合確認): まず `gh pr view $PR_NUMBER --repo $REPO_SLUG --json commits`
+   を使う（どのディレクトリからでも動作するため必ずこれを優先する）。
+   `$LOCAL_REPO_PATH` が存在する場合は追加で以下を実行してもよい（ブランチが未 fetch の場合は先に fetch する）:
+   ```bash
+   git -C "$LOCAL_REPO_PATH" fetch origin "$HEAD" 2>/dev/null
+   git -C "$LOCAL_REPO_PATH" log --oneline -n 20 "origin/$BASE".."origin/$HEAD"
+   ```
+3. 変更行の歴史 (必要時・`$LOCAL_REPO_PATH` 存在時のみ):
+   `git -C "$LOCAL_REPO_PATH" blame -L <range> <file>`。
 
 diff から記録する: 追加依存パッケージ、新規テストファイル、言語・フレームワーク、変更された公開面 (関数・型・API・CLI・設定キー)。
 
-文脈を補完する: 変更シンボルの呼び出し元を `rg` または `git grep` で探し、ループ・外部 I/O・上限欠如を確認する。
-関連 ADR・RFC・設計メモを `docs/` `adr/` `CLAUDE.md` 配下から `Read` し、同責務の既存 helper を 2〜3 件 `Read` で照合する。
+文脈を補完する:
+- 呼び出し元の探索: `rg <pattern> "$LOCAL_REPO_PATH"` または `git -C "$LOCAL_REPO_PATH" grep`。
+  `$LOCAL_REPO_PATH` が空の場合はスキップする。
+- ファイル読み込み: 必ず `Read "$LOCAL_REPO_PATH/<相対パス>"` で絶対パスを使う。
+  `$LOCAL_REPO_PATH` が空の場合は `gh api "repos/$REPO_SLUG/contents/<path>?ref=$HEAD" --jq '.content' | base64 -d` で取得する。
+- 関連 ADR・RFC・設計メモ・CLAUDE.md: `"$LOCAL_REPO_PATH/docs/"` `"$LOCAL_REPO_PATH/adr/"` `"$LOCAL_REPO_PATH/CLAUDE.md"` 配下から `Read`。
+- 同責務の既存 helper を 2〜3 件 `Read "$LOCAL_REPO_PATH/..."` で照合する。
 
 ## Step 3: Brainstorm via Agent specialists
 
 以下 5 specialist を `Agent` (subagent_type: general-purpose) で並列起動する。
 各プロンプトは責務に絞り、低 confidence でも候補に含めるよう指示する。
 返却は `path:line` + 引用元 + 仮重要度を必須とする。
-各 specialist の冒頭で `Read skills/pr-review-pe/references/<該当>.md` を読ませてからレビューさせる。
+各 specialist の冒頭で `Read ~/.claude/skills/pr-review-pe/references/<該当>.md` を読ませてからレビューさせる
+（インストール済みパスを使う。`skills/pr-review-pe/references/` のようなカレントディレクトリ相対パスは使わない）。
 
 - **correctness-reviewer**: PR description と実装の一致、ビジネスロジック、状態遷移、条件分岐、エッジケース処理。
   必須サブ質問は null/nil/空配列/0/負数/MaxInt/空文字列の全パストレースと、AI 生成テストの確認バイアス (テストと実装が同じ誤前提を共有していないか)。
