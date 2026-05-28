@@ -9,8 +9,8 @@ rev = "v0.10.0"
   id = "shellcheck"
 
 [[repos]]
-repo = "https://github.com/mvdan/sh"
-rev = "v3.13.1"
+repo = "https://github.com/scop/pre-commit-shfmt"
+rev = "v3.13.1-1"
 
   [[repos.hooks]]
   id = "shfmt"
