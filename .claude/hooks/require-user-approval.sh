@@ -15,23 +15,26 @@ try:
     data = json.load(sys.stdin)
     print(data.get('command', ''))
 except Exception:
-    pass
-" 2>/dev/null) || COMMAND=""
+    sys.exit(1)
+" 2>/dev/null) || {
+  printf 'hook: failed to parse CLAUDE_TOOL_INPUT\n' >&2
+  exit 1
+}
 
-# Allow commands that do not contain "git push"
-if ! printf '%s' "${COMMAND}" | grep -qF "git push"; then
+# Allow commands that do not contain "git push" (word-boundary aware)
+if ! printf '%s' "${COMMAND}" | grep -qE '(^|[[:space:]])git([[:space:]]+[^[:space:]]*)*[[:space:]]+push([[:space:]]|$)'; then
   exit 0
 fi
 
-# Allow if the approval marker is present
-if printf '%s' "${COMMAND}" | grep -qF "# user-approved"; then
+# Allow if the approval marker appears at the end of the command
+if printf '%s' "${COMMAND}" | grep -qE '#[[:space:]]*user-approved[[:space:]]*$'; then
   exit 0
 fi
 
 # No marker -> block and explain how to proceed
-printf '⚠️  Explicit user approval is required before running git push.\n'
-printf '\nHow to proceed:\n'
-printf '  1. Ask the user: "May I run git push?"\n'
-printf '  2. Once the user approves, re-run the command with "# user-approved" appended.\n'
-printf '\nExample: git push origin feat/my-feature # user-approved\n'
+printf '⚠️  Explicit user approval is required before running git push.\n' >&2
+printf '\nHow to proceed:\n' >&2
+printf '  1. Ask the user: "May I run git push?"\n' >&2
+printf '  2. Once the user approves, re-run the command with "# user-approved" appended.\n' >&2
+printf '\nExample: git push origin feat/my-feature # user-approved\n' >&2
 exit 2
