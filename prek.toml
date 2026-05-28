@@ -9,12 +9,15 @@ rev = "v0.10.0"
   id = "shellcheck"
 
 [[repos]]
-repo = "https://github.com/mvdan/sh"
-rev = "v3.13.1"
+repo = "local"
 
   [[repos.hooks]]
   id = "shfmt"
+  name = "shfmt"
+  language = "system"
+  entry = "shfmt"
   args = ["-d", "-i", "2"]
+  types = ["shell"]
 
 [[repos]]
 repo = "https://github.com/rhysd/actionlint"

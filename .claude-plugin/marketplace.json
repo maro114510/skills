@@ -1,11 +1,11 @@
 {
   "name": "maro114510-agent-skills",
-  "version": "0.14.0",
+  "version": "0.16.0",
   "owner": {
     "name": "Atsuki Nohira"
   },
   "metadata": {
-    "description": ""
+    "description": "Personal skills for Claude Code — pr-review-pe, pr-doc-review-pe, create-pr and more."
   },
   "plugins": [
     {
@@ -14,7 +14,7 @@
         "source": "github",
         "repo": "maro114510/skills"
       },
-      "description": ""
+      "description": "Personal skills for Claude Code — pr-review-pe, pr-doc-review-pe, create-pr and more."
     }
   ]
 }
