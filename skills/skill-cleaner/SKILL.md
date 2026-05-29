@@ -1,8 +1,8 @@
 ---
 name: skill-cleaner
 description: >
-  Audit and slim down Claude Code skills — detect duplicate names, oversized descriptions,
-  and bloated bodies. Use when skills are getting too heavy or context budget is growing.
+  Audit and slim Claude Code skills: detect duplicates, bloated descriptions, oversized bodies.
+  「スキルを軽くして」「説明を短くして」でも起動。
 allowed-tools: Bash(find:*, wc:*, awk:*, sort:*, git:*), Read, Glob, Edit
 argument-hint: "<skills-dir>"
 ---
@@ -17,7 +17,7 @@ Audit a Claude Code skills directory and reduce context budget without breaking 
 
 If `$ARGUMENTS` is empty, skip all processing and display:
 
-```
+```text
 Usage: /skill-cleaner <skills-dir>
 
 Examples:
@@ -51,7 +51,7 @@ echo -n "description string" | wc -c    # description only (pass trimmed string)
 ```
 
 Token estimate (conservative, handles Japanese/English mix):
-```
+```text
 desc_tokens = ceil(desc_bytes / 3)
 body_tokens = ceil((file_bytes - desc_bytes) / 3)
 ```
@@ -60,7 +60,7 @@ body_tokens = ceil((file_bytes - desc_bytes) / 3)
 
 Output the following Markdown table:
 
-```
+```text
 ## Skill Budget Report — <skills-dir>
 
 | Skill | Path (relative) | desc tokens | body tokens | Flags |
@@ -99,7 +99,7 @@ For each skill flagged `[!] desc >60`, draft a compressed description.
 
 Show each proposal in before/after format. Estimate token count with the same `ceil(bytes/3)` formula and include it in the header:
 
-```
+```text
 ### pr-review-pe — description (87 → 42 tokens)
 
 **Before (87 tokens):**
@@ -123,7 +123,7 @@ For each skill flagged `[!] body >800`, Read the body and list removable section
 
 Display hints in this format:
 
-```
+```text
 ### pr-review-pe — body slimming hints (1,240 tokens)
 
 - L45–L52: Same error-handling block duplicated in Step 2 and Step 4. Remove Step 2 copy.
@@ -150,7 +150,7 @@ If not clean, report to the user and stop.
 
 Ask individually for each proposed skill:
 
-```
+```text
 Update description for <skill-name>? (y/n/skip-all):
 ```
 
@@ -167,7 +167,7 @@ For approved skills only, update `description:` in the SKILL.md frontmatter with
 
 If an Edit call fails (YAML corruption, write error), stop immediately and display:
 
-```
+```text
 Updated: <list of completed files>
 Failed:  <failed file>
 Recover: git checkout HEAD -- <list of modified files>
@@ -177,7 +177,7 @@ Recover: git checkout HEAD -- <list of modified files>
 
 After applying:
 
-```
+```text
 Done: N skill(s) updated. Description budget: XXX → YYY tokens (−ZZZ)
 ```
 
