@@ -3,7 +3,7 @@ name: skill-cleaner
 description: >
   Audit and slim Claude Code skills: detect duplicates, bloated descriptions, oversized bodies.
   「スキルを軽くして」「説明を短くして」でも起動。
-allowed-tools: Bash(find:*, wc:*, awk:*, sort:*, git:*), Read, Glob, Edit
+allowed-tools: Bash(find:*, wc:*, awk:*, sort:*, git:*), Read, Glob, Edit, Agent
 argument-hint: "<skills-dir>"
 ---
 
@@ -134,6 +134,38 @@ If no 3b hints exist, display that in one line.
 
 If neither 3a nor 3b has any proposals, display "Nothing to do — all descriptions ≤ 60 tokens and all bodies ≤ 800 tokens." and exit.
 
+### 3c — Trigger accuracy eval
+
+For each description proposal from 3a, dispatch a **fresh subagent** via Agent to verify the compression does not degrade trigger accuracy. Run all proposals in parallel (one Agent call per proposal in a single message).
+
+Subagent prompt template:
+
+```text
+You are a blank-slate evaluator. Do NOT invoke any tools or skills.
+
+Skill name: <name>
+
+Original description:
+<original>
+
+Proposed description:
+<proposal>
+
+Requirements checklist:
+1. [critical] All trigger nouns/verbs from the original are present or clearly inferable in the proposal
+2. [critical] The proposal does not attract unrelated user requests (no false-positive risk)
+3. The proposal is more concise than the original without losing meaning
+
+For each requirement: ○ (fully satisfied) / partial / × (not satisfied), with a one-line reason.
+Then list any trigger concepts from the original that are absent from the proposal (if any).
+```
+
+**Labeling**: based on the subagent's return:
+- Both [critical] ○ → `[eval: PASS]`
+- Any [critical] partial or × → `[eval: RISKY: <one-line reason>]`
+
+If the Agent tool is unavailable, label all proposals `[eval: skipped]` and continue.
+
 ## Step 4 — Apply
 
 ### Pre-check
@@ -151,7 +183,9 @@ If not clean, report to the user and stop.
 Ask individually for each proposed skill:
 
 ```text
-Update description for <skill-name>? (y/n/skip-all):
+Update description for <skill-name>? [eval: PASS] (y/n/skip-all):
+Update description for <skill-name>? [eval: RISKY: "code review" trigger absent] (y/n/skip-all):
+Update description for <skill-name>? [eval: skipped] (y/n/skip-all):
 ```
 
 - `y`: update the `description:` field with the Edit tool
