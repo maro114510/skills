@@ -2,11 +2,11 @@
 name: pr-review-pe
 description: >
   コード差分 PR (Layer-1) 専用の Principal Engineer 視点レビュースキル。
-  正確性・アーキテクチャ・スケーラビリティ・セキュリティ・API 設計・エラーハンドリング/並行/リソース・運用性の 7 観点と、Mandatory Pillars (既存コード整合・リリース/ロールバック・Observability)、および AI が書いたコード特有のリスク (ハルシネーション依存パッケージ、テスト確認バイアス、並行安全性欠如、ハッピーパス偏重) を検査する。
+  正確性・アーキテクチャ・スケーラビリティ・セキュリティ・API 設計・エラーハンドリング/並行/リソース・運用性の 7 観点と、Mandatory Pillars (既存コード整合・リリース/ロールバック・Observability・スケーラビリティ)、および AI が書いたコード特有のリスク (ハルシネーション依存パッケージ、テスト確認バイアス、並行安全性欠如、ハッピーパス偏重) を検査する。
   「コードレビューして」「差分レビュー」「PE 視点でレビュー」「PR を見て」などの依頼で使う。
   引数に PR 番号または GitHub URL を渡す。
   Markdown のみの PR は /pr-doc-review-pe を使うこと。
-allowed-tools: Read, Glob, Grep, Bash(pr-review-pe-identify-pr.sh:*, gh pr view:*, gh pr diff:*, gh api:*, git fetch:*, git -C:*, git log:*, git blame:*, git grep:*, ghq list:*, rg:*, npm:*, go:*, pip:*, echo:*), WebFetch, Agent
+allowed-tools: Read, Glob, Grep, Bash(pr-review-pe-identify-pr.sh:*, gh pr view:*, gh pr diff:*, gh api:*, git fetch:*, git -C:*, git log:*, git blame:*, git grep:*, ghq list:*, rg:*, grep:*, npm:*, go:*, pip:*, echo:*), WebFetch, Agent
 argument-hint: "<pr-number or url>"
 ---
 
@@ -67,9 +67,50 @@ diff から記録する: 追加依存パッケージ、新規テストファイ�
 - 関連 ADR・RFC・設計メモ・CLAUDE.md: `"$LOCAL_REPO_PATH/docs/"` `"$LOCAL_REPO_PATH/adr/"` `"$LOCAL_REPO_PATH/CLAUDE.md"` 配下から `Read`。
 - 同責務の既存 helper を 2〜3 件 `Read "$LOCAL_REPO_PATH/..."` で照合する。
 
+## Step 2.5: Routing Decision
+
+Step 2 で収集したデータを元に、以下のルールを上から順に適用して $SPECIALISTS（起動する specialists のリスト）を確定する。Step 3 では $SPECIALISTS に含まれる specialists のみを起動する。
+
+### Layer 1 — 必須常時起動
+
+- **correctness-reviewer**: 常時起動
+
+### Layer 2 — パスベース強制トリガー
+
+以下のコマンドを実行し、出力が空でない場合は該当 specialist を $SPECIALISTS に追加する。
+
+**security-reviewer**: 認証・暗号系パスまたは依存ファイル変更
+
+```bash
+gh api "repos/$REPO_SLUG/pulls/$PR_NUMBER/files" --paginate --jq '.[].filename' \
+  | grep -E '/(auth(entication|orization)?|permissions|crypto|security|jwt|oauth|session)/|package\.json$|go\.mod$|requirements\.txt$|Cargo\.toml$|pyproject\.toml$'
+```
+
+**operational-reviewer**: マイグレーション・DB 系パス
+
+```bash
+gh api "repos/$REPO_SLUG/pulls/$PR_NUMBER/files" --paginate --jq '.[].filename' \
+  | grep -E '/(migrations?|db|database)/|_(migration|schema|seed)\.'
+```
+
+### Layer 3 — コンテキスト判断
+
+Step 2 で収集した diff・ファイルパス・変更概要を元に以下を判断する。
+
+- **architecture-reviewer**: diff > 100行 OR 変更ファイル > 10件 OR 新規公開 API / interface / 型定義の追加・変更 OR モジュール境界・依存グラフの変更
+- **scalability-reviewer**: DB アクセスパターン変更 OR ループ・集計・フィルタリングロジック変更 OR キャッシュ・バッファリング設計変更 OR バッチ・バルク処理の追加・変更
+- **operational-reviewer**（Layer 2 未トリガーの場合）: インフラ・CI/CD・デプロイ設定変更 OR エラーハンドリングの大幅変更 OR ログ・メトリクス設計変更
+- **security-reviewer**（Layer 2 未トリガーの場合）: 入力バリデーション変更 OR 認可ロジック変更 OR 外部サービス・API 呼び出しの追加
+
+### フォールバック
+
+いずれかの specialist について判断に自信がない場合、または diff が複雑で分類困難な場合は **全 5 specialist を起動する**。
+
+確定した $SPECIALISTS のリストを明示的に記録してから Step 3 に進む。
+
 ## Step 3: Brainstorm via Agent specialists
 
-以下 5 specialist を `Agent` (subagent_type: general-purpose) で並列起動する。
+$SPECIALISTS に含まれる specialist のみを `Agent` (subagent_type: general-purpose) で並列起動する。
 各プロンプトは責務に絞り、低 confidence でも候補に含めるよう指示する。
 返却は `path:line` + 引用元 + 仮重要度を必須とする。
 各 specialist の冒頭で `Read ~/.claude/skills/pr-review-pe/references/<該当>.md` を読ませてからレビューさせる
@@ -105,13 +146,14 @@ deep 候補が 0〜2 件しかない specialist は「go deeper: design-layer �
 
 ## Step 5: Mandatory Pillars 確認
 
-Filter の前に、以下 3 Pillar を specialist 候補から確認する。
+Filter の前に、以下 4 Pillar を specialist 候補から確認する。
 各 Pillar について候補がゼロの場合は、担当 specialist を「force-investigate this pillar: <pillar name>」プロンプトで再起動する。
 再起動後も発見なければ `N/A: scope confirmed — <確認した具体的根拠 (ファイルパス・ADR ID・メトリクス名) を 20 語以上で記録>` とする。
 
 1. **Existing-code alignment**: ADR・CLAUDE.md・既存実装パターン・ユビキタス言語との整合。担当: architecture-reviewer。
 2. **Release / Rollback / Compat.**: マルチ PR 順序・フィーチャーフラグ・ロールバック経路・データ移行順。担当: operational-reviewer。
 3. **Observability**: 本番で壊れたとき root cause に到達できる metrics / logs / alerts / traces の充足。担当: operational-reviewer。
+4. **Scalability**: N+1・上限なしバルク処理・OOM・タイムアウトを引き起こすパスの充足確認。担当: scalability-reviewer。
 
 Pillar 発見には `[pillar]` マーカーを指摘事項の severity に並記する (`**[must][pillar]**` 形式)。Pillar 発見は Confidence-Low でも Filter で除外しない。同一 Pillar に属する複数発見で修正アクションが同一の改善提案にまとめられる場合は 1 件にまとめること。
 Mandatory Pillars テーブルと指摘事項の双方に記録する (テーブル: 発見要約、指摘事項: `[must][pillar]` 詳細)。
@@ -186,6 +228,7 @@ Step 2 の共有収集（`gh pr diff`・`gh pr view --json commits`）はカウ�
 | [pillar] Existing-code alignment | <発見または N/A: scope confirmed — ファイルパス・ADR ID・確認した根拠を 20 語以上> |
 | [pillar] Release / Rollback / Compat. | <発見または N/A: scope confirmed — デプロイ手順・ロールバックパス・確認した根拠を 20 語以上> |
 | [pillar] Observability | <発見または N/A: scope confirmed — logs / metrics / traces の確認根拠を 20 語以上> |
+| [pillar] Scalability | <発見または N/A: scope confirmed — N+1・OOM・タイムアウトパスの確認根拠を 20 語以上> |
 
 ### 指摘事項
 
@@ -199,6 +242,7 @@ Step 2 の共有収集（`gh pr diff`・`gh pr view --json commits`）はカウ�
 - [good] `path/to/file:15`: 評価できる設計判断 (引用不要)
 
 ### 自己検証結果
+起動 specialists: <起動した specialist 名をカンマ区切りで列挙>
 Brainstorm N → Self-Refine M → Filter K → Quality Gates → Meta-Review L 件
 除外: X 件 (うち Confidence-Low 廃棄: Y、risk-exception 経由復活: Z、Why-Chain-3 失敗: W、CRITIC 証拠不足: V、surface quota 超過: U)
 Findings: T (tool-evidence: A/D or N/A, why-chain-3: B/D or N/A, surface: C/3 quota)
