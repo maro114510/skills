@@ -16,7 +16,11 @@ Two files define the plugin:
 - `.claude-plugin/plugin.json` — name, version, description, author metadata
 - `.claude-plugin/marketplace.json` — source location used during `claude plugin install`
 
-Both must be kept in sync when releasing a new version.
+**Both files must be updated together — updating only one will cause `claude plugin install` to fail.**
+
+Version bump checklist:
+- [ ] `.claude-plugin/plugin.json` — update `version`
+- [ ] `.claude-plugin/marketplace.json` — update `version` (same value)
 
 ## Validation and CI
 
