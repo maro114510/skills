@@ -1,11 +1,7 @@
 ---
 name: pr-review-pe
 description: >
-  コード差分 PR (Layer-1) 専用の Principal Engineer 視点レビュースキル。
-  正確性・アーキテクチャ・スケーラビリティ・セキュリティ・API 設計・エラーハンドリング/並行/リソース・運用性の 7 観点と、Mandatory Pillars (既存コード整合・リリース/ロールバック・Observability・スケーラビリティ)、および AI が書いたコード特有のリスク (ハルシネーション依存パッケージ、テスト確認バイアス、並行安全性欠如、ハッピーパス偏重) を検査する。
-  「コードレビューして」「差分レビュー」「PE 視点でレビュー」「PR を見て」などの依頼で使う。
-  引数に PR 番号または GitHub URL を渡す。
-  Markdown のみの PR は /pr-doc-review-pe を使うこと。
+  コード差分 PR を PE 視点でレビュー。「コードレビュー」「差分レビュー」「PE 視点でレビュー」「PR を見て」で起動。Markdown のみは /pr-doc-review-pe。
 allowed-tools: Read, Glob, Grep, Bash(pr-review-pe-identify-pr.sh:*, gh pr view:*, gh pr diff:*, gh api:*, git fetch:*, git -C:*, git log:*, git blame:*, git grep:*, ghq list:*, rg:*, grep:*, npm:*, go:*, pip:*, echo:*), WebFetch, Agent
 argument-hint: "<pr-number or url>"
 ---
