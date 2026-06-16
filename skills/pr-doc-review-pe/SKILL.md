@@ -75,7 +75,7 @@ Pass 1 とは独立に `Agent` (subagent_type: general-purpose) を起動する�
 - **ロールバック**: 失敗時の切り戻し経路・不可逆操作が考慮されているか。「手動で対応」のみは不可。参照: `skills/pr-doc-review-pe/references/operational-design.md`。
 - **可観測性**: 本番で壊れたとき root cause に到達できる metrics / logs / alerts があるか。「既存ダッシュボード参照」のみは不可。参照: `skills/pr-doc-review-pe/references/operational-design.md`。
 - **ベストプラクティス / ライブラリ制約**: 採用技術・ライブラリの既知の制約・誤用・非準拠がないか。不確かな場合は `WebFetch` で一次情報を確認する。
-- **より良い設計の選択肢**: 原則 3 に従い、設計レベルで「本当にやるべきか」「根本的に優れたアプローチはないか」を問う。見つけたら名指し + 4 軸比較し `[ask]` で採否を委ねる。
+- **より良い設計の選択肢**: 原則 3 に従い、設計レベルでより良い代替がないか問う。参照: `skills/pr-doc-review-pe/references/alternatives-and-tradeoffs.md`。
 
 プリモーテム (「6 ヶ月後に失敗するとしたら理由 3 件」を逆生成し文書内で識別・緩和されているか) を補助に使う。参照: `skills/pr-doc-review-pe/references/premortem-and-5whys.md`。
 
