@@ -16,11 +16,22 @@ Two files define the plugin:
 - `.claude-plugin/plugin.json` — name, version, description, author metadata
 - `.claude-plugin/marketplace.json` — source location used during `claude plugin install`
 
-**Both files must be updated together — updating only one will cause `claude plugin install` to fail.**
+**Both files must be updated together — updating only one will cause `claude plugin install` to fail.** Use the Makefile release targets instead of editing versions manually.
 
-Version bump checklist:
-- [ ] `.claude-plugin/plugin.json` — update `version`
-- [ ] `.claude-plugin/marketplace.json` — update `version` (same value)
+`make release` uses `git-cliff` and `cliff.toml` to infer the next SemVer from Conventional Commits. Git tags include the `v` prefix, for example `v0.28.0`; manifest versions omit it, for example `0.28.0`.
+
+This repository needs a one-time baseline tag before the first automated release:
+
+```bash
+git tag -a v0.27.0 -m v0.27.0
+git push origin v0.27.0
+```
+
+Version bump rules:
+- Major: breaking changes (`!` or `BREAKING CHANGE`)
+- Minor: `feat:`
+- Patch: `fix:`, `perf:`, `refactor:`, `docs:`
+- No release bump: `ci:`, `test:`, `chore:`
 
 ## Validation and CI
 
@@ -35,6 +46,8 @@ claude plugin list | grep skills
 ```
 
 CI runs two sequential jobs (`validate` → `test-install`) via `.github/workflows/test-plugin-install.yml` on push to `main` and all PRs. The workflow uses commit-pinned action versions — update these with Dependabot, not manually.
+
+`.github/workflows/release.yml` creates a GitHub Release when a `v*` tag is pushed. It verifies that the tag version matches both `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` before creating the release.
 
 ## Skill File Structure
 
@@ -61,7 +74,7 @@ A skill may include additional reference files (e.g., `skills/<name>/references/
 
 1. Create `skills/<skill-name>/SKILL.md` with the frontmatter above (new skill), or edit the existing `SKILL.md` (modification).
 2. Write the prompt body in Japanese (this repo's convention) or match the target repo's language.
-3. **Bump the version in `plugin.json`** — `claude plugin update` uses the version number to detect changes, so subscribers will not receive updates without a bump. Use semver:
+3. Use Conventional Commits so `make release` can infer the next SemVer:
    - Patch (`0.3.0` → `0.3.1`): fixing ambiguity or bugs in an existing skill body
    - Minor (`0.3.0` → `0.4.0`): adding a new skill or adding meaningful new capability to an existing one
    - Major (`0.3.0` → `1.0.0`): breaking changes to skill interfaces or removing skills
