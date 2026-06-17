@@ -34,6 +34,9 @@ if [[ ${#files[@]} -eq 0 ]]; then
   while IFS= read -r line; do
     status="${line:0:2}"
     path="${line:3}"
+    if [[ "${path}" == *" -> "* ]]; then
+      path="${path##* -> }"
+    fi
     [[ "${status}" == *D* ]] && continue
     [[ -n "${path}" ]] && files+=("${path}")
   done < <(git status --short -- '*.md' 2>/dev/null || true)
@@ -109,7 +112,7 @@ scan_file() {
       return s ~ /(される|されます|られる|行われる|行われます|求められます|必要です|判断される)/
     }
     function implementation_term(s) {
-      return s ~ /(処理|実行|取得|更新|削除|登録|設定|呼び出|返す|戻り値|引数|変数|関数|配列|ループ|分岐|条件|判定|例外|エラー|フラグ|ステータス|true|false|null|nil|undefined|if|else|for|while|switch|case|かつ|または)/
+      return s ~ /(処理|実行|取得|更新|削除|登録|設定|呼び出|返す|戻り値|引数|変数|関数|配列|ループ|分岐|条件|判定|例外|エラー|フラグ|ステータス|true|false|null|nil|undefined|if|else|for|while|switch|case|かつ)/
     }
     function identifier(s) {
       return s ~ /`[^`]+`|[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*|[a-z]+[A-Z][A-Za-z0-9]*|[a-z]+_[a-z0-9_]+|[A-Z]{1,4}-[0-9]+|§[[:space:]]*[0-9]+(\.[0-9]+)*/
@@ -147,8 +150,11 @@ scan_file() {
         mid_sentence = !ends_sentence(current)
         if ((mechanical || mid_sentence) && combined_len <= 200) {
           rule = mechanical ? "mechanical-wrap" : "line-break"
-          emit(rule, "low", i, current, "Sentence appears to continue across a line break.", "Join this line with the following line.", "true")
-          fix_line[i] = 1
+          auto = mechanical ? "true" : "false"
+          emit(rule, "low", i, current, "Sentence appears to continue across a line break.", "Join this line with the following line.", auto)
+          if (mechanical) {
+            fix_line[i] = 1
+          }
         }
       }
 

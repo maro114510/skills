@@ -14,48 +14,48 @@ description: >
 
 # ja-style-check
 
-Use this skill to write or revise Japanese prose with a strict style rubric.
+厳格なスタイル基準に従って、日本語の文章を書く、または修正する。
 
-## Mode
+## モード
 
-- `report`: do not edit files. Return findings and rewrite suggestions.
-- `fix`: edit files. Apply only deterministic fixes, then report all judgment-based issues.
-- no mode: use `fix` for existing files, and use the rubric while drafting new Japanese prose.
+- `report`: ファイルを変更しない。指摘と修正案だけを返す。
+- `fix`: ファイルを変更する。決定的な修正だけを適用し、判断が必要な問題は報告する。
+- モード指定なし: 既存ファイルには `fix` を使う。日本語の文章を新規に書く場合は、ルーブリックを適用して作成する。
 
-If the user asks to create Japanese text rather than edit files, read `references/rubric.md` before writing. Draft directly in the requested format, then run a self-review against the rubric 2 or 3 times before answering.
+ユーザーがファイル編集ではなく日本語の文章作成を求めている場合は、書く前に `references/rubric.md` を読む。依頼された形式で直接書き、回答前にルーブリックに照らして 2〜3 回自己レビューする。
 
-## Files
+## 対象ファイル
 
-When file paths are provided, use them. Otherwise, target modified Markdown files. If no target file is discoverable, ask for the file or text.
+ファイルパスが指定されている場合は、そのファイルを対象にする。指定がない場合は、変更済みの Markdown ファイルを対象にする。対象ファイルを特定できない場合は、ファイルまたは本文をユーザーに確認する。
 
-## Required Resources
+## 必須リソース
 
-- Read `references/rubric.md` before judging prose or drafting Japanese prose.
-- Read `references/fix-policy.md` before editing files.
-- Read `references/output-schema.md` before returning report results.
-- Run `scripts/scan.sh` for file-based work. The script performs deterministic detection and safe line-break fixes with standard shell tools.
+- 文章を判定する、または日本語の文章を書く前に `references/rubric.md` を読む。
+- ファイルを編集する前に `references/fix-policy.md` を読む。
+- レポートを返す前に `references/output-schema.md` を読む。
+- ファイルを対象にする作業では `scripts/scan.sh` を実行する。このスクリプトは、標準的な shell ツールで決定的な検出と安全な改行修正を行う。
 
-## File Workflow
+## ファイル処理
 
-1. Determine the mode and target files.
-2. Run the scanner:
+1. モードと対象ファイルを決める。
+2. スキャナーを実行する。
 
 ```bash
 bash skills/ja-style-check/scripts/scan.sh [--fix] [file...]
 ```
 
-Use `--fix` only in `fix` mode.
+`--fix` は `fix` モード、または既存ファイルを対象にするモード指定なしの実行で使う。
 
-3. Repeat the scanner 2 or 3 times:
-   - Stop early if the JSON reports no applied fixes and no new deterministic candidates.
-   - Never keep looping after the third pass.
-4. Read the target files after the final pass.
-5. Use the scanner JSON plus `references/rubric.md` to judge issues that need context.
-6. In `fix` mode, do not edit judgment-based issues. Report them as manual suggestions.
-7. Return the result using `references/output-schema.md`.
+3. スキャナーを 2〜3 回繰り返す。
+   - JSON の `applied_fixes` が 0 で、新しい決定的候補もない場合は早期終了する。
+   - 3 回を超えて繰り返さない。
+4. 最後の実行後に対象ファイルを読み直す。
+5. スキャナーの JSON と `references/rubric.md` を使い、文脈判断が必要な問題を判定する。
+6. `fix` モードでも、判断が必要な問題は編集しない。手動対応の提案として報告する。
+7. `references/output-schema.md` に従って結果を返す。
 
-## Hard Limits
+## 厳守事項
 
-- Do not auto-rewrite meaning, intent, actor, terminology definitions, paragraph order, or implementation descriptions.
-- Do not treat 「確認して」 or 「チェックして」 alone as a style-fix request.
-- Do not rely on the scanner alone. It finds candidates; the agent still makes the final style judgment.
+- 意味、意図、行為者、用語定義、段落順、実装説明を自動で書き換えない。
+- 「確認して」「チェックして」だけを文章スタイル修正の依頼として扱わない。
+- スキャナーだけに依存しない。スキャナーは候補を見つけるだけであり、最終的なスタイル判断はエージェントが行う。
