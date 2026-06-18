@@ -50,7 +50,7 @@ When passing data between tools or summarizing scanner output, use this shape:
 
 ```json
 {
-  "rule": "line-break | brackets | meta-prose | vague-claim | mechanical-wrap | paragraph-rhythm | first-use-definition | reader-facing-japanese | implementation-transcription | structure-headings | argument-rigor | reader-load | voice-perspective | notation-emphasis",
+  "rule": "line-break | brackets | meta-prose | vague-claim | mechanical-wrap | paragraph-rhythm | first-use-definition | assignment-notation | reader-facing-japanese | implementation-transcription | structure-headings | argument-rigor | reader-load | voice-perspective | notation-emphasis",
   "severity": "high | medium | low",
   "path": "relative/path.md",
   "line": 12,

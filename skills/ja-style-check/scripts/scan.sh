@@ -10,23 +10,23 @@ files=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --fix)
-      fix=1
-      shift
-      ;;
-    -h | --help)
-      cat <<'USAGE'
+  --fix)
+    fix=1
+    shift
+    ;;
+  -h | --help)
+    cat <<'USAGE'
 Usage: scan.sh [--fix] [file...]
 
 Emits JSON with deterministic Japanese style candidates.
 --fix applies only safe line-join fixes.
 USAGE
-      exit 0
-      ;;
-    *)
-      files+=("$1")
-      shift
-      ;;
+    exit 0
+    ;;
+  *)
+    files+=("$1")
+    shift
+    ;;
   esac
 done
 
@@ -116,6 +116,11 @@ scan_file() {
     }
     function identifier(s) {
       return s ~ /`[^`]+`|[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*|[a-z]+[A-Z][A-Za-z0-9]*|[a-z]+_[a-z0-9_]+|[A-Z]{1,4}-[0-9]+|§[[:space:]]*[0-9]+(\.[0-9]+)*/
+    }
+    function assignment_notation(s) {
+      if (s ~ /[A-Za-z_][A-Za-z0-9_]* *= *[A-Za-z][A-Za-z0-9_]*/) return 1
+      if (s ~ /`[^`]+`[[:space:]]*(が|を|は|に)[[:space:]]*(true|false|active|inactive|enabled|disabled|null|nil)/) return 1
+      return 0
     }
     function notation_issue(s) {
       return s ~ /(——|──|―|—|・|非常に|極めて|不可欠|核心的|多角的|包括的|深掘り|掘り下げ|正面から)/
@@ -209,7 +214,9 @@ scan_file() {
         if (passive_phrase(current)) {
           emit("reader-facing-japanese", "medium", i, trim(line[i]), "The sentence may hide the actor.", "Name who acts, decides, or requires the action.", "false")
         }
-        if (identifier(current)) {
+        if (assignment_notation(current)) {
+          emit("assignment-notation", "high", i, trim(line[i]), "Implementation identifier appears as a prose actor, condition, or value assignment.", "Rewrite as reader-visible behavior without code identifiers.", "false")
+        } else if (identifier(current)) {
           emit("reader-facing-japanese", "medium", i, trim(line[i]), "Code identifiers or internal references appear in prose.", "Explain reader-facing behavior and move raw references to evidence when needed.", "false")
         }
         if (implementation_term(current)) {
@@ -253,7 +260,7 @@ while IFS=$'\t' read -r _rule _severity _path _line _quote _reason _suggestion a
   else
     manual_count=$((manual_count + 1))
   fi
-done < "${all_issues}"
+done <"${all_issues}"
 
 printf '{\n'
 printf '  "mode": "%s",\n' "$([[ ${fix} -eq 1 ]] && printf 'fix' || printf 'report')"
@@ -275,7 +282,7 @@ while IFS= read -r issue; do
   printf '    '
   print_issue_json "${issue}"
   printed=$((printed + 1))
-done < "${all_issues}"
+done <"${all_issues}"
 printf '\n  ],\n'
 printf '  "summary": {\n'
 printf '    "issue_count": %d,\n' "${issue_count}"
