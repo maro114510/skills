@@ -51,7 +51,7 @@ bash skills/ja-style-check/scripts/scan.sh [--fix] [file...]
    - 3 回を超えて繰り返さない。
 4. 最後の実行後に対象ファイルを読み直す。
 5. スキャナーの JSON と `references/rubric.md` を使い、文脈判断が必要な問題を判定する。
-6. `fix` モードでも、判断が必要な問題は編集しない。手動対応の提案として報告する。
+6. `fix` モードでは `references/fix-policy.md` の「Model-Applied Fixes」に該当する問題（括弧など）を積極的に編集する。それ以外の判断が必要な問題は手動対応の提案として報告する。
 7. `references/output-schema.md` に従って結果を返す。
 
 ## 厳守事項
