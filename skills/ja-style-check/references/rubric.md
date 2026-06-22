@@ -27,6 +27,8 @@ Good:
 
 Flag frequent parenthetical supplements. Keep only first-use definitions such as `OMS（受注管理システム）`. Treat units, timing notes, attributes, internal IDs, and action notes inside brackets as rewrite candidates.
 
+This rule applies to all document types — design docs, implementation plans, and README files are not exempt. The reduced-severity exception in Check #8 applies only to SKILL.md and references/ files.
+
 Bad:
 - `注文を確定します（自動処理）。`
 
