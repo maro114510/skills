@@ -192,7 +192,7 @@ scan_file() {
 
       in_code = 0
       paragraph_parens = 0
-      paragraph_start = 1
+      paragraph_start = frontmatter_end + 1
       paragraph_text = ""
       for (i = 1; i <= NR; i++) {
         if (i <= frontmatter_end) continue
