@@ -2,11 +2,14 @@
 # Setup: prek install
 
 [[repos]]
-repo = "https://github.com/koalaman/shellcheck-precommit"
-rev = "v0.10.0"
+repo = "local"
 
   [[repos.hooks]]
   id = "shellcheck"
+  name = "ShellCheck"
+  language = "system"
+  entry = "shellcheck"
+  types = ["shell"]
 
 [[repos]]
 repo = "local"

@@ -27,6 +27,8 @@ Good:
 
 Treat parenthetical supplements as a risk signal, not as an automatic violation. Parentheses often hide information that should be part of the sentence, but short clarifications can be appropriate. Do not mechanically reject first-use definitions, dates, units, or brief notes. Flag brackets when the sentence depends on the bracketed text, when bracketed text contains internal IDs, action notes, state, conditions, or reasons, or when brackets appear repeatedly in one paragraph. The agent must judge whether to keep the brackets, move the content into prose, or remove the supplement.
 
+This rule applies to all document types — design docs, implementation plans, and README files are not exempt. The reduced-severity exception in Check #8 applies only to SKILL.md and references/ files.
+
 Bad:
 - `注文を確定します（自動処理）。`
 - `認証エラーを修正します（PR #123）。`
@@ -100,8 +102,21 @@ Flag English jargon, code identifiers, file paths, internal IDs, section referen
 
 Ask "who does this?", "can the reader understand this without opening another file?", and "does this sound like natural Japanese when read aloud?"
 
-Bad:
-- `isPaid が true の場合、order_status を更新します。`
+**Assignment-notation is high severity.** Flag implementation identifiers (variable names, flag names, table names, function names) that appear as prose actors, conditions, or value assignments — the reader cannot understand the referent without opening source code. Patterns include `identifier = value`, `` `identifier` が value ``, and any bare identifier acting as a prose subject.
+
+Do not treat first-use definitions as assignment-notation (see Check #7). Compare:
+- Acceptable: `` `report` モード（ファイルを変更しない）`` — one introduction with visible meaning
+- Violation: `` `report` が実行された場合に〜 `` — same identifier used as prose actor after definition
+
+Exception: internal agent specification files (SKILL.md, references/) that define a schema or parameter term once for agent consumption are medium, not high, when the context makes the term's meaning clear.
+
+Bad (high / assignment-notation):
+- `isPaid = true のとき、order_status を active に設定します。`
+- `` `isPaid` が true の場合、`order_status` を更新します。``
+- `hogehoge = active のとき処理を行います。`
+
+Bad (medium / general):
+- `処理が実行されます。`（hidden actor、passive voice）
 
 Good:
 - `支払いが完了した注文を確定済みにします。`

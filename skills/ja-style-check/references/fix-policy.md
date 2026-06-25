@@ -9,11 +9,17 @@ Use deterministic edits only when the result is uniquely determined by the exist
 
 The scanner may apply these fixes with `--fix`.
 
+## Model-Applied Fixes
+
+Apply these in `fix` mode without asking. They require judgment but have a clear correct direction.
+
+- **Brackets**: Rewrite parenthetical supplements by integrating the content into surrounding prose or restructuring to express it without brackets. Preserve first-use definitions (rubric.md Check #2).
+  - In headings, move the bracket content to the section body. Do not relocate the bracket within the heading string.
+
 ## Automatic Fixes Forbidden
 
 Do not automatically edit the following. Report suggestions instead.
 
-- Removing or rewriting brackets.
 - Deleting meta prose.
 - Replacing vague words with concrete conditions.
 - Adding first-use definitions.
@@ -40,3 +46,5 @@ Run 2 or 3 passes for file-based work. A first pass may expose new line-break is
 ## Safety Rule
 
 If a candidate fix could change meaning, preserve the text and report it. The cost of a missed automatic fix is lower than the cost of silently corrupting meaning.
+
+The Safety Rule takes priority over Model-Applied Fixes. When the Safety Rule applies, always emit a manual suggestion explaining why the fix was skipped.
