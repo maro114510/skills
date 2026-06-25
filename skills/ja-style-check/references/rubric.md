@@ -25,13 +25,15 @@ Good:
 
 ### 2. Brackets
 
-Flag frequent parenthetical supplements. Keep only first-use definitions such as `OMS（受注管理システム）`. Treat units, timing notes, attributes, internal IDs, and action notes inside brackets as rewrite candidates.
+Treat parenthetical supplements as a risk signal, not as an automatic violation. Parentheses often hide information that should be part of the sentence, but short clarifications can be appropriate. Do not mechanically reject first-use definitions, dates, units, or brief notes. Flag brackets when the sentence depends on the bracketed text, when bracketed text contains internal IDs, action notes, state, conditions, or reasons, or when brackets appear repeatedly in one paragraph. The agent must judge whether to keep the brackets, move the content into prose, or remove the supplement.
 
 Bad:
 - `注文を確定します（自動処理）。`
+- `認証エラーを修正します（PR #123）。`
 
 Good:
 - `システムが注文を自動で確定します。`
+- `認証エラーを修正する PR #123 で対応します。`
 
 ### 3. Meta Prose
 
@@ -69,27 +71,32 @@ Good:
 
 ### 6. Paragraphs and Rhythm
 
-Flag paragraphs over 10 sentences, mixed topics in one paragraph, concepts introduced before their prerequisites, repeated short dramatic fragments, repeated long sentences, and monotonous list items.
+Flag paragraphs that are long enough to be a risk signal, mixed topics in one paragraph, concepts introduced before their prerequisites, repeated short dramatic fragments, repeated long sentences, and monotonous list items. Do not split paragraphs mechanically. Treat a paragraph with many Japanese sentence endings and no blank-line break as a candidate for agent judgment. When a paragraph lists conditions, steps, criteria, scope, or consequences, consider using bullets instead of forcing everything into one prose paragraph.
 
 Bad:
 - One paragraph explains background, problem, decision, implementation, and risk together.
 
 Good:
 - Separate background, problem, decision, implementation, and risk into distinct paragraphs.
+- Use bullets when conditions, steps, criteria, scope, or consequences are easier to scan as a list.
 
 ### 7. First-Use Definitions
 
-Flag unexplained abbreviations, domain terms, project names, person names, and organization names when the intended reader may not know them. Do not flag common technical terms such as API, GitHub, JSON, OAuth, or Webhook when explanation would be noisier than the term.
+Flag unexplained abbreviations, domain terms, project names, person names, organization names, PR numbers, issue numbers, ticket IDs, commit hashes, and internal references when the intended reader may not know them. Do not flag common technical terms such as API, GitHub, JSON, OAuth, or Webhook when explanation would be noisier than the term. A raw reference is acceptable only when nearby prose tells the reader what it is without opening the linked item.
 
 Bad:
 - `OMS が注文を確定します。`
+- `PR #123 で対応します。`
+- `AUTH-456 を確認してください。`
 
 Good:
 - `OMS（受注管理システム）が注文を確定します。`
+- `認証エラーを修正する PR #123 で対応します。`
+- `ログイン失敗時の再試行を扱う AUTH-456 を確認してください。`
 
 ### 8. Reader-Facing Japanese
 
-Flag English jargon, code identifiers, file paths, internal IDs, section references, raw boolean expressions, passive voice, hidden actors, and inanimate subjects when they obscure the reader-facing meaning.
+Flag English jargon, code identifiers, file paths, internal IDs, section references, raw boolean expressions, passive voice, hidden actors, and inanimate subjects when they obscure the reader-facing meaning. For PR numbers, issue numbers, ticket IDs, commit hashes, and file paths, check whether the prose explains what the reference means before relying on it.
 
 Ask "who does this?", "can the reader understand this without opening another file?", and "does this sound like natural Japanese when read aloud?"
 
@@ -142,7 +149,7 @@ Good:
 
 ### 12. Reader Load
 
-Flag details that force the reader to remember names, numbers, files, tools, examples, or actors that the later argument never uses. Keep concrete details that support the current question; remove decorative precision. When introducing a new example, state how it differs from the previous one.
+Flag details that force the reader to remember names, numbers, files, tools, examples, or actors that the later argument never uses. Keep concrete details that support the current question; remove decorative precision. When introducing a new example, state how it differs from the previous one. Do not rely on PR numbers, issue numbers, ticket IDs, commit hashes, or file paths as the only explanation of a claim.
 
 Bad:
 - `2026-06-17 14:03:22 に job-retry-v2 が 502 を返し、worker_billing_sync.go の 184 行目で失敗しました。`
@@ -162,16 +169,14 @@ Good:
 
 ### 14. Notation and Emphasis
 
-Flag decorative notation that carries structure instead of prose: dashes in Japanese sentences, middle dots for ordinary parallel terms, bold used as decoration, and headings that pack two ideas with separators. Use punctuation and sentence order instead. Use bold only for first-use definitions or logical points that prevent misreading.
+Flag decorative notation that carries structure instead of prose: dashes in Japanese sentences, bold used as decoration, and headings that pack two ideas with separators. Use punctuation and sentence order instead. Use bold only for first-use definitions or logical points that prevent misreading.
 
 Bad:
 - `原因——ログ不足——を確認します。`
-- `設計・実装・運用を改善します。`
 - `補足──再試行の注意点`
 
 Good:
 - `原因はログ不足です。これを確認します。`
-- `設計、実装、運用を改善します。`
 - `再試行で注意する条件`
 
 ## Drafting Rule
