@@ -117,13 +117,24 @@ scan_file() {
     function identifier(s) {
       return s ~ /`[^`]+`|[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*|[a-z]+[A-Z][A-Za-z0-9]*|[a-z]+_[a-z0-9_]+|[A-Z]{1,4}-[0-9]+|§[[:space:]]*[0-9]+(\.[0-9]+)*/
     }
+    function raw_reference(s) {
+      if (s ~ /(PR|Issue|issue)[[:space:]]*#?[0-9]+/) return 1
+      if (s ~ /#[0-9]+/) return 1
+      if (s ~ /[A-Z][A-Z0-9]+-[0-9]+/) return 1
+      if (s ~ /`[0-9a-f]{7,40}`/) return 1
+      return 0
+    }
     function assignment_notation(s) {
       if (s ~ /[A-Za-z_][A-Za-z0-9_]* *= *[A-Za-z][A-Za-z0-9_]*/) return 1
       if (s ~ /`[^`]+`[[:space:]]*(が|を|は|に)[[:space:]]*(true|false|active|inactive|enabled|disabled|null|nil)/) return 1
       return 0
     }
     function notation_issue(s) {
-      return s ~ /(——|──|―|—|・|非常に|極めて|不可欠|核心的|多角的|包括的|深掘り|掘り下げ|正面から)/
+      return s ~ /(——|──|―|—|非常に|極めて|不可欠|核心的|多角的|包括的|深掘り|掘り下げ|正面から)/
+    }
+    function sentence_count(s, copy) {
+      copy = s
+      return gsub(/。/, "", copy)
     }
     {
       line[NR] = $0
@@ -181,7 +192,8 @@ scan_file() {
 
       in_code = 0
       paragraph_parens = 0
-      paragraph_start = 1
+      paragraph_start = frontmatter_end + 1
+      paragraph_text = ""
       for (i = 1; i <= NR; i++) {
         if (i <= frontmatter_end) continue
         current = trim(line[i])
@@ -191,19 +203,27 @@ scan_file() {
         }
         if (is_structural(line[i], in_code)) {
           if (paragraph_parens >= 2) {
-            emit("brackets", "medium", paragraph_start, "paragraph", "Parenthetical supplements appear repeatedly in one paragraph.", "Move supplements into direct prose or remove them.", "false")
+            emit("brackets", "medium", paragraph_start, "paragraph", "Parenthetical supplements appear repeatedly in one paragraph.", "Judge whether each supplement should stay bracketed, move into prose, or be removed.", "false")
+          }
+          if (sentence_count(paragraph_text) >= 6) {
+            emit("paragraph-rhythm", "medium", paragraph_start, "paragraph", "A paragraph contains many Japanese sentence endings without a blank-line break.", "Judge whether to split the paragraph or use bullets for conditions, steps, criteria, scope, or consequences.", "false")
           }
           paragraph_parens = 0
           paragraph_start = i + 1
+          paragraph_text = ""
           continue
         }
         if (!has_japanese(current)) continue
 
+        paragraph_text = paragraph_text current
         paren_source = current
         parens = gsub(/（|\(/, "", paren_source)
         paragraph_parens += parens
-        if (parens >= 2 || current ~ /[）)]$/) {
-          emit("brackets", "medium", i, trim(line[i]), "Parenthetical supplements interrupt the sentence rhythm.", "Keep only first-use definitions; rewrite other supplements as prose.", "false")
+        if (parens > 0) {
+          emit("brackets", "medium", i, trim(line[i]), "Parenthetical supplements can hide information that belongs in the sentence.", "Judge whether the bracketed text should stay bracketed, move into prose, or be removed.", "false")
+        }
+        if (raw_reference(current)) {
+          emit("first-use-definition", "medium", i, trim(line[i]), "A PR number, issue number, ticket ID, commit hash, or similar reference may be unclear on first read.", "Allow it only when nearby prose explains what the reference means without opening it.", "false")
         }
         if (weak_term(current)) {
           emit("vague-claim", "medium", i, trim(line[i]), "A vague term lacks a concrete condition or threshold.", "State the condition, scope, threshold, or effect.", "false")
@@ -225,6 +245,12 @@ scan_file() {
         if (notation_issue(current)) {
           emit("notation-emphasis", "low", i, trim(line[i]), "Decorative notation or empty emphasis may be carrying the prose.", "Use sentence order, concrete wording, or plain punctuation instead.", "false")
         }
+      }
+      if (paragraph_parens >= 2) {
+        emit("brackets", "medium", paragraph_start, "paragraph", "Parenthetical supplements appear repeatedly in one paragraph.", "Judge whether each supplement should stay bracketed, move into prose, or be removed.", "false")
+      }
+      if (sentence_count(paragraph_text) >= 6) {
+        emit("paragraph-rhythm", "medium", paragraph_start, "paragraph", "A paragraph contains many Japanese sentence endings without a blank-line break.", "Judge whether to split the paragraph or use bullets for conditions, steps, criteria, scope, or consequences.", "false")
       }
       print applied > applied_out
     }

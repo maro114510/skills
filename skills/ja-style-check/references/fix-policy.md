@@ -28,6 +28,7 @@ Do not automatically edit the following. Report suggestions instead.
 - Translating jargon.
 - Replacing code identifiers with behavior.
 - Reordering paragraphs.
+- Splitting paragraphs or converting prose paragraphs to bullets.
 - Reordering sections or headings.
 - Rewriting implementation transcription.
 - Strengthening or weakening uncertainty.
