@@ -6,7 +6,7 @@ description: >
   impact, risks, implementation choices, and review focus before running
   `gh pr create`. Use this skill when the user asks to open, create, submit, or
   send a PR for review.
-disable-model-invocation: false
+disable-model-invocation: true
 allowed-tools: Bash, Read, Glob, Grep
 argument-hint: "[draft] [base <branch>]"
 ---
