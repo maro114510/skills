@@ -8,7 +8,10 @@
 EPIC_URL=$(gh issue create \
   --repo "$REPO" \
   --title "<Epic title>" \
-  --body "<Epic body>")
+  --body "$(cat <<'EOF'
+<Epic body>
+EOF
+)")
 EPIC_NUM=$(echo "$EPIC_URL" | grep -oE '[0-9]+$')
 EPIC_NODE_ID=$(gh issue view "$EPIC_NUM" --repo "$REPO" --json id --jq '.id')
 ```
@@ -21,7 +24,10 @@ Repeat for every child Issue:
 CHILD_URL=$(gh issue create \
   --repo "$REPO" \
   --title "<child Issue title>" \
-  --body "<child Issue body>")
+  --body "$(cat <<'EOF'
+<child Issue body>
+EOF
+)")
 CHILD_NUM=$(echo "$CHILD_URL" | grep -oE '[0-9]+$')
 CHILD_NODE_ID=$(gh issue view "$CHILD_NUM" --repo "$REPO" --json id --jq '.id')
 ```
