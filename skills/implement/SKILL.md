@@ -1,157 +1,157 @@
 ---
 name: implement
 description: >
-  実装タスクを品質最優先で遂行するスキル。タスクの性質（新機能・バグ修正・リファクタ）と
-  テスタビリティを見極め、TDD と Why 確認を必要に応じて自動適用する。
-  「実装して」「機能を追加して」「バグを直して」「修正して」「作って」
-  「これを実装したい」「この機能が欲しい」「XXXを実装してください」
-  「リファクタして」「対応して」などの依頼で起動すること。
-  ワークツリーで作業し、コミット前に difit でユーザー承認を求める。
-  PR はユーザーから明示的に指示があるまで作成しない。
+  A skill for executing implementation tasks with quality as the top priority. Assesses the nature
+  of the task (new feature, bug fix, refactor) and testability, automatically applying TDD and Why
+  validation as needed. Trigger on requests like "implement this", "add a feature", "fix a bug",
+  "make a change", "build this", "I want to implement", "I need this feature",
+  "please implement XXX", "refactor this", "handle this", and similar implementation requests.
+  Works in a worktree and asks for user approval via difit before committing.
+  Does not create a PR until the user explicitly requests it.
 allowed-tools: AskUserQuestion, Bash, Read, Edit, Write, Glob, Grep
-argument-hint: "[実装内容の説明]"
+argument-hint: "[description of what to implement]"
 ---
 
 # implement
 
-実装の品質を最優先にしつつ、タスクの性質に応じて流れを自動調整する。
-余計なステップを踏まず、必要なところだけ深く掘る。
+Prioritize implementation quality while auto-adjusting the flow based on task characteristics.
+Skip unnecessary steps; go deep only where it matters.
 
 ---
 
-## Phase 0: タスクを見極める
+## Phase 0: Assess the Task
 
-`$ARGUMENTS` と会話文脈から以下を自律判断する。
+Make the following autonomous judgments from `$ARGUMENTS` and conversation context.
 
-### Why 確認が必要か？
+### Is a Why check needed?
 
-**不要（即 Phase 2 へ）**
-- バグ修正で再現手順が明確
-- 既存機能の延長でゴールが自明
-- ユーザーが Why を既に説明している
+**Not needed (skip to Phase 2)**
+- Bug fix with clear reproduction steps
+- Extension of existing functionality with an obvious goal
+- User has already explained the Why
 
-**必要（Phase 1 を実行）**
-- 新機能追加で Why が語られていない
-- 複数ファイルにまたがる設計変更・リファクタ
-- 「とりあえず〜したい」など目的が曖昧
+**Needed (execute Phase 1)**
+- New feature addition with no stated Why
+- Design change or refactor spanning multiple files
+- Vague purpose such as "I just want to..."
 
-### TDD が有効か？
+### Is TDD effective?
 
-**TDD で進める条件（すべて満たす場合）**
-- ビジネスロジック / API ハンドラ / データ変換を含む
-- テストフレームワークがすでに存在する
-- 入力と期待する出力が定義できる
+**Proceed with TDD (when all conditions are met)**
+- Involves business logic / API handlers / data transformation
+- A test framework already exists
+- Inputs and expected outputs can be defined
 
-**TDD なし（いずれかが当てはまる場合）**
-- UI / スタイル変更、DB マイグレーション、設定ファイル
-- テストフレームワークがない・導入コストが高い
-- スクリプト・ワンショット処理
+**No TDD (when any condition applies)**
+- UI / style changes, DB migrations, config files
+- No test framework or high setup cost
+- Scripts or one-shot operations
 
-### 着手前に情報が欠けているか？
+### Is information missing before starting?
 
-必要な情報（仕様の核心・技術スタック・制約）が欠けている場合は、
-Phase 3 の質問を先行して実施してから Phase 1 / 2 に戻る。
-
----
-
-## Phase 1: Why を確認する（条件付き）
-
-Phase 0 で「必要」と判断した場合のみ実行。
-
-`AskUserQuestion` で以下を確認する:
-- この実装が解決する具体的な問題は何か
-- 解決しない場合の実際のコスト（ユーザー影響・ビジネス影響）は何か
-- より小さい手段で同じ目的を達成できないか
-
-Why が薄い・実装が不要と判明した場合は、ユーザーに率直に伝えて作業を打ち切る。
-判断はユーザーに委ねる。
+If required information (core spec, tech stack, constraints) is missing,
+run Phase 3 questions first, then return to Phase 1 / 2.
 
 ---
 
-## Phase 2: セットアップ
+## Phase 1: Confirm the Why (conditional)
 
-### main を最新化する
+Execute only when Phase 0 judges this as "needed."
+
+Use `AskUserQuestion` to confirm:
+- What specific problem does this implementation solve?
+- What is the actual cost (user impact, business impact) if it is not solved?
+- Is there a smaller means to achieve the same goal?
+
+If the Why is thin or the implementation turns out to be unnecessary, tell the user candidly and stop.
+Leave the decision to the user.
+
+---
+
+## Phase 2: Setup
+
+### Bring main up to date
 
 ```bash
 git switch main
 git pull origin main
 ```
 
-### ワークツリーを作成する
+### Create a worktree
 
-GitHub Flow に準拠したブランチ名（例: `feat/add-login`, `fix/null-pointer-on-checkout`）を決め、
-`git-wt` でワークツリーを作成する:
+Choose a GitHub Flow-compliant branch name (e.g., `feat/add-login`, `fix/null-pointer-on-checkout`),
+then create a worktree with `git-wt`:
 
 ```bash
 git wt <branch-name>
 ```
 
-`git-wt` のデフォルト配置先は `.wt/<branch-name>/`。
-以降の Bash コマンドはすべてこのパスを基点として実行する。
-（シェル状態はツール呼び出し間で引き継がれないため、相対パスが必要なコマンドは
-`cd .wt/<branch-name> && <command>` のように明示する。）
+`git-wt` places the worktree at `.wt/<branch-name>/` by default.
+Run all subsequent Bash commands relative to this path. Because shell state does not persist between
+tool calls, prefix commands that need a relative path with `cd .wt/<branch-name> && <command>`.
 
 ---
 
-## Phase 3: 実装計画を精査・照応する
+## Phase 3: Scrutinize and Reconcile the Implementation Plan
 
-Phase 1 を実行した場合は、その回答を受けてからこのフェーズに進む。
-（Why の答え次第で仕様確認の範囲が変わるため、必ず逐次で行う。）
+If Phase 1 was executed, wait for its answers before entering this phase. The scope of spec
+clarification depends on the Why answers, so these must run sequentially.
 
-1. 関連するコードベース（既存実装・テスト・型定義・設定）を読む
-2. 計画と現状のギャップ・矛盾・未定義の振る舞いを洗い出す
-3. 以下を発見した場合は **必ず `AskUserQuestion` で確認してから進む**:
-   - トランザクション境界・冪等性・並列安全性が未定義
-   - エラー時のロールバック設計がない
-   - 認証・認可の扱いが曖昧
-   - ユーザーが気づいていない可能性のある致命的な欠陥や論理の漏れ
+1. Read the relevant codebase (existing implementation, tests, type definitions, config).
+2. Surface gaps, contradictions, and undefined behaviors between the plan and the current state.
+3. When any of the following are discovered, **always confirm with `AskUserQuestion` before proceeding**:
+   - Transaction boundaries, idempotency, or concurrency safety are undefined
+   - No rollback design on error
+   - Auth/authorization handling is ambiguous
+   - Potential fatal flaws or logic gaps the user may not have noticed
 
-不確実性がすべて解消するまで質問を繰り返す。1 回の `AskUserQuestion` で複数の疑問をまとめて聞く。
-
----
-
-## Phase 4: 実装する
-
-### TDD あり（Phase 0 で判断した場合）
-
-t-wada の TDD サイクルを厳守する:
-
-1. **テストリストを作る** — 実装前に思いつくテストケースをすべて列挙する
-2. **Red** — 失敗するテストを 1 件書く
-3. **Green** — テストをパスさせる最小限のコードを書く
-4. **Refactor** — テストが Green のまま設計を整理する
-5. テストリストが尽きるまで 2〜4 を繰り返す
-
-テストが書きにくいと感じたら、設計を見直すサインとして受け取る。
-
-### TDD なし
-
-最小限の変更で実装する。触ること以外は変えない。
+Keep asking until all uncertainty is resolved. Group multiple questions into a single `AskUserQuestion` call.
 
 ---
 
-## Phase 5: ローカルで CI 相当を検証する
+## Phase 4: Implement
 
-`.github/workflows/` や `Makefile` / `package.json` の CI 設定を確認し、同等の検証を実行:
+### With TDD (when Phase 0 judged applicable)
+
+Follow t-wada's TDD cycle strictly:
+
+1. **Write the test list** — enumerate all test cases you can think of before writing any code
+2. **Red** — write one failing test
+3. **Green** — write the minimum code to make it pass
+4. **Refactor** — clean up the design while tests stay green
+5. Repeat 2–4 until the test list is exhausted
+
+If a test is hard to write, treat it as a signal to revisit the design.
+
+### Without TDD
+
+Implement with the minimum changes. Touch nothing beyond what is required.
+
+---
+
+## Phase 5: Verify CI Locally
+
+Check `.github/workflows/` and `Makefile` / `package.json` for CI configuration, then run the
+equivalent checks:
 - lint / typecheck
-- テストスイート
-- ビルド
+- test suite
+- build
 
-エラーがあれば修正してからコミットに進む。
+Fix any errors before moving on to commit.
 
 ---
 
-## Phase 6: コミット前に承認を求める
+## Phase 6: Request Approval Before Committing
 
-`difit` コマンドを使ってコミット前の差分をユーザーにレビューしてもらう。
-`command -v difit` が成功すれば `difit`、なければ `npx difit` を使う。
+Use `difit` to have the user review the diff before committing.
+Use `difit` if `command -v difit` succeeds, otherwise use `npx difit`.
 
 ```bash
-# ワークツリー内の未コミット変更をレビュー
+# Review uncommitted changes in the worktree
 difit .
 ```
 
-レビューコメントが返ってきた場合は対応してから再度実行する。
-コメントなしで終了した場合はそのまま承認とみなしてコミットする。
+If review comments come back, address them and run again.
+If it exits without comments, treat that as approval and proceed to commit.
 
-**PR はユーザーから明示的に「PR を作って」と指示があるまで作成しない。**
+**Do not create a PR until the user explicitly says "create a PR."**
