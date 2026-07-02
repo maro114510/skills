@@ -141,6 +141,27 @@ Fix any errors before moving on to commit.
 
 ---
 
+## Phase 5.5: CodeRabbit Self-Review (conditional)
+
+Run only when the CodeRabbit CLI is available. Check with `command -v coderabbit` or `command -v cr`.
+If neither is found, skip this phase entirely and proceed to Phase 6.
+
+1. Request a review of the uncommitted diff. Use `coderabbit` if `command -v coderabbit` succeeds,
+   otherwise use `cr`:
+   ```bash
+   coderabbit review --agent --type uncommitted
+   ```
+   If the command errors out (e.g. not authenticated, network failure), note this briefly to the user
+   and proceed to Phase 6 without blocking.
+2. Treat the output as a self-review. Fix only genuine issues, with the minimum change required —
+   do not piggyback unrelated cleanup.
+   For findings that are false positives or reflect an intentional design decision,
+   leave the code as is and note the reason briefly to the user.
+3. If any fix was applied, rerun the same command to confirm the finding is resolved.
+   Repeat until the review is clean or all remaining findings are judged as not requiring action.
+
+---
+
 ## Phase 6: Request Approval Before Committing
 
 Use `difit` to have the user review the diff before committing.
