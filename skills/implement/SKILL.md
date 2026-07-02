@@ -146,7 +146,8 @@ Fix any errors before moving on to commit.
 Run only when the CodeRabbit CLI is available. Check with `command -v coderabbit` or `command -v cr`.
 If neither is found, skip this phase entirely and proceed to Phase 6.
 
-1. Request a review of the uncommitted diff:
+1. Request a review of the uncommitted diff. Use `coderabbit` if `command -v coderabbit` succeeds,
+   otherwise use `cr`:
    ```bash
    coderabbit review --agent --type uncommitted
    ```
