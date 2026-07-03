@@ -37,13 +37,12 @@ pr-review-pe-identify-pr.sh "$ARGUMENTS"
 ```
 
 PR を特定できない場合の exit code 2、gh 障害時の exit code 3 では処理を止めてユーザーに案内する。
-返却 JSON の `number` を `$PR_NUMBER`、`baseRefName` を `$BASE`、`headRefName` を `$HEAD` として使う。
+返却 JSON の `number` を `$PR_NUMBER`、`baseRefName` を `$BASE`、`headRefName` を `$HEAD`、`body` を `$PR_BODY` として使う。`comments`・`reviews` も同じ JSON に含まれているので、別途 `gh pr view` を呼び直さずそのまま既存コメントとして使う。
 
 並列で取得する:
 
 ```bash
 gh pr diff $PR_NUMBER                              # diff (ハルシネーション防止の基盤)
-gh pr view $PR_NUMBER --json comments,reviews       # 既存コメント (重複防止)
 git log --oneline -n 20 origin/$BASE..$HEAD         # コミット履歴
 ```
 
@@ -68,7 +67,7 @@ git grep -n "<キーノウン>" -- '*.go' '*.ts' '*.py' '*.java' '*.kt' '*.rb' '
 
 typo・表記揺れ・体裁は原則2の通り対象外とし、判定対象は次の2点のみとする。
 
-- **必須要素の欠落**: ADR なら Nygard 5 構成要素・Olaf Zimmermann 7 質問・Consequences-negative、Design Doc なら目的・スコープ外・代替案の要素が揃っているか。参照: `skills/pr-doc-review-pe/references/adr-checklist.md`, `skills/pr-doc-review-pe/references/design-doc-checklist.md`。
+- **必須要素の欠落**: ADR なら Nygard 5 構成要素・Olaf Zimmermann 7 質問・Consequences-negative、Design Doc なら目的・スコープ外・代替案、RFC なら motivation・proposal・検討した代替案・unresolved questions、実装計画書なら作業スコープ・作業手順・完了条件・依存関係の要素が揃っているか。参照: `skills/pr-doc-review-pe/references/adr-checklist.md`, `skills/pr-doc-review-pe/references/design-doc-checklist.md`。
 - **論証の飛躍**: 「〜を選択した」「〜は対象外とした」「〜を採用する」といった意思決定文を全件抽出し、前後 3 段落以内に明示的な根拠があるか確認する。なければ MISSING_RATIONALE として著者への probing question を生成する。
 
 ### 軸2: 論理矛盾・技術前提・データモデリング矛盾
@@ -103,7 +102,7 @@ Pass 1 とは独立に `Agent` を subagent_type: general-purpose で起動し�
 1. **重複排除**: 同一 doc-path:line で重複する候補をまとめる。
 2. **致命度ゲート**: 各候補が本番障害・データ不整合・移行失敗・ロールバック不能・API/データ契約の破壊のいずれかに直結するか判定する。直結しないものは除外し FN log に記録する。
 3. **接地検証**: 各指摘が「具体的障害シナリオに接地しているか」「actionable / specific / verifiable か」を確認する。抽象的な提案・接地のない懸念は除外する。
-4. **重複コメント除外**: 既存コメント・PR description で対処済みの指摘は除外する。
+4. **重複コメント除外**: 既存コメントと `$PR_BODY` で対処済みの指摘は除外する。
 5. **Severity・軸タグ付与**: severity は次の基準で機械的に決める。`[nits]` は使わない。
    - `[must]`: 接地された障害シナリオが本番障害・データ不整合・移行失敗・ロールバック不能・契約破壊のいずれかに直結し、かつ文書内に恒久的な緩和策の記載がない。即時の障害だけでなく、サイレントな機能劣化や累積的なデータ不整合など間接的・遅延的に顕在化する場合も含む。
    - `[ask]`: 障害シナリオへの接地はできるが、並行稼働期間や Feature Flag などの一時的な緩和策が既に存在する、または著者の意図次第で致命度が変わる不確実性がある。
