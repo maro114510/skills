@@ -1,62 +1,68 @@
 # Command Reference
 
-## Step 5: Creating Issues
-
-Child Issues are created first so their real numbers exist before the Epic's dependency diagram is written.
-
-### 5.1 Create each child Issue
-
-Declare associative arrays once, then repeat the create block for every child Issue (`Tn`), keyed by its `Tn` id — do not overwrite a single pair of variables across iterations, or every `Tn` but the last loses its number:
+## Step 1: Preflight gh CLI version check
 
 ```bash
-declare -A CHILD_NUM CHILD_NODE_ID
-
-# Repeat this block per Tn, substituting T1, T2, ... for TN:
-CHILD_URL=$(gh issue create \
-  --repo "$REPO" \
-  --title "<child Issue title for TN>" \
-  --body "$(cat <<'EOF'
-<child Issue body for TN>
-EOF
-)")
-CHILD_NUM[TN]=$(echo "$CHILD_URL" | grep -oE '[0-9]+$')
-CHILD_NODE_ID[TN]=$(gh issue view "${CHILD_NUM[TN]}" --repo "$REPO" --json id --jq '.id')
+gh --version
 ```
 
-### 5.2 Build the Epic body and create the Epic
+Confirm the first line reports `2.94.0` or higher (e.g. `gh version 2.96.0`). If lower, stop and tell the user to upgrade `gh` before continuing — this skill relies on the `--parent`, `--blocked-by`, and `--blocking` flags added in GitHub CLI v2.94.0.
 
-Take the Step 4-approved Epic body and replace every `{{Tn}}` token with `#${CHILD_NUM[Tn]}` using the array built above — a mechanical substitution only, no wording changes. Then create it:
+## Step 5: Creating Issues
+
+The Epic is created first: native sub-issue linking (`gh issue create --parent`) needs the parent to already exist, and creating children in wave order lets each one reference already-created earlier-wave numbers directly via `--blocked-by`.
+
+### 5.1 Create the Epic
+
+Create the Epic using the Step 4-approved body, `{{Tn}}` placeholders left in place:
 
 ```bash
 EPIC_URL=$(gh issue create \
   --repo "$REPO" \
   --title "<Epic title>" \
   --body "$(cat <<'EOF'
-<Epic body, with every {{Tn}} already replaced by #<number>>
+<Epic body, {{Tn}} placeholders as approved in Step 4>
 EOF
 )")
 EPIC_NUM=$(echo "$EPIC_URL" | grep -oE '[0-9]+$')
-EPIC_NODE_ID=$(gh issue view "$EPIC_NUM" --repo "$REPO" --json id --jq '.id')
 ```
 
-## Step 6: Link child Issues to Epic via GraphQL
+### 5.2 Create child Issues in wave order
 
-Run this for each child Issue, substituting `TN` for its `Tn` id (using the same `CHILD_NODE_ID` array from Step 5.1):
+Declare an associative array once, then repeat the create block for every child Issue (`Tn`), keyed by its `Tn` id — do not overwrite a single pair of variables across iterations, or every `Tn` but the last loses its number. Process `Tn` in wave order (Wave 1 first, ascending) so that any `Tm` a later `Tn` depends on already has a real number in `CHILD_NUM`:
 
 ```bash
-gh api graphql \
-  -f query='
-    mutation AddSubIssue($issueId: ID!, $subIssueId: ID!) {
-      addSubIssue(input: {issueId: $issueId, subIssueId: $subIssueId}) {
-        issue { number title }
-        subIssue { number title }
-      }
-    }
-  ' \
-  -f issueId="$EPIC_NODE_ID" \
-  -f subIssueId="${CHILD_NODE_ID[TN]}"
+declare -A CHILD_NUM
+
+# Repeat this block per Tn, in wave order, substituting T1, T2, ... for TN:
+# If TN has no depends_on entries, omit --blocked-by entirely.
+CHILD_URL=$(gh issue create \
+  --repo "$REPO" \
+  --title "<child Issue title for TN>" \
+  --body "$(cat <<'EOF'
+<child Issue body for TN>
+EOF
+)" \
+  --parent "$EPIC_NUM" \
+  --blocked-by "${CHILD_NUM[Tm1]},${CHILD_NUM[Tm2]}")
+CHILD_NUM[TN]=$(echo "$CHILD_URL" | grep -oE '[0-9]+$')
 ```
 
-## Step 7: Completion report
+If a single child Issue creation fails, print the error and continue with the remaining `Tn` — don't abort the whole run. Note any failed `Tn` in the Step 6 completion report so the user knows which parent/blocked-by relation is missing.
 
-See the "Step 7: Completion Report" template in `references/templates.<LANG>.md` (e.g. `templates.ja.md` for `ja`).
+### 5.3 Substitute placeholders into the Epic body
+
+Take the Step 4-approved Epic body and replace every `{{Tn}}` token with `#${CHILD_NUM[Tn]}` using the array built above — a mechanical substitution only, no wording changes. Then update the Epic:
+
+```bash
+gh issue edit "$EPIC_NUM" \
+  --repo "$REPO" \
+  --body "$(cat <<'EOF'
+<Epic body, with every {{Tn}} already replaced by #<number>>
+EOF
+)"
+```
+
+## Step 6: Completion report
+
+See the "Step 6: Completion Report" template in `references/templates.<LANG>.md` (e.g. `templates.ja.md` for `ja`).

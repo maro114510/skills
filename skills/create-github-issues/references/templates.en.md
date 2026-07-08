@@ -204,25 +204,26 @@ Show all Issue bodies in the following format and ask for approval:
 
 ---
 
-I'll create the Issues above (the Epic is created last, after the child Issue numbers are finalized).
+I'll create the Issues above (the Epic is created first, then each child Issue is created with the Epic's number as its parent).
 Let me know which part needs changes. If everything looks good, reply "create them".
 ```
 
-## Step 7: Completion Report
+## Step 6: Completion Report
 
 ```
 ## Created
 
 ### Epic
 - #<number> <title>  (<URL>)
-  (The Epic's number is higher than the child Issues' since it was created last.)
+  (The Epic's number is lower than the child Issues' since it was created first.)
 
 ### Child Issues
 - #<number> <title>
 - #<number> <title>
 ...
 
-The Epic and each child Issue are linked via GraphQL (addSubIssue).
-You can check this in the Sub-Issues panel on GitHub.
+The Epic and each child Issue are linked via native `gh issue create --parent` sub-issue relationships.
+Dependencies are set as native Blocked-by/Blocking relationships via `--blocked-by`.
+You can check both in the Issue sidebar on GitHub (Sub-issues / Relationships).
 The Epic body's dependency diagram (or table) now uses the real Issue numbers.
 ```
