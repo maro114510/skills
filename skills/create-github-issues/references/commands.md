@@ -59,19 +59,4 @@ gh api graphql \
 
 ## Step 7: Completion report
 
-```
-## 作成完了
-
-### Epic
-- #<number> <title>  (<URL>)
-  （子 Issue を先に作成しているため、Epic の番号は子 Issue より大きくなります）
-
-### 子Issue
-- #<number> <title>
-- #<number> <title>
-...
-
-Epic と各子Issue は GraphQL（addSubIssue）で紐づけました。
-GitHub 上の Sub-Issues パネルで確認できます。
-Epic 本文の依存関係図（または表）は実際の Issue 番号で確定済みです。
-```
+See the "Step 7: Completion Report" template in `references/templates.<LANG>.md` (e.g. `templates.ja.md` for `ja`).
