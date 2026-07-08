@@ -206,25 +206,26 @@ Show all Issue bodies in the following format and ask for approval:
 
 ---
 
-上記内容で Issue を作成します（Epic は子 Issue 番号確定後に作成されるため、Epic が最後に作成されます）。
+上記内容で Issue を作成します。Epic を先に作成し、子 Issue はその番号を親として順に作成するため、Epic が最初に作成されます。
 修正があれば箇所を指定して教えてください。問題なければ「作成してください」と返信してください。
 ```
 
-## Step 7: Completion Report
+## Step 6: Completion Report
 
 ```
 ## 作成完了
 
 ### Epic
 - #<number> <title>  (<URL>)
-  （子 Issue を先に作成しているため、Epic の番号は子 Issue より大きくなります）
+  Epic を先に作成しているため、Epic の番号は子 Issue より小さくなります。
 
 ### 子Issue
 - #<number> <title>
 - #<number> <title>
 ...
 
-Epic と各子Issue は GraphQL（addSubIssue）で紐づけました。
-GitHub 上の Sub-Issues パネルで確認できます。
+Epic と各子Issueは `gh issue create --parent` による Sub-issue 関係で紐づけました。
+依存関係は `--blocked-by` による Blocked-by/Blocking 関係として設定済みです。
+GitHub 上の Issue サイドバー（Sub-issues / Relationships）で確認できます。
 Epic 本文の依存関係図（または表）は実際の Issue 番号で確定済みです。
 ```

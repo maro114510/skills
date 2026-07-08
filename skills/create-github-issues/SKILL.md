@@ -2,8 +2,8 @@
 name: create-github-issues
 description: >
   Create GitHub Issues from a conversation, plan, or TODO list.
-  Produces one Epic parent Issue and child Issues per task, each with background, requirements, specs, dependency, and acceptance criteria, linked to the Epic via the GitHub GraphQL addSubIssue mutation.
-  Requirements (what) and specs (how) are kept separate and length-capped so bodies stay concise, and the Epic renders a Mermaid diagram (a compact table for large epics) showing which child Issues block each other and which can run in parallel.
+  Produces one Epic parent Issue and child Issues per task, each with background, requirements, specs, dependency, and acceptance criteria, linked to the Epic as GitHub sub-issues with dependencies recorded as blocked-by/blocking relations.
+  Requirements (what) and specs (how) are kept separate and length-capped so bodies stay concise, and the Epic also renders a Mermaid diagram (a compact table for large epics) showing which child Issues block each other and which can run in parallel.
   Issue titles, bodies, and every interactive prompt are written in Japanese by default; pass `lang en` to generate the whole run in English instead.
   Use this skill when the user asks to track tasks with an Epic, turn TODOs or a plan into GitHub Issues, or extract action items from a review or investigation.
 allowed-tools: Bash(gh:*), Bash(git remote get-url:*)
@@ -13,7 +13,7 @@ argument-hint: "[repo <owner/repo>] [lang <ja|en>]"
 # create-github-issues
 
 Create a GitHub Epic and child Issues from conversation context.
-Write concise, length-capped bodies (requirements separated from specs), model dependencies explicitly, then link via GraphQL and render the dependency graph in the Epic.
+Write concise, length-capped bodies (requirements separated from specs), model dependencies explicitly, then link hierarchy and dependencies via native `gh` CLI flags and render the dependency graph in the Epic.
 
 **Core rule that governs every step below: an Issue body may only contain facts already surfaced and approved earlier in this flow (Step 1.5 / Step 2 / Step 3). Step 4 is formatting, not authoring — never introduce a new requirement, spec detail, or dependency for the first time while writing the final Markdown body.** If you notice you need to state something new while writing a body, stop, go back to Step 3, and get it approved there first.
 
@@ -38,7 +38,7 @@ Extract `owner/repo` from `https://github.com/owner/repo.git` or `git@github.com
 
 Check `$ARGUMENTS` for `lang <ja|en>` and store it as `LANG`; default to `ja` if omitted (preserves existing behavior).
 
-`LANG` is fixed for the rest of this run and governs everything produced from here on — AskUserQuestion prompts, summaries, reviews, warnings, Issue/Epic titles, and Issue/Epic bodies. From Step 1.5 through Step 7, read only `references/templates.<LANG>.md` — never the other language's file, and never switch languages mid-run.
+`LANG` is fixed for the rest of this run and governs everything produced from here on — AskUserQuestion prompts, summaries, reviews, warnings, Issue/Epic titles, and Issue/Epic bodies. From Step 1.5 through Step 6, read only `references/templates.<LANG>.md` — never the other language's file, and never switch languages mid-run.
 
 ---
 
@@ -82,6 +82,7 @@ Analyze the current conversation context (recent plans, investigations, TODO lis
 - Scope: what is included in this Epic
 
 **Child Issue list**
+- **Hierarchy is exactly two levels, always: Epic → `Tn`. A `Tn` is never itself a parent of another `Tn`.** If a task needs more decomposition than the cap below allows, split it into additional sibling `Tn` under the same Epic — never nest one `Tn` under another. This is a hard rule, not a default: do not create a third level under any circumstances, even if a task feels like a natural "sub-epic".
 - Split each task into independently implementable and verifiable units
 - Assign each a short temporary ID: `T1`, `T2`, `T3`, ... (used only during this conversation; never shown to the end reader)
 - Title and a one-line summary of each task's role in the Epic
@@ -124,6 +125,7 @@ After approval, write the Markdown body for the Epic and each child Issue using 
 **Epic:**
 - Dependencies & Parallel Execution Plan section: a Mermaid `flowchart` grouping child Issues into `subgraph` blocks per wave, using `{{Tn}}` tokens (double curly braces) everywhere a real Issue number will later be substituted — both in node labels and in any prose. **If there are more than 12 child Issues, replace the flowchart with the compact wave table** in `references/templates.<LANG>.md` instead — a graph that large stops being readable.
   - **Escaping in node labels:** if a title contains a double quote, write it as the entity code `#quot;` inside the `["..."]` label — never a raw `"` (it terminates the label) and never a backslash-escaped `\"` (Mermaid does not support backslash escaping and the diagram fails to render). Same rule applies to the Step 3 dependency preview.
+- This diagram is a rendering of the same `depends_on`/wave data that Step 5 also uses to set native GitHub blocked-by/blocking relations on each child Issue. Both are generated once, from the same approved data, in the same run — the diagram is a human-readable view, not a hand-maintained duplicate that can drift from the real relations after creation.
 
 Do not use `{{Tn}}` tokens in child Issue bodies — child Issues stay abstract (`T1`, not `{{T1}}`) and are never rewritten after creation; only the Epic body gets the substitution pass in Step 5.
 
@@ -145,24 +147,14 @@ If the user requests changes, apply them and re-display the updated bodies befor
 
 See `references/commands.md` for the exact shell commands.
 
-**Child Issues are created before the Epic** — the Epic's dependency diagram needs real Issue numbers, and those don't exist until the child Issues do.
+**The Epic is created first**, since `--parent` needs it to already exist. Children are created next in wave order, each with `--parent $EPIC_NUM` and `--blocked-by <already-known real numbers>` (never `--parent` pointing at another child — see the hierarchy rule in Step 2). Once every child exists, substitute their real numbers into the Epic body's `{{Tn}}` placeholders and update the Epic via `gh issue edit`.
 
-1. Create every child Issue first (any order), capturing each one's number and Node ID against its `Tn` id.
-2. Build the Epic body by replacing every `{{Tn}}` token in the Step 4-approved Epic body with the real `#<number>` now on hand. This is a pure mechanical substitution — the structure was already approved in Step 4.5, so do not alter wording beyond the token swap.
-3. Create the Epic with the substituted body and capture its number and Node ID.
+If a child Issue's creation fails, continue with the rest and flag it in the Step 6 report — don't abort the whole run.
 
-Note for the user in the completion report (Step 7) that the Epic's Issue number will be higher than its children's, since it's created last.
+Note in the completion report (Step 6) that the Epic's number will be lower than its children's, since it's created first.
 
 ---
 
-## Step 6: Link Issues via GraphQL
+## Step 6: Report Completion
 
-For each child Issue, run the `addSubIssue` mutation shown in `references/commands.md`.
-
-If GraphQL returns an error, print the error message and continue with the remaining child Issues — don't abort the whole run.
-
----
-
-## Step 7: Report Completion
-
-Use the "Step 7: Completion Report" template in `references/templates.<LANG>.md`.
+Use the "Step 6: Completion Report" template in `references/templates.<LANG>.md`.
