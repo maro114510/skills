@@ -224,8 +224,8 @@ Let me know which part needs changes. If everything looks good, reply "create th
 - #<number> <title>
 ...
 
-The Epic and each child Issue are linked via native `gh issue create --parent` sub-issue relationships.
-Dependencies are set as native Blocked-by/Blocking relationships via `--blocked-by`.
+The Epic and each child Issue are linked via `gh issue create --parent` sub-issue relationships.
+Dependencies are set as Blocked-by/Blocking relationships via `--blocked-by`.
 You can check both in the Issue sidebar on GitHub (Sub-issues / Relationships).
 The Epic body's dependency diagram (or table) now uses the real Issue numbers.
 ```

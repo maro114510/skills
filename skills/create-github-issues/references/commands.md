@@ -1,13 +1,5 @@
 # Command Reference
 
-## Step 1: Preflight gh CLI version check
-
-```bash
-gh --version
-```
-
-Confirm the first line reports `2.94.0` or higher (e.g. `gh version 2.96.0`). If lower, stop and tell the user to upgrade `gh` before continuing — this skill relies on the `--parent`, `--blocked-by`, and `--blocking` flags added in GitHub CLI v2.94.0.
-
 ## Step 5: Creating Issues
 
 The Epic is created first: native sub-issue linking (`gh issue create --parent`) needs the parent to already exist, and creating children in wave order lets each one reference already-created earlier-wave numbers directly via `--blocked-by`.
@@ -35,7 +27,9 @@ Declare an associative array once, then repeat the create block for every child 
 declare -A CHILD_NUM
 
 # Repeat this block per Tn, in wave order, substituting T1, T2, ... for TN:
-# If TN has no depends_on entries, omit --blocked-by entirely.
+# --blocked-by takes a comma-separated list of every Tm in TN's depends_on — one, several, or omitted
+# entirely if TN has none. GitHub treats an issue as blocked by ALL listed issues, not just one:
+# it isn't considered unblocked until every one of them is closed.
 CHILD_URL=$(gh issue create \
   --repo "$REPO" \
   --title "<child Issue title for TN>" \
@@ -44,7 +38,7 @@ CHILD_URL=$(gh issue create \
 EOF
 )" \
   --parent "$EPIC_NUM" \
-  --blocked-by "${CHILD_NUM[Tm1]},${CHILD_NUM[Tm2]}")
+  --blocked-by "<comma-separated real numbers of every Tm in TN's depends_on>")
 CHILD_NUM[TN]=$(echo "$CHILD_URL" | grep -oE '[0-9]+$')
 ```
 
