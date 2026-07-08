@@ -33,7 +33,7 @@ Output this when the user instructs to proceed with unresolved items:
 
 ## Step 3: Summary Format
 
-Output this block and ask for approval. Show every task's requirement/spec bullets and its dependency here — this is the only chance to catch invented or misplaced content before it's written into a real Issue.
+Output this block and ask for approval. Show every task's requirement/spec bullets and its dependency here — this is the main checkpoint for catching invented or misplaced content before it's written into a real Issue.
 
 Use the same 12-task threshold as the Epic body template below: Mermaid for 12 or fewer tasks, the wave table for more. This preview must render in the same form the Epic will actually use — never show a Mermaid graph here if Step 4 is going to render a table, or vice versa.
 
@@ -181,7 +181,7 @@ Replace the `## 依存関係と並列実行計画` section with:
 
 Show all Issue bodies in the following format and ask for approval:
 
-```
+```markdown
 ## Issue 本文レビュー
 
 `{{Tn}}` は仮のプレースホルダーです。子 Issue 作成後、実際の Issue 番号（例: #123）に置換されて Epic に反映されます。
