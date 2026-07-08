@@ -123,6 +123,7 @@ After approval, write the Markdown body for the Epic and each child Issue using 
 
 **Epic:**
 - Dependencies & Parallel Execution Plan section: a Mermaid `flowchart` grouping child Issues into `subgraph` blocks per wave, using `{{Tn}}` tokens (double curly braces) everywhere a real Issue number will later be substituted — both in node labels and in any prose. **If there are more than 12 child Issues, replace the flowchart with the compact wave table** in `references/templates.<LANG>.md` instead — a graph that large stops being readable.
+  - **Escaping in node labels:** if a title contains a double quote, write it as the entity code `#quot;` inside the `["..."]` label — never a raw `"` (it terminates the label) and never a backslash-escaped `\"` (Mermaid does not support backslash escaping and the diagram fails to render). Same rule applies to the Step 3 dependency preview.
 
 Do not use `{{Tn}}` tokens in child Issue bodies — child Issues stay abstract (`T1`, not `{{T1}}`) and are never rewritten after creation; only the Epic body gets the substitution pass in Step 5.
 

@@ -37,6 +37,8 @@ Output this block and ask for approval. Show every task's requirement/spec bulle
 
 Use the same 12-task threshold as the Epic body template below: Mermaid for 12 or fewer tasks, the wave table for more. This preview must render in the same form the Epic will actually use — never show a Mermaid graph here if Step 4 is going to render a table, or vice versa.
 
+In any Mermaid node label, a double quote in a title must be written as `#quot;` — never a raw `"` or a backslash-escaped `\"` (backslash escaping breaks rendering).
+
 ```
 ## 作成する Issue の構成
 
