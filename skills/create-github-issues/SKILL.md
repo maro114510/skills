@@ -4,9 +4,10 @@ description: >
   Create GitHub Issues from a conversation, plan, or TODO list.
   Produces one Epic parent Issue and child Issues per task, each with background, requirements, specs, dependency, and acceptance criteria, linked to the Epic via the GitHub GraphQL addSubIssue mutation.
   Requirements (what) and specs (how) are kept separate and length-capped so bodies stay concise, and the Epic renders a Mermaid diagram (a compact table for large epics) showing which child Issues block each other and which can run in parallel.
+  Issue titles, bodies, and every interactive prompt are written in Japanese by default; pass `lang en` to generate the whole run in English instead.
   Use this skill when the user asks to track tasks with an Epic, turn TODOs or a plan into GitHub Issues, or extract action items from a review or investigation.
 allowed-tools: Bash(gh:*), Bash(git remote get-url:*)
-argument-hint: "[repo <owner/repo>]"
+argument-hint: "[repo <owner/repo>] [lang <ja|en>]"
 ---
 
 # create-github-issues
@@ -33,6 +34,14 @@ Extract `owner/repo` from `https://github.com/owner/repo.git` or `git@github.com
 
 ---
 
+## Step 1a: Determine Output Language
+
+Check `$ARGUMENTS` for `lang <ja|en>` and store it as `LANG`; default to `ja` if omitted (preserves existing behavior).
+
+`LANG` is fixed for the rest of this run and governs everything produced from here on — AskUserQuestion prompts, summaries, reviews, warnings, Issue/Epic titles, and Issue/Epic bodies. From Step 1.5 through Step 7, read only `references/templates.<LANG>.md` — never the other language's file, and never switch languages mid-run.
+
+---
+
 ## Step 1.5: Specification Clarification
 
 Scan the conversation context across three axes and determine whether enough information is available to write high-quality Issues.
@@ -51,15 +60,15 @@ Scan the conversation context across three axes and determine whether enough inf
 Skip to Step 2. Do not ask any questions.
 
 **One or more axes are unclear:**
-Use **AskUserQuestion** to surface the ambiguities. For each unclear item, present specific answer choices (e.g., "(A) include JWT refresh in the same Issue / (B) split into a separate Issue"). Batch all unclear items into a single AskUserQuestion call (up to 4 questions); if more than 4 items are unclear, prioritize the ones with the highest impact on Issue scope.
+Use **AskUserQuestion** to surface the ambiguities, following the "Step 1.5: Clarification Question Format" template in `references/templates.<LANG>.md` — use only the labeled subsection(s) for the axis/axes actually unclear, not all three unconditionally. For each unclear item, present specific answer choices (e.g., "(A) include JWT refresh in the same Issue / (B) split into a separate Issue"). Batch all unclear items into a single AskUserQuestion call (up to 4 questions); if more than 4 items are unclear, prioritize the ones with the highest impact on Issue scope.
 
 **Stop after calling AskUserQuestion. Do not proceed to Step 2 until the user has responded.**
 
 **User instructs to proceed with unresolved items:**
-Output the warning using the "Step 1.5: Warning Format" template in `references/templates.md`, then proceed to Step 2.
-Mark unresolved sections in Issue bodies with `[要確認]`.
+Output the warning using the "Step 1.5: Warning Format" template in `references/templates.<LANG>.md`, then proceed to Step 2.
+Mark unresolved sections in Issue bodies with the confirmation tag defined in that template.
 
-Anything that stays unresolved after this step must **not** be silently decided later. Either it gets a `[要確認]` tag, or it gets left out of the Issue entirely — never invented.
+Anything that stays unresolved after this step must **not** be silently decided later. Either it gets the confirmation tag, or it gets left out of the Issue entirely — never invented.
 
 ---
 
@@ -92,7 +101,7 @@ Analyze the current conversation context (recent plans, investigations, TODO lis
 
 ## Step 3: Show Summary and Get Approval
 
-Use the "Step 3: Summary Format" in `references/templates.md`. This preview must show, per task: its `Tn` id, title, wave/dependency, requirement bullets, spec bullets, and one-line acceptance criterion — plus a dependency preview keyed by `Tn` (real Issue numbers don't exist yet). **Apply the same 12-task threshold as the Epic body here**: a Mermaid flowchart for 12 or fewer tasks, the compact wave table for more — the user is approving the same structure that Step 4 will render, so the two must never diverge in form.
+Use the "Step 3: Summary Format" in `references/templates.<LANG>.md`. This preview must show, per task: its `Tn` id, title, wave/dependency, requirement bullets, spec bullets, and one-line acceptance criterion — plus a dependency preview keyed by `Tn` (real Issue numbers don't exist yet). **Apply the same 12-task threshold as the Epic body here**: a Mermaid flowchart for 12 or fewer tasks, the compact wave table for more — the user is approving the same structure that Step 4 will render, so the two must never diverge in form.
 
 This preview is allowed to be more detailed than the final Issue bodies — its job is to surface every piece of content that will end up in an Issue, so nothing new gets invented in Step 4.
 
@@ -104,16 +113,16 @@ If the user requests changes, update the summary (including the dependency graph
 
 ## Step 4: Generate Issue Bodies
 
-After approval, write the Markdown body for the Epic and each child Issue using the templates in `references/templates.md`. Use only content already approved in Step 3 — do not add, soften, or elaborate on requirements/specs while formatting.
+After approval, write the Markdown body for the Epic and each child Issue using the templates in `references/templates.<LANG>.md`. Use only content already approved in Step 3 — do not add, soften, or elaborate on requirements/specs while formatting.
 
 **Child Issues:**
-- `## 要件`: the approved requirement bullets, verbatim in substance (may be copy-edited for clarity, not expanded).
-- `## 仕様`: the approved spec bullets. Omit this section entirely if no technical decision was actually settled in the conversation — do not fill it with invented detail.
-- `## 依存関係`: one line, referencing the `Tn` of whatever it depends on (e.g., "T1 の完了後に着手可能。全体像は Epic を参照。" — don't say "図" or "表" specifically, since which one the Epic uses depends on the 12-issue threshold), or "なし（並列着手可能）". Do not restate the full dependency chain here — that lives only in the Epic.
-- `## 受け入れ条件`: concrete, verifiable statements equivalent to "Given X, When Y, Then Z" — not vague phrases like "works correctly". Cap `検証方法` at 5 items. If the real scenarios don't fit in 5, do not compress them — stop, go back to Step 2 to split this task into more `Tn`, and re-run Step 3 approval before writing bodies again.
+- Requirements section: the approved requirement bullets, verbatim in substance (may be copy-edited for clarity, not expanded).
+- Specs section: the approved spec bullets. Omit this section entirely if no technical decision was actually settled in the conversation — do not fill it with invented detail.
+- Dependencies section: one line referencing the `Tn` it depends on, or the template's "none" phrasing — don't say "diagram" or "table" specifically, since which one the Epic uses depends on the 12-issue threshold. Do not restate the full dependency chain here — that lives only in the Epic.
+- Acceptance Criteria section: concrete, verifiable statements equivalent to "Given X, When Y, Then Z" — not vague phrases like "works correctly". Cap the Verification subsection at 5 items. If the real scenarios don't fit in 5, do not compress them — stop, go back to Step 2 to split this task into more `Tn`, and re-run Step 3 approval before writing bodies again.
 
 **Epic:**
-- `## 依存関係と並列実行計画`: a Mermaid `flowchart` grouping child Issues into `subgraph` blocks per wave, using `{{Tn}}` tokens (double curly braces) everywhere a real Issue number will later be substituted — both in node labels and in any prose. **If there are more than 12 child Issues, replace the flowchart with the compact wave table** shown in `references/templates.md` instead — a graph that large stops being readable.
+- Dependencies & Parallel Execution Plan section: a Mermaid `flowchart` grouping child Issues into `subgraph` blocks per wave, using `{{Tn}}` tokens (double curly braces) everywhere a real Issue number will later be substituted — both in node labels and in any prose. **If there are more than 12 child Issues, replace the flowchart with the compact wave table** in `references/templates.<LANG>.md` instead — a graph that large stops being readable.
 
 Do not use `{{Tn}}` tokens in child Issue bodies — child Issues stay abstract (`T1`, not `{{T1}}`) and are never rewritten after creation; only the Epic body gets the substitution pass in Step 5.
 
@@ -123,7 +132,7 @@ Do not use `{{Tn}}` tokens in child Issue bodies — child Issues stay abstract 
 
 After generating all Issue bodies, present the full text to the user before creating anything.
 
-Use the "Step 4.5: Body Review Format" template in `references/templates.md` to display the Epic and all child Issues in order. Note explicitly that `{{Tn}}` tokens in the Epic body are placeholders that will be replaced with real Issue numbers (`#123`) once the child Issues exist.
+Use the "Step 4.5: Body Review Format" template in `references/templates.<LANG>.md` to display the Epic and all child Issues in order. Note explicitly that `{{Tn}}` tokens in the Epic body are placeholders that will be replaced with real Issue numbers (`#123`) once the child Issues exist.
 
 **Stop after presenting. Do not proceed to Step 5 until the user explicitly approves.**
 
@@ -155,4 +164,4 @@ If GraphQL returns an error, print the error message and continue with the remai
 
 ## Step 7: Report Completion
 
-Use the completion report template in `references/commands.md`.
+Use the "Step 7: Completion Report" template in `references/templates.<LANG>.md`.

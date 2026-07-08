@@ -1,8 +1,8 @@
-# Templates
+# Templates (ja)
 
 ## Step 1.5: Clarification Question Format
 
-Enumerate each unclear item and ask for a response using the following format:
+Enumerate each unclear item and ask for a response using the following format. The three labeled subsections below (`[粒度]` / `[受け入れ条件]` / `[仕様]`) are illustrative, not a fixed checklist — include only the subsection(s) for the axis/axes actually unclear this run.
 
 ```
 以下の点が不明確です。回答してから続行します。
@@ -206,4 +206,23 @@ Show all Issue bodies in the following format and ask for approval:
 
 上記内容で Issue を作成します（Epic は子 Issue 番号確定後に作成されるため、Epic が最後に作成されます）。
 修正があれば箇所を指定して教えてください。問題なければ「作成してください」と返信してください。
+```
+
+## Step 7: Completion Report
+
+```
+## 作成完了
+
+### Epic
+- #<number> <title>  (<URL>)
+  （子 Issue を先に作成しているため、Epic の番号は子 Issue より大きくなります）
+
+### 子Issue
+- #<number> <title>
+- #<number> <title>
+...
+
+Epic と各子Issue は GraphQL（addSubIssue）で紐づけました。
+GitHub 上の Sub-Issues パネルで確認できます。
+Epic 本文の依存関係図（または表）は実際の Issue 番号で確定済みです。
 ```
