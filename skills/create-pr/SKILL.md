@@ -64,7 +64,7 @@ Stop and report the issue to the user if any of the following is true:
 
 - The current branch is the base branch itself, so a PR cannot be created. Suggest creating a feature branch.
 - There are no commits on the branch. Ask whether commits are missing.
-- There are uncommitted changes. Ask whether they should be committed before creating the PR.
+- There are uncommitted changes. Invoke the `commit` skill to handle them — it decides on its own whether to commit automatically or ask first. Afterward, re-check `git status --short`: only re-run 1.3 and continue if the worktree is now clean. If uncommitted changes remain — for example the user declined, or a suspected secret was excluded — stop and report that instead of continuing.
 
 ## Step 2. Analyze the Change
 
