@@ -173,6 +173,7 @@ difit .
 ```
 
 If review comments come back, address them and run again.
-If it exits without comments, treat that as approval and proceed to commit.
+If it exits without comments, treat that as approval to proceed.
+Invoke the `commit` skill to compose and make the commit — it decides on its own whether to commit automatically or ask first, independent of the difit review just completed.
 
 **Do not create a PR until the user explicitly says "create a PR."**
