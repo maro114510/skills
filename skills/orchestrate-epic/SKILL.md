@@ -40,7 +40,7 @@ Parse `$ARGUMENTS`:
 
 - `repo <owner/repo>` — else auto-detect from `git remote get-url origin`; store as `REPO`.
 - `epic <number|url>` — else look for an Epic number in the recent conversation (e.g. a create-github-issues completion report); else ask via AskUserQuestion whether to specify one or run create-github-issues first.
-- `max-parallel <n>` — concurrent worker cap, default 3.
+- `max-parallel <n>` — concurrent worker cap, default 3. Reject anything that isn't a positive integer (0, negative, non-numeric): fall back to the default and tell the user why.
 
 Confirm `gh auth status` succeeds. If the main checkout is dirty, stop and tell the user — Step 4 needs to update `main`, and silently stashing someone's work is not acceptable.
 

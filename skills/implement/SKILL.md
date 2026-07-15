@@ -27,7 +27,7 @@ The word appearing anywhere else (e.g. "implement autonomous reconnection") is t
 The caller may pass `branch <name>` and `worktree <path>`. Everything not listed below runs as in the normal flow:
 
 - **Phase 1 never runs.** A genuinely unclear Why that would change what gets built is a blocking question (see Phase 3 below), not an implicit decision.
-- **Phase 2**: skip `git switch main && git pull` — the orchestrator already updated main, and parallel workers would race on the shared checkout. Use the caller-provided worktree; only if none was given, run `git wt <branch>` and capture the printed path (git-wt config may place it outside `.wt/`). Existing changes in the worktree are prior work — continue on top of them.
+- **Phase 2**: skip `git switch main && git pull` — the orchestrator already updated main, and parallel workers would race on the shared checkout. Use the caller-provided worktree; only if none was given, run `git wt <branch>` and capture the printed path (git-wt config may place it outside `.wt/`) — and if `branch` is also missing, treat that as a blocking question (Phase 3) instead of inventing a name. Existing changes in the worktree are prior work — continue on top of them.
 - **Phase 3**: no human is reachable, so instead of `AskUserQuestion`, stop before implementing and return a BLOCKED report with concrete questions and options. Never guess — the orchestrator relays questions and re-dispatches you with answers.
 - **Phase 6 never runs** — no difit, no commit. Leave changes uncommitted; the orchestrator ships them after human approval.
 - **Final output**: exactly this report — it is the return value the caller parses, not a human-facing message:
