@@ -8,14 +8,41 @@ description: >
   "please implement XXX", "refactor this", "handle this", and similar implementation requests.
   Works in a worktree and asks for user approval via difit before committing.
   Does not create a PR until the user explicitly requests it.
+  Also runs in a non-interactive autonomous mode when invoked with `autonomous` by an orchestrator (e.g. orchestrate-epic) inside a subagent.
 allowed-tools: AskUserQuestion, Bash, Read, Edit, Write, Glob, Grep
-argument-hint: "[description of what to implement]"
+argument-hint: "[description of what to implement] [autonomous] [branch <name>]"
 ---
 
 # implement
 
 Prioritize implementation quality while auto-adjusting the flow based on task characteristics.
 Skip unnecessary steps; go deep only where it matters.
+
+---
+
+## Autonomous Mode
+
+Activated **only when the first token of `$ARGUMENTS` is exactly `autonomous`** — used when an orchestrator dispatches this skill inside a subagent, where no human is reachable.
+The word appearing anywhere else (e.g. "implement autonomous reconnection") is task text, not a trigger.
+The caller may pass `branch <name>` and `worktree <path>`. Everything not listed below runs as in the normal flow:
+
+- **Phase 1 never runs.** A genuinely unclear Why that would change what gets built is a blocking question (see Phase 3 below), not an implicit decision.
+- **Phase 2**: skip `git switch main && git pull` — the orchestrator already updated main, and parallel workers would race on the shared checkout. Use the caller-provided worktree; only if none was given, run `git wt <branch>` and capture the printed path (git-wt config may place it outside `.wt/`) — and if `branch` is also missing, treat that as a blocking question (Phase 3) instead of inventing a name. Existing changes in the worktree are prior work — continue on top of them.
+- **Phase 3**: no human is reachable, so instead of `AskUserQuestion`, stop before implementing and return a BLOCKED report with concrete questions and options. Never guess — the orchestrator relays questions and re-dispatches you with answers.
+- **Phase 6 never runs** — no difit, no commit. Leave changes uncommitted; the orchestrator ships them after human approval.
+- **Final output**: exactly this report — it is the return value the caller parses, not a human-facing message:
+
+```
+STATUS: DONE | BLOCKED | FAILED
+ISSUE: #<number, when the caller supplied one; omit otherwise>
+BRANCH: <branch>
+WORKTREE: <absolute worktree path>
+CHANGED_FILES: <one path per line; empty if BLOCKED before implementing>
+TESTS: <checks run and their results>
+SUMMARY: <what was implemented; key decisions and why>
+QUESTIONS: <BLOCKED only — numbered, each with concrete answer options>
+ERROR: <FAILED only — what failed, what was attempted>
+```
 
 ---
 
@@ -70,6 +97,8 @@ Leave the decision to the user.
 
 ## Phase 2: Setup
 
+In autonomous mode, skip "Bring main up to date" and use the caller's branch name — see Autonomous Mode.
+
 ### Bring main up to date
 
 ```bash
@@ -86,9 +115,8 @@ then create a worktree with `git-wt`:
 git wt <branch-name>
 ```
 
-`git-wt` places the worktree at `.wt/<branch-name>/` by default.
-Run all subsequent Bash commands relative to this path. Because shell state does not persist between
-tool calls, prefix commands that need a relative path with `cd .wt/<branch-name> && <command>`.
+`git wt` prints the worktree path — capture it, since the location depends on git-wt config (`.wt/<branch-name>/` is common but not guaranteed; it may live outside the repo).
+Run all subsequent Bash commands relative to that path. Because shell state does not persist between tool calls, prefix commands that need the worktree with `cd <worktree-path> && <command>`.
 
 ---
 
@@ -106,6 +134,8 @@ clarification depends on the Why answers, so these must run sequentially.
    - Potential fatal flaws or logic gaps the user may not have noticed
 
 Keep asking until all uncertainty is resolved. Group multiple questions into a single `AskUserQuestion` call.
+
+In autonomous mode, return a BLOCKED report instead of calling `AskUserQuestion` — see Autonomous Mode.
 
 ---
 
@@ -163,6 +193,8 @@ If neither is found, skip this phase entirely and proceed to Phase 6.
 ---
 
 ## Phase 6: Request Approval Before Committing
+
+In autonomous mode, skip this phase entirely and emit the structured report — see Autonomous Mode.
 
 Use `difit` to have the user review the diff before committing.
 Use `difit` if `command -v difit` succeeds, otherwise use `npx difit`.
