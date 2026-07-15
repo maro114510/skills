@@ -125,7 +125,7 @@ ERROR: <FAILED only>
 
 ## Step 6: Reviewer Pass (maker/checker)
 
-Per DONE Issue, spawn a `skills:issue-reviewer` subagent (parallel is fine) with the worktree path, the Issue's requirements and acceptance criteria, and the diff command `git -C <worktree> diff $(git -C <worktree> merge-base main HEAD)` — the merge-base baseline catches both uncommitted changes and any commits a worker made despite instructions, without dragging in changes merged to main after a resumed worktree was created.
+Per DONE Issue, first run `git -C <worktree> add -N .` — plain diff skips untracked files, and a worker's newly created files must not escape review. Then spawn a `skills:issue-reviewer` subagent (parallel is fine) with the worktree path, the Issue's requirements and acceptance criteria, and the diff command `git -C <worktree> diff $(git -C <worktree> merge-base main HEAD)` — the merge-base baseline catches uncommitted changes, intent-to-add files, and any commits a worker made despite instructions, without dragging in changes merged to main after a resumed worktree was created.
 If `git -C <worktree> log main..HEAD` shows commits, the worker broke its no-commit rule: still review everything, and flag the violation at the wave gate.
 
 Reviewer output:
@@ -155,7 +155,7 @@ Then ask the explicit approval via AskUserQuestion per the "Wave Approval" templ
 
 Per approved Issue, following commands §3:
 
-1. **Secret screen** the diff (same patterns as the commit skill's Step 2). Any hit: exclude the file, tell the user what and why, ask — a suspected secret never ships on autopilot.
+1. **Secret screen** the diff (same patterns as the commit skill's Step 2). Any hit: exclude the file, tell the user what and why, ask — and stage the remainder via explicit paths, never `add -A`, so a flagged file cannot ride along. A suspected secret never ships on autopilot.
 2. Stage and commit in the worktree with a Conventional Commits message derived from the Issue.
 3. Push and create the PR with `gh pr create --head <branch>` — body carries the worker summary, test evidence, `Closes #<number>`, and the Epic reference.
 4. Remove the `loop:in-progress` label.

@@ -52,12 +52,15 @@ Every sub-step is guarded so a mid-failure rerun resumes instead of erroring: co
 
 ```bash
 # 1. Inspect what ships — input for the secret screen
+git -C "$WT" add -N .                                      # intent-to-add: makes untracked files diff-visible (content stays unstaged)
 git -C "$WT" status --short
 git -C "$WT" diff "$(git -C "$WT" merge-base main HEAD)"   # uncommitted + any rogue commits, without post-branch main noise
 git -C "$WT" log --oneline main..HEAD                      # non-empty = worker committed against its rules; flag to the user
 
 # 2. Stage and commit — skip if `status --short` is empty (a rerun after the commit already landed)
-git -C "$WT" add -A
+git -C "$WT" add -A                        # ONLY when the secret screen found nothing
+# After any hit, never use add -A: unstage flagged paths (git -C "$WT" restore --staged -- <path>)
+# and stage the safe remainder explicitly with git -C "$WT" add -- <path>...
 git -C "$WT" commit -m "$(cat <<'EOF'
 <type>(<scope>): <summary derived from the Issue title>
 
@@ -87,7 +90,7 @@ EOF
 gh issue edit "$N" --repo "$REPO" --remove-label "loop:in-progress"
 ```
 
-Secret screen (before step 2): the commit skill's Step 2 patterns against the status paths and diff — `.env*`, `*.pem`, `*.key`, `id_rsa*`, `*credentials*`, `*secret*`, `*.p12`, `service-account*.json`; `AKIA[0-9A-Z]{16}`, private-key headers, `gh[pousr]_[A-Za-z0-9]{20,}`, `sk-[A-Za-z0-9]{20,}`, `xox[baprs]-`, literal values assigned to `password`/`token`. Any hit: leave unstaged, tell the user, ask.
+Secret screen (before step 2): the commit skill's Step 2 patterns against the status paths and diff — `.env*`, `*.pem`, `*.key`, `id_rsa*`, `*credentials*`, `*secret*`, `*.p12`, `service-account*.json`; `AKIA[0-9A-Z]{16}`, private-key headers, `gh[pousr]_[A-Za-z0-9]{20,}`, `sk-[A-Za-z0-9]{20,}`, `xox[baprs]-`, literal values assigned to `password`/`token`. Any hit: unstage it (`restore --staged`, since `add -N` touched the index), tell the user, ask — never ship it silently.
 
 ## §4 Cleanup After Merge (Step 9 rescan)
 
