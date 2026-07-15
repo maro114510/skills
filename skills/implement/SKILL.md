@@ -115,9 +115,8 @@ then create a worktree with `git-wt`:
 git wt <branch-name>
 ```
 
-`git-wt` places the worktree at `.wt/<branch-name>/` by default.
-Run all subsequent Bash commands relative to this path. Because shell state does not persist between
-tool calls, prefix commands that need a relative path with `cd .wt/<branch-name> && <command>`.
+`git wt` prints the worktree path — capture it, since the location depends on git-wt config (`.wt/<branch-name>/` is common but not guaranteed; it may live outside the repo).
+Run all subsequent Bash commands relative to that path. Because shell state does not persist between tool calls, prefix commands that need the worktree with `cd <worktree-path> && <command>`.
 
 ---
 

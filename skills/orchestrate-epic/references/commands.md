@@ -33,6 +33,14 @@ git switch main && git pull origin main   # once, before any worker; on dirty-tr
 git wt "feat/issue-$N"   # prints the worktree path — capture it for the worker prompt; reuses existing worktrees
 gh issue edit "$N" --repo "$REPO" --add-label "loop:in-progress"
 gh issue comment "$N" --repo "$REPO" --body "orchestrate-epic: 実装を開始しました (branch: \`feat/issue-$N\`)"
+
+# Per answered BLOCKED question (Step 5) — human answers must survive the session
+gh issue comment "$N" --repo "$REPO" --body "$(cat <<'EOF'
+orchestrate-epic Q&A:
+Q: <workerの質問>
+A: <ユーザーの回答>
+EOF
+)"
 ```
 
 git-wt may place worktrees outside the repo (config-dependent) — always use the printed path, never an assumed `.wt/`.
@@ -40,14 +48,15 @@ git-wt may place worktrees outside the repo (config-dependent) — always use th
 ## §3 Ship an Approved Issue (Step 8)
 
 `WT` is the worktree path; `BRANCH` is `feat/issue-<N>`.
+Every sub-step is guarded so a mid-failure rerun resumes instead of erroring: commit only when uncommitted changes exist, push is repeat-safe, create the PR only when none exists for the branch.
 
 ```bash
 # 1. Inspect what ships — input for the secret screen
 git -C "$WT" status --short
-git -C "$WT" diff main                 # uncommitted + any rogue commits
-git -C "$WT" log --oneline main..HEAD  # non-empty = worker committed against its rules; flag to the user
+git -C "$WT" diff "$(git -C "$WT" merge-base main HEAD)"   # uncommitted + any rogue commits, without post-branch main noise
+git -C "$WT" log --oneline main..HEAD                      # non-empty = worker committed against its rules; flag to the user
 
-# 2. Stage and commit (only after the secret screen passes; exclude flagged paths)
+# 2. Stage and commit — skip if `status --short` is empty (a rerun after the commit already landed)
 git -C "$WT" add -A
 git -C "$WT" commit -m "$(cat <<'EOF'
 <type>(<scope>): <summary derived from the Issue title>
@@ -58,8 +67,9 @@ Refs #<N>
 EOF
 )"
 
-# 3. Push and create the PR
+# 3. Push (repeat-safe), then create the PR — only if none exists yet for this branch
 git -C "$WT" push -u origin "$BRANCH"
+gh pr list --repo "$REPO" --head "$BRANCH" --state all --json number   # non-empty → PR exists, skip creation
 BASE=$(gh repo view "$REPO" --json defaultBranchRef -q .defaultBranchRef.name)
 gh pr create --repo "$REPO" --head "$BRANCH" --base "$BASE" --title "<Issue title>" --body "$(cat <<'EOF'
 ## Summary
