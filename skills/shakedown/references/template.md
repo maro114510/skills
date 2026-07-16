@@ -60,7 +60,10 @@ SKILL.md Step 7 で使う。`<>` はプレースホルダ。該当しないセ�
 
 | ID | タグ | シナリオ | 根拠 | anchor |
 |---|---|---|---|---|
-| S1 | Blocking | <名前> | <1行根拠> | <file:line / docセクション / [unanchored]> |
+| S1 | Blocking | <名前> | <1行根拠> | <file:line / docセクション> |
+| S2 | Should-verify | <名前> | <1行根拠> | <file:line / docセクション / [unanchored]> |
+
+Blocking の anchor は file:line か doc セクションの実在するものだけを書く。`[unanchored]` は Should-verify 限定。
 
 ## Blocking チェックリスト
 
