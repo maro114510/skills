@@ -21,6 +21,7 @@ SKILL.md Step 7 で使う。`<>` はプレースホルダ。該当しないセ�
 | 実装者 | <名前> |
 | Blocking 実行者 | <名前> |
 | 生成日 | <YYYY-MM-DD> |
+| anchor 検証 | <実施日>時点で全 Blocking VERIFIED、または REFUTED <n> 件を格下げ済み |
 | 実施ステータス | 未実施 |
 
 [!] HEAD が基準 SHA から動いた場合、本ランブックは陳腐化している。/shakedown で再生成すること。
