@@ -102,9 +102,9 @@ Analyze the current conversation context (recent plans, investigations, TODO lis
 
 ## Step 3: Show Summary and Get Approval
 
-Use the "Step 3: Summary Format" in `references/templates.<LANG>.md`. This preview must show, per task: its `Tn` id, title, wave/dependency, requirement bullets, spec bullets, and one-line acceptance criterion — plus a dependency preview keyed by `Tn` (real Issue numbers don't exist yet). **Apply the same 12-task threshold as the Epic body here**: a Mermaid flowchart for 12 or fewer tasks, the compact wave table for more — the user is approving the same structure that Step 4 will render, so the two must never diverge in form.
+Use the "Step 3: Summary Format" in `references/templates.<LANG>.md`. This preview must show, per task: its `Tn` id, title, wave/dependency, one-line background, requirement bullets, spec bullets, one-line target state, and the full verification bullet list (up to 5) — plus a dependency preview keyed by `Tn` (real Issue numbers don't exist yet), and, for the Epic, its own one-line background and scope (included/excluded). **Apply the same 12-task threshold as the Epic body here**: a Mermaid flowchart for 12 or fewer tasks, the compact wave table for more — the user is approving the same structure that Step 4 will render, so the two must never diverge in form.
 
-This preview is allowed to be more detailed than the final Issue bodies — its job is to surface every piece of content that will end up in an Issue, so nothing new gets invented in Step 4.
+This preview is allowed to be more detailed than the final Issue bodies — its job is to surface every piece of content that will end up in an Issue, so nothing new gets invented in Step 4. Because Step 4.5's full-body review is skipped by default (see Step 4.5), this is the substantive approval gate: it must carry enough detail that approving it is equivalent to approving the final bodies, not just their shape.
 
 **End your response here and wait for the user's reply.**
 **Do not proceed to Step 4 until approval is received.**
@@ -131,15 +131,28 @@ Do not use `{{Tn}}` tokens in child Issue bodies — child Issues stay abstract 
 
 ---
 
-## Step 4.5: Issue Body Review
+## Step 4.5: Full Draft Review (only if requested)
 
-After generating all Issue bodies, present the full text to the user before creating anything.
+By default, skip this step: go straight from Step 3's approval to Step 4.6 validation and then Step 5, without re-displaying the generated bodies. Run this step only when the user explicitly asks to see the full draft before creation (e.g. "ドラフト見せて", "本文を確認したい", "show me the draft") — whether that request is part of their Step 3 approval reply or said earlier in the conversation.
 
-Use the "Step 4.5: Body Review Format" template in `references/templates.<LANG>.md` to display the Epic and all child Issues in order. Note explicitly that `{{Tn}}` tokens in the Epic body are placeholders that will be replaced with real Issue numbers (`#123`) once the child Issues exist.
+When triggered, use the "Step 4.5: Body Review Format" template in `references/templates.<LANG>.md` to display the Epic and all child Issues in order. Note explicitly that `{{Tn}}` tokens in the Epic body are placeholders that will be replaced with real Issue numbers (`#123`) once the child Issues exist.
 
-**Stop after presenting. Do not proceed to Step 5 until the user explicitly approves.**
+**Stop after presenting. Do not proceed to Step 4.6 until the user explicitly approves.**
 
 If the user requests changes, apply them and re-display the updated bodies before proceeding.
+
+---
+
+## Step 4.6: Automated Pre-Creation Validation
+
+Always run this step, whether or not Step 4.5 ran — it is the safety net that replaces routine human re-review of the mechanical formatting Step 4 performs. Check the generated bodies programmatically; there is no need to show them to the user unless a check fails:
+
+- Every child Issue's Requirements / Specs / Verification bullet lists stay within the 5-item cap.
+- No Mermaid node label (Step 3 preview or Epic body) contains a raw `"` — a title with a quote must use `#quot;` instead.
+- Child Issue bodies never contain a `{{Tn}}` token — that substitution syntax is Epic-body-only.
+- Collect every `{{Tn}}` token appearing anywhere in the Epic body (diagram/table node labels, dependency-column references, prose) and confirm that set of ids exactly matches the set of child Issues about to be created — none missing, none referring to a `Tn` that doesn't exist. A given `Tn` may legitimately appear more than once (e.g. once as its own row, again in another row's dependency column), so check set membership, not occurrence count.
+
+If any check fails, stop, report the specific problem and its location to the user, and fix it before proceeding. Never silently patch it and never create Issues with a body known to be broken.
 
 ---
 
@@ -147,9 +160,9 @@ If the user requests changes, apply them and re-display the updated bodies befor
 
 See `references/commands.md` for the exact shell commands.
 
-**The Epic is created first**, since `--parent` needs it to already exist. Children are created next in wave order, each with `--parent $EPIC_NUM` and `--blocked-by <already-known real numbers>` (never `--parent` pointing at another child — see the hierarchy rule in Step 2). Once every child exists, substitute their real numbers into the Epic body's `{{Tn}}` placeholders and update the Epic via `gh issue edit`.
+**The Epic is created first**, since `--parent` needs it to already exist. Children are created next in wave order, each with `--parent $EPIC_NUM` and `--blocked-by <already-known real numbers>` (never `--parent` pointing at another child — see the hierarchy rule in Step 2). Once every child exists, substitute their real numbers into the Epic body's `{{Tn}}` placeholders and update the Epic via `gh issue edit`. Before sending that final `gh issue edit`, confirm no `{{Tn}}` token remains in the substituted body — if one does and it's not accounted for by the failure case below, the substitution missed it; fix it before submitting.
 
-If a child Issue's creation fails, continue with the rest and flag it in the Step 6 report — don't abort the whole run.
+If a child Issue's creation fails, continue with the rest and flag it in the Step 6 report — don't abort the whole run. Since that `Tn` never gets a real number, replace its `{{Tn}}` references in the Epic body with a short inline note (e.g. "(creation failed)") instead of leaving the token unsubstituted — this keeps the final body free of raw `{{Tn}}` tokens without pretending the child was created.
 
 Note in the completion report (Step 6) that the Epic's number will be lower than its children's, since it's created first.
 

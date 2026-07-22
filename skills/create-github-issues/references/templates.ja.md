@@ -33,7 +33,7 @@ Output this when the user instructs to proceed with unresolved items:
 
 ## Step 3: Summary Format
 
-Output this block and ask for approval. Show every task's requirement/spec bullets and its dependency here — this is the main checkpoint for catching invented or misplaced content before it's written into a real Issue.
+Output this block and ask for approval. This is the main checkpoint for catching invented or misplaced content before it's written into a real Issue, and — by default — the *only* checkpoint before creation: Step 4.5's full-body re-display is skipped unless the user asks for it (see Step 4.5), so this summary must carry enough substance (background, full verification list) that approving it is equivalent to approving the final bodies.
 
 Use the same 12-task threshold as the Epic body template below: Mermaid for 12 or fewer tasks, the wave table for more. This preview must render in the same form the Epic will actually use — never show a Mermaid graph here if Step 4 is going to render a table, or vice versa.
 
@@ -45,6 +45,9 @@ In any Mermaid node label, a double quote in a title must be written as `#quot;`
 ### Epic（親 Issue）
 **タイトル**: <Epic タイトル>
 **サマリー**: <目的を1行で>
+**背景**: <この Epic が必要になった経緯を1〜2文で>
+**スコープ（含む）**: <bullet> / <bullet>
+**スコープ（含まない）**: <該当する場合のみ。会話で明示的に除外された項目がなければこの行ごと省略>
 
 （会話で挙げられたタスク数と子 Issue 数が一致しない場合のみ記載: **会話からの構成変更**: <どのタスクをどう分割/統合したか、その理由を1〜2文で>）
 
@@ -73,16 +76,21 @@ flowchart LR
 ### 子 Issue（N 件）
 
 #### T1: <タイトル>（Wave 1 / 依存: なし）
+- 背景: <このタスクが必要な理由・Epic との関係を1行で>
 - 要件: <bullet> / <bullet>
 - 仕様: <bullet>（決定済み事項がなければ「なし」と書く）
-- 受け入れ条件ドラフト: <Given X / When Y / Then Z 形式の1行>
+- 理想状態: <完了時に成り立つべき状態を1行で>
+- 検証方法: <bullet>（最大5件。Given X / When Y / Then Z 形式、または手順・アサーション単位の1行ずつ）
 
 #### T2: <タイトル>（Wave 2 / 依存: T1）
+- 背景: <1行>
 - 要件: <bullet>
 - 仕様: なし
-- 受け入れ条件ドラフト: <Given X / When Y / Then Z 形式の1行>
+- 理想状態: <1行>
+- 検証方法: <bullet>（最大5件）
 
-この構成・依存関係・要件仕様ドラフトで本文生成に進んでよいですか？
+この構成・依存関係・要件仕様・検証方法ドラフトで本文生成に進んでよいですか？
+「作成してください」と返信すると、このまま Step 4（本文生成）→ 作成まで直接進みます。作成前に Issue 本文の全文を確認したい場合は「ドラフトを見せて」と伝えてください。
 追加・削除・タイトル修正・依存関係の修正・要件仕様の修正があれば教えてください。
 ```
 
@@ -181,7 +189,7 @@ Replace the `## 依存関係と並列実行計画` section with:
 
 ## Step 4.5: Body Review Format
 
-Show all Issue bodies in the following format and ask for approval:
+Only used when the user explicitly asked to see the full draft (see Step 4.5 in SKILL.md). Show all Issue bodies in the following format and ask for approval:
 
 ```markdown
 ## Issue 本文レビュー
