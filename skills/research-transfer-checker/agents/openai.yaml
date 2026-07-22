@@ -1,0 +1,4 @@
+interface:
+  display_name: "Research Transfer Checker"
+  short_description: "研究結果の援用範囲・推論の飛躍・社会的リスクを検査する"
+  default_prompt: "Use $research-transfer-checker to assess whether this claim stays within the cited research scope."
