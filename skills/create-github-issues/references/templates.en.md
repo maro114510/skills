@@ -33,7 +33,7 @@ Output this when the user instructs to proceed with unresolved items:
 
 ## Step 3: Summary Format
 
-Output this block and ask for approval. Show every task's requirement/spec bullets and its dependency here — this is the main checkpoint for catching invented or misplaced content before it's written into a real Issue.
+Output this block and ask for approval. This is the main checkpoint for catching invented or misplaced content before it's written into a real Issue, and — by default — the *only* checkpoint before creation: Step 4.5's full-body re-display is skipped unless the user asks for it (see Step 4.5), so this summary must carry enough substance (background, full verification list) that approving it is equivalent to approving the final bodies.
 
 Use the same 12-task threshold as the Epic body template below: Mermaid for 12 or fewer tasks, the wave table for more. This preview must render in the same form the Epic will actually use — never show a Mermaid graph here if Step 4 is going to render a table, or vice versa.
 
@@ -45,6 +45,9 @@ In any Mermaid node label, a double quote in a title must be written as `#quot;`
 ### Epic (parent Issue)
 **Title**: <Epic title>
 **Summary**: <purpose in one line>
+**Background**: <what led to needing this Epic, in 1-2 sentences>
+**Scope (included)**: <bullet> / <bullet>
+**Scope (not included)**: <only if applicable. Omit this line entirely if the conversation never named an exclusion>
 
 (Only if the number of tasks discussed differs from the number of child Issues: **Restructured from the conversation**: <which tasks were split/merged and why, in 1-2 sentences>)
 
@@ -73,16 +76,21 @@ flowchart LR
 ### Child Issues (N total)
 
 #### T1: <title> (Wave 1 / Depends on: none)
+- Background: <why this task is needed, its relation to the Epic, in one line>
 - Requirements: <bullet> / <bullet>
 - Specs: <bullet> (write "none" if nothing was decided)
-- Acceptance criteria draft: <one line in Given X / When Y / Then Z form>
+- Target state: <what must be true when done, in one line>
+- Verification: <bullet> (up to 5, either Given X / When Y / Then Z form, or one line per step/assertion)
 
 #### T2: <title> (Wave 2 / Depends on: T1)
+- Background: <one line>
 - Requirements: <bullet>
 - Specs: none
-- Acceptance criteria draft: <one line in Given X / When Y / Then Z form>
+- Target state: <one line>
+- Verification: <bullet> (up to 5)
 
-OK to proceed to writing the Issue bodies with this structure, dependencies, and requirement/spec drafts?
+OK to proceed to writing the Issue bodies with this structure, dependencies, requirement/spec, and verification drafts?
+Reply "create them" to go straight from here through Step 4 (body generation) to creation. If you want to see the full Issue body text before creation, say "show me the draft" instead.
 Let me know if anything needs to be added, removed, retitled, or corrected (dependencies, requirements, specs).
 ```
 
@@ -181,7 +189,7 @@ There are many child Issues, so this is shown as a table instead of a graph. Iss
 
 ## Step 4.5: Body Review Format
 
-Show all Issue bodies in the following format and ask for approval:
+Only used when the user explicitly asked to see the full draft (see Step 4.5 in SKILL.md). Show all Issue bodies in the following format and ask for approval:
 
 ```markdown
 ## Issue Body Review
