@@ -27,6 +27,7 @@ gh skill install maro114510/skills --agent claude-code --scope user
 | `pr-doc-review-pe` | Review design documents from a Principal Engineer perspective. |
 | `pr-lessons` | Extract reusable lessons from past PR reviews. |
 | `pr-review-pe` | Review code diffs from a Principal Engineer perspective. |
+| `research-transfer-checker` | Check whether a claim stays within the scope of its cited research. |
 | `security-review` | Review PRs or files for security risks. |
 | `skill-cleaner` | Audit and slim down skill definitions. |
 | `tdd-test-cases` | Design practical TDD test cases. |
