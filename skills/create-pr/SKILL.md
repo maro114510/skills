@@ -85,7 +85,7 @@ Read the diff and the full commit history, not only the latest commit, to identi
 
 **2.3 Related issues**
 
-Extract `#NNN` references from the branch name and commit messages. Use `Closes #NNN` only when the PR should close the issue; otherwise use `Related: #NNN`.
+Extract `#NNN` references from the branch name and commit messages. Default to `Closes #NNN` for every extracted issue. Use `Related: #NNN` instead only when the diff, commit messages, or branch name make it clear the issue is not actually resolved by this PR (for example, it covers only part of the issue's scope).
 
 If the diff is large, meaning more than 20 files or more than 1,000 changed lines, organize the description into logical groups.
 
@@ -204,7 +204,7 @@ If open milestones exist, compare them with the change and ask the user whether 
 
 **5.4 Issue links**
 
-Confirm that any issue numbers extracted in Step 2.3 are included in the description. Ask the user whether each issue should be closed with `Closes` or referenced with `Related`.
+Confirm that any issue numbers extracted in Step 2.3 are included in the description using the `Closes`/`Related` choice already made there. Do not ask the user to choose between them.
 
 ## Step 6. Push and Create the PR
 
