@@ -1,0 +1,6 @@
+interface:
+  display_name: "Write Researched Document"
+  short_description: "根拠を検証し、監査可能なMarkdown文書を作成"
+  default_prompt: "Use $write-researched-document to research, verify, and draft this evidence-backed Markdown document."
+policy:
+  allow_implicit_invocation: false
