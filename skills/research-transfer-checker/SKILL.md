@@ -54,7 +54,7 @@ allowed-tools: AskUserQuestion, Read, Glob, Grep, WebFetch, WebSearch
 
 ユーザーが「全文」と呼んでいても、Methods、Results、Limitations などを抜き出した要約、構造化抄録、一部の貼り付けは全文とみなさない。公開物の書誌情報がない場合や、未公開資料の来歴を確認できない場合は `full_verified` にしない。引用箇所は、ページ、節、表、図のいずれかで再特定できる範囲を「原研究との対応」に明記する。特定できない箇所はその旨を書く。
 
-`source_access` が `full_verified` に満たない場合でも、判定を一律に止めない。Step 7 の非対称ゲートに従い、確認できた範囲で `citation_support` と `transfer_status` を判定し、確認できない部分だけを `unverifiable` / `not_assessed` とする。二次資料を使う場合は、原論文の結論と限界を正確に伝えているかを、その二次資料自身の記述の範囲で確認する。
+`source_access` が `full_verified` に満たない場合でも、判定を一律に止めない。Step 7 の非対称ゲートに従い、確認できた範囲で `citation_support` と `transfer_status` を判定し、確認できない部分だけを `unverifiable` / `not_assessed` とする。二次資料を使う場合は、原論文の結論と限界を正確に伝えているかを、その二次資料自身の記述の範囲で確認する。原研究本体と橋渡し資料など複数の資料を使う命題では、`source_access` を軸ごとに判定する。橋渡し資料が弱くても、原研究本体が `full_verified` であれば `citation_support` の判定は制限しない。
 
 資料に一切アクセスできない場合（`source_access: unavailable`）は、その資料に依存する軸の `integrity_concern` を `判定保留` とする。暫定所見に明白な本質化や排除の危険がある場合は、その表現と予見できる害を示す。ただし、原研究を歪めているとの判定はしない。
 
@@ -118,7 +118,7 @@ allowed-tools: AskUserQuestion, Read, Glob, Grep, WebFetch, WebSearch
 - `citation_support`: `direct` / `qualified` / `overextended` / `contradicted` / `unverifiable`
 - `transfer_status`: `no_transfer` / `justified` / `plausible_but_uncertain` / `not_established` / `not_assessed`
 
-`references/decision-rubric.md` の非対称ゲートに従う。`source_access` が `abstract_only`・`secondary_only`・`unavailable` の場合、`citation_support` に `direct` / `qualified` を、`transfer_status` に `justified` を付けない。ただし、資料の記述が主張と明確に矛盾する、または格上げが明確に読み取れる場合は、全文がなくても `citation_support: overextended` / `contradicted`、`transfer_status: not_established` を付けてよい。
+`references/decision-rubric.md` の非対称ゲートに従う。`citation_support` は原研究本体の `source_access`、`transfer_status` の `justified` は橋渡し資料の `source_access` を基準に、軸ごとに判定する。基準とする資料の `source_access` が `full_verified` に満たない場合（`full_unverified`・`abstract_only`・`secondary_only`・`unavailable`）、その軸に `citation_support` の `direct` / `qualified`、または `transfer_status` の `justified` を付けない。ただし、資料の記述が主張と明確に矛盾する、または格上げが明確に読み取れる場合は、全文がなくても `citation_support: overextended` / `contradicted`、`transfer_status: not_established` を付けてよい。
 
 全文の一部だけを確認できない場合は、確認できない部分だけを `unverifiable` / `not_assessed` とし、確認できた軸・他の命題は通常どおり判定する。ケース全体を検証不能として扱わない。
 
@@ -158,7 +158,8 @@ allowed-tools: AskUserQuestion, Read, Glob, Grep, WebFetch, WebSearch
 #### C1. <原子的な命題>
 - citation_support: direct / qualified / overextended / contradicted / unverifiable
 - transfer_status: no_transfer / justified / plausible_but_uncertain / not_established / not_assessed
-- source_access: full_verified / full_unverified / abstract_only / secondary_only / unavailable
+- source_access（citation_support の根拠資料）: full_verified / full_unverified / abstract_only / secondary_only / unavailable
+- source_access（transfer_status の根拠資料）: full_verified / full_unverified / abstract_only / secondary_only / unavailable / no_transfer のため該当なし
 - confidence: 高 / 中 / 低
 - integrity_concern: true / false / 判定保留
 - 問題のある推論箇所: <該当なし、または具体的な文言>
@@ -181,4 +182,4 @@ allowed-tools: AskUserQuestion, Read, Glob, Grep, WebFetch, WebSearch
 この結果は研究不正や倫理違反を認定するものではない。学術的・倫理的・法的な最終判断と公開可否は、対象分野の専門家が原資料を確認して決定する。
 ```
 
-特定の軸や命題の一部だけを確認できない場合も、上記の様式でそのまま出力し、確認できない軸だけを `unverifiable` / `not_assessed` とする。資料に一切アクセスできず、すべての命題ですべての軸が判定不能になる場合だけ、命題別の検査を省略し、確認できた書誌情報、不足資料、検証再開に必要な情報、主張自体から予見できる暫定的な社会的リスクを出力する。
+特定の軸や命題の一部だけを確認できない場合も、上記の様式でそのまま出力し、確認できない軸だけを `unverifiable` / `not_assessed` とする。2つの `source_access` が異なる場合も両方をそのまま出力し、弱い方の資料に依存しない軸の値を巻き込んで制限しない。資料に一切アクセスできず、すべての命題ですべての軸が判定不能になる場合だけ、命題別の検査を省略し、確認できた書誌情報、不足資料、検証再開に必要な情報、主張自体から予見できる暫定的な社会的リスクを出力する。

@@ -32,7 +32,7 @@
 
 ### source_access（資料の取得状況）
 
-命題の判定に使った資料それぞれについて、次のいずれかを付ける。複数資料を使う命題では、判定へ直接使った資料の中で最も弱いものを基準にする。
+命題の判定に使った資料それぞれについて、次のいずれかを付ける。`citation_support` と `transfer_status` は依拠する資料が異なりうるため、`source_access` は軸ごとに判定する。同じ軸の判定に複数資料を使う場合は、その軸の判定へ直接使った資料の中で最も弱いものを基準にする。他方の軸が依拠しない資料の弱さで、その軸の判定を巻き込んで一律に制限しない。
 
 | 値 | 条件 |
 |---|---|
@@ -44,7 +44,7 @@
 
 ## 非対称ゲート
 
-肯定的判定（`citation_support` の `direct` / `qualified`、`transfer_status` の `justified`）は、原則として全文検証を要件とする。`source_access` が `full_verified` に満たない資料からは、これらの値を付けない。`full_unverified` も対象や同一性の確認が不十分なため、肯定的判定の根拠にしない。
+肯定的判定（`citation_support` の `direct` / `qualified`、`transfer_status` の `justified`）は、原則として全文検証を要件とする。`source_access` が `full_verified` に満たない資料からは、これらの値を付けない。`full_unverified` も対象や同一性の確認が不十分なため、肯定的判定の根拠にしない。各値は、その軸の判定へ直接使った資料の `source_access` だけで判定する。もう一方の軸が依拠する資料が弱くても、影響を受けない軸の値を制限しない。
 
 否定的判定（`citation_support: overextended` / `contradicted`、`transfer_status: not_established`）は、資料の記述が主張と明確に矛盾する、または格上げが明確に読み取れる場合、全文がなくても付けてよい。例えば抄録が相関研究であることを明示しているのに主張が因果を述べている場合、全文がなくても `overextended` である。
 
