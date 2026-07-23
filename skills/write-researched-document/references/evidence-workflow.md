@@ -51,7 +51,7 @@ Evidence Mapの初期版を作った後、次の4要素を一つのレビュー�
 - 未解決の問題:
 
 ## 確認が必要なClaim
-| claim_id | claim | role | support | source | citation access | transfer access | scope | 予定処置 |
+| claim_id | claim | role | citation support | source | citation access | transfer access | scope | 予定処置 |
 |---|---|---|---|---|---|---|---|---|
 ```
 
@@ -66,10 +66,10 @@ Evidence Mapの初期版を作った後、次の4要素を一つのレビュー�
 Evidence Map全文は貼らない。次のClaimだけを「確認が必要なClaim」へ抜粋する。
 
 - 中心命題
-- `missing`または`conflicted`の主要主張
+- `citation_support`が`pending`、`overextended`、`contradicted`、`unverifiable`の主要主張
 - 文言、状態、適用範囲を変更するClaim
 
-`missing`または`conflicted`の各Claimには、追加調査、限定、未検証仮説として保持、削除のどれを予定するかを書く。
+抜粋した各Claimには、追加調査、限定、未検証仮説として保持、削除のどれを予定するかを書く。
 確立済みの事実として扱わない。
 
 ## 成果物ごとの完成条件
@@ -109,26 +109,37 @@ Evidence Map全文は貼らない。次のClaimだけを「確認が必要なCla
 | `claim` | 個別に真偽条件を持つ命題 |
 | `claim_type` | `empirical` / `inference` / `normative` / `hypothesis` |
 | `role` | `core` / `supporting` / `counterclaim` / `context` |
-| `source` | 原資料、上位文書、データ、または「未確認」 |
-| `citation_source_access` | 引用忠実性の判定で実際に確認した版、節、ページ、表、図。確認できなければ「未確認」 |
-| `transfer_source_access` | 射程移送の判定で実際に確認した橋渡し資料の範囲。未確認は「未確認」、移送なしは「該当なし」 |
-| `support` | `supported` / `qualified` / `conflicted` / `missing` |
+| `citation_source` | 原資料、上位文書、データと、確認したページ、節、表、図 |
+| `transfer_source` | 橋渡し資料と確認箇所。移送なしは`not_applicable` |
+| `citation_support` | `pending` / `direct` / `qualified` / `overextended` / `contradicted` / `unverifiable` |
+| `citation_source_access` | `pending` / `full_verified` / `full_unverified` / `abstract_only` / `secondary_only` / `unavailable` |
+| `transfer_scope` | `none`、または移送元から移送先 |
+| `transfer_status` | `pending` / `no_transfer` / `justified` / `plausible_but_uncertain` / `not_established` / `not_assessed` |
+| `transfer_source_access` | `pending` / `full_verified` / `full_unverified` / `abstract_only` / `secondary_only` / `unavailable` / `not_applicable` |
 | `confidence` | 高 / 中 / 低 |
 | `scope` | 対象、地域、制度、時代、条件 |
 | `counterevidence` | 反証、境界条件、代替説明 |
 | `freshness` | 資料の日付、確認日、更新が必要になる条件 |
-| `transfer` | `none`、または移送元から移送先 |
-| `transfer_check` | `not_required` / `pending`、またはCheckerが返した2軸の判定 |
+| `integrity_concern` | `pending` / `true` / `false` / `判定保留` |
 | `document_location` | 草稿中の節、段落、図表 |
 
 1つの出典が複数の命題を支える場合も、命題を統合しない。主張の一部だけが未確認なら、確認できない部分を別命題に分ける。
 
-Checkerを実行した場合は、`citation_support`と`transfer_status`を別々に記録する。
-2軸をEvidence Mapの`support`へまとめて変換しない。
+### 正規化規則
 
-既存の永続的なClaim Ledgerがない場合でも、証拠管理をセッション内だけに残さない。
-追加探索またはCheckerを実行した場合は、対象文書と同じディレクトリへ
-`<document-stem>.evidence.md`を追加する。Evidence Mapは必須とし、追加探索を行った場合はSearch Log、Checkerを実行した場合はChecker Summaryを設ける。
+1. 未評価の軸と資料アクセスは`pending`にする。`pending`は作業中だけ使用し、公開判断を必ずブロックする。
+2. `transfer_scope: none`では`transfer_status: no_transfer`、
+   `transfer_source_access: not_applicable`とする。移送があれば、独立検査が終わるまで両方を`pending`にする。
+3. 原資料を確認した後、Checkerと同じ定義で`citation_support`と`citation_source_access`を更新する。
+   資料確認とリスク検査が終わるまで`integrity_concern`は`pending`とし、完了後はCheckerと同じ定義で更新する。
+4. Checkerを実行した場合は、`citation_support`、`transfer_status`、`integrity_concern`をそのまま転記する。
+   2つの`source_access`はそれぞれ`citation_source_access`と`transfer_source_access`へ転記する。
+   「no_transferのため該当なし」は`not_applicable`に正規化する。
+5. 公開ゲートは上記の正規フィールドだけを使用する。別の状態値から公開可能な値を推測しない。
+
+ファイルを変更する作業で永続的なClaim Ledgerがなければ、ユーザーの承認後から本文の初回保存前までに
+対象文書と同じディレクトリへ`<document-stem>.evidence.md`を作り、Evidence Mapを保存する。
+読み取り専用の設計・監査では作らない。追加探索を行った場合だけSearch Log、Checkerを実行した場合だけChecker Summaryを設ける。
 
 ## 情報源の扱い
 
@@ -155,7 +166,8 @@ Checkerを実行した場合は、`citation_support`と`transfer_status`を別�
 
 ### 追加探索
 
-追加探索はEvidence Mapの`missing`または`conflicted`を解消するために行う。
+追加探索は`citation_support: pending`または`unverifiable`を解消するために行う。
+`overextended`を支える新しい根拠が必要な場合も追加探索の対象とする。
 テーマ全体を最初から調べ直さない。探索では次を記録する。
 
 - 探索日
@@ -176,12 +188,14 @@ Checkerを実行した場合は、`citation_support`と`transfer_status`を別�
 | `candidate` | 確認した資料 |
 | `decision` | `adopted` / `excluded` / `pending` |
 | `reason` | 採用・除外・保留の理由 |
-| `citation_source_access` | 原資料について確認できた範囲 |
-| `transfer_source_access` | 橋渡し資料について確認できた範囲。対象外なら「該当なし」 |
+| `verified_location` | 確認したページ、節、表、図 |
+| `citation_source_access` | Evidence Mapと同じ取得状況の列挙値 |
+| `transfer_source_access` | Evidence Mapと同じ取得状況の列挙値。移送なしは`not_applicable` |
 
 ## 射程移送の検出
 
-次のいずれかが変わる場合は、`transfer`へ移送元と移送先を記録する。
+次のいずれかが変わる場合は、`transfer_scope`へ移送元と移送先を記録する。
+この場合、`transfer_status`と`transfer_source_access`を`pending`にする。
 
 | 軸 | 例 |
 |---|---|
@@ -247,15 +261,15 @@ Checkerの判定には次を反映する。
 中心命題として残す場合はユーザーの明示承認を得る。
 
 各命題に`citation_support`、`transfer_status`、`citation_source_access`、`transfer_source_access`、`integrity_concern`を記録する。
-`no_transfer`の`transfer_source_access`は「該当なし」とする。
+公開判断では`pending`を残さない。
 
 次の表を上から順に評価し、最初に該当する扱いを採用する。
 
 | 優先 | 扱い | 条件 |
 |---:|---|---|
-| 1 | ブロック | `citation_support: contradicted`、未修正の`overextended`、`integrity_concern: true`、または中心的な事実主張の`integrity_concern: 判定保留` |
-| 2 | 公開文の事実主張 | `citation_support`が`direct`または`qualified`、`transfer_status`が`no_transfer`または`justified`、`integrity_concern: false` |
-| 3 | 不確実性つきの事実主張 | 上記の引用支持があり、`transfer_status: plausible_but_uncertain`、`integrity_concern: false`で、未確定性と不足根拠を本文に残す |
+| 1 | ブロック | いずれかの正規フィールドが`pending`、`citation_support: contradicted`、未修正の`overextended`、`integrity_concern: true`、または中心的な事実主張の`integrity_concern: 判定保留` |
+| 2 | 公開文の事実主張 | `citation_support`が`direct`または`qualified`、`citation_source_access: full_verified`、`integrity_concern: false`であり、移送の組が`no_transfer`と`not_applicable`、または`justified`と`full_verified`である |
+| 3 | 不確実性つきの事実主張 | 上記の引用支持と引用資料アクセスがあり、`transfer_status: plausible_but_uncertain`、`transfer_source_access`が`full_verified` / `full_unverified` / `abstract_only` / `secondary_only`のいずれか、`integrity_concern: false`で、未確定性と不足根拠を本文に残す |
 | 4 | 仮説としてのみ保持 | 優先1に該当せず、`integrity_concern: false`で、`transfer_status`が`not_established`か`not_assessed`、または`citation_support: unverifiable`。事実や他の結論の根拠には使わない |
 | 5 | 未解決としてブロック | 上記のどれにも該当しない |
 
@@ -265,9 +279,7 @@ Checkerの判定には次を反映する。
 
 次の場合は本文の新規作成または公開判断を止める。
 
-- 中心命題の根拠が`missing`または`conflicted`で、仮説への変更が承認されていない。
-- 中心命題が原資料と`contradicted`である。
-- `overextended`を限定語だけで救済しようとしているが、新しい根拠が必要である。
+- 中心命題の`citation_support`が`pending`、`unverifiable`、`overextended`、`contradicted`のいずれかで、仮説への変更が承認されていない。
 - 前提となる依存成果物が未完成である。
 - Issueの要求と既存の調査規約、用語、証拠が両立しない。
 - `integrity_concern: true`が未解決である。
@@ -286,8 +298,8 @@ Checkerの判定には次を反映する。
 - [ ] 経験的主張、推論、価値判断を区別できる
 - [ ] 確信度と限定表現が整合している
 - [ ] 時点依存情報に確認日または情報基準日がある
-- [ ] 射程移送を含む全命題に`citation_support`、`transfer_status`、`citation_source_access`、`transfer_source_access`、`integrity_concern`が記録されている
-- [ ] 公開文の事実主張がSkill本体の「完了と公開のゲート」を満たしている
+- [ ] 全主要主張に`citation_support`、`transfer_status`、`citation_source_access`、`transfer_source_access`、`integrity_concern`が記録され、`pending`が残っていない
+- [ ] 公開文の事実主張が「判定と公開ゲート」を満たしている
 - [ ] 仮説として残す命題が事実主張や他の結論の根拠として使われていない
 
 ### 成果物
