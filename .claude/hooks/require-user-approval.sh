@@ -8,16 +8,15 @@
 #   git push origin feat/my-feature                    -> blocked
 #   git push origin feat/my-feature # user-approved   -> allowed
 
-COMMAND=$(printf '%s' "${CLAUDE_TOOL_INPUT:-}" |
-  python3 -c "
+COMMAND=$(python3 -c "
 import sys, json
 try:
     data = json.load(sys.stdin)
-    print(data.get('command', ''))
+    print(data.get('tool_input', {}).get('command', ''))
 except Exception:
     sys.exit(1)
 " 2>/dev/null) || {
-  printf 'hook: failed to parse CLAUDE_TOOL_INPUT\n' >&2
+  printf 'hook: failed to parse hook input JSON from stdin\n' >&2
   exit 1
 }
 
