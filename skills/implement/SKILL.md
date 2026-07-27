@@ -6,7 +6,7 @@ description: >
   validation as needed. Trigger on requests like "implement this", "add a feature", "fix a bug",
   "make a change", "build this", "I want to implement", "I need this feature",
   "please implement XXX", "refactor this", "handle this", and similar implementation requests.
-  Works in a worktree and asks for user approval via difit before committing.
+  Works in a worktree and asks for user approval via Hunk before committing.
   Does not create a PR until the user explicitly requests it.
   Also runs in a non-interactive autonomous mode when invoked with `autonomous` by an orchestrator (e.g. orchestrate-epic) inside a subagent.
 allowed-tools: AskUserQuestion, Bash, Read, Edit, Write, Glob, Grep
@@ -196,16 +196,27 @@ If neither is found, skip this phase entirely and proceed to Phase 6.
 
 In autonomous mode, skip this phase entirely and emit the structured report — see Autonomous Mode.
 
-Use `difit` to have the user review the diff before committing.
-Use `difit` if `command -v difit` succeeds, otherwise use `npx difit`.
+Use Hunk to have the user review the diff before committing. Hunk's TUI is for the user only —
+never run `hunk diff` or `hunk show` yourself; drive an existing live session with `hunk session *`
+commands instead.
 
-```bash
-# Review uncommitted changes in the worktree
-difit .
-```
+1. Check whether a live session already covers this worktree:
+   ```bash
+   hunk session get --repo <worktree-path>
+   ```
+   - No session found: ask the user to launch `hunk diff` in the worktree, then retry.
+   - Session found: reload it with the current diff:
+     ```bash
+     hunk session reload --repo <worktree-path> -- diff
+     ```
+2. Tell the user the diff is loaded in Hunk, ask them to review it, and let you know when they're done.
+3. Once the user confirms, check for the comments they left:
+   ```bash
+   hunk session comment list --repo <worktree-path> --type user
+   ```
+4. If comments exist, address them, reload the session, and repeat from step 2.
+5. If no comments, treat that as approval to proceed.
 
-If review comments come back, address them and run again.
-If it exits without comments, treat that as approval to proceed.
-Invoke the `commit` skill to compose and make the commit — it decides on its own whether to commit automatically or ask first, independent of the difit review just completed.
+Invoke the `commit` skill to compose and make the commit — it decides on its own whether to commit automatically or ask first, independent of the Hunk review just completed.
 
 **Do not create a PR until the user explicitly says "create a PR."**
