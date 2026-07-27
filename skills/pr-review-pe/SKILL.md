@@ -139,11 +139,15 @@ specialist 返却を 1 件ずつ surface / mid / deep に分類する。
 - **deep**: 設計層 (責務漏れ、依存方向逆転、Observability Gap、リリース順依存、並行安全性、API 契約破壊)。
 
 deep 候補が 0〜2 件しかない specialist は「go deeper: design-layer の漏れを 2 件追加で出す」プロンプトで再起動する。
+Agent 呼び出しはデフォルトでステートレスであり、この再起動は同一 Agent の続行ではなく新規の独立した Agent 起動である。
+そのため再起動時は「go deeper」の追加指示だけでなく、diff・specialist の役割定義・Step 3 で与えた関連コンテキストを含む元のプロンプト全体と、その specialist 自身がそれまでに返した候補一覧を併せて再送する。
 
 ## Step 5: Mandatory Pillars 確認
 
 Filter の前に、以下 4 Pillar を specialist 候補から確認する。
 各 Pillar について候補がゼロの場合は、担当 specialist を「force-investigate this pillar: <pillar name>」プロンプトで再起動する。
+Step 4 の go deeper 再起動と同様、Agent 呼び出しはデフォルトでステートレスであり、この再起動も同一 Agent の続行ではなく新規の独立した Agent 起動である。
+そのため再起動時は「force-investigate」の追加指示だけでなく、diff・specialist の役割定義・Step 3 で与えた関連コンテキストを含む元のプロンプト全体と、その specialist 自身がそれまでに返した候補一覧を併せて再送する。
 再起動後も発見なければ `N/A: scope confirmed — <確認した具体的根拠 (ファイルパス・ADR ID・メトリクス名) を 20 語以上で記録>` とする。
 
 1. **Existing-code alignment**: ADR・CLAUDE.md・既存実装パターン・ユビキタス言語との整合。担当: architecture-reviewer。
