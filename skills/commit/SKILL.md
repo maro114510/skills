@@ -55,14 +55,14 @@ This is a best-effort heuristic, not an exhaustive scanner — when in doubt, tr
 For every match found:
 - If the file is already staged, unstage it first: `git restore --staged -- <path>`.
 - Never add it with `git add`, even in auto-commit mode.
-- Tell the user which files, or which lines for a content match, were excluded and why, and ask what to do with them — this always requires a human decision, independent of Step 5's outcome.
-- Excluding a secret does not block the rest of the commit: continue with Steps 3-6 for the remaining, unaffected files, since a legitimate, unrelated change shouldn't be held hostage to an unrelated secret sitting in the same working tree.
+- Tell the user which files, or which lines for a content match, were excluded and why, and ask what to do with them — this always requires a human decision, independent of Step 6's outcome.
+- Excluding a secret does not block the rest of the commit: continue with Steps 3-7 for the remaining, unaffected files, since a legitimate, unrelated change shouldn't be held hostage to an unrelated secret sitting in the same working tree.
 
 ## Step 3. Stage the change
 
 - Changes may already be staged after Step 2's exclusions, meaning `git diff --staged` is non-empty. If so, commit only what is staged and leave unstaged changes untouched.
 - If nothing is staged but unstaged or untracked changes exist, stage each specific file with `git add -- <path>`, skipping anything excluded in Step 2. Do not use `git add -A` or `git add .`.
-- After staging, re-run `git diff --staged` — Steps 4 and 5 must work from this refreshed staged diff, not the one read in Step 1.
+- After staging, re-run `git diff --staged` — Steps 4 and 6 must work from this refreshed staged diff, not the one read in Step 1.
 
 ## Step 4. Compose the message
 
@@ -83,9 +83,32 @@ Omit the scope rather than inventing one when nothing naturally fits.
 
 **Subject**: imperative mood, under 70 characters, specific rather than vague — `fix(auth): handle expired JWT on refresh`, not `fix: bug`.
 
-**Body**: explain why the change was needed — the problem, root cause, or motivation — not what the diff already shows.
+**Body**: explain why the change was needed — the problem, root cause, or motivating evidence — never what the diff already shows or how it was implemented.
+One short paragraph (2-5 sentences), regardless of whether a PR will follow. If it needs more than that, split the change into multiple commits, or defer the extra depth to the PR description instead.
 Omit the body entirely for genuinely trivial changes.
 Reference rejected alternatives or tradeoffs only if they matter to future readers.
+Wrap the body at roughly 72 columns — a commit message is read as plain text in `git log`/`git show`, unlike a PR body, so manual wrapping here is correct, not a rendering bug (contrast with create-pr's Line Breaks rule, which is about GitHub's PR/issue rendering, not this).
+
+Good (why, backed by concrete evidence):
+```
+Case 09 was a false positive: the stated justification for
+integrity_concern was a reworded restatement of "overextended" and
+"not_established," conditions decision-rubric.md already treats as
+insufficient on their own.
+```
+
+Bad (what/how — cut this, the diff already shows it):
+```
+Add an explicit restatement check to decision-rubric.md's
+integrity_concern section: before setting true, strip the
+judgment-name words from the stated reason.
+```
+
+Bad (verification narration — belongs in the PR's Test Plan, not here):
+```
+Re-verified all 12 eval cases against the fixed SKILL.md; the 9/9
+overextension detection rate is preserved.
+```
 
 **Footer**: add `Closes #NNN` or `Related #NNN` when an issue number is inferable from the branch name or conversation context.
 Add a `BREAKING CHANGE:` line when the change breaks an existing interface, config format, or behavior.
@@ -94,9 +117,19 @@ Add a `BREAKING CHANGE:` line when the change breaks an existing interface, conf
 
 If `$ARGUMENTS` includes a hint — an issue number, a message override, or context the diff alone doesn't capture — incorporate it.
 
-## Step 5. Decide: auto-commit or ask first
+## Step 5. Compact Pass
 
-Ask the user before committing — via `AskUserQuestion`, showing the staged diff summary and the message composed in Step 4 — if any of the following is true:
+Before moving to Step 6, re-read the composed body once:
+
+- Does any sentence describe what changed or how, rather than why? Cut it.
+- Does any sentence report verification or test results? Cut it — that belongs in the PR's Test Plan, not the commit body.
+- Is the body longer than one short paragraph? Shorten it, or reconsider splitting the change into multiple commits.
+
+If the body is already a single why-focused paragraph, keep it as written.
+
+## Step 6. Decide: auto-commit or ask first
+
+Ask the user before committing — via `AskUserQuestion`, showing the staged diff summary and the message as finalized after Step 5's Compact Pass — if any of the following is true:
 
 - The diff mixes clearly unrelated concerns, for example an unrelated `fix` bundled with a `feat`.
 - The diff touches CI/CD workflow files under `.github/workflows/` or release configuration such as `Makefile`, `cliff.toml`, or plugin and version manifests.
@@ -105,9 +138,9 @@ Ask the user before committing — via `AskUserQuestion`, showing the staged dif
 - Some of the changed files look unrelated to what the rest of the diff is doing — possibly stray edits caught up in the same working tree.
 - A confident Conventional Commits type/scope cannot be determined.
 
-If none of these apply, skip straight to Step 6 and commit without asking.
+If none of these apply, skip straight to Step 7 and commit without asking.
 
-## Step 6. Commit
+## Step 7. Commit
 
 ```bash
 git commit -m "$(cat <<'EOF'
@@ -120,7 +153,7 @@ EOF
 )"
 ```
 
-## Step 7. Report
+## Step 8. Report
 
-After committing — whether auto-committed or approved via Step 5 — show the user the commit hash and subject line in one short line.
+After committing — whether auto-committed or approved via Step 6 — show the user the commit hash and subject line in one short line.
 Never commit silently without this confirmation, even in the auto-commit path.
