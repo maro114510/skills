@@ -119,7 +119,7 @@ Follow the template found in Step 1.2. Do not ignore it:
 
 ## Implementation Details
 
-<!-- Explain the implementation approach and why it was chosen. Mention tradeoffs or rejected alternatives when relevant. -->
+<!-- Explain why this implementation approach was chosen, and tradeoffs or rejected alternatives. Do not restate what each file/group does here — that belongs only in Changes. -->
 
 ## Changes
 
@@ -151,9 +151,41 @@ Reviewers can read the diff. The PR description is valuable because it explains 
 
 - **Background**: Make the reason for the change clear to a reviewer who lacks the surrounding context.
 - **Summary**: Avoid vague wording like "add X"; prefer "add X to solve Y."
-- **Implementation Details**: Explain not only what was implemented, but why this approach was chosen.
-- **Concerns**: Be candid about uncertainty, rejected alternatives, review focus areas, and long-term implications.
-- **Omission rule**: Remove sections that are genuinely irrelevant. However, always include Concerns when the change affects performance, defaults, existing behavior, compatibility, data formats, configuration, or APIs.
+- **Implementation Details**: Explain why this approach was chosen, not what it does — the "what" belongs in Changes.
+- **One fact, one place**: Each fact (a file's purpose, a design decision) belongs in exactly one section. If Implementation Details would restate what Changes already says, keep only the reasoning Changes does not capture.
+- **Concerns**: Include only when genuine unresolved uncertainty, risk, or a deliberate tradeoff actually exists — not merely because the change touches performance, defaults, existing behavior, compatibility, data formats, configuration, or APIs. When unsure whether something qualifies, include it rather than omit it.
+- **Test Plan vs. Concerns**: Execution narration (commands run, tool limitations hit, which automated review already passed) belongs in Test Plan as terse evidence, not in Concerns. Concerns is for judgment calls and open risk, not an execution log.
+- **Omission rule**: Remove sections that are genuinely irrelevant.
+
+### 3.5 Line Breaks
+
+GitHub renders every single newline inside a PR/issue body as a hard line break (`<br>`), unlike README files where CommonMark treats a lone newline as a soft break joined by a space. Do not manually wrap prose the way a plain-text commit message is wrapped (for example at ~72 columns) — that convention produces a choppy, broken-looking body on GitHub.
+
+Within one paragraph or one bullet item, write the sentence as a single unbroken line in the source text no matter how long it is. Only start a new line at a real paragraph or bullet boundary.
+
+Bad (manually wrapped, renders as 3 separate lines on GitHub):
+
+```
+Adds `chrome-adapter.js`, a factory that wraps `chrome.tabs` and
+`chrome.bookmarks`, converting every bookmark node into the plain
+`RawNode` shape the domain package already expects.
+```
+
+Good (one line in source, wraps naturally when rendered):
+
+```
+Adds `chrome-adapter.js`, a factory that wraps `chrome.tabs` and `chrome.bookmarks`, converting every bookmark node into the plain `RawNode` shape the domain package already expects.
+```
+
+### 3.6 Compact Pass
+
+Before moving to Step 4, re-read the full draft once as a first-time reader with no other context:
+
+- Does any sentence restate a fact already given in an earlier section? Delete the later occurrence.
+- Does anything in Concerns fail the genuine-uncertainty bar above? Move it to Test Plan or delete it.
+- Does any paragraph or bullet contain a newline that is not a real paragraph/bullet boundary? Rejoin it into one line.
+
+If none of these apply, keep the draft as written — depth is intentional for this skill's purpose as a design record, so do not cut content for brevity alone.
 
 ## Step 4. Choose the PR Title
 
