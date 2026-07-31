@@ -112,11 +112,13 @@ scan_file() {
       if (s ~ /(。|！|？|」|』|）|；)$/) return 1
       return 0
     }
-    # This awk counts bytes, so length() reports 3 for one Japanese
-    # character. ASCII bytes count as themselves; the rest are assumed to be
-    # 3-byte UTF-8, which is exact for Japanese. Without this, the 78-82
-    # threshold rubric.md Check #5 documents in characters fires at 26.
+    # Character count for the 78-82 threshold rubric.md Check #5 documents.
+    # Three awks are in play and they disagree: macOS onetrue awk and mawk
+    # count bytes, so length() reports 3 for one Japanese character, while
+    # gawk in a UTF-8 locale counts characters. Assuming either one alone
+    # puts the threshold off by a factor of three, so detect which it is.
     function char_len(s,   copy, ascii) {
+      if (counts_chars) return length(s)
       copy = s
       ascii = gsub(/[ -~]/, "", copy)
       return ascii + (length(s) - ascii) / 3
@@ -162,6 +164,9 @@ scan_file() {
     function sentence_count(s, copy) {
       copy = s
       return gsub(/。/, "", copy)
+    }
+    BEGIN {
+      counts_chars = (length("あ") == 1)
     }
     {
       line[NR] = $0

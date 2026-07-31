@@ -19,10 +19,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # The scanner's awk runs against multibyte Japanese, and macOS awk and
-  # Linux mawk disagree on whether a character class of multibyte characters
-  # is a set of characters or a set of bytes. That difference is invisible on
-  # a developer's macOS machine, so the suite has to run on Linux too.
+  # The scanner's awk runs against multibyte Japanese, and awk
+  # implementations disagree about it in two ways: whether length() counts
+  # bytes or characters, and whether a character class of multibyte
+  # characters is a set of characters or a set of bytes. macOS ships an older
+  # onetrue awk that counts bytes; this runner ships gawk, which counts
+  # characters. Neither difference is visible on a developer's machine alone,
+  # so the suite runs here too.
   scanner-tests:
     name: Scanner tests (Linux awk)
     runs-on: ubuntu-latest
