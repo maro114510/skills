@@ -19,6 +19,29 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The scanner's awk runs against multibyte Japanese, and awk
+  # implementations disagree about it in two ways: whether length() counts
+  # bytes or characters, and whether a character class of multibyte
+  # characters is a set of characters or a set of bytes. macOS ships an older
+  # onetrue awk that counts bytes; this runner ships gawk, which counts
+  # characters. Neither difference is visible on a developer's machine alone,
+  # so the suite runs here too.
+  scanner-tests:
+    name: Scanner tests (Linux awk)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Run scan.sh test suite
+        env:
+          LANG: en_US.UTF-8
+          LC_ALL: en_US.UTF-8
+        run: |
+          sudo locale-gen en_US.UTF-8
+          awk --version 2>&1 | head -1 || true
+          bash skills/ja-style-check/scripts/test-scan.sh
+
   shellcheck:
     name: ShellCheck
     runs-on: ubuntu-latest

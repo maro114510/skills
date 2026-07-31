@@ -73,7 +73,7 @@ A skill may include additional reference files (e.g., `skills/<name>/references/
 ## Adding or Modifying a Skill
 
 1. Create `skills/<skill-name>/SKILL.md` with the frontmatter above (new skill), or edit the existing `SKILL.md` (modification).
-2. Write the prompt body in Japanese (this repo's convention) or match the target repo's language.
+2. Write the prompt body in English, or match the target repo's language. See the Language convention below for what stays Japanese.
 3. Use Conventional Commits so `make release` can infer the next SemVer:
    - Patch (`0.3.0` → `0.3.1`): fixing ambiguity or bugs in an existing skill body
    - Minor (`0.3.0` → `0.4.0`): adding a new skill or adding meaningful new capability to an existing one
@@ -83,7 +83,7 @@ A skill may include additional reference files (e.g., `skills/<name>/references/
 
 ## Conventions
 
-- **Language**: Skill bodies are written in Japanese. Skill descriptions may include Japanese trigger phrases to improve natural-language matching.
+- **Language**: Skill bodies are written in English. Two things stay Japanese: trigger phrases in `description`, which are what users actually type, and user-facing output templates, which users actually read. Older skills still carry Japanese bodies; convert one only when you are already editing it for another reason.
 - **`description` field**: This is pattern-matched against user requests to suggest the skill. Include common phrasings users would naturally say.
 - **`disable-model-invocation: true`**: Use this when the skill should execute as a single-shot prompt without starting an agentic loop. `create-pr` uses this; the skill instructions themselves direct all tool calls.
 - **Tool minimalism**: Declare only the tools a skill actually needs. Prefer scoped `Bash(cmd:*)` over bare `Bash` when the command set is small and predictable.
