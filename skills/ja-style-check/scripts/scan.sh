@@ -1,25 +1,37 @@
 #!/usr/bin/env bash
 # Deterministic scanner for ja-style-check.
-# Uses only shell, awk, git, mktemp, and mv. Semantic style issues are emitted
-# as candidates for agent judgment; only safe line joining can be applied.
+#
+# Read-only by design. It never edits a file: it emits candidates as JSON and
+# the agent applies every change through Edit. An earlier version could join
+# wrapped lines itself, and that single write path was the source of the only
+# defects that damaged user documents — joining ordinary 26-character lines
+# because this awk's length() counts bytes, and replacing the target's mode
+# with the temp file's. Neither is worth a fix the agent can make just as well.
+#
+# Semantic style issues are candidates for agent judgment, not verdicts. The
+# scanner does not decide whether a line is Japanese prose or English prose
+# quoting Japanese; rubric.md Check #8 is the agent's job.
+#
+# Uses only shell, awk, and git.
 
 set -euo pipefail
 
-fix=0
 files=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
   --fix)
-    fix=1
+    # Accepted so existing invocations keep working. The scanner no longer
+    # writes; fix-policy.md tells the agent to apply the joins itself.
+    printf 'scan.sh: --fix is accepted but ignored; the scanner is read-only\n' >&2
     shift
     ;;
   -h | --help)
     cat <<'USAGE'
-Usage: scan.sh [--fix] [file...]
+Usage: scan.sh [file...]
 
-Emits JSON with deterministic Japanese style candidates.
---fix applies only safe line-join fixes.
+Emits JSON with deterministic Japanese style candidates. Never edits a file.
+--fix is accepted and ignored.
 USAGE
     exit 0
     ;;
@@ -71,11 +83,8 @@ print_issue_json() {
 scan_file() {
   local file=$1
   local issues_file=$2
-  local applied_file=$3
-  local fixed_file
-  fixed_file="$(mktemp)"
 
-  awk -v path="${file}" -v do_fix="${fix}" -v issues="${issues_file}" -v fixed="${fixed_file}" -v applied_out="${applied_file}" '
+  awk -v path="${file}" -v issues="${issues_file}" '
     function has_japanese(s) {
       return s ~ /[ぁ-んァ-ヶ一-龠]/
     }
@@ -93,14 +102,32 @@ scan_file() {
       if (stripped ~ /https?:\/\//) return 1
       return 0
     }
+    # Kept as two tests on purpose. A character class holding multibyte
+    # characters is read as a set of BYTES by a byte-oriented awk such as
+    # mawk, so an anchored [。] also matches any character whose final byte
+    # happens to be 0x82 — every Japanese line ending in あ, for one. An
+    # alternation of whole literals means the same thing to both awks.
     function ends_sentence(s) {
-      return s ~ /[。！？!?」』）)\]`.;；:]$/
+      if (s ~ /[!?)\]`.;:]$/) return 1
+      if (s ~ /(。|！|？|」|』|）|；)$/) return 1
+      return 0
+    }
+    # This awk counts bytes, so length() reports 3 for one Japanese
+    # character. ASCII bytes count as themselves; the rest are assumed to be
+    # 3-byte UTF-8, which is exact for Japanese. Without this, the 78-82
+    # threshold rubric.md Check #5 documents in characters fires at 26.
+    function char_len(s,   copy, ascii) {
+      copy = s
+      ascii = gsub(/[ -~]/, "", copy)
+      return ascii + (length(s) - ascii) / 3
     }
     function emit(rule, severity, line, quote, reason, suggestion, auto) {
+      # The record is tab separated, and both quote and path carry outside
+      # data, so a tab in either would shift every later field and break the
+      # JSON.
+      gsub(/\t/, " ", quote)
+      gsub(/\t/, " ", path)
       printf "%s\t%s\t%s\t%d\t%s\t%s\t%s\t%s\n", rule, severity, path, line, quote, reason, suggestion, auto >> issues
-    }
-    function sep(left, right) {
-      return ""
     }
     function weak_term(s) {
       return s ~ /(適切に|適切な|必要に応じて|十分に|基本的に|可能なら|考慮する|担保する|いい感じに|ある程度|なるべく)/
@@ -150,44 +177,27 @@ scan_file() {
         }
       }
 
-      in_code = 0
+      # Line joins are candidates only. The agent applies them, and can add
+      # the separator that a Latin-to-Latin join needs and a Japanese one
+      # must not have.
+      fenced = 0
       for (i = 1; i < NR; i++) {
         if (i <= frontmatter_end || i + 1 <= frontmatter_end) continue
         current = trim(line[i])
         next_line = trim(line[i + 1])
         if (current ~ /^```/) {
-          in_code = !in_code
+          fenced = !fenced
           continue
         }
-        if (is_structural(line[i], in_code) || is_structural(line[i + 1], in_code)) continue
+        if (is_structural(line[i], fenced) || is_structural(line[i + 1], fenced)) continue
         if (!has_japanese(current next_line)) continue
-        combined_len = length(current) + length(next_line)
-        mechanical = (length(current) >= 78 && length(current) <= 82 && !ends_sentence(current))
+        cur_len = char_len(current)
+        mechanical = (cur_len >= 78 && cur_len <= 82 && !ends_sentence(current))
         mid_sentence = !ends_sentence(current)
-        if ((mechanical || mid_sentence) && combined_len <= 200) {
-          rule = mechanical ? "mechanical-wrap" : "line-break"
-          auto = mechanical ? "true" : "false"
-          emit(rule, "low", i, current, "Sentence appears to continue across a line break.", "Join this line with the following line.", auto)
-          if (mechanical) {
-            fix_line[i] = 1
-          }
-        }
-      }
-
-      applied = 0
-      if (do_fix) {
-        for (i = 1; i <= NR; i++) {
-          if (fix_line[i] && i < NR) {
-            left = trim(line[i])
-            right = line[i + 1]
-            sub(/^[[:space:]]+/, "", right)
-            print left sep(left, right) right >> fixed
-            i++
-            applied++
-          } else {
-            print line[i] >> fixed
-          }
-        }
+        if (!(mechanical || mid_sentence)) continue
+        if (cur_len + char_len(next_line) > 200) continue
+        rule = mechanical ? "mechanical-wrap" : "line-break"
+        emit(rule, "low", i, current, "Sentence appears to continue across a line break.", "Join this line with the following line. Insert a space only if both sides end and begin with Latin script.", mechanical ? "true" : "false")
       }
 
       in_code = 0
@@ -203,7 +213,7 @@ scan_file() {
         }
         if (is_structural(line[i], in_code)) {
           if (paragraph_parens >= 2) {
-            emit("brackets", "medium", paragraph_start, "paragraph", "Parenthetical supplements appear repeatedly in one paragraph.", "Judge whether each supplement should stay bracketed, move into prose, or be removed.", "false")
+            emit("brackets", "high", paragraph_start, "paragraph", "Parenthetical supplements appear repeatedly in one paragraph.", "Keep only a first-use definition; rewrite every other supplement into the sentence or remove it.", "false")
           }
           if (sentence_count(paragraph_text) >= 6) {
             emit("paragraph-rhythm", "medium", paragraph_start, "paragraph", "A paragraph contains many Japanese sentence endings without a blank-line break.", "Judge whether to split the paragraph or use bullets for conditions, steps, criteria, scope, or consequences.", "false")
@@ -220,7 +230,7 @@ scan_file() {
         parens = gsub(/（|\(/, "", paren_source)
         paragraph_parens += parens
         if (parens > 0) {
-          emit("brackets", "medium", i, trim(line[i]), "Parenthetical supplements can hide information that belongs in the sentence.", "Judge whether the bracketed text should stay bracketed, move into prose, or be removed.", "false")
+          emit("brackets", "high", i, trim(line[i]), "A parenthetical supplement holds information that belongs in the sentence.", "Keep it only if the bracket is a first-use definition; otherwise rewrite it into the sentence or remove it. Clear it when the parenthesis is Markdown syntax such as a link target.", "false")
         }
         if (raw_reference(current)) {
           emit("first-use-definition", "medium", i, trim(line[i]), "A PR number, issue number, ticket ID, commit hash, or similar reference may be unclear on first read.", "Allow it only when nearby prose explains what the reference means without opening it.", "false")
@@ -247,32 +257,31 @@ scan_file() {
         }
       }
       if (paragraph_parens >= 2) {
-        emit("brackets", "medium", paragraph_start, "paragraph", "Parenthetical supplements appear repeatedly in one paragraph.", "Judge whether each supplement should stay bracketed, move into prose, or be removed.", "false")
+        emit("brackets", "high", paragraph_start, "paragraph", "Parenthetical supplements appear repeatedly in one paragraph.", "Keep only a first-use definition; rewrite every other supplement into the sentence or remove it.", "false")
       }
       if (sentence_count(paragraph_text) >= 6) {
         emit("paragraph-rhythm", "medium", paragraph_start, "paragraph", "A paragraph contains many Japanese sentence endings without a blank-line break.", "Judge whether to split the paragraph or use bullets for conditions, steps, criteria, scope, or consequences.", "false")
       }
-      print applied > applied_out
     }
   ' "${file}"
-
-  if [[ ${fix} -eq 1 ]]; then
-    mv "${fixed_file}" "${file}"
-  else
-    rm -f "${fixed_file}"
-  fi
 }
 
 all_issues="$(mktemp)"
-applied_total=0
+# The trap must not become the script's exit status. A bare `trap 'rm -f x'
+# EXIT` makes the successful rm the status, so an abort earlier in the script
+# reports success and the agent reads an empty scan as a clean document.
+# shellcheck disable=SC2154  # rc is assigned inside the trap body itself
+trap 'rc=$?; rm -f "${all_issues}"; exit "${rc}"' EXIT
 
-for file in "${files[@]}"; do
+for file in ${files[@]+"${files[@]}"}; do
   [[ -f "${file}" ]] || continue
-  applied_file="$(mktemp)"
-  scan_file "${file}" "${all_issues}" "${applied_file}"
-  applied="$(cat "${applied_file}")"
-  rm -f "${applied_file}"
-  applied_total=$((applied_total + applied))
+  # A file the process cannot read must not discard the findings already
+  # collected for the files before it.
+  if [[ ! -r "${file}" ]]; then
+    printf 'scan.sh: cannot read %s; skipped\n' "${file}" >&2
+    continue
+  fi
+  scan_file "${file}" "${all_issues}"
 done
 
 issue_count=0
@@ -289,17 +298,17 @@ while IFS=$'\t' read -r _rule _severity _path _line _quote _reason _suggestion a
 done <"${all_issues}"
 
 printf '{\n'
-printf '  "mode": "%s",\n' "$([[ ${fix} -eq 1 ]] && printf 'fix' || printf 'report')"
+printf '  "mode": "report",\n'
 printf '  "files": ['
 printed=0
-for file in "${files[@]}"; do
-  [[ -f "${file}" ]] || continue
+for file in ${files[@]+"${files[@]}"}; do
+  [[ -f "${file}" && -r "${file}" ]] || continue
   if [[ ${printed} -gt 0 ]]; then printf ', '; fi
   printf '"%s"' "$(json_escape "${file}")"
   printed=$((printed + 1))
 done
 printf '],\n'
-printf '  "applied_fixes": %d,\n' "${applied_total}"
+printf '  "applied_fixes": 0,\n'
 printf '  "issues": [\n'
 printed=0
 while IFS= read -r issue; do
@@ -316,5 +325,3 @@ printf '    "auto_fixable_count": %d,\n' "${auto_count}"
 printf '    "manual_count": %d\n' "${manual_count}"
 printf '  }\n'
 printf '}\n'
-
-rm -f "${all_issues}"

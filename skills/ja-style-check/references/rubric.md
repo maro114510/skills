@@ -25,17 +25,27 @@ Good:
 
 ### 2. Brackets
 
-Treat parenthetical supplements as a risk signal, not as an automatic violation. Parentheses often hide information that should be part of the sentence, but short clarifications can be appropriate. Do not mechanically reject first-use definitions, dates, units, or brief notes. Flag brackets when the sentence depends on the bracketed text, when bracketed text contains internal IDs, action notes, state, conditions, or reasons, or when brackets appear repeatedly in one paragraph. The agent must judge whether to keep the brackets, move the content into prose, or remove the supplement.
+A parenthetical supplement is a violation, not a risk signal. Severity is `high`. Rewrite the content into the sentence, or delete it.
+
+The single exception is a first-use definition: a bracket whose entire content gives the meaning, full name, or Japanese rendering of the term immediately before it. `OMS（受注管理システム）` qualifies. The exception covers first use only. The same term bracketed again later is a violation.
+
+Nothing else survives. Units, numbers, attributes, timing, actions, state, conditions, reasons, internal IDs, and cross-references all belong in the sentence.
+
+Markdown syntax is not prose. Link and image targets, code spans, code blocks, and URLs are out of scope. So are half-width parentheses inside an English sentence, which are English punctuation — judge by which script carries the sentence, as in Check #8.
 
 This rule applies to all document types — design docs, implementation plans, and README files are not exempt. The reduced-severity exception in Check #8 applies only to SKILL.md and references/ files.
 
 Bad:
 - `注文を確定します（自動処理）。`
 - `認証エラーを修正します（PR #123）。`
+- `月予算（単位：円）を設定します。`
+- `再試行します（最大 3 回）。`
 
 Good:
 - `システムが注文を自動で確定します。`
 - `認証エラーを修正する PR #123 で対応します。`
+- `月予算を円単位で設定します。`
+- `最大 3 回まで再試行します。`
 
 ### 3. Meta Prose
 
@@ -73,7 +83,7 @@ Good:
 
 ### 6. Paragraphs and Rhythm
 
-Flag paragraphs that are long enough to be a risk signal, mixed topics in one paragraph, concepts introduced before their prerequisites, repeated short dramatic fragments, repeated long sentences, and monotonous list items. Do not split paragraphs mechanically. Treat a paragraph with many Japanese sentence endings and no blank-line break as a candidate for agent judgment. When a paragraph lists conditions, steps, criteria, scope, or consequences, consider using bullets instead of forcing everything into one prose paragraph.
+Flag long paragraphs, mixed topics in one paragraph, concepts introduced before their prerequisites, repeated short dramatic fragments, repeated long sentences, and monotonous list items. Do not split mechanically — many sentence endings with no blank line is a candidate for judgment, not an automatic violation. When a paragraph lists conditions, steps, criteria, scope, or consequences, use bullets.
 
 Bad:
 - One paragraph explains background, problem, decision, implementation, and risk together.
@@ -98,14 +108,44 @@ Good:
 
 ### 8. Reader-Facing Japanese
 
-Flag English jargon, code identifiers, file paths, internal IDs, section references, raw boolean expressions, passive voice, hidden actors, and inanimate subjects when they obscure the reader-facing meaning. For PR numbers, issue numbers, ticket IDs, commit hashes, and file paths, check whether the prose explains what the reference means before relying on it.
+Latin script inside a Japanese sentence is a violation by default. Severity is `high` when the reader cannot act without decoding it, `medium` otherwise. Rewrite it into the Japanese term the document already uses, or into plain Japanese naming what it does.
+
+The target is Latin inside a Japanese sentence, not the reverse. Japanese quoted inside an English sentence — as this rubric's own examples do — is not a violation. Ask which script carries the sentence, not how much English it holds; judging by quantity lets a sentence escape the rule precisely by carrying more untranslated English.
+
+No scanner rule covers this check. Apply it by reading. A deterministic version was attempted and withdrawn because it kept missing real violations, so a clean finding list says nothing about Latin script.
+
+Allowed without rewriting:
+
+- Code identifiers, flags, mode names, commands, and file paths **inside backticks or a code block**. The bare, unquoted form is a violation.
+- URLs.
+- Proper nouns and product names with no established Japanese form, such as GitHub, Slack, Markdown, Spanner, macOS, npm, and gRPC. There is no fixed list; judge whether a Japanese rendering exists and is in use.
+- All-caps acronyms of two to six letters, such as API, JSON, and HTTP. These belong to Check #7, which asks whether the reader was given a definition.
+
+Capitalisation does not earn an exemption on its own. `Deprecated`, `Pending`, and `Active` are ordinary English words in Japanese prose and are violations exactly as `invalid` is.
+- Numbers, units, and symbols.
+- An abbreviation at the point where its Check #7 first-use definition introduces it.
+- PR numbers, issue numbers, ticket IDs, and commit hashes, still subject to Check #7.
+
+**Quote runtime literals; do not translate them.** `report` and `fix` are strings the user types. Rendering them as 報告 or 修正 breaks the interface, so wrap them in backticks instead.
+
+Bad:
+- `report モードではファイルを変更しません。` — bare runtime literal
+- `この値が invalid のとき停止します。` — bare English word
+
+Good:
+- `` `report` モードではファイルを変更しません。``
+- `この値が不正なとき停止します。`
+
+Separately, flag passive voice, hidden actors, and inanimate subjects when they obscure who acts. For PR numbers, issue numbers, ticket IDs, commit hashes, and file paths, check whether the prose explains what the reference means before relying on it.
 
 Ask "who does this?", "can the reader understand this without opening another file?", and "does this sound like natural Japanese when read aloud?"
+
+Two layers apply. Clearing the allowlist above does not exempt a backticked identifier from the assignment-notation rule below.
 
 **Assignment-notation is high severity.** Flag implementation identifiers (variable names, flag names, table names, function names) that appear as prose actors, conditions, or value assignments — the reader cannot understand the referent without opening source code. Patterns include `identifier = value`, `` `identifier` が value ``, and any bare identifier acting as a prose subject.
 
 Do not treat first-use definitions as assignment-notation (see Check #7). Compare:
-- Acceptable: `` `report` モード（ファイルを変更しない）`` — one introduction with visible meaning
+- Acceptable: `` `report` モードはファイルを変更しません。`` — one introduction with visible meaning
 - Violation: `` `report` が実行された場合に〜 `` — same identifier used as prose actor after definition
 
 Exception: internal agent specification files (SKILL.md, references/) that define a schema or parameter term once for agent consumption are medium, not high, when the context makes the term's meaning clear.
@@ -116,7 +156,7 @@ Bad (high / assignment-notation):
 - `hogehoge = active のとき処理を行います。`
 
 Bad (medium / general):
-- `処理が実行されます。`（hidden actor、passive voice）
+- `処理が実行されます。` — hidden actor, passive voice
 
 Good:
 - `支払いが完了した注文を確定済みにします。`
@@ -145,10 +185,10 @@ Good:
 - `Current Behavior` -> `Issue` -> `Proposed Behavior` -> `Risk`
 
 Evidence:
-- Text structure instruction has positive effects on reading comprehension in meta-analysis and later reviews: https://ila.onlinelibrary.wiley.com/doi/full/10.1002/rrq.311
-- Headings can improve text comprehension and calibration of comprehension: https://onlinelibrary.wiley.com/doi/full/10.1002/acp.4076
-- Recent work on changing informational text structure suggests structure affects comprehension, with reader ability influencing which structure helps: https://link.springer.com/article/10.1007/s11145-026-10791-8
-- Japanese technical-writing norms also emphasize paragraph-level roles, concrete headings, and avoiding empty section labels: https://gist.github.com/k16shikano/fd287c3133457c4fd8f5601d34aa817d
+- Meta-analysis and later reviews: structure instruction improves reading comprehension. https://ila.onlinelibrary.wiley.com/doi/full/10.1002/rrq.311
+- Headings improve comprehension and its calibration. https://onlinelibrary.wiley.com/doi/full/10.1002/acp.4076
+- Structure affects comprehension, and reader ability decides which structure helps. https://link.springer.com/article/10.1007/s11145-026-10791-8
+- Japanese technical-writing norms: paragraph-level roles, concrete headings, no empty section labels. https://gist.github.com/k16shikano/fd287c3133457c4fd8f5601d34aa817d
 
 ### 11. Argument Rigor
 

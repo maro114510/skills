@@ -2,6 +2,8 @@
 
 Return concise Markdown. For file-based work, include the structured summary first.
 
+The section labels below are Japanese on purpose — the user reads them. Keep them verbatim even though the surrounding instructions are English.
+
 ## Report Mode
 
 ```text
@@ -60,3 +62,5 @@ When passing data between tools or summarizing scanner output, use this shape:
   "auto_fixable": false
 }
 ```
+
+`auto_fixable` means the rewrite is uniquely determined by the text, so you can apply it without judgment. The scanner never applies it: `applied_fixes` in the scanner's output is always 0, and `auto_applied` in the Fix Mode report above counts what you applied with Edit.
