@@ -28,8 +28,10 @@ The caller may pass `branch <name>` and `worktree <path>`. Everything not listed
 
 - **Before Phase 1**, resolve and validate the worktree. Capture and canonicalize every registered path from
   `git worktree list --porcelain` as `GIT_WORKTREES`. Use the caller-provided path; if none was given, run
-  `git wt <branch>` and capture its printed path. If neither value is available, return BLOCKED. If worktree
-  creation fails, return FAILED. Canonicalize the candidate with `git -C <path> rev-parse --show-toplevel`,
+  `git wt <branch>` and capture its printed path. After `git wt` succeeds, recapture and canonicalize
+  `git worktree list --porcelain` as `GIT_WORKTREES` so the newly created worktree is included. If neither
+  value is available, return BLOCKED. If worktree creation fails, return FAILED. Canonicalize the candidate
+  with `git -C <path> rev-parse --show-toplevel`,
   then require an exact match in `GIT_WORKTREES`, reject the main checkout (the first `worktree` entry), and
   require a non-detached current branch. When `branch` was supplied, require it to equal
   `git -C <path> branch --show-current`; otherwise set `branch` to that verified value. A missing path, invalid
@@ -265,8 +267,9 @@ skip Phase 7 and emit the required structured report without invoking difit or c
    do not piggyback unrelated cleanup.
    For findings that are false positives or reflect an intentional design decision,
    leave the code as is and note the reason briefly to the user.
-3. If any fix was applied, rerun the entire selection-and-review block to confirm the finding is resolved.
-   Repeat until the review is clean or all remaining findings are judged as not requiring action.
+3. If any fix was applied, rerun Phase 6 before rerunning the selection-and-review block, so lint, tests,
+   and build reflect the fix. Repeat until the review is clean or all remaining findings are judged as not
+   requiring action.
 
 ---
 
