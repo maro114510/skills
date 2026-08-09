@@ -1,11 +1,11 @@
 ---
 name: implement
 description: >
-  A skill for executing implementation tasks with quality as the top priority. Assesses the nature
-  of the task (new feature, bug fix, refactor) and testability, automatically applying TDD and Why
-  validation as needed. Trigger on requests like "implement this", "add a feature", "fix a bug",
-  "make a change", "build this", "I want to implement", "I need this feature",
-  "please implement XXX", "refactor this", "handle this", and similar implementation requests.
+  A skill for executing implementation tasks with quality as the top priority. Grounds the request
+  in the codebase, resolves requirements and acceptance criteria, obtains approval for an implementation
+  plan, and applies TDD and Why validation as needed. Trigger on requests like
+  「これを実装して」「機能を追加して」「バグを修正して」「変更して」「これを作って」
+  「リファクタリングして」「対応して」 and similar implementation requests.
   Works in a worktree and asks for user approval via difit before committing.
   Does not create a PR until the user explicitly requests it.
   Also runs in a non-interactive autonomous mode when invoked with `autonomous` by an orchestrator (e.g. orchestrate-epic) inside a subagent.
@@ -26,17 +26,30 @@ Activated **only when the first token of `$ARGUMENTS` is exactly `autonomous`** 
 The word appearing anywhere else (e.g. "implement autonomous reconnection") is task text, not a trigger.
 The caller may pass `branch <name>` and `worktree <path>`. Everything not listed below runs as in the normal flow:
 
-- **Phase 1 never runs.** A genuinely unclear Why that would change what gets built is a blocking question (see Phase 3 below), not an implicit decision.
-- **Phase 2**: skip `git switch main && git pull` — the orchestrator already updated main, and parallel workers would race on the shared checkout. Use the caller-provided worktree; only if none was given, run `git wt <branch>` and capture the printed path (git-wt config may place it outside `.wt/`) — and if `branch` is also missing, treat that as a blocking question (Phase 3) instead of inventing a name. Existing changes in the worktree are prior work — continue on top of them.
-- **Phase 3**: no human is reachable, so instead of `AskUserQuestion`, stop before implementing and return a BLOCKED report with concrete questions and options. Never guess — the orchestrator relays questions and re-dispatches you with answers.
-- **Phase 6 never runs** — no difit, no commit. Leave changes uncommitted; the orchestrator ships them after human approval.
+- **Before Phase 1**, resolve and validate the worktree. Capture and canonicalize every registered path from
+  `git worktree list --porcelain` as `GIT_WORKTREES`. Use the caller-provided path; if none was given, run
+  `git wt <branch>` and capture its printed path. After `git wt` succeeds, recapture and canonicalize
+  `git worktree list --porcelain` as `GIT_WORKTREES` so the newly created worktree is included. If neither
+  value is available, return BLOCKED. If worktree creation fails, return FAILED. Canonicalize the candidate
+  with `git -C <path> rev-parse --show-toplevel`,
+  then require an exact match in `GIT_WORKTREES`, reject the main checkout (the first `worktree` entry), and
+  require a non-detached current branch. When `branch` was supplied, require it to equal
+  `git -C <path> branch --show-current`; otherwise set `branch` to that verified value. A missing path, invalid
+  repository, unregistered path, main checkout, detached HEAD, or branch mismatch must return FAILED before
+  any repository inspection or edit. Never fall back to the current directory or another worktree. When
+  blocking or failing before either value exists, emit `UNKNOWN` for its report field. Existing changes in a
+  validated worktree are prior work — continue on top of them.
+- **Phases 1–2 still run.** Inspect the resolved worktree and treat the Issue body, Epic body, caller prompt, and persisted user answers as the only authoritative product decisions. Do not run an interactive Why check. If a missing Why, requirement, acceptance criterion, constraint, or critical behavior could materially change the implementation, return a BLOCKED report with concrete questions and options. Never guess — the orchestrator relays questions and re-dispatches you with answers.
+- **Phase 3**: build the implementation plan, but skip interactive approval only when every material decision is already supported by those authoritative sources. If the plan would introduce an unsupported product or technical decision, return BLOCKED instead.
+- **Phase 4**: skip it — the orchestrator already updated the base, and parallel workers would race on the shared checkout. The worktree was resolved before Phase 1.
+- **Phase 7 never runs** — no difit, no commit. Leave changes uncommitted; the orchestrator ships them after human approval.
 - **Final output**: exactly this report — it is the return value the caller parses, not a human-facing message:
 
 ```
 STATUS: DONE | BLOCKED | FAILED
 ISSUE: #<number, when the caller supplied one; omit otherwise>
-BRANCH: <branch>
-WORKTREE: <absolute worktree path>
+BRANCH: <branch, or UNKNOWN if unavailable>
+WORKTREE: <absolute worktree path, or UNKNOWN if unavailable>
 CHANGED_FILES: <one path per line; empty if BLOCKED before implementing>
 TESTS: <checks run and their results>
 SUMMARY: <what was implemented; key decisions and why>
@@ -46,102 +59,155 @@ ERROR: <FAILED only — what failed, what was attempted>
 
 ---
 
-## Phase 0: Assess the Task
+## Phase 0: Assess the Request
 
-Make the following autonomous judgments from `$ARGUMENTS` and conversation context.
+Determine the execution mode and task type from `$ARGUMENTS` and conversation context. Record what the
+user has already decided; do not make them repeat it. Defer the TDD decision until after inspecting the
+repository and defining acceptance criteria.
 
-### Is a Why check needed?
-
-**Not needed (skip to Phase 2)**
-- Bug fix with clear reproduction steps
-- Extension of existing functionality with an obvious goal
-- User has already explained the Why
-
-**Needed (execute Phase 1)**
-- New feature addition with no stated Why
-- Design change or refactor spanning multiple files
-- Vague purpose such as "I just want to..."
-
-### Is TDD effective?
-
-**Proceed with TDD (when all conditions are met)**
-- Involves business logic / API handlers / data transformation
-- A test framework already exists
-- Inputs and expected outputs can be defined
-
-**No TDD (when any condition applies)**
-- UI / style changes, DB migrations, config files
-- No test framework or high setup cost
-- Scripts or one-shot operations
-
-### Is information missing before starting?
-
-If required information (core spec, tech stack, constraints) is missing,
-run Phase 3 questions first, then return to Phase 1 / 2.
+In normal mode, do not mutate repository state in Phases 0–3. Autonomous mode has only the worktree-resolution
+exception described in Autonomous Mode.
 
 ---
 
-## Phase 1: Confirm the Why (conditional)
+## Phase 1: Ground in the Repository
 
-Execute only when Phase 0 judges this as "needed."
+Inspect before asking questions:
 
-Use `AskUserQuestion` to confirm:
-- What specific problem does this implementation solve?
-- What is the actual cost (user impact, business impact) if it is not solved?
-- Is there a smaller means to achieve the same goal?
+1. Read repository instructions and the relevant implementation, tests, types, configuration, schemas,
+   documentation, and CI entrypoints.
+2. Inspect Git status, the current branch, remotes, and the remote default branch without switching,
+   pulling, stashing, or creating a worktree.
+3. Summarize the current observable behavior, established conventions, affected interfaces, and constraints.
+4. Separate facts discoverable from the repository from genuine product or design decisions. Never ask the
+   user for a fact that can be established safely from available sources.
 
-If the Why is thin or the implementation turns out to be unnecessary, tell the user candidly and stop.
-Leave the decision to the user.
-
----
-
-## Phase 2: Setup
-
-In autonomous mode, skip "Bring main up to date" and use the caller's branch name — see Autonomous Mode.
-
-### Bring main up to date
-
-```bash
-git switch main
-git pull origin main
-```
-
-### Create a worktree
-
-Choose a GitHub Flow-compliant branch name (e.g., `feat/add-login`, `fix/null-pointer-on-checkout`),
-then create a worktree with `git-wt`:
-
-```bash
-git wt <branch-name>
-```
-
-`git wt` prints the worktree path — capture it, since the location depends on git-wt config (`.wt/<branch-name>/` is common but not guaranteed; it may live outside the repo).
-Run all subsequent Bash commands relative to that path. Because shell state does not persist between tool calls, prefix commands that need the worktree with `cd <worktree-path> && <command>`.
+If the repository is unavailable or the relevant source cannot be identified, treat that as a material gap
+in Phase 2 rather than inventing an implementation context.
 
 ---
 
-## Phase 3: Scrutinize and Reconcile the Implementation Plan
+## Phase 2: Establish the Implementation Contract
 
-If Phase 1 was executed, wait for its answers before entering this phase. The scope of spec
-clarification depends on the Why answers, so these must run sequentially.
+Establish all of the following for every task, using the request, conversation, repository evidence, and
+linked specifications:
 
-1. Read the relevant codebase (existing implementation, tests, type definitions, config).
-2. Surface gaps, contradictions, and undefined behaviors between the plan and the current state.
-3. When any of the following are discovered, **always confirm with `AskUserQuestion` before proceeding**:
-   - Transaction boundaries, idempotency, or concurrency safety are undefined
-   - No rollback design on error
-   - Auth/authorization handling is ambiguous
-   - Potential fatal flaws or logic gaps the user may not have noticed
+- **Goal and actor**: who needs what problem solved, and why it matters
+- **Current and desired behavior**: the externally observable difference this change must create
+- **Requirements**: the behaviors that must be true when the work is complete
+- **Specification**: the necessary interfaces, inputs and outputs, state transitions, defaults, precedence,
+  and error behavior
+- **Scope and non-goals**: what is included and intentionally excluded
+- **Acceptance criteria**: concrete, independently verifiable pass/fail outcomes, including relevant failure paths
+- **Constraints and compatibility**: supported environments, public interfaces, data or migration obligations,
+  performance or operational limits, and prohibited changes
+- **Prerequisites and dependencies**: required services, data, permissions, tools, and upstream work
+- **Assumptions**: every implementation-relevant belief not guaranteed by a requirement or repository evidence
 
-Keep asking until all uncertainty is resolved. Group multiple questions into a single `AskUserQuestion` call.
+Run the Why check only when the goal or value is missing and the answer could change whether or what to build.
+Ask what problem is being solved, the cost of leaving it unsolved, and whether a smaller change achieves the
+same outcome. If the proposed implementation is unnecessary, say so candidly and let the user decide.
 
-In autonomous mode, return a BLOCKED report instead of calling `AskUserQuestion` — see Autonomous Mode.
+### Scrutinize Critical Behavior
+
+For every applicable area, define the required behavior rather than merely noting the risk:
+
+- Authentication, authorization, privacy, secrets, and trust boundaries
+- Destructive operations, data integrity, migrations, and backward compatibility
+- Transaction boundaries, idempotency, concurrency, ordering, retries, and duplicate delivery
+- Validation, partial failure, rollback, cancellation, timeout, and recovery behavior
+- Resource limits, performance regressions, observability, rollout, and operational ownership
+
+Surface contradictions between the request and the repository, requirements that cannot all be satisfied,
+untestable acceptance criteria, and fatal flaws or logic gaps the user may not have noticed.
+
+### Ask Only Decision-Relevant Questions
+
+Classify each unresolved item:
+
+- Resolve discoverable facts through further inspection.
+- State low-risk, reversible defaults as proposed assumptions in the plan.
+- Ask about any material decision whose alternatives change user-visible behavior, safety, compatibility,
+  scope, architecture, data, or acceptance criteria.
+
+Use `AskUserQuestion` with concrete, mutually exclusive options, a recommended default, and the consequence
+of each option. Ask in small groups and continue until no **material** uncertainty remains. Never convert a
+security, authorization, data-loss, irreversible, or otherwise potentially fatal gap into an assumption.
+
+In autonomous mode, return a BLOCKED report instead of asking whenever a material decision lacks an
+authoritative answer — see Autonomous Mode.
 
 ---
 
-## Phase 4: Implement
+## Phase 3: Present and Approve the Plan
 
-### With TDD (when Phase 0 judged applicable)
+Before any repository mutation, present a decision-complete implementation plan containing:
+
+- The goal and observable success criteria
+- Relevant current-state evidence
+- The implementation approach and affected interfaces or data flow
+- Failure, compatibility, migration, and operational behavior where applicable
+- A test strategy mapped to the acceptance criteria
+- Explicit non-goals, assumptions, risks, and rejected alternatives that materially affect the decision
+
+In normal mode, use `AskUserQuestion` to offer **Approve**, **Adjust**, or **Cancel**. Do not treat answers to
+individual clarification questions as approval of the complete plan. If the user adjusts it, update the
+implementation contract and present the complete revised plan again. Do not proceed without explicit approval.
+
+In autonomous mode, skip the interactive approval only as described in Autonomous Mode.
+
+If material new information, repository drift, or a scope change invalidates an approved plan, stop, update the
+contract and plan, and obtain approval again before continuing.
+
+---
+
+## Phase 4: Set Up the Worktree
+
+In autonomous mode, follow the worktree rules in Autonomous Mode and skip the normal-mode base update below.
+
+For normal mode:
+
+1. Verify the checkout is still clean. Never stash, discard, or overwrite existing changes. If it is dirty,
+   stop and ask how the user wants to preserve that work.
+2. Resolve the base branch from an explicit approved choice or `refs/remotes/origin/HEAD`. Do not assume `main`.
+   If no trustworthy base can be resolved, ask before changing Git state.
+3. Switch to the base branch and update it only with a fast-forward pull:
+   ```bash
+   git switch <base-branch>
+   git pull --ff-only origin <base-branch>
+   ```
+   If either command would overwrite work, diverges, or fails, stop and report the state; do not force it.
+4. Choose a GitHub Flow-compliant branch name (e.g., `feat/add-login`, `fix/null-pointer-on-checkout`) and run:
+   ```bash
+   git wt <branch-name>
+   ```
+
+Capture the worktree path printed by `git wt`; its location is configuration-dependent. Run every subsequent
+command relative to that path. Because shell state does not persist between tool calls, prefix commands that
+need the worktree with `cd <worktree-path> && <command>`.
+
+Recheck the relevant files after setup. If the updated base changed a material premise of the approved plan,
+return to Phase 2.
+
+---
+
+## Phase 5: Implement
+
+Choose and record the test approach in the approved plan.
+
+**Proceed with TDD when all conditions are met:**
+
+- The change involves business logic, API handlers, or data transformation.
+- A test framework already exists without disproportionate setup cost.
+- Inputs and expected outputs can be defined from the acceptance criteria.
+
+**Do not force TDD when any condition applies:**
+
+- The change is limited to UI styling, a migration, configuration, or a one-shot operation.
+- No suitable test framework exists and adding one is outside the approved scope.
+- Another verification method maps more directly to the acceptance criteria.
+
+### With TDD
 
 Follow t-wada's TDD cycle strictly:
 
@@ -159,7 +225,7 @@ Implement with the minimum changes. Touch nothing beyond what is required.
 
 ---
 
-## Phase 5: Verify CI Locally
+## Phase 6: Verify CI Locally
 
 Check `.github/workflows/` and `Makefile` / `package.json` for CI configuration, then run the
 equivalent checks:
@@ -171,28 +237,43 @@ Fix any errors before moving on to commit.
 
 ---
 
-## Phase 5.5: CodeRabbit Self-Review (conditional)
+## Phase 6.5: CodeRabbit Self-Review (conditional)
 
-Run only when the CodeRabbit CLI is available. Check with `command -v coderabbit` or `command -v cr`.
-If neither is found, skip this phase entirely and proceed to Phase 6.
+Select the available CodeRabbit executable and invoke it in the same Bash call, because shell variables do
+not persist between tool calls:
 
-1. Request a review of the uncommitted diff. Use `coderabbit` if `command -v coderabbit` succeeds,
-   otherwise use `cr`:
-   ```bash
-   coderabbit review --agent --type uncommitted
-   ```
-   If the command errors out (e.g. not authenticated, network failure), note this briefly to the user
-   and proceed to Phase 6 without blocking.
+```bash
+if command -v coderabbit >/dev/null 2>&1; then
+  CODERABBIT_BIN=coderabbit
+elif command -v cr >/dev/null 2>&1; then
+  CODERABBIT_BIN=cr
+else
+  CODERABBIT_BIN=
+fi
+
+if [ -n "$CODERABBIT_BIN" ]; then
+  "$CODERABBIT_BIN" review --agent --type uncommitted
+fi
+```
+
+If `CODERABBIT_BIN` is empty, skip this phase. In normal mode, proceed to Phase 7. In autonomous mode,
+skip Phase 7 and emit the required structured report without invoking difit or committing.
+
+1. Run the block above to request a review of the uncommitted diff. If the command errors out (e.g. not
+   authenticated, network failure), note this briefly to the user
+   and follow the same mode-aware completion path as the missing-tool case: Phase 7 in normal mode,
+   or the structured report in autonomous mode.
 2. Treat the output as a self-review. Fix only genuine issues, with the minimum change required —
    do not piggyback unrelated cleanup.
    For findings that are false positives or reflect an intentional design decision,
    leave the code as is and note the reason briefly to the user.
-3. If any fix was applied, rerun the same command to confirm the finding is resolved.
-   Repeat until the review is clean or all remaining findings are judged as not requiring action.
+3. If any fix was applied, rerun Phase 6 before rerunning the selection-and-review block, so lint, tests,
+   and build reflect the fix. Repeat until the review is clean or all remaining findings are judged as not
+   requiring action.
 
 ---
 
-## Phase 6: Request Approval Before Committing
+## Phase 7: Request Approval Before Committing
 
 In autonomous mode, skip this phase entirely and emit the structured report — see Autonomous Mode.
 
