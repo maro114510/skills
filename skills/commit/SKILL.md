@@ -6,7 +6,6 @@ description: >
   Otherwise it commits automatically and reports what it did.
   Called by create-pr and implement when they need to commit changes.
   Can also be invoked directly with phrases like "commit this," "write a commit message," or "commit these changes."
-disable-model-invocation: true
 allowed-tools: Bash(git status:*, git diff:*, git log:*, git add:*, git restore:*, git commit:*), Read, AskUserQuestion
 argument-hint: "[optional hint, e.g. an issue number or message override]"
 ---
