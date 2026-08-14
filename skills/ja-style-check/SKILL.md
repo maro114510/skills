@@ -43,10 +43,11 @@ bash skills/ja-style-check/scripts/scan.sh [file...]
 ```
 
 3. Apply the fixes yourself with Edit, including the line joins. `mechanical-wrap` comes marked `auto_fixable`; `line-break` does not, so read that pair before joining it. When you join two lines, add a space only if Latin script ends the first and begins the second; a Japanese join takes no separator.
-4. Re-run the scanner after editing to pick up candidates the joins exposed. Stop once a run surfaces nothing new, and never exceed three runs.
+4. Re-run the scanner after editing to pick up candidates the joins exposed. A candidate you already judged and intentionally left as-is (such as a kept traceability identifier) reappearing is not "new" — stop once a run surfaces nothing beyond already-judged candidates, and never exceed three runs.
 5. Judge the context-dependent findings using the scanner output and `references/rubric.md`.
-6. In `fix` mode, edit every Model-Applied Fix: brackets, Latin script in Japanese sentences, meta prose, passive voice, jargon, code identifiers, paragraph and section structure, weak argument, reader load, voice, and notation. Report the Automatic Fixes Forbidden items — vague thresholds, absent first-use definitions, a hidden actor's real identity — as manual suggestions.
-7. Return the result in the shape `references/output-schema.md` defines.
+6. Manually scan every heading, list item, table row, and URL line for brackets (Check #2) and vague words (Check #4) — the scanner skips these lines entirely, so a short finding list is not evidence they are clean.
+7. In `fix` mode, edit every Model-Applied Fix: brackets, Latin script in Japanese sentences, meta prose, passive voice, jargon, code identifiers, paragraph and section structure, weak argument, reader load, voice, and notation. Report the Automatic Fixes Forbidden items — vague thresholds, absent first-use definitions, a hidden actor's real identity — as manual suggestions.
+8. Return the result in the shape `references/output-schema.md` defines.
 
 ## Compression
 
