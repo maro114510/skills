@@ -35,6 +35,8 @@ Markdown syntax is not prose. Link and image targets, code spans, code blocks, a
 
 This rule applies to all document types — design docs, implementation plans, and README files are not exempt. The reduced-severity exception in Check #8 applies only to SKILL.md and references/ files.
 
+House style, a sibling document's established convention, and "this is a technical or design-doc genre" are not exceptions. Folding bracket content into the sentence relocates information rather than adding it, so it never changes meaning — the fix-policy.md Safety Rule does not apply to it, regardless of document genre or how the rest of the file is written.
+
 Bad:
 - `注文を確定します（自動処理）。`
 - `認証エラーを修正します（PR #123）。`
@@ -164,6 +166,8 @@ Good:
 ### 9. Implementation Transcription
 
 Flag prose that copies control flow or implementation structure: `flag が true なら`, `A かつ B のとき`, `フラグを立てる`, `処理する`, or mixed identifiers and Japanese that cannot be read naturally. Rewrite toward the user-visible behavior.
+
+Ask first whether the actor is a human operator performing a manual step, or code executing control flow. A human operator's plain description of their own action — `運用者が手動で再送を実行します` — is not implementation transcription even though it contains a word like 実行 or 処理; this check targets code-shaped logic, not human process description.
 
 Bad:
 - `配列をループして条件に一致する要素を処理します。`
