@@ -31,5 +31,6 @@ gh skill install maro114510/skills --agent claude-code --scope user
 | `security-review` | Review PRs or files for security risks. |
 | `skill-cleaner` | Audit and slim down skill definitions. |
 | `tdd-test-cases` | Design practical TDD test cases. |
+| `tear-down` | Blank-slate red-team a plan or design instead of defending or polishing it. |
 | `write-researched-document` | Research, verify, and draft an evidence-backed Markdown document. |
 | `why-man` | Challenge assumptions with higher-level Why questions. |
