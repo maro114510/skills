@@ -54,12 +54,24 @@ Treat this list as a constraint no later pass may violate. Rewording is fine; dr
 
 Split the document into meaning-bearing blocks such as sections or paragraphs, and boil each down to what it is actually saying in one or a few sentences. Keep the safety-list elements at this stage too.
 
-### Step 3: Compress the whole document to a fixed point
+### Step 3: Structural redundancy check
 
-Stitch the block summaries together, then repeat the following.
+Before touching individual sentences, compare the block summaries from Step 2 against each other for redundancy at the level of meaning, not wording. A block is redundant when it restates a claim, conclusion, or example another block already makes — an intro that previews what the body says, a conclusion that repeats the body verbatim, two paragraphs arguing the same point. Surface similarity between blocks that make genuinely distinct points is not redundancy; leave those alone.
+
+For each redundant block found:
+
+1. Decide which block is the fuller, primary statement and which is the restatement.
+2. Check whether the restatement holds any safety-list element the primary block lacks — a number, condition, exception, or proper noun found only there. If so, merge that element into the primary block first.
+3. Once nothing safety-list-relevant remains exclusively in the restatement, delete it.
+
+Run this once, on the full set of block summaries, before entering the sentence-level loop below — it is a separate unit of cutting (whole blocks) from Step 4's (words and phrases), and the two must not be interleaved.
+
+### Step 4: Compress the whole document to a fixed point
+
+Stitch the surviving block summaries together, then repeat the following.
 
 1. Record the character count before this pass.
-2. Cut redundant phrasing, repeated claims, tangents, and decorative preambles. Don't relocate the cut information into a side note just to shave off characters. The anti-pattern isn't a specific punctuation mark — parentheses, em dashes, and colons all do it — it's forcing the reader to jump in and out of an aside. Test it that way: if reading the sentence straight through, aside and all, breaks comprehension, fold what you're keeping into the main clause, or split it onto its own line under Step 5.
+2. Cut redundant phrasing, repeated claims, tangents, and decorative preambles. Don't relocate the cut information into a side note just to shave off characters. The anti-pattern isn't a specific punctuation mark — parentheses, em dashes, and colons all do it — it's forcing the reader to jump in and out of an aside. Test it that way: if reading the sentence straight through, aside and all, breaks comprehension, fold what you're keeping into the main clause, or split it onto its own line under Step 6.
 
    With parentheses:
    - Disallowed: "We're revising the expense policy (purpose: reduce employee burden). Reimbursements (under $50 each) no longer need original receipts."
@@ -81,7 +93,7 @@ Stitch the block summaries together, then repeat the following.
    Measure against the text you were handed, which for Japanese is ja-style-check's output. Length added by a style rule — a bracket unfolded into the sentence, a Latin word replaced by its Japanese term — is not a failed pass. Never re-introduce a bracket or a bare Latin word to reach the 5% threshold; stop iterating instead.
 5. As a safety margin, stop after 5 passes even if the fixed point hasn't been reached, keeping the most recent output that wasn't discarded under the first case above.
 
-### Step 4: Final consistency check
+### Step 5: Final consistency check
 
 Compare the compressed text against the original and confirm the following.
 
@@ -91,13 +103,13 @@ Compare the compressed text against the original and confirm the following.
 
 If any of these fail, roll back to the pass where it broke and compress again with a different approach.
 
-### Step 5: Present the result
+### Step 6: Present the result
 
 If the result holds several independent points such as cause, response, deadline, and condition, split them into short lines or bullets rather than cramming them into one sentence. A single point can stay plain prose. This costs a few characters and is what lets the reader grasp the text quickly, so give it the same priority as keeping the safety list intact.
 
 Present only the compressed text. Don't show the iteration process or a before/after diff. Be ready to explain the safety-list contents, or why nothing more could be cut, if asked.
 
-Don't rewrite the original file. Only update it if the user explicitly asks for the change to be applied there.
+If the input was a file path, ask whether to overwrite that file with the compressed result after presenting it, and write it only once the user agrees. Chat-pasted text has no file to write back to, so it's presented only.
 
 ## Don't
 
@@ -105,6 +117,7 @@ Don't rewrite the original file. Only update it if the user explicitly asks for 
 - Compress Japanese that ja-style-check has not seen without saying so in the reply
 - Drop a safety-list item — numbers, conditions, proper nouns — on the theory that "the meaning is the same". A paraphrase usually can't replace them.
 - Skip the safety-list check on any pass
+- Delete a block in the structural redundancy check without first confirming no safety-list element exists only there
 - Invent information that isn't in the source text to push the compression ratio higher
 - Relocate cut information into a side note — parentheses, em dashes, or any other jump-in-jump-out construction — just to shave off characters
 - Re-introduce a parenthetical or a bare Latin word into Japanese output to shave off characters
