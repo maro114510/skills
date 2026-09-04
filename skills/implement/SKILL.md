@@ -1,12 +1,8 @@
 ---
 name: implement
 description: >
-  A skill for executing implementation tasks with quality as the top priority. Grounds the request
-  in the codebase, resolves requirements and acceptance criteria, obtains approval for an implementation
-  plan, and applies TDD and Why validation as needed. Trigger on requests like
-  「これを実装して」「機能を追加して」「バグを修正して」「変更して」「これを作って」
-  「リファクタリングして」「対応して」 and similar implementation requests.
-  Works in a worktree and asks for user approval via difit before committing.
+  A skill for executing implementation tasks with quality as the top priority. Grounds the request in the codebase, resolves requirements and acceptance criteria, obtains approval for an implementation plan, and applies TDD and Why validation as needed.
+  Works in a worktree, asks for user approval before committing, and opens a difit review only if explicitly requested.
   Does not create a PR until the user explicitly requests it.
   Also runs in a non-interactive autonomous mode when invoked with `autonomous` by an orchestrator (e.g. orchestrate-epic) inside a subagent.
 allowed-tools: AskUserQuestion, Bash, Read, Edit, Write, Glob, Grep
@@ -141,13 +137,13 @@ authoritative answer — see Autonomous Mode.
 
 ## Phase 3: Present and Approve the Plan
 
-Before any repository mutation, present a decision-complete implementation plan containing:
+Before any repository mutation, decide the test approach using the TDD criteria in Phase 5, then present a decision-complete implementation plan containing:
 
 - The goal and observable success criteria
 - Relevant current-state evidence
 - The implementation approach and affected interfaces or data flow
 - Failure, compatibility, migration, and operational behavior where applicable
-- A test strategy mapped to the acceptance criteria
+- The test strategy mapped to the acceptance criteria, and whether it follows TDD
 - Explicit non-goals, assumptions, risks, and rejected alternatives that materially affect the decision
 
 In normal mode, use `AskUserQuestion` to offer **Approve**, **Adjust**, or **Cancel**. Do not treat answers to
@@ -193,7 +189,7 @@ return to Phase 2.
 
 ## Phase 5: Implement
 
-Choose and record the test approach in the approved plan.
+Follow the test approach decided and approved in Phase 3, using the criteria below. If repository facts discovered during implementation contradict that decision, stop and return to Phase 3 to revise and re-approve the plan rather than silently switching approach.
 
 **Proceed with TDD when all conditions are met:**
 
@@ -227,66 +223,40 @@ Implement with the minimum changes. Touch nothing beyond what is required.
 
 ## Phase 6: Verify CI Locally
 
-Check `.github/workflows/` and `Makefile` / `package.json` for CI configuration, then run the
-equivalent checks:
-- lint / typecheck
-- test suite
-- build
-
-Fix any errors before moving on to commit.
+Determine the project's CI checks from its workflow, build, and package configuration, and run the equivalent lint, test, and build steps locally. Fix any errors before moving on to commit.
 
 ---
 
 ## Phase 6.5: CodeRabbit Self-Review (conditional)
 
-Select the available CodeRabbit executable and invoke it in the same Bash call, because shell variables do
-not persist between tool calls:
+If neither `coderabbit` nor `cr` is on `PATH`, skip this phase and go to Phase 7 in normal mode, or emit the structured report in autonomous mode.
+
+Otherwise select and run it in the same Bash call, since shell variables do not persist between tool calls:
 
 ```bash
-if command -v coderabbit >/dev/null 2>&1; then
-  CODERABBIT_BIN=coderabbit
-elif command -v cr >/dev/null 2>&1; then
-  CODERABBIT_BIN=cr
-else
-  CODERABBIT_BIN=
-fi
-
-if [ -n "$CODERABBIT_BIN" ]; then
-  "$CODERABBIT_BIN" review --agent --type uncommitted
-fi
+CODERABBIT_BIN=$(command -v coderabbit || command -v cr)
+"$CODERABBIT_BIN" review --agent --type uncommitted
 ```
 
-If `CODERABBIT_BIN` is empty, skip this phase. In normal mode, proceed to Phase 7. In autonomous mode,
-skip Phase 7 and emit the required structured report without invoking difit or committing.
-
-1. Run the block above to request a review of the uncommitted diff. If the command errors out (e.g. not
-   authenticated, network failure), note this briefly to the user
-   and follow the same mode-aware completion path as the missing-tool case: Phase 7 in normal mode,
-   or the structured report in autonomous mode.
-2. Treat the output as a self-review. Fix only genuine issues, with the minimum change required —
-   do not piggyback unrelated cleanup.
-   For findings that are false positives or reflect an intentional design decision,
-   leave the code as is and note the reason briefly to the user.
-3. If any fix was applied, rerun Phase 6 before rerunning the selection-and-review block, so lint, tests,
-   and build reflect the fix. Repeat until the review is clean or all remaining findings are judged as not
-   requiring action.
+If the command errors out, note it briefly and follow the same mode-aware path as the missing-tool case. Otherwise treat the output as a self-review: fix genuine issues with the minimum change required, and briefly note any finding left as-is because it's a false positive or an intentional design choice. If you applied a fix, rerun Phase 6, then rerun the review above, and repeat until it's clean or every remaining finding is judged not to need action. Then follow the same mode-aware path.
 
 ---
 
-## Phase 7: Request Approval Before Committing
+## Phase 7: Commit
 
 In autonomous mode, skip this phase entirely and emit the structured report — see Autonomous Mode.
 
-Use `difit` to have the user review the diff before committing.
-Use `difit` if `command -v difit` succeeds, otherwise use `npx difit`.
+Invoke the `commit` skill to compose and make the commit — it decides on its own whether to commit automatically or ask first, and that is what authorizes the commit.
+
+Do not open `difit` by default. Only run it when the user explicitly requests a difit review, per the `difit` skill's own opt-in rule.
+
+If the user did explicitly request a difit review, do it before invoking `commit`:
 
 ```bash
 # Review uncommitted changes in the worktree
 difit .
 ```
 
-If review comments come back, address them and run again.
-If it exits without comments, treat that as approval to proceed.
-Invoke the `commit` skill to compose and make the commit — it decides on its own whether to commit automatically or ask first, independent of the difit review just completed.
+Use `difit` if `command -v difit` succeeds, otherwise use `npx difit`. If review comments come back, address them and run again; once it exits clean, proceed to invoke `commit`.
 
 **Do not create a PR until the user explicitly says "create a PR."**
