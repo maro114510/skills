@@ -5,7 +5,7 @@ description: >
   This session acts as the Publisher (run it on a strong model such as Opus): it dispatches ready child Issues to Sonnet worker subagents that run the implement skill in autonomous mode in isolated worktrees, has an Opus reviewer check every diff (maker/checker), and gates all commit/push/PR creation on one explicit human approval per wave.
   A task starts only after every Issue it depends on is merged and closed. All state lives in GitHub (issue state, labels, branches, PRs), so re-running the skill with the same Epic resumes the loop from anywhere.
   Use when the user wants an Epic's child Issues implemented — "Epic を実装して", "この Epic を進めて", "Issue 群を順に実装して", "wave ごとに実装して", "オーケストレーションして".
-allowed-tools: AskUserQuestion, Agent, SendMessage, Bash, Read, Glob, Grep
+allowed-tools: AskUserQuestion, Agent, Bash, Read, Glob, Grep
 argument-hint: "[epic <number|url>] [repo <owner/repo>] [max-parallel <n>]"
 ---
 
@@ -100,17 +100,10 @@ Each prompt must contain:
 - The instruction to read its own Issue first: `gh issue view <number> --repo <REPO> --json title,body --jq .body`, plus its orchestrate-epic comments when the Issue carries the `loop:in-progress` label, which is where prior user answers live.
 - The Epic number, as one line of context. Do not summarize the Epic — a child Issue's own background section is the scope the worker is allowed to act on.
 - The branch (`feat/issue-<number>`) and the **already-created worktree path** — the worker works there and creates nothing.
-- Reviewer findings or user answers from the current cycle, when this is a fresh spawn rather than a continuation (see below).
+- Any user answers (also persisted as Issue comments — on resume, recover them from there) or reviewer findings from the current cycle. Reviewer findings need no persistence: a resumed run re-derives them by re-reviewing in Step 6.
 - The instruction: "Follow the `implement` skill preloaded in your context in Autonomous Mode, as if invoked with `autonomous branch feat/issue-<number> worktree <path> <task description>`. If the skill content is missing, read `<orchestrate-epic base dir>/../implement/SKILL.md` and follow its Autonomous Mode section." (Fill the path from this skill's base directory, which the harness states on invocation.)
 - The report contract below, noting the final message must be the report and nothing else.
 
-### Continue a Worker, Don't Respawn One
-
-A fresh subagent re-reads the codebase from zero. Two fix cycles on a respawn-per-cycle loop pay that grounding three times.
-
-So, within one run: send answers and reviewer findings back to the **same worker** with SendMessage, addressing it by the id or name its spawn returned. Spawn a replacement only when SendMessage cannot reach it — a new session, or an agent that already exited. A replacement needs the findings or answers spelled out in its prompt, since it has none of the prior context.
-
-Answers still get persisted as Issue comments regardless of which path is taken; that persistence is for the next session, not for this worker.
 
 ### Worker Report Contract
 
@@ -131,8 +124,8 @@ ERROR: <FAILED only>
 ## Step 5: Triage Worker Reports
 
 - **DONE** → queue for review (Step 6).
-- **BLOCKED** → answer only from documented sources (Epic body, Issue body, its comments, this conversation); batch everything else from all blocked workers into one AskUserQuestion call (up to 4, highest impact first, rest in a follow-up call) using the "Blocked Questions" template. **Post each question and its answer as a comment on the Issue** (commands §2) — human answers exist nowhere else, and without the comment a resumed session would re-dispatch the worker blind and get the same questions again. Then send the answers back to the same worker with SendMessage — same Issue, same worktree, no respawn.
-- **FAILED** (or a worker that returned nothing) → retry once with the error context, continuing the same worker when it is still reachable. On second failure: comment the failure on the Issue, drop it from the round, report at the wave gate, continue with the rest.
+- **BLOCKED** → answer only from documented sources (Epic body, Issue body, its comments, this conversation); batch everything else from all blocked workers into one AskUserQuestion call (up to 4, highest impact first, rest in a follow-up call) using the "Blocked Questions" template. **Post each question and its answer as a comment on the Issue** (commands §2) — human answers exist nowhere else, and without the comment a resumed session would re-dispatch the worker blind and get the same questions again. Then re-dispatch with the answers — same Issue, same worktree. Re-dispatch is always a fresh agent against the same worktree; never continue a live agent.
+- **FAILED** (or a worker that returned nothing) → re-dispatch once with the error context. On second failure: comment the failure on the Issue, drop it from the round, report at the wave gate, continue with the rest.
 
 ---
 
@@ -148,7 +141,7 @@ VERDICT: APPROVE | REQUEST_CHANGES
 FINDINGS: numbered; each has severity (blocking|nit), file:line, defect, concrete failure scenario, fix direction
 ```
 
-Blocking findings → send them to the same worker with SendMessage (same worktree), then re-review. Cap 2 fix cycles per Issue; unresolved blockers go to the wave gate for the human to decide.
+Blocking findings → re-dispatch a fresh worker with them (same worktree), then re-review. Cap 2 fix cycles per Issue; unresolved blockers go to the wave gate for the human to decide.
 Nits become gate-summary notes, not fix cycles.
 
 ---
@@ -157,7 +150,7 @@ Nits become gate-summary notes, not fix cycles.
 
 When every dispatched Issue is review-clean or explicitly parked, render the "Wave Gate" template: per Issue — branch, worktree, changed files, tests, reviewer verdict — plus a **file-overlap warning** for any file touched by two or more branches this wave, or by a branch this wave and an `awaiting-merge` PR from an earlier one, with a recommended merge order.
 
-Offer a difit walkthrough per worktree: `cd <worktree> && difit .` (fall back to `npx difit`). difit comments are fix requests: route to the worker (Step 4, continuing it when reachable), re-review (Step 6), return here.
+Offer a difit walkthrough per worktree: `cd <worktree> && difit .` (fall back to `npx difit`). difit comments are fix requests: route to the worker (Step 4), re-review (Step 6), return here.
 
 Then ask the explicit approval via AskUserQuestion per the "Wave Approval" template: commit + push + PR creation for the listed Issues as one batch. Options: 一括承認 / 一部のみ承認 / 中断.
 **This question alone authorizes Step 8. Never treat difit exiting cleanly as this approval.**
