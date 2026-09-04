@@ -203,10 +203,9 @@ If the repository has existing PRs, check their title style and stay consistent 
 
 ## Step 5. Consider Metadata
 
-Before creating the PR, run the following `gh` commands and use the results to propose choices to the user.
+Before creating the PR, run the following `gh` commands and use the results to choose metadata automatically.
 Do not merely show the commands; execute them.
-Complete 5.3 and 5.4, including user confirmation, before continuing to Step 6.
-Step 5.2 does not require user confirmation because the AI chooses labels automatically.
+Steps 5.2 and 5.3 do not require user confirmation because the AI chooses labels and the milestone automatically.
 
 **5.1 Assignee**
 
@@ -232,7 +231,9 @@ Run:
 gh api repos/{owner}/{repo}/milestones
 ```
 
-If open milestones exist, compare them with the change and ask the user whether to attach one.
+Compare open milestones with the Step 2 analysis and automatically attach the most appropriate one.
+Tell the user which milestone was selected and why in one concise sentence.
+If no milestone clearly matches, or several are equally plausible, continue without one.
 
 **5.4 Issue links**
 
