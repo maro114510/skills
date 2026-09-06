@@ -23,7 +23,6 @@ gh skill install maro114510/skills --agent claude-code --scope user
 | `create-pr` | Create a pull request with a useful description. |
 | `frame-problem` | Frame a vague problem before implementation and converge on a direction. |
 | `ja-style-check` | Review and improve Japanese technical writing. |
-| `md-review` | Preview and review Markdown changes. |
 | `pr-doc-review-pe` | Review design documents from a Principal Engineer perspective. |
 | `pr-lessons` | Extract reusable lessons from past PR reviews. |
 | `pr-review-pe` | Review code diffs from a Principal Engineer perspective. |
