@@ -89,6 +89,18 @@ flowchart LR
 - 理想状態: <1行>
 - 検証方法: <bullet>（最大5件）
 
+コンテナに昇格した Tn がある場合のみ、以下の形で示す。要件・仕様・検証方法は Tn.m 側にのみ書く。
+
+#### T3: <タイトル>（コンテナ / 依存: なし）
+- 背景: <このテーマが独立したまとまりとして必要な理由を1行で>
+- スコープ: <T3.1, T3.2 が含まれる、など>
+
+##### T3.1: <タイトル>（Wave 1 / 依存: なし）
+- 背景・要件・仕様・理想状態・検証方法は通常の子 Issue と同じ形式
+
+##### T3.2: <タイトル>（Wave 2 / 依存: T3.1）
+- 同上
+
 この構成・依存関係・要件仕様・検証方法ドラフトで本文生成に進んでよいですか？
 「作成してください」と返信すると、このまま Step 4（本文生成）→ 作成まで直接進みます。作成前に Issue 本文の全文を確認したい場合は「ドラフトを見せて」と伝えてください。
 追加・削除・タイトル修正・依存関係の修正・要件仕様の修正があれば教えてください。
@@ -155,7 +167,39 @@ Replace the `## 依存関係と並列実行計画` section with:
 | 2 | {{T2}} | <タイトル> | {{T1}} |
 ```
 
+## Container Tn body (Step 4)
+
+Step 2 で `Tn` がコンテナに昇格した場合のみ使う。要件・仕様・受け入れ条件は持たず、Epic 本文と同じ形で自分の孫 `Tn.m` だけを扱う縮小版。孫が12件以下なら Mermaid、それを超えるなら表を使う — 実際にはまず起きないが、閾値は Epic と揃える。
+
+```markdown
+## 背景
+
+{このテーマが独立したまとまりとして必要な理由 — 元の Tn のスコープとの関係を1〜2文で}
+
+## スコープ
+
+**含まれるもの:**
+- {孫 Issue のタイトル一覧}
+
+## 依存関係と実行計画
+
+​```mermaid
+flowchart LR
+  subgraph Wave1[Wave 1: 並列着手可]
+    T1_1["{{T1.1}} <タイトル>"]
+  end
+  subgraph Wave2[Wave 2: 並列着手可]
+    T1_2["{{T1.2}} <タイトル>"]
+  end
+  T1_1 --> T1_2
+​```
+```
+
+要件・仕様・検証方法セクションはここには書かない — それらは各 `Tn.m` 本文にのみ書く。依存図はこのコンテナ配下の孫だけを示し、他の `Tn` の孫とは混ぜない。
+
 ## Child Issue body (Step 4)
+
+コンテナでない `Tn`（リーフ）と `Tn.m`（孫）の両方がこの形を使う。
 
 ```markdown
 ## 背景
@@ -174,7 +218,7 @@ Replace the `## 依存関係と並列実行計画` section with:
 
 ## 依存関係
 
-{"Tn の完了後に着手可能。全体の依存関係は Epic を参照。" または "なし（並列着手可能）"。ステップ列挙や理由の詳細はここに書かない。}
+{`Tn` なら: "Tn の完了後に着手可能。全体の依存関係は Epic を参照。" / `Tn.m` なら: "Tn.m の完了後に着手可能。同じ親 Tn 配下の依存関係は Tn 本文を参照。" または "なし（並列着手可能）"。ステップ列挙や理由の詳細はここに書かない。}
 
 ## 受け入れ条件
 
@@ -194,7 +238,7 @@ Only used when the user explicitly asked to see the full draft (see Step 4.5 in 
 ```markdown
 ## Issue 本文レビュー
 
-`{{Tn}}` は仮のプレースホルダーです。子 Issue 作成後、実際の Issue 番号（例: #123）に置換されて Epic に反映されます。
+`{{Tn}}` と `{{Tn.m}}` は仮のプレースホルダーです。`{{Tn}}` は子 Issue 作成後に実際の Issue 番号（例: #123）へ置換されて Epic に反映され、`{{Tn.m}}` は孫 Issue 作成後にコンテナ化された Tn 本文へ同様に反映されます。
 
 ### Epic: <タイトル>
 
@@ -214,7 +258,19 @@ Only used when the user explicitly asked to see the full draft (see Step 4.5 in 
 
 ---
 
-上記内容で Issue を作成します。Epic を先に作成し、子 Issue はその番号を親として順に作成するため、Epic が最初に作成されます。
+コンテナ化された Tn がある場合のみ、以下も示す。
+
+### 子 Issue T3（コンテナ）: <タイトル>
+
+<T3 本文全文（{{T3.m}} プレースホルダーのまま）>
+
+### 孫 Issue T3.1: <タイトル>
+
+<孫 Issue T3.1 本文全文>
+
+---
+
+上記内容で Issue を作成します。Epic を先に作成し、Tn はその番号を親として順に作成し、コンテナ化された Tn がある場合はその番号を親として孫 Issue を作成するため、作成順は Epic → Tn → Tn.m になります。
 修正があれば箇所を指定して教えてください。問題なければ「作成してください」と返信してください。
 ```
 
@@ -229,11 +285,13 @@ Only used when the user explicitly asked to see the full draft (see Step 4.5 in 
 
 ### 子Issue
 - #<number> <title>
-- #<number> <title>
+- #<number> <title>（コンテナ）
+  - #<number> <title>（孫）
+  - #<number> <title>（孫）
 ...
 
-Epic と各子Issueは `gh issue create --parent` による Sub-issue 関係で紐づけました。
-依存関係は `--blocked-by` による Blocked-by/Blocking 関係として設定済みです。
+Epic と各Tn、コンテナ化されたTnと各孫Issueは `gh issue create --parent` による Sub-issue 関係で紐づけました。
+依存関係は `--blocked-by` による Blocked-by/Blocking 関係として設定済みです — 孫同士の依存は同じ親Tn配下のみです。
 GitHub 上の Issue サイドバー（Sub-issues / Relationships）で確認できます。
-Epic 本文の依存関係図（または表）は実際の Issue 番号で確定済みです。
+Epic 本文の依存関係図（または表）とコンテナ化されたTn本文の依存関係図は、いずれも実際の Issue 番号で確定済みです。
 ```

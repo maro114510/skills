@@ -50,13 +50,15 @@ Confirm `gh auth status` succeeds. If the main checkout is dirty, stop and tell 
 
 ## Step 2: Load State from GitHub
 
-Read the whole board with the three `gh` calls in commands §1 — one for the Epic and its children, one for the open children's labels and `blockedBy` edges, one for every PR on a loop branch. The call count does not grow with the Epic. Never fetch children one at a time, and never pull the Epic or an Issue body into context at this step; §1's projections carry everything Step 2 classifies on.
+Read the whole board with the three `gh` calls in commands §1 — one for the Epic, its `Tn` children, and one level of `Tn.m` grandchildren; one for the open `Tn`/`Tn.m` labels and `blockedBy` edges; one for every PR on a loop branch. The call count does not grow with the Epic. Never fetch children one at a time, and never pull the Epic or an Issue body into context at this step; §1's projections carry everything Step 2 classifies on.
 
-`blockedBy` is the dependency ground truth; the Epic body's diagram is only the fallback described in §1. Recover branches and worktrees with the local git commands there. For a resumed Issue, read its orchestrate-epic comments only when you are about to dispatch it.
+A `Tn` with a non-empty `grandchildren` array (call 1) is a **container**, created by create-github-issues to group a cohesive theme's `Tn.m` leaves — it is never dispatched itself and never appears as a unit of work. Only its `Tn.m` grandchildren enter the flat classification list below, alongside every non-container `Tn`. A container's own state for dependency purposes is derived, not read directly: it counts as `done` only when every one of its `Tn.m` is `done` — a `Tm` that `depends_on` a container is `ready` only once all of that container's grandchildren are `done`, regardless of the container Issue's own open/closed state. A `Tn.m` never has grandchildren of its own (create-github-issues caps depth at three), so no further recursion is needed.
+
+`blockedBy` is the dependency ground truth; the Epic body's diagram (and, for a container `Tn`, its own body's diagram) is only the fallback described in §1. Recover branches and worktrees with the local git commands there. For a resumed Issue, read its orchestrate-epic comments only when you are about to dispatch it.
 
 For an Issue classified `in-progress`, also read its sticky state comment (§2.5) once, at dispatch time: no state comment means this is still cycle 0 (the first attempt never finished). A state comment gives the recovered `cycle` count — the fix-cycle cap in Step 6 reads this instead of assuming 0 after a restart — and `head_sha`. `head_sha: none` means no commit was recorded yet (the last report was BLOCKED or FAILED before committing) — there is nothing to compare, so resume normally. Otherwise compare `head_sha` against `git -C <worktree> rev-parse HEAD`: a match means the worktree is exactly what GitHub last recorded, so resume normally; a mismatch means the worktree diverged from that record (edited by hand, a different process, a stale local checkout) — stop and tell the user instead of either trusting the worktree's current state as authoritative or silently redoing the work.
 
-Classify every child Issue:
+Classify every dispatchable Issue — every non-container `Tn`, and every `Tn.m`:
 
 | State | Meaning |
 |-------|---------|
@@ -71,7 +73,7 @@ Sanity checks — escalate instead of guessing:
 
 - A dependency cycle among open Issues.
 - A **merged** PR whose Issue is still open — never re-dispatch onto a merged branch; ask whether to close the Issue or start a fresh branch (e.g. `feat/issue-<number>-2`) for follow-up work.
-- `tokens: true` from §1's first call — a leftover `{{Tn}}` in the Epic body means a child's creation failed during create-github-issues, so a task and its edges may be missing. Fetch the body to show the user which token remains.
+- `tokens: true` from §1's first call — a leftover `{{Tn}}` or `{{Tn.m}}` in the Epic body (or a container `Tn`'s own body) means a Tn/Tn.m's creation failed during create-github-issues, so a task and its edges may be missing. Fetch the relevant body to show the user which token remains.
 - A `loop:in-progress` label with no branch anywhere — stale; propose resetting to `ready`.
 - A dispatch comment posted within the last 30 minutes that this session didn't post — labels are not locks, so another Publisher session may be running this Epic right now; confirm with the user before dispatching the same Issue (two workers in one worktree corrupt each other's diff).
 - Fallback path only: an unparseable Epic dependency section (offer to treat all open children as independent, only with explicit consent).
@@ -80,7 +82,7 @@ Sanity checks — escalate instead of guessing:
 
 ## Step 3: Present the Round Plan
 
-Render the "Round Plan" template: every child with its state, what gets dispatched this round (`in-progress` resumes first, then `ready`, up to `MAX_PARALLEL`), and the cost note.
+Render the "Round Plan" template: every dispatchable Issue from Step 2's classification (containers never appear here) with its state, what gets dispatched this round (`in-progress` resumes first, then `ready`, up to `MAX_PARALLEL`), and the cost note.
 Confirm via AskUserQuestion (開始 / 調整 / 中止) before dispatching anything.
 
 If nothing is dispatchable but Issues are `awaiting-merge` or `waiting`, skip to Step 9 — the loop is blocked on merges, not on work.
@@ -202,8 +204,8 @@ On every rescan, first clean up Issues that are closed with a merged PR (command
 
 ## Step 10: Completion
 
-When every child is closed: render the "Completion Report" template — shipped, merged, skipped/failed.
-Ask whether to close the Epic; never close it automatically.
+When every dispatchable Issue is `done` (per Step 2's derived state — every non-container `Tn` closed, and every container `Tn`'s own `Tn.m` all closed): render the "Completion Report" template — shipped, merged, skipped/failed.
+Ask whether to close the Epic and any container `Tn` that is now fully done but still open (GitHub does not auto-close a parent when its sub-issues close); never close either automatically.
 
 ---
 
