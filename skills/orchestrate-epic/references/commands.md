@@ -99,7 +99,9 @@ HTTP_STATUS=$(gh api "repos/$REPO/branches/$BASE/protection" -i 2>/dev/null | he
 if [ "$HTTP_STATUS" = "404" ]; then
   echo "no protection configured"
 elif [ "$HTTP_STATUS" != "200" ]; then
-  echo "protection check failed (HTTP $HTTP_STATUS) — stop and report, do not assume no protection" >&2
+  # empty $HTTP_STATUS (gh api itself failed — network, auth) also lands here, since it's neither 404 nor 200
+  echo "protection check failed (HTTP ${HTTP_STATUS:-no response}) — stop and report, do not assume no protection" >&2
+  exit 1
 fi
 git ls-tree -r "origin/$BASE" --name-only -- .github/workflows
 
