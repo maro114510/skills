@@ -8,16 +8,45 @@ Read only the section for the step you are on. Commands run from the main checko
 Three `gh` calls, whatever the child count. Never loop `gh issue view` per child: that payload embeds every blocker's full title and URL, so both the call count and the response size scale with the Epic.
 
 ```bash
-# 1. Epic, its children's states, and the leftover-token check in one projection
-gh issue view "$EPIC" --repo "$REPO" \
-  --json number,title,body,subIssues \
-  --jq '{epic:.number, tokens:(.body|test("\\{\\{T[0-9]+\\}\\}")),
-         children:[.subIssues.nodes[]|{n:.number,s:.state,t:.title}]}'
+# 1. Epic, its Tn's states, one level of Tn.m grandchildren, and the leftover-token check —
+#    all in one projection. `gh issue view --json subIssues` cannot do this: each subIssues
+#    node it returns is a flat LinkedIssue (number/title/state/url) with no subIssues field of
+#    its own, so a second nesting level is not reachable through that convenience flag. Raw
+#    `gh api graphql` has no such limit — GraphQL resolves the whole two-level tree in one round
+#    trip, so this stays a single call regardless of Epic size.
+OWNER="${REPO%/*}"; REPO_NAME="${REPO#*/}"
+gh api graphql \
+  -f query='
+    query($owner: String!, $repo: String!, $num: Int!) {
+      repository(owner: $owner, name: $repo) {
+        issue(number: $num) {
+          number
+          body
+          subIssues(first: 100) {
+            nodes {
+              number
+              state
+              title
+              subIssues(first: 100) {
+                nodes { number state title }
+              }
+            }
+          }
+        }
+      }
+    }' \
+  -f owner="$OWNER" -f repo="$REPO_NAME" -F num="$EPIC" \
+  --jq '.data.repository.issue |
+    {epic:.number, tokens:(.body|test("\\{\\{T[0-9]+(\\.[0-9]+)?\\}\\}")),
+     children:[.subIssues.nodes[]|{n:.number,s:.state,t:.title,
+       grandchildren:[.subIssues.nodes[]|{n:.number,s:.state,t:.title}]}]}'
 
-# 2. Labels and dependency edges, open children only
-EPIC="$EPIC" gh issue list --repo "$REPO" --state open --limit 200 \
+# 2. Labels and dependency edges, open Tn AND open Tn.m grandchildren of any container Tn.
+#    CONTAINERS is the set of Tn numbers from call 1 that have a non-empty grandchildren list.
+EPIC="$EPIC" CONTAINERS="$CONTAINERS" gh issue list --repo "$REPO" --state open --limit 200 \
   --json number,labels,blockedBy,parent \
-  --jq '[.[]|select(.parent.number == (env.EPIC|tonumber))
+  --jq --argjson containers "${CONTAINERS:-[]}" \
+  '[.[]|select(.parent.number == (env.EPIC|tonumber) or ([.parent.number] | inside($containers)))
         |{n:.number, l:[.labels[].name],
           b:[.blockedBy.nodes[]|select(.state=="OPEN")|.number]}]'
 
@@ -29,9 +58,9 @@ gh pr list --repo "$REPO" --state all --limit 200 \
           p:.number, s:(if .mergedAt then "MERGED" else .state end), h:.headRefName}]'
 ```
 
-`--jq` filters client-side, so only the projection reaches the context. `tokens: true` is the leftover-`{{Tn}}` signal Step 2 escalates on — it costs nothing, unlike carrying the Epic body.
+`--jq` filters client-side, so only the projection reaches the context. `tokens: true` is the leftover-`{{Tn}}`/`{{Tn.m}}` signal Step 2 escalates on — it costs nothing, unlike carrying the Epic body. `CONTAINERS` is derived from call 1's output before call 2 runs (`[.children[]|select(.grandchildren|length>0)|.n]`) — a `Tn` with a non-empty `grandchildren` array in call 1 is a container; every other `Tn` is a leaf and is never expected to have children of its own. A `Tn.m` never has grandchildren of its own (Step 2's depth cap in create-github-issues), so this single extra nesting level is always enough — no recursion needed.
 
-Calls 2 and 3 page the repository's issues and PRs before filtering, so `--limit` truncates silently on a busy repository. Cross-check both against call 1's child list: if an open child is missing from call 2, or a `feat/issue-<n>` branch that exists locally has no row in call 3, the read is incomplete. Raise the limit and re-run rather than classifying on a partial board.
+Calls 2 and 3 page the repository's issues and PRs before filtering, so `--limit` truncates silently on a busy repository. Cross-check both against call 1's `Tn` and grandchild lists (flattened): if an open `Tn` or `Tn.m` is missing from call 2, or a `feat/issue-<n>` branch that exists locally has no row in call 3, the read is incomplete. Raise the limit and re-run rather than classifying on a partial board.
 
 Branch and worktree recovery stays local and free:
 
@@ -45,7 +74,7 @@ PR state decoding: `OPEN` → awaiting-merge; `MERGED` → merged; `CLOSED` with
 
 Fetch the Epic body itself (`--jq .body`) only on the fallback path below, or when a leftover token needs to be shown to the user.
 
-Fallback when `subIssues`/`blockedBy` are unavailable (older gh / GHES): parse the Epic body's "Dependencies & Parallel Execution Plan" section — Mermaid edges `X --> Y` mean Y depends on X; the wave-table variant lists each row's `#<number>` dependencies — then fetch each child's state individually. Tell the user the run is on this fallback, since a hand-edited Epic body can drift from the real relations.
+Fallback when `subIssues`/`blockedBy` are unavailable (older gh / GHES, or the GraphQL call itself errors): parse the Epic body's "Dependencies & Parallel Execution Plan" section — Mermaid edges `X --> Y` mean Y depends on X; the wave-table variant lists each row's `#<number>` dependencies — then fetch each `Tn`'s state individually. For a `Tn` that turned out to be a container, its own body carries the same kind of section for its `Tn.m` children — parse it the same way, one level down. Tell the user the run is on this fallback, since a hand-edited body can drift from the real relations.
 
 ## §2 Dispatch Bookkeeping (Step 4)
 
