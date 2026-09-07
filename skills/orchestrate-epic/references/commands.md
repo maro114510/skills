@@ -73,16 +73,18 @@ git-wt may place worktrees outside the repo (config-dependent) — always use th
 ## §3 Ship an Approved Issue (Step 8)
 
 `WT` is the worktree path; `BRANCH` is `feat/issue-<N>`.
-Every sub-step is guarded so a mid-failure rerun resumes instead of erroring: commit only when uncommitted changes exist, push is repeat-safe, create the PR only when none exists for the branch.
+Every sub-step is guarded so a mid-failure rerun resumes instead of erroring: commit only when work is left uncommitted, push is repeat-safe, create the PR only when none exists for the branch.
 
 ```bash
 # 1. Inspect what ships — input for the secret screen
 git -C "$WT" add -N .                                      # intent-to-add: makes untracked files diff-visible (content stays unstaged)
 git -C "$WT" status --short
-git -C "$WT" diff "$(git -C "$WT" merge-base main HEAD)"   # uncommitted + any rogue commits, without post-branch main noise
-git -C "$WT" log --oneline main..HEAD                      # non-empty = worker committed against its rules; flag to the user
+git -C "$WT" diff "$(git -C "$WT" merge-base main HEAD)"   # uncommitted changes plus the worker's own commit(s), without post-branch main noise
+git -C "$WT" fetch origin "$BRANCH" 2>/dev/null
+git -C "$WT" rev-parse --verify -q "origin/$BRANCH" >/dev/null 2>&1 && echo "PUSHED EXTERNALLY — flag to the user"   # succeeds only if the branch reached the remote before this step pushed it
 
-# 2. Stage and commit — skip if `status --short` is empty (a rerun after the commit already landed)
+# 2. Stage and commit — skip only if `status --short` is empty AND `git -C "$WT" rev-parse HEAD`
+# matches the worker report's HEAD_SHA (the worker already committed everything there was)
 git -C "$WT" add -A                        # ONLY when the secret screen found nothing
 # After any hit, never use add -A: unstage flagged paths (git -C "$WT" restore --staged -- <path>)
 # and stage the safe remainder explicitly with git -C "$WT" add -- <path>...
@@ -103,8 +105,8 @@ gh pr create --repo "$REPO" --head "$BRANCH" --base "$BASE" --title "<Issue titl
 ## Summary
 <worker summary, condensed>
 
-## Test evidence
-<TESTS section from the worker report>
+## Check evidence
+<CHECKS and CRITERIA sections from the worker report>
 
 Closes #<N>
 Part of Epic #<EPIC>

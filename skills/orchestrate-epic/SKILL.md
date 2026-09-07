@@ -116,14 +116,18 @@ Answers still get persisted as Issue comments regardless of which path is taken;
 
 ```
 STATUS: DONE | BLOCKED | FAILED
-ISSUE: #<number>
-BRANCH: <branch>
-WORKTREE: <absolute path>
-CHANGED_FILES: <one per line; empty if BLOCKED before implementing>
-TESTS: <checks run and results>
+ISSUE: #<number, when the caller supplied one; omit otherwise>
+BRANCH: <branch, or UNKNOWN if unavailable>
+WORKTREE: <absolute worktree path, or UNKNOWN if unavailable>
+HEAD_SHA: <commit SHA of the worker's final commit, or UNKNOWN if unavailable>
+CHANGED_FILES: <one path per line; empty if BLOCKED before implementing>
+CHECKS: <one per line, `<command> -> exit <code>`>
+CRITERIA: <one per line, `<acceptance criterion> -> <test or manual check that covers it>`>
+SKIPPED: <requirements judged out of scope, one per line, `<requirement> -> <reason>`; empty if none>
+FOUND: <defects found outside scope but not fixed, one per line; empty if none>
 SUMMARY: <what was implemented; key decisions and why>
-QUESTIONS: <BLOCKED only — numbered, each with concrete options>
-ERROR: <FAILED only>
+QUESTIONS: <BLOCKED only — numbered, each with concrete answer options>
+ERROR: <FAILED only — what failed, what was attempted>
 ```
 
 ---
@@ -138,8 +142,8 @@ ERROR: <FAILED only>
 
 ## Step 6: Reviewer Pass (maker/checker)
 
-Per DONE Issue, first run `git -C <worktree> add -N .` — plain diff skips untracked files, and a worker's newly created files must not escape review. Then spawn a `skills:issue-reviewer` subagent (parallel is fine) with the worktree path, `REPO`, the Issue number — the reviewer reads the requirements and acceptance criteria itself, for the same reason the worker does — and the diff command `git -C <worktree> diff $(git -C <worktree> merge-base main HEAD)` — the merge-base baseline catches uncommitted changes, intent-to-add files, and any commits a worker made despite instructions, without dragging in changes merged to main after a resumed worktree was created.
-If `git -C <worktree> log main..HEAD` shows commits, the worker broke its no-commit rule: still review everything, and flag the violation at the wave gate.
+Per DONE Issue, first run `git -C <worktree> add -N .` — plain diff skips untracked files, and a worker's newly created files must not escape review. Then spawn a `skills:issue-reviewer` subagent (parallel is fine) with the worktree path, `REPO`, the Issue number — the reviewer reads the requirements and acceptance criteria itself, for the same reason the worker does — and the diff command `git -C <worktree> diff $(git -C <worktree> merge-base main HEAD)` — the merge-base baseline catches uncommitted changes, intent-to-add files, and any commits the worker made, without dragging in changes merged to main after a resumed worktree was created.
+Workers are expected to commit in the worktree (Autonomous Mode Phase 7), so a commit on the branch is not itself a violation. Check instead whether the branch reached the remote outside this flow: `git -C <worktree> fetch origin "$BRANCH" && git -C <worktree> rev-parse --verify -q origin/"$BRANCH"` succeeding, before Step 8 has pushed anything itself, means the worker (or something else) pushed it — as does an existing PR from Step 2's projection not yet known to this wave. That is the actual rule break — still review everything, and flag it at the wave gate.
 
 Reviewer output:
 
@@ -169,8 +173,8 @@ Then ask the explicit approval via AskUserQuestion per the "Wave Approval" templ
 Per approved Issue, following commands §3:
 
 1. **Secret screen** the diff (same patterns as the commit skill's Step 2). Any hit: exclude the file, tell the user what and why, ask — and stage the remainder via explicit paths, never `add -A`, so a flagged file cannot ride along. A suspected secret never ships on autopilot.
-2. Stage and commit in the worktree with a Conventional Commits message derived from the Issue.
-3. Push and create the PR with `gh pr create --head <branch>` — body carries the worker summary, test evidence, `Closes #<number>`, and the Epic reference.
+2. The worker already committed (its report's `HEAD_SHA`). If the worktree still has uncommitted changes, or `HEAD_SHA` is missing/`UNKNOWN`, or `git -C <worktree> rev-parse HEAD` doesn't match it, stage and commit the remainder yourself with a Conventional Commits message derived from the Issue. Otherwise there is nothing left to commit; proceed to push.
+3. Push and create the PR with `gh pr create --head <branch>` — body carries the worker summary, check evidence (`CHECKS`/`CRITERIA`), `Closes #<number>`, and the Epic reference.
 4. Remove the `loop:in-progress` label.
 
 Ship is the loop's only irreversible stretch, so every sub-step is written to be idempotent (commands §3 checks whether each one already happened). If a sub-step fails mid-way — pushed but the PR creation errored, say — fix the cause and rerun Step 8 for that Issue; already-completed sub-steps are skipped, never repeated.
