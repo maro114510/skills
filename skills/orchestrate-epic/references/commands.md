@@ -60,7 +60,7 @@ gh pr list --repo "$REPO" --state all --limit 200 \
 
 `--jq` filters client-side, so only the projection reaches the context. `tokens: true` is the leftover-`{{Tn}}`/`{{Tn.m}}` signal Step 2 escalates on — it costs nothing, unlike carrying the Epic body. `CONTAINERS` is derived from call 1's output before call 2 runs, via `[.children[]|select(.grandchildren|length>0)|.n]` — a `Tn` with a non-empty `grandchildren` array in call 1 is a container; every other `Tn` is a leaf and is never expected to have children of its own. Step 2's depth cap in create-github-issues means a `Tn.m` never has grandchildren of its own, so this single extra nesting level is always enough — no recursion needed.
 
-Calls 2 and 3 page the repository's issues and PRs before filtering, so `--limit` truncates silently on a busy repository. Cross-check both against call 1's `Tn` and grandchild lists, flattened: if an open `Tn` or `Tn.m` is missing from call 2, or a `feat/issue-<n>` branch that exists locally has no row in call 3, the read is incomplete. Raise the limit and re-run rather than classifying on a partial board.
+Calls 2 and 3 page the repository's issues and PRs before filtering, so `--limit` truncates silently on a busy repository. Cross-check call 2 against call 1's `Tn` and grandchild lists, flattened: if an open `Tn` or `Tn.m` is missing from call 2, the read is incomplete — raise the limit and re-run rather than classifying on a partial board. Do not apply the same reasoning to call 3: a local `feat/issue-<n>` branch with no row there is not itself evidence of a truncated page — an Issue can legitimately be `ready` or `in-progress` with a branch that has no PR yet, since Step 7 is what creates one.
 
 Branch and worktree recovery stays local and free:
 
@@ -82,9 +82,16 @@ Fallback when `subIssues`/`blockedBy` are unavailable — older gh, GHES, or the
 # Once per run
 gh label create "oe:go" --repo "$REPO" --color "0E8A16" --description "human approved the orchestrate-epic Run Plan" 2>/dev/null || true
 
+# Resolve this run's own identity once — every marker lookup below trusts only a comment this identity
+# posted, never merely one that starts with the right prefix. On a public repo anyone can comment
+# "<!-- orchestrate-epic:run-plan -->..." to spoof a marker and suppress the real lifecycle comment,
+# or get the state upsert to read and edit a comment they planted instead of the real state.
+ME=$(gh api user --jq .login)
+
 # Find the Run Plan comment — --paginate --slurp fetches every page (an Epic can carry more
 # comments than one page holds), `add` flattens the resulting array-of-arrays before [-1] picks the latest
-gh api "repos/$REPO/issues/$EPIC/comments" --paginate --slurp --jq 'add | [.[]|select(.body|startswith("<!-- orchestrate-epic:run-plan -->"))][-1] // empty'
+gh api "repos/$REPO/issues/$EPIC/comments" --paginate --slurp --jq --arg me "$ME" \
+  'add | [.[]|select(.user.login==$me and (.body|startswith("<!-- orchestrate-epic:run-plan -->")))][-1] // empty'
 
 # Post it (create only — never edit/replace an existing Run Plan)
 gh issue comment "$EPIC" --repo "$REPO" --body "$RUN_PLAN_BODY"
@@ -107,7 +114,8 @@ git ls-tree -r "origin/$BASE" --name-only -- .github/workflows
 
 # Completion exit comment (Step 9) — marked the same way as the Run Plan, so a rerun after completion
 # doesn't post a second one; $EXIT_COMMENT_BODY must start with <!-- orchestrate-epic:completion -->
-gh api "repos/$REPO/issues/$EPIC/comments" --paginate --slurp --jq 'add | [.[]|select(.body|startswith("<!-- orchestrate-epic:completion -->"))][-1] // empty'
+gh api "repos/$REPO/issues/$EPIC/comments" --paginate --slurp --jq --arg me "$ME" \
+  'add | [.[]|select(.user.login==$me and (.body|startswith("<!-- orchestrate-epic:completion -->")))][-1] // empty'
 gh issue comment "$EPIC" --repo "$REPO" --body "$EXIT_COMMENT_BODY"   # only when the check above found none
 ```
 
@@ -138,13 +146,19 @@ EOF
 One sticky comment per Issue, distinct from the start/Q&A comments above, identified by a leading marker so it can be found and edited in place instead of piling up duplicates.
 
 ```bash
+ME=$(gh api user --jq .login)   # same resolution as §1.5 — read it fresh here if this section runs on its own
+
 # Read the latest state comment (empty output if none exists yet — still cycle 0).
 # --paginate --slurp fetches every page — a long-running Issue can carry more comments than one
 # page holds, and [-1] alone would silently pick a stale mid-list comment instead of the real latest.
-gh api "repos/$REPO/issues/$N/comments" --paginate --slurp --jq 'add | [.[]|select(.body|startswith("<!-- orchestrate-epic-state -->"))][-1] // empty'
+# $ME filters out any comment planted by someone other than this run's own identity — otherwise an
+# attacker-authored marker could be read as, or overwritten as, real state.
+gh api "repos/$REPO/issues/$N/comments" --paginate --slurp --jq --arg me "$ME" \
+  'add | [.[]|select(.user.login==$me and (.body|startswith("<!-- orchestrate-epic-state -->")))][-1] // empty'
 
 # Upsert: edit the existing state comment if found, else create it
-STATE_ID=$(gh api "repos/$REPO/issues/$N/comments" --paginate --slurp --jq 'add | [.[]|select(.body|startswith("<!-- orchestrate-epic-state -->"))][-1].id // empty')
+STATE_ID=$(gh api "repos/$REPO/issues/$N/comments" --paginate --slurp --jq --arg me "$ME" \
+  'add | [.[]|select(.user.login==$me and (.body|startswith("<!-- orchestrate-epic-state -->")))][-1].id // empty')
 if [ -n "$STATE_ID" ]; then
   gh api "repos/$REPO/issues/comments/$STATE_ID" -X PATCH -f body="$BODY"
 else
@@ -163,20 +177,22 @@ orchestrate-epic state:
 - decisions: <このIssueについて人間が下した判断。なければ なし>
 ```
 
-`cycle` counts reviewer fix cycles only, a REQUEST_CHANGES re-dispatch from Step 6, and never resets; a BLOCKED answer or FAILED retry from Step 5 leaves it unchanged. Step 6 reads it back on a resumed session so the 2-fix-cycle cap holds across a restart instead of starting over at 0.
+`cycle` counts reviewer fix cycles only, a REQUEST_CHANGES re-dispatch from Step 6; a BLOCKED answer or FAILED retry from Step 5 leaves it unchanged, and neither resets it. The one exception is an authorized `retry` or `redo` decision on a `parked` or `rejected` Issue, SKILL.md Step 2's un-parking check, which resets `cycle` to 0 — a human decision restarts the fix-cycle budget on purpose. Short of that, Step 6 reads it back on a resumed session so the 2-fix-cycle cap holds across a restart instead of starting over at 0.
 
 git-wt may place worktrees outside the repo, depending on its config — always use the printed path, never an assumed `.wt/`.
 
 ## §3 Ship an Approved Issue — Step 7
 
-`WT` is the worktree path; `BRANCH` is `feat/issue-<N>`.
+`WT` is the worktree path; `BRANCH` is the branch selected for this Issue in Step 4 — `feat/issue-<N>` normally, or its state-comment-recorded `redo` branch when one applies.
 Every sub-step is guarded so a mid-failure rerun resumes instead of erroring: commit only when work is left uncommitted, push is repeat-safe, create the PR only when none exists for the branch.
 
 ```bash
+BASE=$(gh repo view "$REPO" --json defaultBranchRef -q .defaultBranchRef.name)   # same resolution as §1.5 — never hardcode main
+
 # 1. Inspect what ships — input for the secret screen
 git -C "$WT" add -N .                                      # intent-to-add: makes untracked files diff-visible (content stays unstaged)
 git -C "$WT" status --short
-git -C "$WT" diff "$(git -C "$WT" merge-base main HEAD)"   # uncommitted changes plus the worker's own commit(s), without post-branch main noise
+git -C "$WT" diff "$(git -C "$WT" merge-base "$BASE" HEAD)"   # uncommitted changes plus the worker's own commit(s), without post-branch main noise
 git -C "$WT" fetch origin "$BRANCH" 2>/dev/null
 git -C "$WT" rev-parse --verify -q "origin/$BRANCH" >/dev/null 2>&1 && echo "PUSHED EXTERNALLY — flag to the user"   # succeeds only if the branch reached the remote before this step pushed it
 
