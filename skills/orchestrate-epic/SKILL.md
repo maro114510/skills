@@ -53,13 +53,15 @@ Confirm `gh auth status` succeeds. If the main checkout is dirty, stop and tell 
 
 ## Step 2: Load State from GitHub
 
-Read the whole board with the three `gh` calls in commands §1 — one for the Epic and its children, one for the open children's labels and `blockedBy` edges, one for every PR on a loop branch. The call count does not grow with the Epic. Never fetch children one at a time, and never pull the Epic or an Issue body into context at this step; §1's projections carry everything Step 2 classifies on.
+Read the whole board with the three `gh` calls in commands §1 — one for the Epic, its `Tn` children, and one level of `Tn.m` grandchildren; one for the open `Tn`/`Tn.m` labels and `blockedBy` edges; one for every PR on a loop branch. The call count does not grow with the Epic. Never fetch children one at a time, and never pull the Epic or an Issue body into context at this step; §1's projections carry everything Step 2 classifies on.
 
-`blockedBy` is the dependency ground truth; the Epic body's diagram is only the fallback described in §1. Recover branches and worktrees with the local git commands there. For a resumed Issue, read its orchestrate-epic comments only when you are about to dispatch it.
+A `Tn` with a non-empty `grandchildren` array (call 1) is a **container**, created by create-github-issues to group a cohesive theme's `Tn.m` leaves — it is never dispatched itself and never appears as a unit of work. Only its `Tn.m` grandchildren enter the flat classification list below, alongside every non-container `Tn`. A container's own state for dependency purposes is derived, not read directly: it counts as `done` only when every one of its `Tn.m` is `done` — a `Tm` that `depends_on` a container is `ready` only once all of that container's grandchildren are `done`, regardless of the container Issue's own open/closed state. A `Tn.m` never has grandchildren of its own (create-github-issues caps depth at three), so no further recursion is needed.
+
+`blockedBy` is the dependency ground truth; the Epic body's diagram (and, for a container `Tn`, its own body's diagram) is only the fallback described in §1. Recover branches and worktrees with the local git commands there. For a resumed Issue, read its orchestrate-epic comments only when you are about to dispatch it.
 
 For any Issue carrying `loop:in-progress` with no PR, read its sticky state comment (§2.5) now, as part of classification, not only once dispatch is about to happen — whether it is `in-progress` or `parked` (below) depends on it. No state comment means this is still cycle 0 (the first attempt never finished) and there are no unresolved blockers. A state comment gives the recovered `cycle` count — the fix-cycle cap in Step 6 reads this instead of assuming 0 after a restart — `head_sha`, and `unresolved_blockers`. `head_sha: none` means no commit was recorded yet (the last report was BLOCKED or FAILED before committing) — there is nothing to compare, so resume normally. Otherwise compare `head_sha` against `git -C <worktree> rev-parse HEAD`: a match means the worktree is exactly what GitHub last recorded, so resume normally; a mismatch means the worktree diverged from that record (edited by hand, a different process, a stale local checkout) — stop and tell the user instead of either trusting the worktree's current state as authoritative or silently redoing the work.
 
-Classify every child Issue:
+Classify every dispatchable Issue — every non-container `Tn`, and every `Tn.m`:
 
 | State | Meaning |
 |-------|---------|
@@ -85,10 +87,10 @@ Sanity checks — none of these block on a question; each names a concrete non-i
 
 - **A dependency cycle among open Issues** → do not compute `ready` for any Issue in the cycle. Post one comment on the Epic naming the cyclic Issues and exit without dispatching (the Epic is effectively frozen until a human edits a `blockedBy` relation or a label); say the same in this session's own output.
 - **A merged PR whose Issue is still open** → never re-dispatch onto a merged branch. Post a comment on the Issue describing the situation and the two resolutions (close the Issue, or start a fresh branch such as `feat/issue-<number>-2` for follow-up work); skip dispatching that Issue this round and continue with the rest.
-- **`tokens: true`** from §1's first call — a leftover `{{Tn}}` in the Epic body means a child's creation failed during create-github-issues, so a task and its edges may be missing. Fetch the body, show the user which token remains, in this session's own output.
+- **`tokens: true`** from §1's first call — a leftover `{{Tn}}` or `{{Tn.m}}` in the Epic body (or a container `Tn`'s own body) means a Tn/Tn.m's creation failed during create-github-issues, so a task and its edges may be missing. Fetch the relevant body, show the user which token remains, in this session's own output.
 - **A `loop:in-progress` label with no branch anywhere** — stale. Report it in this session's own output; do not silently reset the label yourself.
 - **A dispatch comment posted within the last 30 minutes that this session didn't post** — labels are not locks, so another Publisher session may be running this Epic right now. Skip dispatching that Issue this round and report it — two workers in one worktree corrupt each other's diff, so the safe default is not to dispatch, not to ask.
-- **Fallback path only: an unparseable Epic dependency section** — post a comment on the Epic saying the dependency section could not be parsed and that `blockedBy`/`subIssues` support (or a corrected body) is needed; exit without dispatching. Never assume independence without that support.
+- **Fallback path only: an unparseable Epic (or container `Tn`) dependency section** — post a comment on the Epic (or the container `Tn`) saying the dependency section could not be parsed and that `blockedBy`/`subIssues` support (or a corrected body) is needed; exit without dispatching. Never assume independence without that support.
 
 ---
 
@@ -97,7 +99,7 @@ Sanity checks — none of these block on a question; each names a concrete non-i
 This is the loop's only up-front human gate. It runs on every invocation, before any worktree is created or any worker is spawned.
 
 1. **Look for the Run Plan comment** on the Epic (§1.5): a comment whose body starts with the marker `<!-- orchestrate-epic:run-plan -->`.
-2. **If none exists**: gather the repository facts below, render the "Run Plan" template from Step 2's classification (state, risk tier, blockers, planned base branch per child — base branch is always the repository's default branch, since a `ready` Issue's dependencies are by definition already merged there; there is no branch stacking yet, see #148), post it as the marked comment on the Epic (§1.5), and **exit** — no worktree, no dispatch, nothing past this point runs this invocation.
+2. **If none exists**: gather the repository facts below, render the "Run Plan" template from Step 2's classification (state, risk tier, blockers, planned base branch per dispatchable Issue — containers never appear here, only every non-container `Tn` and every `Tn.m`; base branch is always the repository's default branch, since a `ready` Issue's dependencies are by definition already merged there; there is no branch stacking yet, see #148), post it as the marked comment on the Epic (§1.5), and **exit** — no worktree, no dispatch, nothing past this point runs this invocation.
 3. **If a Run Plan comment exists but the Epic lacks the `oe:go` label**: exit, telling the user in this session's own output that the `oe:go` label must be added to the Epic before anything runs.
 4. **If both exist**: proceed to Step 4.
 
@@ -219,14 +221,14 @@ On every rescan, first clean up Issues that are closed with a merged PR (command
 
 ## Step 9: Completion
 
-When every child is closed, check the Epic for an existing completion comment (marker `<!-- orchestrate-epic:completion -->`, commands §1.5) — if one is already there, do not post a second one. Otherwise post one **exit comment** on the Epic (commands §1.5) using the "Completion Exit Comment" template, then render the same content in this session's own output:
+When every dispatchable Issue is `done` (per Step 2's derived state — every non-container `Tn` closed, and every container `Tn`'s own `Tn.m` all closed), check the Epic for an existing completion comment (marker `<!-- orchestrate-epic:completion -->`, commands §1.5) — if one is already there, do not post a second one. Otherwise post one **exit comment** on the Epic (commands §1.5) using the "Completion Exit Comment" template, then render the same content in this session's own output:
 
 - Shipped and merged Issues.
 - Every recorded assumption — aggregated from each Issue's Q&A comments (Step 5) and `SKIPPED` entries in worker reports.
 - Parked or failed Issues, each with the reason it never shipped.
 - The six #141 metrics, best-effort from data this run already has (dispatch counts, state-comment `cycle` values, reviewer first-pass verdicts, round timestamps); where a metric depends on work not yet done (CI-failure attribution needs #143's derived check set), say so plainly instead of reporting a number.
 
-The loop never closes the Epic. Closing it is the human's own exit check, stated as such in the exit comment.
+The loop never closes the Epic, or any container `Tn` that is now fully done but still open, automatically — GitHub does not auto-close a parent when its sub-issues close, so both need the same human exit check; the exit comment names them.
 
 ---
 

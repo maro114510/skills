@@ -89,6 +89,18 @@ flowchart LR
 - Target state: <one line>
 - Verification: <bullet> (up to 5)
 
+Only when a Tn was promoted to a container, show it in this shape instead — Requirements/Specs/Verification live only on the Tn.m side.
+
+#### T3: <title> (container / Depends on: none)
+- Background: <why this theme needs to be its own grouping, in one line>
+- Scope: <e.g. covers T3.1, T3.2>
+
+##### T3.1: <title> (Wave 1 / Depends on: none)
+- Background/Requirements/Specs/Target state/Verification, same shape as a regular child Issue
+
+##### T3.2: <title> (Wave 2 / Depends on: T3.1)
+- Same as above
+
 OK to proceed to writing the Issue bodies with this structure, dependencies, requirement/spec, and verification drafts?
 Reply "create them" to go straight from here through Step 4 (body generation) to creation. If you want to see the full Issue body text before creation, say "show me the draft" instead.
 Let me know if anything needs to be added, removed, retitled, or corrected (dependencies, requirements, specs).
@@ -155,7 +167,39 @@ There are many child Issues, so this is shown as a table instead of a graph. Iss
 | 2 | {{T2}} | <title> | {{T1}} |
 ```
 
+## Container Tn body (Step 4)
+
+Use only when Step 2 promoted a `Tn` to a container. It has no Requirements, Specs, or Acceptance Criteria — a scaled-down version of the Epic shape covering only its own grandchildren `Tn.m`. Mermaid for 12 or fewer grandchildren; past that, the table — rarely reached in practice, but the same threshold as the Epic.
+
+```markdown
+## Background
+
+{Why this theme needs to be its own grouping — its relation to the original Tn's scope, in 1-2 sentences}
+
+## Scope
+
+**Included:**
+- {List grandchild Issue titles}
+
+## Dependencies & Execution Plan
+
+​```mermaid
+flowchart LR
+  subgraph Wave1[Wave 1: can start in parallel]
+    T1_1["{{T1.1}} <title>"]
+  end
+  subgraph Wave2[Wave 2: can start in parallel]
+    T1_2["{{T1.2}} <title>"]
+  end
+  T1_1 --> T1_2
+​```
+```
+
+No Requirements / Specs / Verification section here — those live only on each `Tn.m` body. The diagram shows only this container's own grandchildren, never mixed with another `Tn`'s.
+
 ## Child Issue body (Step 4)
+
+Both a non-container `Tn` (leaf) and a `Tn.m` (grandchild) use this shape.
 
 ```markdown
 ## Background
@@ -174,7 +218,7 @@ There are many child Issues, so this is shown as a table instead of a graph. Iss
 
 ## Dependencies
 
-{"Can start after Tn is done. See the Epic for the full dependency picture." or "None (can start in parallel)". Don't write step-by-step reasoning or detail here.}
+{For a `Tn`: "Can start after Tn is done. See the Epic for the full dependency picture." / For a `Tn.m`: "Can start after Tn.m is done. See the Tn body for the full dependency picture within this parent." or "None (can start in parallel)". Don't write step-by-step reasoning or detail here.}
 
 ## Acceptance Criteria
 
@@ -194,7 +238,7 @@ Only used when the user explicitly asked to see the full draft (see Step 4.5 in 
 ```markdown
 ## Issue Body Review
 
-`{{Tn}}` are temporary placeholders. Once the child Issues are created, they'll be replaced with the real Issue numbers (e.g. #123) in the Epic.
+`{{Tn}}` and `{{Tn.m}}` are temporary placeholders. `{{Tn}}` is replaced with the real Issue number (e.g. #123) in the Epic once the Tn Issues are created; `{{Tn.m}}` is replaced the same way in a container Tn's own body once its grandchildren are created.
 
 ### Epic: <title>
 
@@ -214,7 +258,19 @@ Only used when the user explicitly asked to see the full draft (see Step 4.5 in 
 
 ---
 
-I'll create the Issues above (the Epic is created first, then each child Issue is created with the Epic's number as its parent).
+Only show the following when a Tn was promoted to a container.
+
+### Child Issue T3 (container): <title>
+
+<Full T3 body ({{T3.m}} placeholders left as-is)>
+
+### Grandchild Issue T3.1: <title>
+
+<Full grandchild Issue T3.1 body>
+
+---
+
+I'll create the Issues above. The Epic is created first, then each Tn with the Epic's number as its parent, then — for any container Tn — its Tn.m grandchildren with that Tn's number as their parent, so the creation order is Epic → Tn → Tn.m.
 Let me know which part needs changes. If everything looks good, reply "create them".
 ```
 
@@ -229,11 +285,13 @@ Let me know which part needs changes. If everything looks good, reply "create th
 
 ### Child Issues
 - #<number> <title>
-- #<number> <title>
+- #<number> <title> (container)
+  - #<number> <title> (grandchild)
+  - #<number> <title> (grandchild)
 ...
 
-The Epic and each child Issue are linked via `gh issue create --parent` sub-issue relationships.
-Dependencies are set as Blocked-by/Blocking relationships via `--blocked-by`.
+The Epic and each Tn, and any container Tn and its grandchild Issues, are linked via `gh issue create --parent` sub-issue relationships.
+Dependencies are set as Blocked-by/Blocking relationships via `--blocked-by` — grandchild-to-grandchild dependencies only within the same parent Tn.
 You can check both in the Issue sidebar on GitHub (Sub-issues / Relationships).
-The Epic body's dependency diagram (or table) now uses the real Issue numbers.
+The Epic body's dependency diagram (or table), and any container Tn's own dependency diagram, now use the real Issue numbers.
 ```
