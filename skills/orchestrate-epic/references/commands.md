@@ -47,12 +47,38 @@ Fetch the Epic body itself (`--jq .body`) only on the fallback path below, or wh
 
 Fallback when `subIssues`/`blockedBy` are unavailable (older gh / GHES): parse the Epic body's "Dependencies & Parallel Execution Plan" section — Mermaid edges `X --> Y` mean Y depends on X; the wave-table variant lists each row's `#<number>` dependencies — then fetch each child's state individually. Tell the user the run is on this fallback, since a hand-edited Epic body can drift from the real relations.
 
+## §1.5 Entry Gate (Step 3)
+
+```bash
+# Once per run
+gh label create "oe:go" --repo "$REPO" --color "0E8A16" --description "human approved the orchestrate-epic Run Plan" 2>/dev/null || true
+
+# Find the Run Plan comment (empty output if none exists yet)
+gh api "repos/$REPO/issues/$EPIC/comments" --jq '[.[]|select(.body|startswith("<!-- orchestrate-epic:run-plan -->"))][-1] // empty'
+
+# Post it (create only — never edit/replace an existing Run Plan)
+gh issue comment "$EPIC" --repo "$REPO" --body "$RUN_PLAN_BODY"
+
+# Check for oe:go
+gh issue view "$EPIC" --repo "$REPO" --json labels --jq '[.labels[].name]|any(.=="oe:go")'
+
+# Repository facts for the Run Plan
+BASE=$(gh repo view "$REPO" --json defaultBranchRef -q .defaultBranchRef.name)
+gh api "repos/$REPO/branches/$BASE/protection" 2>/dev/null || echo "no protection configured"
+git ls-tree -r "origin/$BASE" --name-only -- .github/workflows
+
+# Completion exit comment (Step 9) — marked the same way as the Run Plan, so a rerun after completion
+# doesn't post a second one; $EXIT_COMMENT_BODY must start with <!-- orchestrate-epic:completion -->
+gh api "repos/$REPO/issues/$EPIC/comments" --jq '[.[]|select(.body|startswith("<!-- orchestrate-epic:completion -->"))][-1] // empty'
+gh issue comment "$EPIC" --repo "$REPO" --body "$EXIT_COMMENT_BODY"   # only when the check above found none
+```
+
 ## §2 Dispatch Bookkeeping (Step 4)
 
 ```bash
 # Once per run
 gh label create "loop:in-progress" --repo "$REPO" --color "BFD4F2" --description "orchestrate-epic worker is implementing" 2>/dev/null || true
-git switch main && git pull origin main   # once, before any worker; on dirty-tree failure: stop and ask
+git switch main && git pull origin main   # once, before any worker; on dirty-tree failure: stop and tell the user
 
 # Per dispatched Issue, serially
 git wt "feat/issue-$N"   # prints the worktree path — capture it for the worker prompt; reuses existing worktrees
@@ -100,7 +126,7 @@ orchestrate-epic state:
 
 git-wt may place worktrees outside the repo (config-dependent) — always use the printed path, never an assumed `.wt/`.
 
-## §3 Ship an Approved Issue (Step 8)
+## §3 Ship an Approved Issue (Step 7)
 
 `WT` is the worktree path; `BRANCH` is `feat/issue-<N>`.
 Every sub-step is guarded so a mid-failure rerun resumes instead of erroring: commit only when work is left uncommitted, push is repeat-safe, create the PR only when none exists for the branch.
@@ -147,14 +173,14 @@ EOF
 gh issue edit "$N" --repo "$REPO" --remove-label "loop:in-progress"
 ```
 
-Secret screen (before step 2): the commit skill's Step 2 patterns against the status paths and diff — `.env*`, `*.pem`, `*.key`, `id_rsa*`, `*credentials*`, `*secret*`, `*.p12`, `service-account*.json`; `AKIA[0-9A-Z]{16}`, private-key headers, `gh[pousr]_[A-Za-z0-9]{20,}`, `sk-[A-Za-z0-9]{20,}`, `xox[baprs]-`, literal values assigned to `password`/`token`. Any hit: unstage it (`restore --staged`, since `add -N` touched the index), tell the user, ask — never ship it silently.
+Secret screen (before step 2): the commit skill's Step 2 patterns against the status paths and diff — `.env*`, `*.pem`, `*.key`, `id_rsa*`, `*credentials*`, `*secret*`, `*.p12`, `service-account*.json`; `AKIA[0-9A-Z]{16}`, private-key headers, `gh[pousr]_[A-Za-z0-9]{20,}`, `sk-[A-Za-z0-9]{20,}`, `xox[baprs]-`, literal values assigned to `password`/`token`. Any hit: unstage it (`restore --staged`, since `add -N` touched the index), post the finding as a comment on the Issue, and park it (SKILL.md Step 7) — never ship it silently.
 
-## §4 Cleanup After Merge (Step 9 rescan)
+## §4 Cleanup After Merge (Step 8 rescan)
 
 Only for an Issue that is **closed** with a **merged** PR:
 
 ```bash
-git -C "$WT" status --short   # must be clean; if not, ask instead of forcing
+git -C "$WT" status --short   # must be clean; if not, report it instead of forcing
 git worktree remove "$WT"
 git branch -d "$BRANCH"       # -d refuses if unmerged, which is the point
 git worktree prune
