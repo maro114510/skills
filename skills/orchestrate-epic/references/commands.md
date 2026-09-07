@@ -68,6 +68,36 @@ EOF
 )"
 ```
 
+## §2.5 State Comment (Steps 2, 5, 6, 7)
+
+One sticky comment per Issue, distinct from the start/Q&A comments above, identified by a leading marker so it can be found and edited in place instead of piling up duplicates.
+
+```bash
+# Read the latest state comment (empty output if none exists yet — still cycle 0)
+gh api "repos/$REPO/issues/$N/comments" --jq '[.[]|select(.body|startswith("<!-- orchestrate-epic-state -->"))][-1] // empty'
+
+# Upsert: edit the existing state comment if found, else create it
+STATE_ID=$(gh api "repos/$REPO/issues/$N/comments" --jq '[.[]|select(.body|startswith("<!-- orchestrate-epic-state -->"))][-1].id // empty')
+if [ -n "$STATE_ID" ]; then
+  gh api "repos/$REPO/issues/comments/$STATE_ID" -X PATCH -f body="$BODY"
+else
+  gh issue comment "$N" --repo "$REPO" --body "$BODY"
+fi
+```
+
+`$BODY` carries all four fields every time, even when a field is empty — a partial write is worse than a stale one, since a missing field reads as "never recorded" on the next resume:
+
+```
+<!-- orchestrate-epic-state -->
+orchestrate-epic state:
+- cycle: <再ディスパッチ回数。初回ディスパッチは 0>
+- head_sha: <workerが報告した HEAD_SHA。コミットがまだなければ none>
+- unresolved_blockers: <なし、またはレビューア指摘を番号付きで file:line — 要約>
+- decisions: <このIssueについて人間が下した判断。なければ なし>
+```
+
+`cycle` counts reviewer fix cycles only (a REQUEST_CHANGES re-dispatch from Step 6) and never resets; a BLOCKED answer or FAILED retry from Step 5 leaves it unchanged. Step 6 reads it back on a resumed session so the 2-fix-cycle cap holds across a restart instead of starting over at 0.
+
 git-wt may place worktrees outside the repo (config-dependent) — always use the printed path, never an assumed `.wt/`.
 
 ## §3 Ship an Approved Issue (Step 8)
