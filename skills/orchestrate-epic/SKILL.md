@@ -79,12 +79,13 @@ A `parked` Issue stays out of Step 4's dispatch list on its own — it is a dist
 
 - **Retry** — reset `cycle` to 0 in the state comment (a human decision restarts the fix-cycle budget) and reclassify as `in-progress` so Step 4 dispatches it fresh this round, with the decision text included in the worker prompt.
 - **Redo on a fresh branch** — handle exactly like the merged-PR-but-issue-open sanity check below: a new branch (e.g. `feat/issue-<number>-2`), fresh worktree, `cycle` reset to 0.
-- **Drop it** — leave it parked, remove `loop:in-progress` if the human said to abandon it, and report it as failed at Completion (Step 9).
+- **Drop it** — leave it parked and record the decision; never remove `loop:in-progress` here, since that label is what keeps it classified `parked` instead of falling through to `ready`/`waiting` and getting re-dispatched next round. Report it as failed at Completion (Step 9). Closing the Issue, if that's what "abandon" means, stays the human's own action, same as everywhere else in this loop.
 
 Also read each open child's risk tier: the `risk:low` or `risk:high` label. A child with neither label is treated as `risk:high` — this is a reporting/default rule only; it changes nothing about how the child is scheduled or shipped, it only changes what the Run Plan (Step 3) shows the human before they add `oe:go`.
 
 Sanity checks — none of these block on a question; each names a concrete non-interactive resolution:
 
+- **A `rejected` Issue** (all its PRs closed without merging) → never resume it silently. Post a comment on the Issue describing the situation and the resolutions (reopen a PR, redo on a fresh branch such as `feat/issue-<number>-2`, or close the Issue) and remove `loop:in-progress` — an Issue with rejected PRs and no label falls out of dispatch entirely until a human's comment says which of those three to do; treat that comment the same way Step 2's un-parking check reads one.
 - **A dependency cycle among open Issues** → do not compute `ready` for any Issue in the cycle. Post one comment on the Epic naming the cyclic Issues and exit without dispatching (the Epic is effectively frozen until a human edits a `blockedBy` relation or a label); say the same in this session's own output.
 - **A merged PR whose Issue is still open** → never re-dispatch onto a merged branch. Post a comment on the Issue describing the situation and the two resolutions (close the Issue, or start a fresh branch such as `feat/issue-<number>-2` for follow-up work); skip dispatching that Issue this round and continue with the rest.
 - **`tokens: true`** from §1's first call — a leftover `{{Tn}}` or `{{Tn.m}}` in the Epic body (or a container `Tn`'s own body) means a Tn/Tn.m's creation failed during create-github-issues, so a task and its edges may be missing. Fetch the relevant body, show the user which token remains, in this session's own output.
