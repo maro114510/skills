@@ -12,8 +12,10 @@
 
 ### リポジトリ事実
 - branch protection: <あり/なし>（required checks: <一覧 or なし>、required reviewers: <人数 or なし>）
-- workflows: <.github/workflows 配下のファイル名一覧、なければ「なし」>
-- [!] required checks も required reviewers も未設定です。このループの reviewer pass がマージ前の唯一のゲートです。   ← 該当する場合のみ
+- 導出した CHECKS_SET（`.github/workflows/` から derive、script 名からの推測ではない）:
+  - 実行可能: <command のリスト、working directory 付き。無ければ「なし」>
+  - ローカル検証不可: <`${{ }}` / sudo / グローバルインストール / `uses:` アクションを理由付きで列挙。無ければ「なし」>
+- [!] required checks も required reviewers も未設定です。このループの reviewer pass と CHECKS_SET の実行可能エントリが、マージ前の唯一のゲートです。   ← 該当する場合のみ
 
 ### Issue 一覧
 | Issue | タイトル | 状態 | risk | 依存 | base branch |
@@ -100,7 +102,7 @@ Q2: <あれば>
 | #16 | <2回目の失敗内容 / 未解消の blocking findings / secret screen ヒット 等> |
 
 ### メトリクス（#141）
-1. ループが実行しなかったチェックに起因する CI 失敗: <件数、または「未計測（#143 未実装のため）」>
+1. ループが実行しなかったチェックに起因する CI 失敗: <件数。CHECKS_SET の requires-runner エントリに起因する失敗は除く>
 2. reviewer 初回 APPROVE 率: <n/m>
 3. fix-cycle cap 到達件数: <n 件>
 4. worker dispatch 数（計画時想定 vs 実績）: <計画 vs 実績>
