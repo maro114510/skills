@@ -121,16 +121,16 @@ gh issue comment "$EPIC" --repo "$REPO" --body "$EXIT_COMMENT_BODY"   # only whe
 
 ## §1.6 Derive the Check Set — Step 3
 
-Derived once per round, from `.github/workflows/` on the default branch — never from `package.json`/`Makefile` script names. The result, `CHECKS_SET`, is an ordered list of `{command, working_directory, runnable}` entries, reused as-is by Step 4's worker prompt, Step 6's reviewer, and Step 7's pre-push run. Recompute it fresh each round; do not carry it over from a prior round in case a workflow file changed.
+Derived once per round, from `.github/workflows/` on the default branch — never from `package.json`/`Makefile` script names. The result, `CHECKS_SET`, is an ordered list of `{command, working_directory, env, runnable}` entries, reused as-is by Step 4's worker prompt, Step 6's reviewer, and Step 7's pre-push run. Recompute it fresh each round; do not carry it over from a prior round in case a workflow file changed.
 
 **The rule, applied by hand or via the script below — get this exactly right, since it is the only thing standing between the loop and the next "nobody owned CI-equivalence" incident:**
 
 1. List every file under `.github/workflows` on the default branch (`git ls-tree -r "origin/$BASE" --name-only -- .github/workflows`, `.yml`/`.yaml` only) and read each one's content from that same ref — never the local worktree copy, which can be mid-edit by a worker. `origin/$BASE` is already current at this point: Step 2 runs `git fetch origin --prune` every invocation, before Step 3 derives `CHECKS_SET`, per §1.
 2. Keep a workflow only if its `on:` triggers include `pull_request` (any form), or `push` restricted to a `branches` list containing `$BASE`, or `push` with neither a `branches` nor a `tags` filter (fully unrestricted, so it fires on a push to the default branch too). Drop everything else — `push` restricted to `tags` only, `schedule`, `workflow_dispatch`-only — a workflow that never runs against a PR or a push to the default branch cannot be what "CI ran" means for a shipped branch. This filter is mandatory, not an optional narrowing: without it, `CHECKS_SET` picks up a tag-triggered release job or any other workflow irrelevant to a shipped branch, and the loop starts running things far more dangerous than a missing linter.
-3. Within each kept workflow, walk every job in `jobs:` in file order, and every step in that job's `steps:` in order. For a step carrying a `run:` key, capture the run block **verbatim, one entry per step** — never merge two steps' commands into one entry, never split one step's multi-line block into several, never deduplicate two entries with identical text, whatever their content. Two separate steps that happen to run the same linter are two entries, whether written as two `run:` steps or as one multi-line `run:` block invoking it twice, because CI actually executes it (that many times); collapsing them is exactly the kind of inference this rule exists to forbid. Note the step's `working-directory:` if set, else the job's `defaults.run.working-directory`, else the repo root.
+3. Within each kept workflow, walk every job in `jobs:` in file order, and every step in that job's `steps:` in order. For a step carrying a `run:` key, capture the run block **verbatim, one entry per step** — never merge two steps' commands into one entry, never split one step's multi-line block into several, never deduplicate two entries with identical text, whatever their content. Two separate steps that happen to run the same linter are two entries, whether written as two `run:` steps or as one multi-line `run:` block invoking it twice, because CI actually executes it (that many times); collapsing them is exactly the kind of inference this rule exists to forbid. Note the step's `working-directory:` if set, else the job's `defaults.run.working-directory`, else the repo root. Also note the step's effective `env:` (the job's `env:` merged with the step's own, the step winning on a key collision) and its effective `shell:` (the step's `shell:`, else the job's `defaults.run.shell`, else unset) — a command that depends on an environment variable or a non-default shell must carry that with it, not be replayed bare.
 4. For a step carrying a `uses:` key instead of `run:`, add one entry naming the action (`action: <uses value>`) with no command — it is part of what CI runs but not something a shell can replay locally — **except** `actions/checkout`, `actions/setup-*`, and `actions/cache`, which perform no verification themselves and are dropped rather than reported as an unverifiable check. This is the one named, closed exclusion list in this rule, not an open-ended judgment call: any other `uses:` step, including a linter distributed as an action (e.g. `rhysd/actionlint`, `ludeeus/action-shellcheck`), is captured.
-5. Classify every captured entry: **requires-runner** if its text contains a `${{ ... }}` GitHub Actions expression, `sudo`, a global-scope install or mutation (`npm install -g`, any `-g`/`--global` package-manager flag, `gh release create`, a `--scope user` plugin/package install, `git config --global`, or `pip install` in any form — unlike `npm install`, which defaults to a project-local `node_modules`, a bare `pip install` has no project-local default and mutates the ambient Python environment), or if it came from step 4 (a `uses:`-only step, checkout/setup/cache excluded already). Everything else is **runnable**. Do not narrow this further by guessing intent from the command's name — the point is whether it is safe and possible to execute unattended in a worktree, not whether it "looks like a check."
-6. Only **runnable** entries are ever executed, by the worker, the reviewer, or the Publisher's own pre-push run. **requires-runner** entries are still reported — in the Run Plan and in whatever surfaces `CHECKS_SET` — as "not locally verifiable," never silently dropped and never executed.
+5. Classify every captured entry: **requires-runner** if its command text *or* its effective `env:` contains a `${{ ... }}` GitHub Actions expression, if its command text contains `sudo` or a global-scope install or mutation (`npm install -g`, any `-g`/`--global` package-manager flag, `gh release create`, a `--scope user` plugin/package install, `git config --global`, or `pip install` in any form — unlike `npm install`, which defaults to a project-local `node_modules`, a bare `pip install` has no project-local default and mutates the ambient Python environment), if its effective `shell:` is set to anything other than `bash`, `sh`, or unset (a runner-specific interpreter — `pwsh`, `python`, a custom invocation like `bash -e {0}` — cannot be safely replayed by the plain `bash`/`sh` execution the other three roles use), or if it came from step 4 (a `uses:`-only step, checkout/setup/cache excluded already). Everything else is **runnable**. Do not narrow this further by guessing intent from the command's name — the point is whether it is safe and possible to execute unattended in a worktree, not whether it "looks like a check."
+6. Only **runnable** entries are ever executed, by the worker, the reviewer, or the Publisher's own pre-push run — and always with their captured `env:` exported first, in their captured `working_directory`. **requires-runner** entries are still reported — in the Run Plan and in whatever surfaces `CHECKS_SET` — as "not locally verifiable," never silently dropped and never executed. Two entries whose command comes from the same job can be classified differently even when one depends on the other's setup — for example a `pip install <linter>` step (`requires-runner`, a global-scope install) followed by a step invoking that linter (`runnable` on its own text, but a no-op in an environment where the install never ran). This rule classifies **per entry**, not per dependency chain: tracking which `runnable` entries transitively depend on a `requires-runner` one would mean inferring intent between steps, which is exactly what this rule forbids elsewhere. Report a `runnable` entry that fails only because a preceding `requires-runner` step was — correctly — never run as an expected, documented gap, not a defect in the derivation.
 
 Fast path with `yq` (mikefarah, v4+) and `jq`, streaming each workflow's content straight through both — no temp file, so two Publisher sessions on the same repo never collide on one. Both are required dependencies for this section and for the check-run loop in §3, alongside the `gh`/`git` this file already assumes:
 
@@ -138,14 +138,18 @@ Fast path with `yq` (mikefarah, v4+) and `jq`, streaming each workflow's content
 BASE=$(gh repo view "$REPO" --json defaultBranchRef -q .defaultBranchRef.name)
 for f in $(git ls-tree -r "origin/$BASE" --name-only -- .github/workflows | grep -E '\.ya?ml$'); do
   WF_JSON=$(git show "origin/$BASE:$f" | yq -o=json '.')
-  KEEP=$(jq -e --arg base "$BASE" '.on |
+  KEEP=$(jq -e --arg base "$BASE" '
+    def glob_re: "^" + (gsub("\\."; "\\.") | gsub("\\*"; ".*")) + "$";
+    def branch_matches($patterns): ($patterns // []) | any(. as $p | ($base | test($p|glob_re)));
+    .on |
     if type=="array" then any(.=="pull_request" or .=="push")
     elif type=="object" then
       has("pull_request")
         or (has("push") and (
           ((.push|type)!="object")
-          or ((.push.branches // null) != null and (.push.branches | index($base)))
-          or ((.push.branches // null) == null and (.push.tags // null) == null)
+          or (.push|has("branches")) and branch_matches(.push.branches)
+          or ((.push|has("branches")|not) and (.push|has("branches-ignore")) and (branch_matches(.push["branches-ignore"])|not))
+          or ((.push|has("branches")|not) and (.push|has("branches-ignore")|not) and (.push|has("tags")|not))
         ))
     else . == true or . == "pull_request" or . == "push"
     end' <<<"$WF_JSON" >/dev/null 2>&1 && echo yes || echo no)
@@ -153,23 +157,26 @@ for f in $(git ls-tree -r "origin/$BASE" --name-only -- .github/workflows | grep
   jq -c --arg f "$f" '
     .jobs // {} | to_entries[] | .value as $job |
     ($job.defaults.run["working-directory"] // "") as $jobwd |
+    ($job.defaults.run.shell // "") as $jobshell |
+    ($job.env // {}) as $jobenv |
     ($job.steps // [])[] |
     if has("run") then
-      {file:$f, kind:"run", workdir:(.["working-directory"] // $jobwd), command:.run}
+      {file:$f, kind:"run", workdir:(.["working-directory"] // $jobwd),
+       shell:(.shell // $jobshell), env:($jobenv + (.env // {})), command:.run}
     elif has("uses") and (.uses | test("^actions/(checkout|setup-|cache)") | not) then
       {file:$f, kind:"action", ref:.uses}
     else empty end' <<<"$WF_JSON"
 done
 ```
 
-Each output line is one compact JSON object — `.command` embeds internal newlines as `\n`, so a multi-line `run:` block always survives as exactly one `CHECKS_SET` entry regardless of how many lines or semicolons it contains. Classify each object per step 5 above; the script derives, filters, and orders the candidates, it does not decide runnable-vs-requires-runner for you. If `yq` is unavailable, read the workflow files directly and extract `run:`/`uses:` steps by the same rule; never approximate by grepping `package.json` scripts instead. Every `run:` block in a kept workflow originates from a file on the repository's own default branch, so treat it as trusted input if a later step needs to execute it (Step 4, Step 6, commands §3) — the same trust boundary this loop already extends to a worker's own commits.
+Each output line is one compact JSON object — `.command` embeds internal newlines as `\n`, so a multi-line `run:` block always survives as exactly one `CHECKS_SET` entry regardless of how many lines or semicolons it contains. Classify each object per step 5 above; the script derives, filters, and orders the candidates, it does not decide runnable-vs-requires-runner for you. `branch_matches` is a best-effort glob (`*` only, no `**`/character classes) rather than full GitHub Actions branch-filter syntax — good enough to tell whether the default branch itself is matched or excluded, which is all this rule needs. If `yq` is unavailable, read the workflow files directly and extract `run:`/`uses:` steps by the same rule; never approximate by grepping `package.json` scripts instead. Every `run:` block in a kept workflow originates from a file on the repository's own default branch, so treat it as trusted input if a later step needs to execute it (Step 4, Step 6, commands §3) — the same trust boundary this loop already extends to a worker's own commits.
 
 **Worked example — this repository's own four workflows**, since the Issue's partner-repo replay (a CI that runs two `oxlint` commands `npm run lint` doesn't cover) isn't reachable from here. Applying the rule above to `.github/workflows/*.yml` on `main`, verified by actually running the script above against them:
 
 | Workflow | Kept? | Entries in `CHECKS_SET` | Classification |
 |---|---|---|---|
 | `lint-actions.yml` (`pull_request`, `push:[main]`) | yes | `action: rhysd/actionlint@914e7df...` | requires-runner (`uses:`-only step) |
-| `lint-shell.yml` (`pull_request`, `push:[main]`) | yes | `sudo locale-gen …` / `awk --version …` / `bash skills/ja-style-check/scripts/test-scan.sh` (one step, one entry, multi-line) | requires-runner (`sudo`) |
+| `lint-shell.yml` (`pull_request`, `push:[main]`) | yes | `sudo locale-gen …` / `awk --version …` / `bash skills/ja-style-check/scripts/test-scan.sh` (one step, one entry, multi-line, `env: {LANG, LC_ALL}` captured alongside it) | requires-runner (`sudo` — `env` capture is moot here, but the entry still carries it) |
 | `lint-shell.yml` | yes | `action: ludeeus/action-shellcheck@00cae50...` | requires-runner (`uses:`-only step) |
 | `lint-shell.yml` | yes | `pip install semgrep` | requires-runner (`pip install` mutates the ambient Python environment) |
 | `lint-shell.yml` | yes | `semgrep --config p/security-audit --config p/secrets --error .` | runnable, but only meaningful if `semgrep` is already on `PATH` — the preceding step is `requires-runner` and this loop never runs it |
@@ -288,7 +295,7 @@ fi
 
 # 3. Run CHECKS_SET's runnable entries once, against the just-committed state — the Publisher-side
 # check run required by #143. $CHECKS_SET_RUNNABLE is CHECKS_SET filtered to `runnable` entries,
-# newline-delimited compact JSON as commands §1.6 produces (one object per line: {workdir, command}).
+# newline-delimited compact JSON as commands §1.6 produces (one object per line: {workdir, env, command}).
 # Each `run:` block is trusted input — it comes from a workflow file on the repository's own default
 # branch, the same trust boundary already extended to a worker's own commits.
 CHECK_FAILED=0
@@ -296,25 +303,31 @@ while IFS= read -r entry; do
   [ -z "$entry" ] && continue
   WORKDIR=$(jq -r '.workdir // ""' <<<"$entry")
   COMMAND=$(jq -r '.command' <<<"$entry")
-  OUTPUT=$(cd "$WT/${WORKDIR:-.}" && eval "$COMMAND" 2>&1)
+  ENV_EXPORTS=$(jq -r '.env // {} | to_entries | map("export \(.key)=\(.value|@sh)") | join("; ")' <<<"$entry")
+  OUTPUT=$(cd "$WT/${WORKDIR:-.}" && eval "${ENV_EXPORTS:+$ENV_EXPORTS; }$COMMAND" 2>&1)
   STATUS=$?
   if [ "$STATUS" -ne 0 ]; then
     CHECK_FAILED=1
     printf 'RED (exit %s): %s\n%s\n' "$STATUS" "$COMMAND" "$OUTPUT"   # capture for the Issue comment below
   fi
 done <<<"$CHECKS_SET_RUNNABLE"
-# CHECK_FAILED != 0: treat exactly like a secret-screen hit — post the failing command(s), exit
-# code, and relevant output as a comment on the Issue, upsert the state comment's unresolved_blockers
-# (SKILL.md Step 7), leave loop:in-progress, skip sub-steps 4-5 for this Issue, continue with the rest
-# of the round. Nothing above stages or commits anything, so a check that writes a lockfile, build
-# output, or cache directory into $WT never enters the pushed commit — there is no `add` step after
-# this one, matching sub-step 2's explicit-path staging above.
-
-# 4. Push (repeat-safe), then create the PR — only if none exists yet for this branch
-git -C "$WT" push -u origin "$BRANCH"
-gh pr list --repo "$REPO" --head "$BRANCH" --state all --json number   # non-empty → PR exists, skip creation
-BASE=$(gh repo view "$REPO" --json defaultBranchRef -q .defaultBranchRef.name)
-gh pr create --repo "$REPO" --head "$BRANCH" --base "$BASE" --title "<Issue title>" --body "$(cat <<'EOF'
+if [ "$CHECK_FAILED" -ne 0 ]; then
+  # Treat exactly like a secret-screen hit — this actually stops sub-steps 4-5, it is not only a
+  # comment. Restore the worktree to exactly what the worker committed first: a failed check can
+  # leave $WT dirty (build output, a partial lockfile write), and Step 4 reuses this same worktree on
+  # the next dispatch, Step 6 re-runs `add -N .` over it — neither should see check-run leftovers as
+  # if they were new changes.
+  git -C "$WT" reset --hard "$HEAD_SHA"
+  git -C "$WT" clean -fd
+  # Post the failing command(s), exit code, and captured output as a comment on the Issue, upsert
+  # the state comment's unresolved_blockers (SKILL.md Step 7), leave loop:in-progress in place, and
+  # move on to the next Issue in the round — do not reach sub-step 4 below for this Issue.
+else
+  # 4. Push (repeat-safe), then create the PR — only if none exists yet for this branch
+  git -C "$WT" push -u origin "$BRANCH"
+  gh pr list --repo "$REPO" --head "$BRANCH" --state all --json number   # non-empty → PR exists, skip creation
+  BASE=$(gh repo view "$REPO" --json defaultBranchRef -q .defaultBranchRef.name)
+  gh pr create --repo "$REPO" --head "$BRANCH" --base "$BASE" --title "<Issue title>" --body "$(cat <<'EOF'
 ## Summary
 <worker summary, condensed>
 
@@ -326,8 +339,9 @@ Part of Epic #<EPIC>
 EOF
 )"
 
-# 5. Clear the marker
-gh issue edit "$N" --repo "$REPO" --remove-label "loop:in-progress"
+  # 5. Clear the marker
+  gh issue edit "$N" --repo "$REPO" --remove-label "loop:in-progress"
+fi
 ```
 
 Secret screen, run before step 2 above: the commit skill's Step 2 patterns against the status paths and diff — `.env*`, `*.pem`, `*.key`, `id_rsa*`, `*credentials*`, `*secret*`, `*.p12`, `service-account*.json`; `AKIA[0-9A-Z]{16}`, private-key headers, `gh[pousr]_[A-Za-z0-9]{20,}`, `sk-[A-Za-z0-9]{20,}`, `xox[baprs]-`, literal values assigned to `password`/`token`. Any hit: unstage it via `restore --staged`, since `add -N` touched the index, post the finding as a comment on the Issue, and park it per SKILL.md Step 7 — never ship it silently.
