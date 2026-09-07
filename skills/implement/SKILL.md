@@ -42,7 +42,7 @@ The caller may pass `branch <name>` and `worktree <path>`. Everything not listed
 - **Phases 1–2 still run.** Inspect the resolved worktree and treat the Issue body, Epic body, caller prompt, and persisted user answers as the only authoritative product decisions. Do not run an interactive Why check. If a missing Why, requirement, acceptance criterion, constraint, or critical behavior could materially change the implementation, return a BLOCKED report with concrete questions and options. Never guess — the orchestrator relays questions and re-dispatches you with answers.
 - **Phase 3**: build the implementation plan, but skip interactive approval only when every material decision is already supported by those authoritative sources. If the plan would introduce an unsupported product or technical decision, return BLOCKED instead.
 - **Phase 4**: skip it — the orchestrator already updated the base, and parallel workers would race on the shared checkout. The worktree was resolved before Phase 1.
-- **Phase 7 never runs** — no difit, no commit. Leave changes uncommitted; the orchestrator ships them after human approval.
+- **Phase 7**: skip difit — no human to review it. Commit in the worktree with the `commit` skill; never push, never open a PR. Leave the commit there; the orchestrator ships it after human approval.
 - **Final output**: exactly this report — it is the return value the caller parses, not a human-facing message:
 
 ```
@@ -50,8 +50,12 @@ STATUS: DONE | BLOCKED | FAILED
 ISSUE: #<number, when the caller supplied one; omit otherwise>
 BRANCH: <branch, or UNKNOWN if unavailable>
 WORKTREE: <absolute worktree path, or UNKNOWN if unavailable>
+HEAD_SHA: <commit SHA of the worker's final commit, or UNKNOWN if unavailable>
 CHANGED_FILES: <one path per line; empty if BLOCKED before implementing>
-TESTS: <checks run and their results>
+CHECKS: <one per line, `<command> -> exit <code>`>
+CRITERIA: <one per line, `<acceptance criterion> -> <test or manual check that covers it>`>
+SKIPPED: <requirements judged out of scope, one per line, `<requirement> -> <reason>`; empty if none>
+FOUND: <defects found outside scope but not fixed, one per line; empty if none>
 SUMMARY: <what was implemented; key decisions and why>
 QUESTIONS: <BLOCKED only — numbered, each with concrete answer options>
 ERROR: <FAILED only — what failed, what was attempted>
