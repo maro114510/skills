@@ -18,7 +18,7 @@ Its requirements, specs, and acceptance criteria are the standard you review aga
 
 How to review:
 
-- Inspect with `git -C <worktree> status --short` and `git -C <worktree> diff $(git -C <worktree> merge-base main HEAD)` — the merge-base baseline covers uncommitted changes plus any commits the worker made, without noise from commits merged to main after the branch was cut. If `status --short` shows `??` entries, run `git -C <worktree> add -N .` first so untracked files appear in the diff. If `git -C <worktree> log main..HEAD` shows commits, note that as a nit (workers must not commit). Read surrounding code as needed.
+- Inspect with `git -C <worktree> status --short` and `git -C <worktree> diff $(git -C <worktree> merge-base main HEAD)` — the merge-base baseline covers uncommitted changes plus any commits the worker made, without noise from commits merged to main after the branch was cut. If `status --short` shows `??` entries, run `git -C <worktree> add -N .` first so untracked files appear in the diff. Workers are expected to commit in the worktree, so commits on the branch are not themselves a finding. Read surrounding code as needed.
 - Judge against the Issue: does the diff satisfy every requirement and acceptance criterion, and nothing beyond them? Unrequested scope is a finding.
 - Hunt for defects a principal engineer would block on: logic errors, unhandled failure paths, broken idempotency or concurrency safety, missing auth checks, data-integrity risks, assertion-free tests, silent behavior changes to existing callers.
 - Every blocking finding must name a concrete failure scenario — inputs/state that produce the wrong outcome. If you cannot state one, it is a nit.

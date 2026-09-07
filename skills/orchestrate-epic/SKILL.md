@@ -5,7 +5,7 @@ description: >
   This session acts as the Publisher (run it on a strong model such as Opus): it dispatches ready child Issues to Sonnet worker subagents that run the implement skill in autonomous mode in isolated worktrees, has an Opus reviewer check every diff (maker/checker), and gates all commit/push/PR creation on one explicit human approval per wave.
   A task starts only after every Issue it depends on is merged and closed. All state lives in GitHub (issue state, labels, branches, PRs), so re-running the skill with the same Epic resumes the loop from anywhere.
   Use when the user wants an Epic's child Issues implemented — "Epic を実装して", "この Epic を進めて", "Issue 群を順に実装して", "wave ごとに実装して", "オーケストレーションして".
-allowed-tools: AskUserQuestion, Agent, SendMessage, Bash, Read, Glob, Grep
+allowed-tools: AskUserQuestion, Agent, Bash, Read, Glob, Grep
 argument-hint: "[epic <number|url>] [repo <owner/repo>] [max-parallel <n>]"
 ---
 
@@ -27,6 +27,8 @@ Rules that govern the whole loop:
 - **Nothing is committed, pushed, or turned into a PR without the explicit wave approval in Step 7.** No configuration skips this gate.
 - **Workers never talk to the human.** Questions flow worker → Publisher → human. The Publisher answers a worker's question itself only when the answer is already written down (Epic body, Issue body, or this conversation) — it never invents one.
 - **The Publisher never merges PRs.** A merge is the human's decision and the signal that unblocks dependent Issues.
+- **The Publisher never edits code.** All implementation happens inside a worker's worktree; the Publisher's own file access is read-only (Read/Glob/Grep) plus `gh`/`git` bookkeeping through Bash. See the residual-risk note in Edge Cases — this is not tool-enforced.
+- **Re-dispatch is always a fresh agent, never a continued one.** See "Always a Fresh Worker" under Step 4.
 - **Cost is surfaced, not hidden.** Each round spawns up to `MAX_PARALLEL` Sonnet workers plus one Opus review per completed Issue; say so in the round plan.
 
 All user-facing output is Japanese, using the formats in `references/templates.md`.
@@ -51,6 +53,8 @@ Confirm `gh auth status` succeeds. If the main checkout is dirty, stop and tell 
 Read the whole board with the three `gh` calls in commands §1 — one for the Epic and its children, one for the open children's labels and `blockedBy` edges, one for every PR on a loop branch. The call count does not grow with the Epic. Never fetch children one at a time, and never pull the Epic or an Issue body into context at this step; §1's projections carry everything Step 2 classifies on.
 
 `blockedBy` is the dependency ground truth; the Epic body's diagram is only the fallback described in §1. Recover branches and worktrees with the local git commands there. For a resumed Issue, read its orchestrate-epic comments only when you are about to dispatch it.
+
+For an Issue classified `in-progress`, also read its sticky state comment (§2.5) once, at dispatch time: no state comment means this is still cycle 0 (the first attempt never finished). A state comment gives the recovered `cycle` count — the fix-cycle cap in Step 6 reads this instead of assuming 0 after a restart — and `head_sha`. `head_sha: none` means no commit was recorded yet (the last report was BLOCKED or FAILED before committing) — there is nothing to compare, so resume normally. Otherwise compare `head_sha` against `git -C <worktree> rev-parse HEAD`: a match means the worktree is exactly what GitHub last recorded, so resume normally; a mismatch means the worktree diverged from that record (edited by hand, a different process, a stale local checkout) — stop and tell the user instead of either trusting the worktree's current state as authoritative or silently redoing the work.
 
 Classify every child Issue:
 
@@ -100,17 +104,15 @@ Each prompt must contain:
 - The instruction to read its own Issue first: `gh issue view <number> --repo <REPO> --json title,body --jq .body`, plus its orchestrate-epic comments when the Issue carries the `loop:in-progress` label, which is where prior user answers live.
 - The Epic number, as one line of context. Do not summarize the Epic — a child Issue's own background section is the scope the worker is allowed to act on.
 - The branch (`feat/issue-<number>`) and the **already-created worktree path** — the worker works there and creates nothing.
-- Reviewer findings or user answers from the current cycle, when this is a fresh spawn rather than a continuation (see below).
+- Any reviewer findings or user answers from the current cycle — the worker has no memory of an earlier cycle, so these must be spelled out in full even on a re-dispatch.
 - The instruction: "Follow the `implement` skill preloaded in your context in Autonomous Mode, as if invoked with `autonomous branch feat/issue-<number> worktree <path> <task description>`. If the skill content is missing, read `<orchestrate-epic base dir>/../implement/SKILL.md` and follow its Autonomous Mode section." (Fill the path from this skill's base directory, which the harness states on invocation.)
 - The report contract below, noting the final message must be the report and nothing else.
 
-### Continue a Worker, Don't Respawn One
+### Always a Fresh Worker
 
-A fresh subagent re-reads the codebase from zero. Two fix cycles on a respawn-per-cycle loop pay that grounding three times.
+Every re-dispatch — a BLOCKED answer, a FAILED retry, or a REQUEST_CHANGES fix cycle — spawns a brand-new `skills:issue-implementer` subagent in the same worktree. Never continue an existing agent, even one still reachable.
 
-So, within one run: send answers and reviewer findings back to the **same worker** with SendMessage, addressing it by the id or name its spawn returned. Spawn a replacement only when SendMessage cannot reach it — a new session, or an agent that already exited. A replacement needs the findings or answers spelled out in its prompt, since it has none of the prior context.
-
-Answers still get persisted as Issue comments regardless of which path is taken; that persistence is for the next session, not for this worker.
+Two things break if a worker is continued instead of respawned: the reviewer's independence relies on the worker not carrying its own prior reasoning forward as unstated context, and a continued agent that later dies or gets lost leaves no trace anywhere, since GitHub only reconstructs what was written down and a live agent's memory is not written down. A fresh respawn re-reading the Issue, its comments, and its state comment (§2.5) is the price paid for both properties, not a regression to work around.
 
 ### Worker Report Contract
 
@@ -135,8 +137,10 @@ ERROR: <FAILED only — what failed, what was attempted>
 ## Step 5: Triage Worker Reports
 
 - **DONE** → queue for review (Step 6).
-- **BLOCKED** → answer only from documented sources (Epic body, Issue body, its comments, this conversation); batch everything else from all blocked workers into one AskUserQuestion call (up to 4, highest impact first, rest in a follow-up call) using the "Blocked Questions" template. **Post each question and its answer as a comment on the Issue** (commands §2) — human answers exist nowhere else, and without the comment a resumed session would re-dispatch the worker blind and get the same questions again. Then send the answers back to the same worker with SendMessage — same Issue, same worktree, no respawn.
-- **FAILED** (or a worker that returned nothing) → retry once with the error context, continuing the same worker when it is still reachable. On second failure: comment the failure on the Issue, drop it from the round, report at the wave gate, continue with the rest.
+- **BLOCKED** → answer only from documented sources (Epic body, Issue body, its comments, this conversation); batch everything else from all blocked workers into one AskUserQuestion call (up to 4, highest impact first, rest in a follow-up call) using the "Blocked Questions" template. **Post each question and its answer as a comment on the Issue** (commands §2) — human answers exist nowhere else, and without the comment a resumed session would re-dispatch the worker blind and get the same questions again. Then re-dispatch with the answers — same Issue, same worktree, always a fresh agent (see "Always a Fresh Worker" under Step 4).
+- **FAILED** (or a worker that returned nothing) → re-dispatch once with the error context, always a fresh agent. On second failure: comment the failure on the Issue, drop it from the round, report at the wave gate, continue with the rest.
+
+Every re-dispatch here upserts the state comment (§2.5): `cycle` and `head_sha` carried forward unchanged (a BLOCKED or FAILED report has no new fix cycle or commit to record), `decisions` updated only if the human's answer itself counts as a decision worth recording there.
 
 ---
 
@@ -152,8 +156,10 @@ VERDICT: APPROVE | REQUEST_CHANGES
 FINDINGS: numbered; each has severity (blocking|nit), file:line, defect, concrete failure scenario, fix direction
 ```
 
-Blocking findings → send them to the same worker with SendMessage (same worktree), then re-review. Cap 2 fix cycles per Issue; unresolved blockers go to the wave gate for the human to decide.
+Blocking findings → read the state comment's `cycle` field (§2.5) first, recovered in Step 2 for a resumed Issue rather than assumed to be 0: at 2 already, do not dispatch a third fix cycle — unresolved blockers go straight to the wave gate for the human to decide. `cycle` counts only these reviewer fix cycles; a BLOCKED answer or FAILED retry in Step 5 never increments it, since the two-fix-cycle cap is specifically about the reviewer loop. Below the cap, re-dispatch a fresh worker with the findings (same worktree, per "Always a Fresh Worker" under Step 4), increment `cycle` by 1 in the state comment, then re-review.
 Nits become gate-summary notes, not fix cycles.
+
+After every review — whether it triggers a fix cycle or not — upsert the state comment (§2.5): `head_sha` from the worker's `HEAD_SHA`, `unresolved_blockers` as the reviewer's blocking findings (empty on APPROVE), `decisions` left as-is until the wave gate records one.
 
 ---
 
@@ -161,10 +167,12 @@ Nits become gate-summary notes, not fix cycles.
 
 When every dispatched Issue is review-clean or explicitly parked, render the "Wave Gate" template: per Issue — branch, worktree, changed files, tests, reviewer verdict — plus a **file-overlap warning** for any file touched by two or more branches this wave, or by a branch this wave and an `awaiting-merge` PR from an earlier one, with a recommended merge order.
 
-Offer a difit walkthrough per worktree: `cd <worktree> && difit .` (fall back to `npx difit`). difit comments are fix requests: route to the worker (Step 4, continuing it when reachable), re-review (Step 6), return here.
+Offer a difit walkthrough per worktree: `cd <worktree> && difit .` (fall back to `npx difit`). difit comments are fix requests: route to the worker (Step 4, always a fresh agent), re-review (Step 6), return here.
 
 Then ask the explicit approval via AskUserQuestion per the "Wave Approval" template: commit + push + PR creation for the listed Issues as one batch. Options: 一括承認 / 一部のみ承認 / 中断.
 **This question alone authorizes Step 8. Never treat difit exiting cleanly as this approval.**
+
+Whatever the human decides for a parked or partially-approved Issue — ship as-is despite a nit, park pending a manual fix, redo on a fresh branch — upsert that Issue's state comment (§2.5) with the decision in `decisions` before moving on, so a later resumed session sees it instead of re-asking.
 
 ---
 
@@ -210,3 +218,4 @@ Ask whether to close the Epic; never close it automatically.
 - **Token budget** — many waves means many rounds; the user can lower `max-parallel` or stop between waves at no cost, since the loop resumes from GitHub state.
 - **Worker permission prompts** — worker Bash calls go through the session's permission system, and an un-allowlisted command stalls that worker on an approval prompt mid-parallel-run. Before the first round on a repo, suggest allowlisting its test/build commands (or running with a permission mode that covers them) so workers don't sit waiting.
 - **Residual risk — worker invariants are instruction-level.** Workers need broad Bash for builds and tests, so "never commit/push/PR" cannot be tool-enforced. Compensating controls: reviews diff against `main`, Step 8 checks `git log main..HEAD`, Step 2 detects branches/PRs that appeared outside the flow. If a worker pushed or opened a PR on its own, stop and tell the user before anything else ships.
+- **Residual risk — the Publisher's own tool boundary is instruction-level too.** This skill's `allowed-tools` omits `Edit`/`Write`, but a session's actual tool access is set by the harness's permission mode, not by this file — the omission is a declared intent, not an enforced guarantee. Compensating control: before Step 8 ships anything, run `git status --short` on the **main** checkout (not a worktree); any output there means files were edited directly on the shared checkout outside a worker's worktree — stop and tell the user, don't ship it.
