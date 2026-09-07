@@ -23,7 +23,7 @@
 | #14 | ... | ready | risk:high | #12 | main |
 | #15 | ... | waiting | risk:low（未設定→risk:high 扱い） | #13 | main |
 
-risk ラベルが無い Issue は risk:high 扱いです（表示のみで、実行順やショップ可否は変えません）。
+risk ラベルが無い Issue は risk:high 扱いです（表示のみで、実行順や出荷可否は変えません）。
 
 ### Bounds
 - max-parallel: <M>

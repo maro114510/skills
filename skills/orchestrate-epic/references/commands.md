@@ -82,8 +82,9 @@ Fallback when `subIssues`/`blockedBy` are unavailable (older gh / GHES, or the G
 # Once per run
 gh label create "oe:go" --repo "$REPO" --color "0E8A16" --description "human approved the orchestrate-epic Run Plan" 2>/dev/null || true
 
-# Find the Run Plan comment (empty output if none exists yet)
-gh api "repos/$REPO/issues/$EPIC/comments" --jq '[.[]|select(.body|startswith("<!-- orchestrate-epic:run-plan -->"))][-1] // empty'
+# Find the Run Plan comment — --paginate --slurp fetches every page (an Epic can carry more
+# comments than one page holds), `add` flattens the resulting array-of-arrays before [-1] picks the latest
+gh api "repos/$REPO/issues/$EPIC/comments" --paginate --slurp --jq 'add | [.[]|select(.body|startswith("<!-- orchestrate-epic:run-plan -->"))][-1] // empty'
 
 # Post it (create only — never edit/replace an existing Run Plan)
 gh issue comment "$EPIC" --repo "$REPO" --body "$RUN_PLAN_BODY"
@@ -91,14 +92,20 @@ gh issue comment "$EPIC" --repo "$REPO" --body "$RUN_PLAN_BODY"
 # Check for oe:go
 gh issue view "$EPIC" --repo "$REPO" --json labels --jq '[.labels[].name]|any(.=="oe:go")'
 
-# Repository facts for the Run Plan
+# Repository facts for the Run Plan. Only a confirmed 404 means "no protection configured" — every
+# other failure (auth, permission, network, 5xx) must stop and be reported, never be read as "no protection"
 BASE=$(gh repo view "$REPO" --json defaultBranchRef -q .defaultBranchRef.name)
-gh api "repos/$REPO/branches/$BASE/protection" 2>/dev/null || echo "no protection configured"
+HTTP_STATUS=$(gh api "repos/$REPO/branches/$BASE/protection" -i 2>/dev/null | head -1 | awk '{print $2}')
+if [ "$HTTP_STATUS" = "404" ]; then
+  echo "no protection configured"
+elif [ "$HTTP_STATUS" != "200" ]; then
+  echo "protection check failed (HTTP $HTTP_STATUS) — stop and report, do not assume no protection" >&2
+fi
 git ls-tree -r "origin/$BASE" --name-only -- .github/workflows
 
 # Completion exit comment (Step 9) — marked the same way as the Run Plan, so a rerun after completion
 # doesn't post a second one; $EXIT_COMMENT_BODY must start with <!-- orchestrate-epic:completion -->
-gh api "repos/$REPO/issues/$EPIC/comments" --jq '[.[]|select(.body|startswith("<!-- orchestrate-epic:completion -->"))][-1] // empty'
+gh api "repos/$REPO/issues/$EPIC/comments" --paginate --slurp --jq 'add | [.[]|select(.body|startswith("<!-- orchestrate-epic:completion -->"))][-1] // empty'
 gh issue comment "$EPIC" --repo "$REPO" --body "$EXIT_COMMENT_BODY"   # only when the check above found none
 ```
 
@@ -107,7 +114,8 @@ gh issue comment "$EPIC" --repo "$REPO" --body "$EXIT_COMMENT_BODY"   # only whe
 ```bash
 # Once per run
 gh label create "loop:in-progress" --repo "$REPO" --color "BFD4F2" --description "orchestrate-epic worker is implementing" 2>/dev/null || true
-git switch main && git pull origin main   # once, before any worker; on dirty-tree failure: stop and tell the user
+BASE=$(gh repo view "$REPO" --json defaultBranchRef -q .defaultBranchRef.name)   # same resolution as §1.5 — never hardcode main
+git switch "$BASE" && git pull origin "$BASE"   # once, before any worker; on dirty-tree failure: stop and tell the user
 
 # Per dispatched Issue, serially
 git wt "feat/issue-$N"   # prints the worktree path — capture it for the worker prompt; reuses existing worktrees
@@ -128,11 +136,13 @@ EOF
 One sticky comment per Issue, distinct from the start/Q&A comments above, identified by a leading marker so it can be found and edited in place instead of piling up duplicates.
 
 ```bash
-# Read the latest state comment (empty output if none exists yet — still cycle 0)
-gh api "repos/$REPO/issues/$N/comments" --jq '[.[]|select(.body|startswith("<!-- orchestrate-epic-state -->"))][-1] // empty'
+# Read the latest state comment (empty output if none exists yet — still cycle 0).
+# --paginate --slurp fetches every page — a long-running Issue can carry more comments than one
+# page holds, and [-1] alone would silently pick a stale mid-list comment instead of the real latest.
+gh api "repos/$REPO/issues/$N/comments" --paginate --slurp --jq 'add | [.[]|select(.body|startswith("<!-- orchestrate-epic-state -->"))][-1] // empty'
 
 # Upsert: edit the existing state comment if found, else create it
-STATE_ID=$(gh api "repos/$REPO/issues/$N/comments" --jq '[.[]|select(.body|startswith("<!-- orchestrate-epic-state -->"))][-1].id // empty')
+STATE_ID=$(gh api "repos/$REPO/issues/$N/comments" --paginate --slurp --jq 'add | [.[]|select(.body|startswith("<!-- orchestrate-epic-state -->"))][-1].id // empty')
 if [ -n "$STATE_ID" ]; then
   gh api "repos/$REPO/issues/comments/$STATE_ID" -X PATCH -f body="$BODY"
 else
