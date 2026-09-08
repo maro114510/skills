@@ -53,8 +53,8 @@ WORKTREE: <absolute worktree path, or UNKNOWN if unavailable>
 HEAD_SHA: <commit SHA of the worker's final commit, or UNKNOWN if unavailable>
 CHANGED_FILES: <one path per line; empty if BLOCKED before implementing>
 CHECKS: <one per line, `<command> -> exit <code>`>
-CRITERIA: <one per line, `<acceptance criterion> -> <test or manual check that covers it>`>
-SKIPPED: <requirements judged out of scope, one per line, `<requirement> -> <reason>`; empty if none>
+CRITERIA: <every criterion from Phase 6.9, one per line, `<criterion verbatim from the source> -> <evidence>`; a criterion with no evidence is still listed, with `-> none`>
+SKIPPED: <criteria and requirements deferred rather than met, one per line, `<criterion> -> <what was done instead, and why>`; empty if none>
 FOUND: <defects found outside scope but not fixed, one per line; empty if none>
 SUMMARY: <what was implemented; key decisions and why>
 QUESTIONS: <BLOCKED only — numbered, each with concrete answer options>
@@ -274,6 +274,31 @@ skip Phase 7 and emit the required structured report without invoking difit or c
 3. If any fix was applied, rerun Phase 6 before rerunning the selection-and-review block, so lint, tests,
    and build reflect the fix. Repeat until the review is clean or all remaining findings are judged as not
    requiring action.
+
+---
+
+## Phase 6.9: Reconcile Against the Source
+
+Runs in both modes. Phase 2's criteria live in context, and context drifts toward what you did — so check
+against the source again, not against memory.
+
+1. **Re-fetch the source** — Issue body, linked spec, caller's prompt. If it changed since Phase 2, say so first.
+2. **Quote each acceptance criterion verbatim.** Paraphrasing is where a criterion gets softened.
+3. **Attach evidence**: a command and its exit code, the covering test, a file path, or a quoted user decision.
+4. **No evidence means unsatisfied** — a TODO, a new Issue, "out of scope", "future work", a later Epic.
+   Deferring a criterion is the user's call; surfacing it is yours.
+
+```
+| Criterion (verbatim) | Evidence |
+|---|---|
+| <the source's own words> | `go test ./...` -> exit 0 |
+
+Deferred, not satisfied: <criterion> -> <what was done instead, and why>
+No evidence: <criterion>
+```
+
+Lead with those last two lines whenever either has content. In autonomous mode they are what `CRITERIA` and
+`SKIPPED` carry.
 
 ---
 
