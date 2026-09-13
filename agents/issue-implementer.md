@@ -2,8 +2,6 @@
 name: issue-implementer
 description: >
   Worker agent used by the orchestrate-epic skill. Implements exactly one GitHub Issue in an isolated worktree by running the implement skill in autonomous mode. Commits in the worktree but never pushes or creates PRs. Not intended for direct invocation.
-tools: Bash, Read, Edit, Write, Glob, Grep
-model: sonnet
 skills:
   - implement
 ---
