@@ -2,7 +2,7 @@
 name: orchestrate-epic
 description: >
   Orchestrate implementation of a GitHub Epic created by create-github-issues.
-  This session acts as the Publisher — run it on a strong model such as Opus: it dispatches ready child Issues to Sonnet worker subagents that run the implement skill in autonomous mode in isolated worktrees, and has an Opus reviewer check every diff using a maker/checker split.
+  This session acts as the Publisher — run it on a strong model: it dispatches ready child Issues to isolated worker subagents that run the implement skill in autonomous mode in isolated worktrees, and has a fresh independent reviewer check every diff using a maker/checker split.
   A human reviews the Run Plan once and signals go with the `oe:go` label; after that the loop ships review-clean Issues on its own and only surfaces on GitHub — a parked Issue, a frozen Epic, or completion — never through an interactive question.
   A task starts only after every Issue it depends on is merged and closed. All state lives in GitHub — issue state, labels, branches, PRs, comments — so re-running the skill with the same Epic resumes the loop from anywhere.
   Use when the user wants an Epic's child Issues implemented — "Epic を実装して", "この Epic を進めて", "Issue 群を順に実装して", "wave ごとに実装して", "オーケストレーションして".
@@ -16,9 +16,11 @@ Drive a GitHub Epic from open Issues to merged PRs with a three-role loop:
 
 | Role | Who | Model | Job |
 |------|-----|-------|-----|
-| Publisher | This session, this skill | Session model — use a strong model such as Opus | Read GitHub state, schedule ready Issues, ship review-clean work, post every human-relevant fact to GitHub |
-| Worker | `skills:issue-implementer` subagent | sonnet, pinned in the agent definition | Implement one Issue in an isolated worktree via the implement skill's autonomous mode; commits locally and reports `HEAD_SHA`, but never pushes and never opens a PR |
-| Reviewer | `skills:issue-reviewer` subagent | opus, pinned in the agent definition | Review each worker diff against the Issue's requirements and acceptance criteria before it ships |
+| Publisher | This session, this skill | Invoking session model — a strong model is operationally recommended, never enforced | Read GitHub state, schedule ready Issues, ship review-clean work, post every human-relevant fact to GitHub |
+| Worker | `skills:issue-implementer` subagent | Inherits the harness/session model unless the caller explicitly overrides it | Implement one Issue in an isolated worktree via the implement skill's autonomous mode; commits locally and reports `HEAD_SHA`, but never pushes and never opens a PR |
+| Reviewer | `skills:issue-reviewer` subagent | Inherits the harness/session model unless the caller explicitly overrides it | Review each worker diff against the Issue's requirements and acceptance criteria before it ships |
+
+**No package-level model pins.** Worker and reviewer agent definitions intentionally omit `model`. The active harness owns model selection. Do not add provider/model aliases to these shared agent files.
 
 Plugin agents register under their plugin-scoped name, `skills:<agent>`; if that doesn't resolve, look for the bare names in the available agent types before falling back to a general-purpose agent with the same prompt.
 
@@ -139,7 +141,7 @@ Each prompt must contain:
 - The branch Step 4 actually selected for this Issue — `feat/issue-<number>` normally, or the state-comment-recorded `redo` branch such as `feat/issue-<number>-2` when one applies — and the **already-created worktree path** for that branch. The worker works there and creates nothing.
 - `CHECKS_SET`'s `runnable` entries, from Step 3, verbatim — mandatory. The worker's Autonomous Mode `CHECKS` report field must run at minimum these, in addition to anything it infers is relevant from its own implementation; it must never substitute a `package.json`/`Makefile` script name for what a workflow file's `run:` step actually invokes.
 - Any reviewer findings or user answers from the current cycle — the worker has no memory of an earlier cycle, so these must be spelled out in full even on a re-dispatch.
-- The instruction: "Follow the `implement` skill preloaded in your context in Autonomous Mode, as if invoked with `autonomous branch <selected branch> worktree <path> <task description>`, using that same selected branch." If the skill content is missing, read `<orchestrate-epic base dir>/../implement/SKILL.md` and follow its Autonomous Mode section. Fill the path from this skill's base directory, which the harness states on invocation.
+- `IMPLEMENT_SKILL_PATH` — the canonical implement skill path, `<orchestrate-epic base dir>/../implement/SKILL.md`, filled from this skill's base directory, which the harness states on invocation. Always pass it explicitly — skill delivery to the worker never depends on preloading. The instruction: "Use the harness-native `implement` skill if available. Regardless of preload support, the canonical skill source is <IMPLEMENT_SKILL_PATH>. If the skill is not already loaded, read that file before starting Autonomous Mode. Follow it as if invoked with `autonomous branch <selected branch> worktree <path> <task description>`, using that same selected branch."
 - The report contract below, noting the final message must be the report and nothing else.
 
 ### Always a Fresh Worker
@@ -179,6 +181,8 @@ Every re-dispatch here upserts the state comment, §2.5: `cycle` and `head_sha` 
 ---
 
 ## Step 6: Reviewer Pass — maker/checker
+
+Maker/checker independence is fresh contexts plus independent evidence collection, not model separation: a fresh reviewer agent that reads the Issue and gathers its own evidence instead of trusting the worker's reasoning or report — worker and reviewer inherit the same harness/session model, per the no-package-level-model-pins rule above.
 
 Per DONE Issue, first run `git -C <worktree> add -N .` — plain diff skips untracked files, and a worker's newly created files must not escape review. Then spawn a `skills:issue-reviewer` subagent, parallel is fine, with the worktree path, `REPO`, the Issue number, `CHECKS_SET`'s `runnable` entries from Step 3, and the **resolved default branch name itself** (`$BASE`, resolved the same way §1.5 does — never let the reviewer hardcode `main`, since a repository whose default branch isn't `main` would otherwise have its diff command fail or compare against the wrong history) — the reviewer reads the requirements and acceptance criteria itself, for the same reason the worker does, and it runs `CHECKS_SET` itself rather than trusting the worker's `CHECKS` report. Its diff command is `git -C <worktree> diff $(git -C <worktree> merge-base <resolved base branch> HEAD)` — the merge-base baseline catches uncommitted changes, intent-to-add files, and any commits the worker made, without dragging in changes merged to the default branch after a resumed worktree was created. A red `CHECKS_SET` entry is itself a blocking finding, same as any other defect below.
 Workers are expected to commit in the worktree, per Autonomous Mode Phase 7, so a commit on the branch is not itself a violation. Check instead whether the branch reached the remote outside this flow: `git -C <worktree> fetch origin "$BRANCH" && git -C <worktree> rev-parse --verify -q origin/"$BRANCH"` succeeding, before Step 7 has pushed anything itself, means the worker or something else pushed it, as does an existing PR from Step 2's projection not yet known to this round. That is the actual rule break — still review everything, and flag it in this session's own output before Step 7 touches that Issue.
