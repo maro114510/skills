@@ -4,7 +4,23 @@
 
 The Epic is created first: native sub-issue linking (`gh issue create --parent`) needs the parent to already exist, and creating each level in wave order lets it reference already-created earlier-wave numbers directly via `--blocked-by`. A `Tn` promoted to a container (Step 2) still gets created here like any other `Tn` — only its own `Tn.m` grandchildren and body substitution come later (5.3, 5.4).
 
-`CHILD_NUM` is one associative array for the whole run, keyed by dotted id (`T1`, `T1.1`, `T2`, ...) — a grandchild's key is its full `Tn.m` id, not just `m`.
+`CHILD_NUM_FILE` is one plain file for the whole run, standing in for a bash associative array (unsupported on bash 3.2, macOS's default `/bin/bash`). Each created Issue gets one `id<TAB>number` line, keyed by dotted id (`T1`, `T1.1`, `T2`, ...) — a grandchild's key is its full `Tn.m` id, not just `m`. Two helpers:
+
+```bash
+CHILD_NUM_FILE=$(mktemp)
+
+record_child_num() {  # record_child_num <id> <number>
+  printf '%s\t%s\n' "$1" "$2" >> "$CHILD_NUM_FILE"
+}
+
+child_num() {  # child_num <id> -> prints the recorded number, or nothing
+  awk -F'\t' -v id="$1" '$1 == id { v = $2 } END { print v }' "$CHILD_NUM_FILE"
+}
+```
+
+`child_num` uses `awk` field matching, not `grep`, so the `.` in `T1.1` isn't treated as a regex wildcard.
+
+Batching many `Tn`/`Tn.m` creations in one script run means a mid-run failure leaves later ones simply not created. To resume, rerun from the first `Tn`/`Tn.m` not yet created, reusing the same `$CHILD_NUM_FILE`. 5.2/5.3 chain creation and recording with `&&` on one line, so recording can only fail immediately after the Issue is created — never silently later. If that append itself fails, find the Issue via `gh issue list --repo "$REPO" --search "<Tn title>"`, append its `<id><TAB><number>` line to `$CHILD_NUM_FILE` by hand, then resume.
 
 ### 5.1 Create the Epic
 
@@ -23,11 +39,9 @@ EPIC_NUM=$(echo "$EPIC_URL" | grep -oE '[0-9]+$')
 
 ### 5.2 Create every Tn in wave order
 
-Declare the associative array once, then repeat the create block for every `Tn` (leaf or container), keyed by its id — do not overwrite a single pair of variables across iterations, or every `Tn` but the last loses its number. Process `Tn` in wave order (Wave 1 first, ascending) so that any `Tm` a later `Tn` depends on already has a real number in `CHILD_NUM`. A container `Tn`'s body still holds unsubstituted `{{Tn.m}}` tokens at this point — that's expected, 5.4 fixes it up once its grandchildren exist:
+Set up `$CHILD_NUM_FILE` once (see above), then repeat the create block for every `Tn` (leaf or container), keyed by its id. Process `Tn` in wave order (Wave 1 first, ascending) so that any `Tm` a later `Tn` depends on already has a real number recorded. A container `Tn`'s body still holds unsubstituted `{{Tn.m}}` tokens at this point — that's expected, 5.4 fixes it up once its grandchildren exist:
 
 ```bash
-declare -A CHILD_NUM
-
 # Repeat this block per Tn, in wave order, substituting T1, T2, ... for TN:
 # --blocked-by takes a comma-separated list of every Tm in TN's depends_on — one, several, or omitted
 # entirely if TN has none. GitHub treats an issue as blocked by ALL listed issues, not just one:
@@ -40,15 +54,15 @@ CHILD_URL=$(gh issue create \
 EOF
 )" \
   --parent "$EPIC_NUM" \
-  --blocked-by "<comma-separated real numbers of every Tm in TN's depends_on>")
-CHILD_NUM[TN]=$(echo "$CHILD_URL" | grep -oE '[0-9]+$')
+  --blocked-by "<comma-separated real numbers of every Tm in TN's depends_on>") \
+  && record_child_num "TN" "$(echo "$CHILD_URL" | grep -oE '[0-9]+$')"
 ```
 
-If a single `Tn` creation fails, print the error, skip creating its would-be `Tn.m` grandchildren (5.3) entirely — there is no valid parent for them — and continue with the remaining `Tn`. Note any failed `Tn` in the Step 6 completion report so the user knows which parent/blocked-by relation, and which grandchildren, are missing. Before creating any later `Tn` whose `depends_on` names a failed one, drop that id from its `--blocked-by` list — `CHILD_NUM` has no entry for it, so passing it through would hand `gh issue create` a nonexistent number.
+If a single `Tn` creation fails, print the error, skip creating its would-be `Tn.m` grandchildren (5.3) entirely — there is no valid parent for them — and continue with the remaining `Tn`. Note any failed `Tn` in the Step 6 completion report so the user knows which parent/blocked-by relation, and which grandchildren, are missing. Before creating any later `Tn` whose `depends_on` names a failed one, drop that id from its `--blocked-by` list — `child_num` returns nothing for it, so passing it through would hand `gh issue create` a nonexistent number.
 
 ### 5.3 Create Tn.m grandchildren for each container Tn
 
-Only for `Tn` that Step 2 promoted to a container. Same pattern as 5.2, one level down: `--parent` is the container's own real number from `CHILD_NUM[Tn]`, `--blocked-by` may only list sibling `Tn.m` under the same parent (never a `Tn`, never a different container's child):
+Only for `Tn` that Step 2 promoted to a container. Same pattern as 5.2, one level down: `--parent` is the container's own real number from `child_num "Tn"`, `--blocked-by` may only list sibling `Tn.m` under the same parent (never a `Tn`, never a different container's child):
 
 ```bash
 # Repeat this block per Tn.m, in wave order, for each container Tn:
@@ -59,19 +73,19 @@ GRANDCHILD_URL=$(gh issue create \
 <Tn.m body — leaf shape, no tokens>
 EOF
 )" \
-  --parent "${CHILD_NUM[Tn]}" \
-  --blocked-by "<comma-separated real numbers of every sibling Tn.m in this Tn.m's depends_on>")
-CHILD_NUM[Tn.m]=$(echo "$GRANDCHILD_URL" | grep -oE '[0-9]+$')
+  --parent "$(child_num "Tn")" \
+  --blocked-by "<comma-separated real numbers of every sibling Tn.m in this Tn.m's depends_on>") \
+  && record_child_num "Tn.m" "$(echo "$GRANDCHILD_URL" | grep -oE '[0-9]+$')"
 ```
 
 If a single `Tn.m` creation fails, print the error and continue with the remaining `Tn.m` under the same container — its container is still created/updated normally (5.4). Note the failed `Tn.m` in the Step 6 completion report, and, same as 5.2, drop it from any later sibling's `--blocked-by` list instead of passing a nonexistent number.
 
 ### 5.4 Substitute placeholders into each container Tn body
 
-For every container `Tn`, replace every `{{Tn.m}}` token in its Step 4-approved body with `#${CHILD_NUM[Tn.m]}` (or the inline "(creation failed)" note for a grandchild that failed in 5.3) — a mechanical substitution only, no wording changes. Then update it:
+For every container `Tn`, replace every `{{Tn.m}}` token in its Step 4-approved body with `#$(child_num "Tn.m")` (or the inline "(creation failed)" note for a grandchild that failed in 5.3) — a mechanical substitution only, no wording changes. Then update it:
 
 ```bash
-gh issue edit "${CHILD_NUM[Tn]}" \
+gh issue edit "$(child_num "Tn")" \
   --repo "$REPO" \
   --body "$(cat <<'EOF'
 <container Tn body, with every {{Tn.m}} already replaced by #<number> or "(creation failed)">
@@ -83,7 +97,7 @@ Do this for every container before moving to 5.5, so the Epic substitution never
 
 ### 5.5 Substitute placeholders into the Epic body
 
-Take the Step 4-approved Epic body and replace every `{{Tn}}` token with `#${CHILD_NUM[Tn]}` (or the inline "(creation failed)" note for a `Tn` that failed in 5.2) using the array built above — a mechanical substitution only, no wording changes. Then update the Epic:
+Take the Step 4-approved Epic body and replace every `{{Tn}}` token with `#$(child_num "Tn")` (or the inline "(creation failed)" note for a `Tn` that failed in 5.2) using `$CHILD_NUM_FILE` built above — a mechanical substitution only, no wording changes. Then update the Epic:
 
 ```bash
 gh issue edit "$EPIC_NUM" \
