@@ -21,6 +21,7 @@ gh skill install maro114510/skills --agent claude-code --scope user
 | Skill | Goal |
 |---|---|
 | `create-pr` | Create a pull request with a useful description. |
+| `domain-master` | Review domain model and state-transition code for illegal states that bypass validation. |
 | `frame-problem` | Frame a vague problem before implementation and converge on a direction. |
 | `ja-style-check` | Review and improve Japanese technical writing. |
 | `pr-doc-review-pe` | Review design documents from a Principal Engineer perspective. |
