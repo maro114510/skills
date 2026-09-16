@@ -15,6 +15,7 @@ A bypassable validator is not an invariant.
 
 ## Step 1. Scope
 
+Parse `$ARGUMENTS`:
 - Number → `gh pr diff <n>`
 - File path → `Read` the file
 - Empty → `git diff origin/main...HEAD`, fallback `git diff HEAD`
