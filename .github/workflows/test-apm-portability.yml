@@ -1,0 +1,64 @@
+name: Test APM Portability
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  APM_VERSION: 0.31.0
+  APM_SHA256: 866d7f2cc095e858e52c4c81e2fc0acb99d1fb1948fe5464165bb362d08e9645
+  OPENCODE_VERSION: 1.18.30
+
+jobs:
+  validate-static:
+    name: Validate agent portability (static)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Run the static agent portability validator
+        run: make validate-agent-portability
+
+  apm-portability:
+    name: APM install (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: validate-static
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [claude, codex, opencode]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install APM
+        run: |
+          set -euo pipefail
+          tarball="${RUNNER_TEMP}/apm.tar.gz"
+          curl -fsSL --retry 3 -o "${tarball}" \
+            "https://github.com/microsoft/apm/releases/download/v${APM_VERSION}/apm-linux-x86_64.tar.gz"
+          echo "${APM_SHA256}  ${tarball}" | sha256sum -c -
+          tar -xzf "${tarball}" -C "${RUNNER_TEMP}"
+          echo "${RUNNER_TEMP}/apm-linux-x86_64" >> "$GITHUB_PATH"
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        if: matrix.target == 'opencode'
+        with:
+          node-version: '22'
+
+      - name: Install OpenCode CLI
+        if: matrix.target == 'opencode'
+        run: npm install -g "opencode-ai@${OPENCODE_VERSION}"
+
+      - name: Verify APM portability (${{ matrix.target }})
+        run: make validate-apm APM_TARGET=${{ matrix.target }}

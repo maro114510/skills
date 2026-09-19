@@ -7,7 +7,7 @@ MANIFESTS := $(PLUGIN_MANIFEST) $(MARKETPLACE_MANIFEST)
 GIT_CLIFF := git-cliff
 CLAUDE := claude
 
-.PHONY: help next-version check-version validate validate-plugin validate-agent-portability release
+.PHONY: help next-version check-version validate validate-plugin validate-agent-portability validate-apm release
 
 help: ## Show available commands.
 	@awk 'BEGIN { FS = ":.*##"; printf "Usage:\n  make <command>\n\nCommands:\n" } /^[a-zA-Z0-9_-]+:.*##/ { printf "  %-20s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
@@ -50,6 +50,9 @@ validate-plugin: ## Validate the plugin and marketplace manifests with Claude Co
 
 validate-agent-portability: ## Validate that shared agents only use portable frontmatter.
 	@tests/validate-agent-portability.sh
+
+validate-apm: ## Verify APM deploys the agents portably (APM_TARGET=claude|codex|opencode, default all).
+	@tests/validate-apm.sh $(APM_TARGET)
 
 release: check-version ## Bump manifests, commit, tag, and push a release.
 	@test "$$(git branch --show-current)" = 'main' || { printf 'Release must run from main, not %s.\n' "$$(git branch --show-current)"; exit 1; }; \
