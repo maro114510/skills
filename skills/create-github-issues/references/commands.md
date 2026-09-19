@@ -108,6 +108,73 @@ EOF
 )"
 ```
 
+### 5.6 Verify sub-issue and blocked-by relations against GitHub
+
+Script output is not proof. Read the relations back from GitHub before the Step 6 report; on any mismatch, report it to the user and stop.
+
+`Issue` exposes `blockedBy`, `blocking`, `issueDependenciesSummary`. `blockedByIssues` does not exist.
+
+```bash
+gh api graphql -f query='{ __type(name:"Issue"){ fields { name } } }'
+OWNER="${REPO%/*}"
+NAME="${REPO#*/}"
+```
+
+**Sub-issue count.** Epic sub-issues are the `Tn` level only; `Tn.m` hangs off its container. Expected count = non-dotted ids in `$CHILD_NUM_FILE`.
+
+```bash
+EXPECTED_TN_COUNT=$(awk -F'\t' '$1 !~ /\./ { n++ } END { print n + 0 }' "$CHILD_NUM_FILE")
+
+gh api graphql -f owner="$OWNER" -f name="$NAME" -F number="$EPIC_NUM" -f query='
+query($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    issue(number: $number) {
+      id
+      subIssues(first: 100) { totalCount nodes { id number title } }
+    }
+  }
+}'
+```
+
+Reconcile until `totalCount` and the number sets agree.
+
+- **Extra** — a number no `Tn` owns. Detach, close, unlist.
+
+```bash
+gh api graphql -F epicId="$EPIC_ID" -F dupId="$DUP_ID" -f query='
+mutation($epicId: ID!, $dupId: ID!) {
+  removeSubIssue(input: { issueId: $epicId, subIssueId: $dupId }) { issue { number } }
+}'
+
+gh issue close "$DUP_NUM" --repo "$REPO" --comment "Duplicate of #$CANONICAL_NUM — detached from the Epic."
+```
+
+  If project automation auto-added the duplicate, delete its project item with `gh project item-delete`.
+
+- **Missing** — a recorded `Tn` absent from the nodes; its `--parent` was lost. Re-attach with `addSubIssue`.
+
+```bash
+gh api graphql -F epicId="$EPIC_ID" -F tnId="$TN_ID" -f query='
+mutation($epicId: ID!, $tnId: ID!) {
+  addSubIssue(input: { issueId: $epicId, subIssueId: $tnId }) { issue { number } }
+}'
+```
+
+**Blocked-by sets.** Per dependent `Tn`/`Tn.m`, `blockedBy` must equal its `depends_on` numbers.
+
+```bash
+EXPECTED_BLOCKERS="$(child_num "T1") $(child_num "T2")"
+
+gh api graphql -f owner="$OWNER" -f name="$NAME" -F number="$(child_num "Tn")" -f query='
+query($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    issue(number: $number) { blockedBy(first: 100) { nodes { number } } }
+  }
+}'
+```
+
+Missing or unexpected entry = mismatch: report and stop.
+
 ## Step 6: Completion report
 
 See the "Step 6: Completion Report" template in `references/templates.<LANG>.md` (e.g. `templates.ja.md` for `ja`).
