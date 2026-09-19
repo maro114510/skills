@@ -34,3 +34,14 @@ gh skill install maro114510/skills --agent claude-code --scope user
 | `tear-down` | Blank-slate red-team a plan or design instead of defending or polishing it. |
 | `write-researched-document` | Research, verify, and draft an evidence-backed Markdown document. |
 | `why-man` | Challenge assumptions with higher-level Why questions. |
+
+## Agents
+
+APM deploys `agents/` to multiple harnesses.
+
+| Rule | Detail |
+|---|---|
+| Allowed frontmatter | `name`, `description` |
+| Forbidden frontmatter | `model`, `tools`, permissions, `color`, skill preload fields |
+| Runtime policy | Invoking skill or harness configuration |
+| Before committing | Run `make validate` |
