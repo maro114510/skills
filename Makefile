@@ -7,7 +7,7 @@ MANIFESTS := $(PLUGIN_MANIFEST) $(MARKETPLACE_MANIFEST)
 GIT_CLIFF := git-cliff
 CLAUDE := claude
 
-.PHONY: help next-version check-version validate release
+.PHONY: help next-version check-version validate validate-plugin validate-agent-portability release
 
 help: ## Show available commands.
 	@awk 'BEGIN { FS = ":.*##"; printf "Usage:\n  make <command>\n\nCommands:\n" } /^[a-zA-Z0-9_-]+:.*##/ { printf "  %-20s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
@@ -43,8 +43,13 @@ check-version: ## Check that plugin and marketplace manifest versions match.
 	test "$$plugin_version" = "$$marketplace_version" || { printf 'Version mismatch: %s=%s, %s=%s\n' '$(PLUGIN_MANIFEST)' "$$plugin_version" '$(MARKETPLACE_MANIFEST)' "$$marketplace_version"; exit 1; }; \
 	printf 'Manifest versions match: %s\n' "$$plugin_version"
 
-validate: check-version ## Validate the plugin and marketplace manifests with Claude Code.
+validate: check-version validate-plugin validate-agent-portability ## Validate manifests, the plugin, and agent portability.
+
+validate-plugin: ## Validate the plugin and marketplace manifests with Claude Code.
 	@$(CLAUDE) plugin validate .
+
+validate-agent-portability: ## Validate that shared agents only use portable frontmatter.
+	@tests/validate-agent-portability.sh
 
 release: check-version ## Bump manifests, commit, tag, and push a release.
 	@test "$$(git branch --show-current)" = 'main' || { printf 'Release must run from main, not %s.\n' "$$(git branch --show-current)"; exit 1; }; \
