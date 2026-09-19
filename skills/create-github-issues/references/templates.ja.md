@@ -80,14 +80,14 @@ flowchart LR
 - 要件: <bullet> / <bullet>
 - 仕様: <bullet>（決定済み事項がなければ「なし」と書く）
 - 理想状態: <完了時に成り立つべき状態を1行で>
-- 検証方法: <bullet>（最大5件。Given X / When Y / Then Z 形式、または手順・アサーション単位の1行ずつ）
+- 検証方法: <bullet>（最大5件。Given X / When Y / Then Z 形式、または手順・アサーション単位の1行ずつ。上流文書が完全なリストを所有している場合は、失敗系を優先した5件＋その文書への prose 参照1行 — Step 4 参照）
 
 #### T2: <タイトル>（Wave 2 / 依存: T1）
 - 背景: <1行>
 - 要件: <bullet>
 - 仕様: なし
 - 理想状態: <1行>
-- 検証方法: <bullet>（最大5件）
+- 検証方法: <bullet>（最大5件。上流文書が完全なリストを所有している場合は、失敗系5件＋prose 参照）
 
 コンテナに昇格した Tn がある場合のみ、以下の形で示す。要件・仕様・検証方法は Tn.m 側にのみ書く。
 
@@ -226,7 +226,7 @@ flowchart LR
 {What must be true when done — concrete and verifiable}
 
 ### 検証方法
-{Up to 5 items. Manual: numbered steps. Automated: assert what, run which command. If it takes more than 5 to cover the real scenarios, that's a signal this Issue should be split — see Step 2.}
+{Up to 5 bullets. Manual: numbered steps. Automated: assert what, run which command. If it takes more than 5 to cover the real scenarios, that's a signal this Issue should be split — see Step 2 — unless an upstream authoritative document owns the full list: then keep 5 bullets chosen by failure mode rather than happy path, and add one prose line after the bullets (never a sixth bullet) pointing to that document as the authoritative full list. The pointer option is unavailable when no such document exists.}
 ```
 
 **Banned in every section above:** lettered step sequences (`a→b→c→d`), pseudocode, function signatures, multi-level nested bullets. If a task genuinely needs that much detail to specify, split it into more child Issues, or add a single line linking to an existing design doc — never restate the doc inline.
