@@ -80,14 +80,14 @@ flowchart LR
 - Requirements: <bullet> / <bullet>
 - Specs: <bullet> (write "none" if nothing was decided)
 - Target state: <what must be true when done, in one line>
-- Verification: <bullet> (up to 5, either Given X / When Y / Then Z form, or one line per step/assertion)
+- Verification: <bullet> (up to 5, either Given X / When Y / Then Z form, or one line per step/assertion; if an upstream document owns the full list, keep 5 chosen by failure mode and add a prose pointer to it — see Step 4)
 
 #### T2: <title> (Wave 2 / Depends on: T1)
 - Background: <one line>
 - Requirements: <bullet>
 - Specs: none
 - Target state: <one line>
-- Verification: <bullet> (up to 5)
+- Verification: <bullet> (up to 5; if an upstream document owns the full list, 5 failure-mode items + prose pointer)
 
 Only when a Tn was promoted to a container, show it in this shape instead — Requirements/Specs/Verification live only on the Tn.m side.
 
@@ -226,7 +226,7 @@ Both a non-container `Tn` (leaf) and a `Tn.m` (grandchild) use this shape.
 {What must be true when done — concrete and verifiable}
 
 ### Verification
-{Up to 5 items. Manual: numbered steps. Automated: assert what, run which command. If it takes more than 5 to cover the real scenarios, that's a signal this Issue should be split — see Step 2.}
+{Up to 5 bullets. Manual: numbered steps. Automated: assert what, run which command. If it takes more than 5 to cover the real scenarios, that's a signal this Issue should be split — see Step 2 — unless an upstream authoritative document owns the full list: then keep 5 bullets chosen by failure mode rather than happy path, and add one prose line after the bullets (never a sixth bullet) pointing to that document as the authoritative full list. The pointer option is unavailable when no such document exists.}
 ```
 
 **Banned in every section above:** lettered step sequences (`a→b→c→d`), pseudocode, function signatures, multi-level nested bullets. If a task genuinely needs that much detail to specify, split it into more child Issues, or add a single line linking to an existing design doc — never restate the doc inline.
