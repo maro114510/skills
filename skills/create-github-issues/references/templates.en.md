@@ -53,6 +53,8 @@ In any Mermaid node label, a double quote in a title must be written as `#quot;`
 
 (Only if applicable: **Epic split suggestion**: The dependency graph splits into independent groups and the count is large, so <proposed split> as separate Epics could also work instead of one Epic. Proceed with a single Epic anyway?)
 
+(Only when Step 1.5 changed a merged design doc/implementation plan: **Document currently out of sync**: <document> no longer matches the clarified answers. T<doc> (Wave 1 / Depends on: none) updates it to match, and every Tn whose content the answers changed depends on it — directly or transitively, as stated on each Tn's dependency line.)
+
 ### Dependency preview (temporary IDs; real Issue numbers are assigned after creation)
 
 ​```mermaid
@@ -88,6 +90,8 @@ flowchart LR
 - Specs: none
 - Target state: <one line>
 - Verification: <bullet> (up to 5; if an upstream document owns the full list, 5 failure-mode items + prose pointer)
+
+When this Tn's content changed because Step 1.5 changed a merged document, write its dependency line as "(directly on T<doc>)" or "(transitively via T<via>)" instead of the plain "Depends on: ..." — the summary must approve which of the two applies.
 
 Only when a Tn was promoted to a container, show it in this shape instead — Requirements/Specs/Verification live only on the Tn.m side.
 
@@ -218,7 +222,7 @@ Both a non-container `Tn` (leaf) and a `Tn.m` (grandchild) use this shape.
 
 ## Dependencies
 
-{For a `Tn`: "Can start after Tn is done. See the Epic for the full dependency picture." / For a `Tn.m`: "Can start after Tn.m is done. See the Tn body for the full dependency picture within this parent." or "None (can start in parallel)". Don't write step-by-step reasoning or detail here.}
+{For a `Tn`: "Can start after Tn is done. See the Epic for the full dependency picture." / For a `Tn.m`: "Can start after Tn.m is done. See the Tn body for the full dependency picture within this parent." or "None (can start in parallel)". Don't write step-by-step reasoning or detail here. When this Tn's content changed because Step 1.5 changed a merged document, state instead whether it depends on the doc-update Tn directly ("Can start after the doc-update T<doc> is done") or transitively ("Can start after T<via> is done, which in turn depends on the doc-update T<doc>").}
 
 ## Acceptance Criteria
 
@@ -294,4 +298,6 @@ The Epic and each Tn, and any container Tn and its grandchild Issues, are linked
 Dependencies are set as Blocked-by/Blocking relationships via `--blocked-by` — grandchild-to-grandchild dependencies only within the same parent Tn.
 You can check both in the Issue sidebar on GitHub (Sub-issues / Relationships).
 The Epic body's dependency diagram (or table), and any container Tn's own dependency diagram, now use the real Issue numbers.
+
+(Only when a doc-update dependency was wired transitively: <Tn(s)> depend on the doc-update Tn transitively via <Tvia> — they are not directly blocked by it. This ordering is intentional; do not "fix" it by adding or removing edges.)
 ```
