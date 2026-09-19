@@ -175,6 +175,24 @@ query($owner: String!, $name: String!, $number: Int!) {
 
 Missing or unexpected entry = mismatch: report and stop.
 
+### 5.7 Link the Epic and every Issue to a project (only when asked)
+
+Run only when Step 1 set `$PROJECT_NUM`; `gh issue create` has no `--project` flag, so linking happens after creation. Otherwise skip.
+
+- **Auth**: `gh project` needs the `project` scope. `gh auth refresh -s project` fails when `GITHUB_TOKEN` is exported, and needs `--hostname` without a prompt. If the keyring already has the scope, prefix commands with `env -u GITHUB_TOKEN`; else stop and report.
+- **Add** Epic and every child under repo owner `$OWNER`, by URL:
+
+```bash
+env -u GITHUB_TOKEN gh project item-add "$PROJECT_NUM" --owner "$OWNER" --url "$EPIC_URL" --format json
+while IFS=$'\t' read -r id num; do
+  env -u GITHUB_TOKEN gh project item-add "$PROJECT_NUM" --owner "$OWNER" \
+    --url "https://github.com/$REPO/issues/$num" --format json
+done < "$CHILD_NUM_FILE"
+```
+
+- **Automation**: auto-add workflows add Issues the skill never created, and a closed duplicate lands as `Done`, reading as finished work. Remove them with `gh project item-delete "$PROJECT_NUM" --owner "$OWNER" --id <item-id>`.
+- **Fields**: never map this run's Wave numbers onto a `Stage`/`Wave` field — it is the program's vocabulary; leave it unset, keep waves in the Epic body. Only a user-requested field is set, via `gh project item-edit --id <item> --project-id <project-id> --field-id <field-id> --single-select-option-id <option-id>`, ids from `gh project view` and `gh project field-list --format json`.
+
 ## Step 6: Completion report
 
 See the "Step 6: Completion Report" template in `references/templates.<LANG>.md` (e.g. `templates.ja.md` for `ja`).

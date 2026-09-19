@@ -7,7 +7,7 @@ description: >
   Issue titles, bodies, and every interactive prompt are written in Japanese by default; pass `lang en` to generate the whole run in English instead.
   Use this skill when the user asks to track tasks with an Epic, turn TODOs or a plan into GitHub Issues, or extract action items from a review or investigation.
 allowed-tools: Bash(gh:*), Bash(git remote get-url:*)
-argument-hint: "[repo <owner/repo>] [lang <ja|en>]"
+argument-hint: "[repo <owner/repo>] [lang <ja|en>] [project <n>]"
 ---
 
 # create-github-issues
@@ -31,6 +31,8 @@ git remote get-url origin
 ```
 
 Extract `owner/repo` from `https://github.com/owner/repo.git` or `git@github.com:owner/repo.git` and store it as `REPO`.
+
+Also check `$ARGUMENTS` for `project <number>` and store it as `PROJECT_NUM` — an optional GitHub Project to link the Epic and every created Issue to, added after creation per 5.7. `gh issue create` has no `--project` flag, so linking happens after creation. Without `project`, 5.7 is skipped.
 
 ---
 
@@ -179,6 +181,8 @@ If a `Tn`'s creation fails, skip creating its would-be `Tn.m` grandchildren enti
 A failed `Tn`/`Tn.m` never gets a real number, so any not-yet-created sibling whose `depends_on` names it must drop that id from its own `--blocked-by` list — never pass a number that doesn't exist. Note the dropped edge in the Step 6 report so the user knows that dependency was never wired, rather than silently creating an Issue that was supposed to wait but isn't blocked on anything.
 
 Note in the completion report (Step 6) that the Epic's number is lowest, `Tn` numbers come next in wave order, and each container's `Tn.m` numbers come after their parent.
+
+**Optional project linking (only when asked).** When `$ARGUMENTS` contained `project <n>` (Step 1), run section 5.7 of `references/commands.md` after 5.6 — it adds the Epic and every created Issue to the target project, so the run never improvises project commands. Skip it entirely when no `project` argument was given. Never map this run's Wave numbers onto a project field named `Stage` or `Wave`; keep waves in the Epic body.
 
 ---
 
