@@ -6,7 +6,7 @@ description: >
   Requirements (what) and specs (how) are kept separate and length-capped so bodies stay concise, and the Epic also renders a Mermaid diagram (a compact table for large epics) showing which child Issues block each other and which can run in parallel.
   Issue titles, bodies, and every interactive prompt are written in Japanese by default; pass `lang en` to generate the whole run in English instead.
   Use this skill when the user asks to track tasks with an Epic, turn TODOs or a plan into GitHub Issues, or extract action items from a review or investigation.
-allowed-tools: Bash(gh:*), Bash(git remote get-url:*)
+allowed-tools: Bash(gh:*)
 argument-hint: "[repo <owner/repo>] [lang <ja|en>] [project <n>]"
 ---
 
@@ -24,13 +24,13 @@ Write concise, length-capped bodies (requirements separated from specs), model d
 Check `$ARGUMENTS`:
 
 - If `repo <owner/repo>` is provided, use that repository.
-- Otherwise, auto-detect from the remote URL:
+- Otherwise, auto-detect from the current repository:
 
 ```bash
-git remote get-url origin
+gh repo view --json nameWithOwner -q .nameWithOwner
 ```
 
-Extract `owner/repo` from `https://github.com/owner/repo.git` or `git@github.com:owner/repo.git` and store it as `REPO`.
+Store the printed `owner/repo` as `REPO`.
 
 Also check `$ARGUMENTS` for `project <number>` and store it as `PROJECT_NUM` — an optional GitHub Project to link the Epic and every created Issue to, added after creation per 5.7. `gh issue create` has no `--project` flag, so linking happens after creation. Without `project`, 5.7 is skipped.
 
@@ -170,9 +170,9 @@ If any check fails, stop, report the specific problem and its location to the us
 
 ## Step 5: Create Issues
 
-See `references/commands.md` for the exact shell commands.
+See `references/commands.md` for the exact commands. Every command starts with `gh` to match the declared `allowed-tools`; read that file's "Tool permission contract" before adding or changing one.
 
-**The Epic is created first**, since `--parent` needs it to already exist. Every `Tn` — leaf or container — is created next in wave order, each with `--parent $EPIC_NUM` and `--blocked-by <already-known real numbers>`; never `--parent` pointing at another `Tn`, per the hierarchy rule in Step 2. A container `Tn`'s own body still carries unsubstituted `{{Tn.m}}` tokens at this point, since its grandchildren don't exist yet. Once every `Tn` exists, create each container's `Tn.m` grandchildren with `--parent` set to that `Tn`'s real number and `--blocked-by` limited to sibling `Tn.m` it depends on — never a `Tn`, never a different container's child, per Step 2's dependency-scope rule.
+**The Epic is created first**, since `--parent` needs it to already exist. Every `Tn` — leaf or container — is created next in wave order, each with `--parent <the Epic's number>` and `--blocked-by <already-known real numbers>`; never `--parent` pointing at another `Tn`, per the hierarchy rule in Step 2. A container `Tn`'s own body still carries unsubstituted `{{Tn.m}}` tokens at this point, since its grandchildren don't exist yet. Once every `Tn` exists, create each container's `Tn.m` grandchildren with `--parent` set to that `Tn`'s real number and `--blocked-by` limited to sibling `Tn.m` it depends on — never a `Tn`, never a different container's child, per Step 2's dependency-scope rule.
 
 Substitution then happens bottom-up: for each container `Tn`, substitute its own body's `{{Tn.m}}` placeholders with the real grandchild numbers and update it via `gh issue edit`, before touching the Epic. Only after every container is updated, substitute the Epic body's `{{Tn}}` placeholders — leaf and container alike — and update the Epic. Before each `gh issue edit`, confirm no token remains in that body's scope; if one does and the failure case below doesn't explain it, the substitution missed it — fix it before submitting.
 
