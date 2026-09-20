@@ -17,7 +17,7 @@ The Epic is created first: `gh issue create --parent` needs the parent to exist,
 - `gh issue create` prints the new Issue URL on success.
 - Record its trailing number against the id: `T1`, `T1.1`, `T2`, and so on; a grandchild is keyed by its full `Tn.m` id.
 - A failed create prints an error, not a URL, so it gets no number; treat it as failed and continue.
-- To resume an interrupted run, recover a number with `gh issue list --repo <owner/repo> --search "<Tn title>" --json number`.
+- To resume an interrupted run, recover a number with `gh issue list --repo <owner/repo> --state all --search "in:title <Tn title>" --json number,title,url,state`, continuing only when exactly one returned title matches `<Tn title>`; otherwise stop rather than attach an ambiguous Issue to the dependency graph.
 
 ### 5.1 Create the Epic
 
@@ -147,7 +147,7 @@ mutation($epicId: ID!, $tnId: ID!) {
 }'
 ```
 
-Blocked-by sets: each dependent `Tn` or `Tn.m` must list exactly its `depends_on` numbers.
+Blocked-by sets: each dependent `Tn` or `Tn.m` must list exactly its successful `depends_on` numbers; failed IDs are intentionally omitted and reported in Step 6.
 
 ```bash
 gh api graphql -f owner="<owner>" -f name="<name>" -F number=<dependent Tn or Tn.m number> -f query='
