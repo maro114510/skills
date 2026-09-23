@@ -82,31 +82,39 @@ Omit the scope rather than inventing one when nothing naturally fits.
 
 **Subject**: imperative mood, under 70 characters, specific rather than vague — `fix(auth): handle expired JWT on refresh`, not `fix: bug`.
 
-**Body**: explain why the change was needed — the problem, root cause, or motivating evidence — never what the diff already shows or how it was implemented.
-One short paragraph (2-5 sentences), regardless of whether a PR will follow. If it needs more than that, split the change into multiple commits, or defer the extra depth to the PR description instead.
-Omit the body entirely for genuinely trivial changes.
-Reference rejected alternatives or tradeoffs only if they matter to future readers.
-Wrap the body at roughly 72 columns — a commit message is read as plain text in `git log`/`git show`, unlike a PR body, so manual wrapping here is correct, not a rendering bug (contrast with create-pr's Line Breaks rule, which is about GitHub's PR/issue rendering, not this).
+**Body**: up to 4 bullets, one why fact each — problem, root cause, evidence, or a tradeoff that matters. Never what/how; no lead sentence.
 
-Good (why, backed by concrete evidence):
+| Item | Rule |
+|---|---|
+| Per bullet | One fact. A "because/since/so/which" chain hides a second — split or trim |
+| Lines | 2 max, wrapped at ~72 columns, two-space hanging indent — intentional, unlike create-pr's Line Breaks rule |
+| Overflow | Split into multiple commits, or keep the most load-bearing fact and defer the rest to the PR description |
+| Trivial | Omit the body |
+
+Good (why facts, one per bullet):
 ```
-Case 09 was a false positive: the stated justification for
-integrity_concern was a reworded restatement of "overextended" and
-"not_established," conditions decision-rubric.md already treats as
-insufficient on their own.
+- Case 09 was a false positive: its integrity_concern
+  justification restated "overextended" and "not_established."
+- decision-rubric.md already treats both conditions as
+  insufficient on their own.
 ```
 
 Bad (what/how — cut this, the diff already shows it):
 ```
-Add an explicit restatement check to decision-rubric.md's
-integrity_concern section: before setting true, strip the
-judgment-name words from the stated reason.
+- Add a restatement check to integrity_concern: strip the
+  judgment-name words from the stated reason before setting true.
 ```
 
 Bad (verification narration — belongs in the PR's Test Plan, not here):
 ```
-Re-verified all 12 eval cases against the fixed SKILL.md; the 9/9
-overextension detection rate is preserved.
+- Re-verified all 12 eval cases against the fixed SKILL.md; the
+  9/9 overextension detection rate is preserved.
+```
+
+Bad (file enumeration — "what" wearing structure, not why):
+```
+- commit/SKILL.md: Step 4 body rules rewritten as bullets.
+- create-pr/SKILL.md: cross-reference updated to match.
 ```
 
 **Footer**: add `Closes #NNN` or `Related #NNN` when an issue number is inferable from the branch name or conversation context.
@@ -118,13 +126,13 @@ If `$ARGUMENTS` includes a hint — an issue number, a message override, or cont
 
 ## Step 5. Compact Pass
 
-Before moving to Step 6, re-read the composed body once:
+Before moving to Step 6, re-read the bullets:
 
-- Does any sentence describe what changed or how, rather than why? Cut it.
-- Does any sentence report verification or test results? Cut it — that belongs in the PR's Test Plan, not the commit body.
-- Is the body longer than one short paragraph? Shorten it, or reconsider splitting the change into multiple commits.
+- What/how, verification results, or file enumeration? Cut.
+- "Because/since/so/which" chaining a second fact? Split or trim.
+- Over 4 bullets or 2 lines per bullet? Shorten, defer to the PR description, or split the change.
 
-If the body is already a single why-focused paragraph, keep it as written.
+Otherwise keep as written.
 
 ## Step 6. Decide: auto-commit or ask first
 
