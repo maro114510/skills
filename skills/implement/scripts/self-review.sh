@@ -18,13 +18,17 @@ cd "${worktree}" 2>/dev/null || {
   echo "Not a directory: ${worktree:-<none>}" >&2
   exit 2
 }
+git rev-parse --is-inside-work-tree >/dev/null 2>&1 || {
+  echo "Not a Git worktree: ${worktree}" >&2
+  exit 2
+}
 
 # Gitignored paths are left out so build output from local checks does not count as a change.
 fingerprint() {
   {
     git status --porcelain=v1 --untracked-files=all
     git diff HEAD --binary
-    git ls-files --others --exclude-standard | while IFS= read -r f; do git hash-object -- "${f}"; done
+    git ls-files -z --others --exclude-standard | while IFS= read -r -d '' f; do git hash-object -- "${f}"; done
   } | git hash-object --stdin
 }
 
@@ -43,7 +47,8 @@ codex)
   codex exec review --uncommitted --ephemeral -c 'sandbox_mode="read-only"' -o "${out}" </dev/null >"${log}" 2>&1
   ;;
 opencode)
-  OPENCODE_CONFIG_CONTENT='{"permission":{"edit":"deny","webfetch":"deny","bash":{"*":"deny","git diff*":"allow","git status*":"allow","git log*":"allow","git show*":"allow","git ls-files*":"allow"}}}' \
+  # OpenCode has no OS sandbox, so write-capable git options and redirects are denied explicitly.
+  OPENCODE_CONFIG_CONTENT='{"permission":{"edit":"deny","webfetch":"deny","bash":{"*":"deny","git diff*":"allow","git status*":"allow","git log*":"allow","git show*":"allow","git ls-files*":"allow","*--output*":"deny","*>*":"deny"}}}' \
     opencode run --agent plan --command review </dev/null >"${out}" 2>"${log}"
   ;;
 esac
