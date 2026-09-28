@@ -45,7 +45,7 @@ Scan the diff content, staged and unstaged, for common secret-value patterns:
 - AWS keys such as `AKIA[0-9A-Z]{16}`
 - Private key headers such as `-----BEGIN [A-Z ]*PRIVATE KEY-----`
 - GitHub tokens such as `gh[pousr]_[A-Za-z0-9]{20,}`
-- OpenAI or Anthropic-style keys such as `sk-[A-Za-z0-9]{20,}`
+- OpenAI or Anthropic-style keys such as `\bsk-[A-Za-z0-9_-]{20,}` (covers `sk-ant-api03-…` and `sk-proj-…`)
 - Slack tokens such as `xox[baprs]-`
 - A literal-looking value assigned to `password` or `token`
 
