@@ -344,7 +344,7 @@ EOF
 fi
 ```
 
-Secret screen, run before step 2 above: the commit skill's Step 2 patterns against the status paths and diff — `.env*`, `*.pem`, `*.key`, `id_rsa*`, `*credentials*`, `*secret*`, `*.p12`, `service-account*.json`; `AKIA[0-9A-Z]{16}`, private-key headers, `gh[pousr]_[A-Za-z0-9]{20,}`, `sk-[A-Za-z0-9]{20,}`, `xox[baprs]-`, literal values assigned to `password`/`token`. Any hit: unstage it via `restore --staged`, since `add -N` touched the index, post the finding as a comment on the Issue, and park it per SKILL.md Step 7 — never ship it silently.
+Secret screen, run before step 2 above: the commit skill's Step 2 patterns against the status paths and diff — `.env*`, `*.pem`, `*.key`, `id_rsa*`, `*credentials*`, `*secret*`, `*.p12`, `service-account*.json`; `AKIA[0-9A-Z]{16}`, private-key headers, `gh[pousr]_[A-Za-z0-9]{20,}`, `\bsk-[A-Za-z0-9_-]{20,}`, `xox[baprs]-`, literal values assigned to `password`/`token`. Any hit: unstage it via `restore --staged`, since `add -N` touched the index, post the finding as a comment on the Issue, and park it per SKILL.md Step 7 — never ship it silently.
 
 ## §4 Cleanup After Merge — Step 8 rescan
 
