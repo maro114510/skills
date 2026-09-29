@@ -247,7 +247,7 @@ fi
 ```
 <!-- orchestrate-epic-state -->
 orchestrate-epic state:
-- cycle: <再ディスパッチ回数。初回ディスパッチは 0>
+- cycle: <reviewer 再 review 回数。blocking 修正・nit のみの修正を問わず 1 回として数え、初回 review は 0>
 - head_sha: <workerが報告した HEAD_SHA。コミットがまだなければ none>
 - reviewed_sha: <直近の APPROVE が束縛された HEAD。有効な承認がなければ none>
 - verified_base: <その APPROVE が比較した default branch の commit SHA。有効な承認がなければ none>
@@ -255,7 +255,7 @@ orchestrate-epic state:
 - decisions: <このIssueについて人間が下した判断。なければ なし>
 ```
 
-`cycle` counts reviewer fix cycles only, a REQUEST_CHANGES re-dispatch from Step 6; a BLOCKED answer or FAILED retry from Step 5 leaves it unchanged, and neither resets it. The one exception is an authorized `retry` or `redo` decision on a `parked` or `rejected` Issue, SKILL.md Step 2's un-parking check, which resets `cycle` to 0 — a human decision restarts the fix-cycle budget on purpose. Short of that, Step 6 reads it back on a resumed session so the 2-fix-cycle cap holds across a restart instead of starting over at 0.
+`cycle` counts every reviewer re-pass after the first review, from Step 6 — a re-dispatch for blocking findings and one for nit-only findings each add 1, since the 2-cycle cap is what bounds nit resolution too, not only blocking; a BLOCKED answer or FAILED retry from Step 5 leaves it unchanged, and neither resets it. The one exception is an authorized `retry` or `redo` decision on a `parked` or `rejected` Issue, SKILL.md Step 2's un-parking check, which resets `cycle` to 0 — a human decision restarts the fix-cycle budget on purpose. Short of that, Step 6 reads it back on a resumed session so the 2-cycle cap holds across a restart instead of starting over at 0.
 
 `head_sha` alone is not an approval — it is written after every review, including a REQUEST_CHANGES. The ship-integrity pair is `reviewed_sha` + `verified_base`: Step 6 sets both only on an APPROVE, and resets both to `none` on a REQUEST_CHANGES, a park, or a human `retry`/`redo` restart. Step 2's `awaiting-merge` sanity check compares them against the PR's `headRefOid` and the current `origin/$BASE`; Step 7's verdict gate compares them against the worktree HEAD and `origin/$BASE` before shipping; #145's merge request sends `reviewed_sha` as its expected SHA. A mismatch on either field means the recorded verdict cannot authorize a ship or a merge.
 
