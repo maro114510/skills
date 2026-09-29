@@ -8,7 +8,7 @@ description: >
   send a PR for review.
 disable-model-invocation: true
 allowed-tools: Bash, Read, Glob, Grep
-argument-hint: "[draft] [base <branch>]"
+argument-hint: "[ready] [base <branch>]"
 ---
 
 # create-pr
@@ -17,12 +17,14 @@ Analyze the branch changes and create a reviewer-focused GitHub pull request in 
 
 ## Arguments
 
-Parse `$ARGUMENTS` as follows:
+| `$ARGUMENTS` | Result |
+|---|---|
+| none | Draft PR against the default branch |
+| `ready` | Ready-for-review PR |
+| `draft` | Same as none; kept for compatibility |
+| `base <branch>` | Use `<branch>` as the base |
 
-- No arguments -> auto-detect the base branch and create a regular PR.
-- `draft` -> create a draft PR.
-- `base <branch>` -> use the specified base branch.
-- Arguments may be combined, for example: `draft base develop`.
+Combine in any order, e.g. `ready base develop`. Stop and list the valid arguments on `ready` with `draft`, an unknown token, or `base` without a branch.
 
 All PR titles, PR descriptions, and user-facing status messages produced by this skill must be written in English.
 
@@ -35,9 +37,11 @@ Run the following checks in parallel:
 ```bash
 git branch --show-current
 git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null || echo "no upstream"
-git remote show origin | grep 'HEAD branch'
+git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null || gh repo view --json defaultBranchRef --jq .defaultBranchRef.name
 git status --short
 ```
+
+Base: the `base` argument, else the detected default branch without `origin/`.
 
 **1.2 Find the PR template**
 
@@ -55,8 +59,9 @@ If a template exists, read it before generating the PR description.
 ```bash
 git log --oneline <base>..HEAD
 git diff --stat <base>...HEAD
-git diff <base>...HEAD
 ```
+
+Within 20 files and 1,000 lines, run `git diff <base>...HEAD`. Otherwise read meaningful files with `-- <path>` and skip lockfiles, generated files, and vendored code.
 
 **1.4 Stop conditions**
 
@@ -197,16 +202,11 @@ If none of these apply, keep the draft as written — depth is intentional for t
 - Use the imperative mood: "add", not "added".
 - Be specific: prefer `fix(auth): handle expired JWT on refresh` over `fix: resolve crash`.
 
-**4.2 Match existing PRs**
-
-If the repository has existing PRs, check their title style and stay consistent unless it conflicts with the rules above.
-
 ## Step 5. Consider Metadata
 
-Before creating the PR, run the following `gh` commands and use the results to propose choices to the user.
+Before creating the PR, run the following `gh` commands and use the results to choose metadata.
 Do not merely show the commands; execute them.
-Complete 5.3 and 5.4, including user confirmation, before continuing to Step 6.
-Step 5.2 does not require user confirmation because the AI chooses labels automatically.
+Do not ask the user for confirmation.
 
 **5.1 Assignee**
 
@@ -217,24 +217,14 @@ Add `--assignee @me` by default.
 Run:
 
 ```bash
-gh label list
+gh label list --limit 200 --json name,description
 ```
 
-Compare the available labels with the Step 2 analysis and automatically choose the most appropriate labels.
-Tell the user which labels were selected and why in one concise sentence.
-If no label matches, continue without labels.
+- Apply at most two labels that clearly match the change type or area. No clear match means no label.
+- Never apply status labels such as `wip` or `draft`, and never create labels.
+- Tell the user the choice and reason in one sentence.
 
-**5.3 Milestone**
-
-Run:
-
-```bash
-gh api repos/{owner}/{repo}/milestones
-```
-
-If open milestones exist, compare them with the change and ask the user whether to attach one.
-
-**5.4 Issue links**
+**5.3 Issue links**
 
 Confirm that any issue numbers extracted in Step 2.3 are included in the description using the `Closes`/`Related` choice already made there. Do not ask the user to choose between them.
 
@@ -248,7 +238,7 @@ git push -u origin <current-branch>
 
 **6.2 Create the PR**
 
-Run the following command. Do not stop after merely showing the command to the user:
+Run the following command. Do not stop after merely showing the command to the user. Add `--draft` unless `ready` was given:
 
 ```bash
 gh pr create \
@@ -260,11 +250,20 @@ EOF
   [--draft] \
   [--base <base-branch>] \
   [--assignee @me] \
-  [--label "<label>"] \
-  [--milestone "<milestone>"]
+  [--label "<label>"]
 ```
 
-**6.3 Finish**
+**6.3 Handle a failed `gh pr create`**
+
+| Error | Action |
+|---|---|
+| PR already exists | Show its URL and stop. Do not edit it |
+| Draft not supported | Ask: ready or abort. Ready reruns without `--draft` |
+| Other | Show the error verbatim and stop |
+
+Never push again or retry blindly.
+
+**6.4 Finish**
 
 After creating the PR, run:
 
@@ -272,4 +271,4 @@ After creating the PR, run:
 gh pr view --web
 ```
 
-Show the PR URL to the user.
+Show the PR URL and whether it is draft or ready.
