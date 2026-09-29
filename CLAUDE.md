@@ -60,7 +60,7 @@ description: >
   <Natural language description — also used for trigger-phrase matching>
 disable-model-invocation: true   # Optional. Runs as a direct prompt without re-invoking the model
 allowed-tools: Bash, Read, Glob, Grep   # Comma-separated. Restricts tool access.
-argument-hint: "[draft] [base <branch>]"  # Shown to user on /help
+argument-hint: "[ready] [base <branch>]"  # Shown to user on /help
 ---
 ```
 
