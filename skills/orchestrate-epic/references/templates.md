@@ -29,8 +29,8 @@ risk ラベルが無い Issue は risk:high 扱いです（表示のみで、実
 
 ### Bounds
 - max-parallel: <M>
-- fix-cycle cap: 2（Issue あたり）
-- 今回のワースト想定（予測ではなく上限）: <N 件 Issue> × 最大 5 回試行（初回 + 回答済みBLOCKEDの再送1回 + FAILED再試行1回 + reviewer修正2回、を積み上げた最悪ケース）× 最大 3 回 reviewer 実行（FAILED再試行時は reviewer を呼ばない）
+- fix-cycle cap: 2（Issue あたり。初回 review 後の再 review は blocking 修正・nit のみの修正を問わず 1 cycle として数えるため、nit のみの修正も同じ上限で止まります）
+- 今回のワースト想定（予測ではなく上限）: <N 件 Issue> × 最大 5 回試行（初回 + 回答済みBLOCKEDの再送1回 + FAILED再試行1回 + reviewer修正2回 = blocking/nit いずれも1 cycle、を積み上げた最悪ケース）× 最大 3 回 reviewer 実行（FAILED再試行時は reviewer を呼ばない。cap 到達後は残指摘のまま park し、それ以上は dispatch しません）
 - [!] wall-clock / 予算による自動停止はまだありません（#171 未実装）
 
 ### 次のアクション
@@ -53,6 +53,30 @@ Q2: <あれば>
 ```
 
 回答済みの問いを次回コメントするときは、既存の Q&A 形式（commands §2）に従う。
+
+## Ship-class Question（Step 6、Issue コメント）
+
+suspected secret、change-size split、`risk:high` の scope dispute は、ループ自身が決めてはいけない ship-class の問いです。回答が来るまで Issue は parked のままにし、時間経過・無回答を承認として扱いません。
+
+```
+orchestrate-epic: ship-class の判断が必要なため、この Issue を保留しました。
+
+種類: <suspected secret / change-size split / risk:high の scope dispute>
+内容: <何を判断する必要があるか>
+選択肢: <考えられる選択肢をそのまま列挙>
+
+この問いはループ自身では決めません。方針をこの Issue へのコメントとして残してください。次回実行時に、信頼できるコメントとして読み取ります。回答が無い限り再開しません。
+回答には `retry`（同じ worktree で修正を続ける）/ `redo`（新しいブランチでやり直す）/ `drop`（出荷しない）のいずれか 1 語を、独立した語として含めてください。この語が無いコメントは判断として読み取られず、Issue は parked のままになります。
+```
+
+`risk:low` の scope dispute だけは ship-class ではありません。Park せず、狭い解釈を採用して広い解釈を follow-up として記録し、続行します。
+
+```
+orchestrate-epic: scope dispute を risk:low として記録しました。
+
+採用した解釈: <狭い方の解釈>
+follow-up: <広い方の解釈。将来の Issue や別対応で扱う内容>
+```
 
 ## Ship Report（Step 7）
 
