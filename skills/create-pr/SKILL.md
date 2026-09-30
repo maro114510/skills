@@ -271,4 +271,4 @@ After creating the PR, run:
 gh pr view --web
 ```
 
-Show the PR URL and whether it is draft or ready.
+Show the PR URL and whether it is draft or ready. Only if the description has `Closes #NNN`, run `gh pr view --json closingIssuesReferences -q '.closingIssuesReferences[].number'`; GitHub sometimes drops the link, so name any missing issue and tell the user to link it from the Development sidebar — editing the description does not restore it.
