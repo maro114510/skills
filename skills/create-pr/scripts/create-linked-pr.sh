@@ -134,8 +134,16 @@ if [[ -n "${link_pr}" ]]; then
   exit $?
 fi
 
+# Same precedence as gh pr create, then passed explicitly so gh cannot pick another base.
+if [[ -z "${base}" ]]; then
+  branch="${head##*:}"
+  [[ -n "${branch}" ]] || branch="$(git branch --show-current 2>/dev/null)"
+  [[ -n "${branch}" ]] && base="$(git config --get "branch.${branch}.gh-merge-base" 2>/dev/null)"
+  [[ -n "${base}" ]] || base="${default}"
+fi
+
 issues="$(closing "${tmp}")"
-if [[ -n "${issues}" && -n "${base}" && "${base}" != "${default}" ]]; then
+if [[ -n "${issues}" && "${base}" != "${default}" ]]; then
   rewritten="$(closing "${tmp}" rewrite)"
   printf '%s\n' "${rewritten}" >"${tmp}"
   for n in ${issues}; do
@@ -145,8 +153,7 @@ if [[ -n "${issues}" && -n "${base}" && "${base}" != "${default}" ]]; then
 fi
 resolve_issues
 
-create_args=(--title "${title}" --body-file "${tmp}")
-[[ -n "${base}" ]] && create_args+=(--base "${base}")
+create_args=(--title "${title}" --body-file "${tmp}" --base "${base}")
 [[ -n "${head}" ]] && create_args+=(--head "${head}")
 [[ "${draft}" == 1 ]] && create_args+=(--draft)
 for a in ${assignees[@]+"${assignees[@]}"}; do create_args+=(--assignee "${a}"); done

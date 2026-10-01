@@ -328,8 +328,13 @@ else
   git -C "$WT" push -u origin "$BRANCH"
   gh pr list --repo "$REPO" --head "$BRANCH" --state all --json number   # non-empty → PR exists: bash "$SCRIPTS/create-linked-pr.sh" --repo "$REPO" --link <number>, skip creation
   BASE=$(gh repo view "$REPO" --json defaultBranchRef -q .defaultBranchRef.name)
-  (cd "$WT" && bash "$SCRIPTS/issue-refs.sh" "origin/$BASE")   # closing line for the body, SKILL.md Step 7
-  bash "$SCRIPTS/create-linked-pr.sh" --repo "$REPO" --head "$BRANCH" --base "$BASE" --title "<Issue title>" --body-file - <<'EOF'
+  if ! REFS=$(cd "$WT" && bash "$SCRIPTS/issue-refs.sh" "origin/$BASE"); then
+    # Exit 3 is a CONFLICT: park the Issue like a red check run, SKILL.md Step 7.
+    # Never create the PR and keep loop:in-progress.
+    echo "$REFS"
+  else
+    # $REFS holds the closing line for the body, SKILL.md Step 7
+    bash "$SCRIPTS/create-linked-pr.sh" --repo "$REPO" --head "$BRANCH" --base "$BASE" --title "<Issue title>" --body-file - <<'EOF'
 ## Summary
 <worker summary, condensed>
 
@@ -340,8 +345,9 @@ else
 Part of Epic #<EPIC>
 EOF
 
-  # 5. Clear the marker
-  gh issue edit "$N" --repo "$REPO" --remove-label "loop:in-progress"
+    # 5. Clear the marker
+    gh issue edit "$N" --repo "$REPO" --remove-label "loop:in-progress"
+  fi
 fi
 ```
 

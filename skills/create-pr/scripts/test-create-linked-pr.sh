@@ -72,6 +72,21 @@ esac
 STUB
 chmod +x "${bin}/gh"
 
+# git stub: current branch from $STUB_DIR/current, gh-merge-base per branch from $STUB_DIR/merge-base.<branch>.
+cat >"${bin}/git" <<'STUB'
+#!/usr/bin/env bash
+d="${STUB_DIR}"
+case "$*" in
+"branch --show-current") cat "${d}/current" 2>/dev/null || echo feat-x ;;
+"config --get branch."*".gh-merge-base")
+  b="${3#branch.}"
+  cat "${d}/merge-base.${b%.gh-merge-base}" 2>/dev/null || exit 1
+  ;;
+*) exit 1 ;;
+esac
+STUB
+chmod +x "${bin}/git"
+
 # Fresh stub state with $1 as the PR body.
 setup() {
   STUB_DIR="$(mktemp -d "${work}/stub.XXXXXX")"
@@ -215,6 +230,32 @@ r=0
 grep -qx "From stdin" "${STUB_DIR}/created_body" 2>/dev/null || r=1
 has_line "LINKED #12" || r=1
 check "--body-file - reads the body from stdin" "${r}"
+
+setup $'Closes #12'
+echo develop >"${STUB_DIR}/merge-base.feat-x"
+create
+r=0
+[[ "${rc}" == 0 ]] || r=1
+grep -q -- "pr create .*--base develop" "${STUB_DIR}/log" || r=1
+grep -qx "Related #12" "${STUB_DIR}/created_body" 2>/dev/null || r=1
+called "api graphql" && r=1
+check "gh-merge-base of the current branch is the base" "${r}"
+
+setup $'Closes #12'
+echo develop >"${STUB_DIR}/merge-base.feat-y"
+create --head feat-y
+r=0
+[[ "${rc}" == 0 ]] || r=1
+grep -q -- "pr create .*--base develop" "${STUB_DIR}/log" || r=1
+called "api graphql" && r=1
+check "gh-merge-base is read from the --head branch" "${r}"
+
+setup $'Closes #12'
+create
+r=0
+[[ "${rc}" == 0 ]] || r=1
+grep -q -- "pr create .*--base main" "${STUB_DIR}/log" || r=1
+check "default branch is passed as --base when nothing is configured" "${r}"
 
 setup ""
 run --title "t"
