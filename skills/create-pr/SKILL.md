@@ -90,7 +90,16 @@ Read the diff and the full commit history, not only the latest commit, to identi
 
 **2.3 Related issues**
 
-Extract `#NNN` references from the branch name and commit messages. Default to `Closes #NNN` for every extracted issue. Use `Related: #NNN` instead only when the diff, commit messages, or branch name make it clear the issue is not actually resolved by this PR (for example, it covers only part of the issue's scope).
+Run `bash <skill-dir>/scripts/issue-refs.sh <base>`. `<skill-dir>` is the directory containing this SKILL.md.
+
+| Case | Reference |
+|---|---|
+| Line printed | Copy it as is |
+| Exit 3 with `CONFLICT #NNN` | Stop. An older commit closes the issue that the newest commit marks Related |
+| Issue only in the branch name or a commit subject | `Closes #NNN`, or `Related #NNN` if the diff covers only part of the issue |
+
+- One reference per line. GitHub links only the first issue of `Closes #1, #2`.
+- For each `Related` issue, state what this PR resolves and what remains.
 
 If the diff is large, meaning more than 20 files or more than 1,000 changed lines, organize the description into logical groups.
 
@@ -238,28 +247,32 @@ git push -u origin <current-branch>
 
 **6.2 Create the PR**
 
-Run the following command. Do not stop after merely showing the command to the user. Add `--draft` unless `ready` was given:
+Never run `gh pr create` directly. GitHub can lag hours before it links a closing keyword, so the script links each `Closes` line through the API and waits until the link appears. On a non-default base it rewrites `Closes` to `Related`, because GitHub ignores closing keywords there.
+
+Run the command; do not stop after showing it. Add `--draft` unless `ready` was given:
 
 ```bash
-gh pr create \
+bash <skill-dir>/scripts/create-linked-pr.sh \
   --title "<title>" \
-  --body "$(cat <<'EOF'
-<description>
-EOF
-)" \
+  --body-file - \
   [--draft] \
   [--base <base-branch>] \
   [--assignee @me] \
-  [--label "<label>"]
+  [--label "<label>"] <<'EOF'
+<description>
+EOF
 ```
 
-**6.3 Handle a failed `gh pr create`**
+**6.3 Handle the result**
 
-| Error | Action |
-|---|---|
-| PR already exists | Show its URL and stop. Do not edit it |
-| Draft not supported | Ask: ready or abort. Ready reruns without `--draft` |
-| Other | Show the error verbatim and stop |
+| Exit | Output | Action |
+|---|---|---|
+| 0 | PR URL, `LINKED #NNN`, `NOTICE` | Continue to 6.4 |
+| 1 | PR already exists | Show its URL and stop. Do not edit it |
+| 1 | Draft not supported | Ask: ready or abort. Ready reruns without `--draft` |
+| 1 | Other | Show the error verbatim and stop |
+| 2 | `ISSUE_NOT_FOUND #NNN` | No PR was created. Name the issues and stop |
+| 3 | PR URL, `LINK_MISSING #NNN` | Rerun once with `--link <url>`. If still missing, ask the user to link it from the Development sidebar |
 
 Never push again or retry blindly.
 
@@ -271,4 +284,4 @@ After creating the PR, run:
 gh pr view --web
 ```
 
-Show the PR URL and whether it is draft or ready. Only if the description has `Closes #NNN`, run `gh pr view --json closingIssuesReferences -q '.closingIssuesReferences[].number'`; GitHub sometimes drops the link, so name any missing issue and tell the user to link it from the Development sidebar — editing the description does not restore it.
+Show the PR URL, whether it is draft or ready, every linked issue, and any `NOTICE` line verbatim.

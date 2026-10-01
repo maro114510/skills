@@ -117,7 +117,12 @@ Bad (file enumeration — "what" wearing structure, not why):
 - create-pr/SKILL.md: cross-reference updated to match.
 ```
 
-**Footer**: add `Closes #NNN` or `Related #NNN` when an issue number is inferable from the branch name or conversation context.
+**Footer**: when an issue number is inferable from the branch name or conversation context:
+
+- `Closes #NNN` only if the issue is fully resolved, such as when implement Phase 6.9 left nothing deferred or without evidence
+- `Related #NNN` otherwise
+
+create-pr copies this keyword into the PR, and a merge commit closes the issue from it alone.
 Add a `BREAKING CHANGE:` line when the change breaks an existing interface, config format, or behavior.
 
 **No AI attribution trailer.** Do not add `Co-Authored-By` or similar provenance trailers — this matches the existing convention across this repository's entire commit history.
