@@ -172,26 +172,25 @@ In autonomous mode, follow the worktree rules in Autonomous Mode and skip the no
 
 For normal mode:
 
-1. Verify the checkout is still clean. Never stash, discard, or overwrite existing changes. If it is dirty,
-   stop and ask how the user wants to preserve that work.
-2. Resolve the base branch from an explicit approved choice or `refs/remotes/origin/HEAD`. Do not assume `main`.
+1. Resolve the base branch from an explicit approved choice or `refs/remotes/origin/HEAD`. Do not assume `main`.
    If no trustworthy base can be resolved, ask before changing Git state.
-3. Switch to the base branch and update it only with a fast-forward pull:
+2. Update only the remote-tracking ref. Never `git switch` or `git pull` in the current checkout — it may be
+   shared with other agents or sessions, and rewriting its files disrupts them:
    ```bash
-   git switch <base-branch>
-   git pull --ff-only origin <base-branch>
+   git fetch origin <base-branch>
    ```
-   If either command would overwrite work, diverges, or fails, stop and report the state; do not force it.
-4. Choose a GitHub Flow-compliant branch name (e.g., `feat/add-login`, `fix/null-pointer-on-checkout`) and run:
+   If the fetch fails, stop and report the state.
+3. Choose a GitHub Flow-compliant branch name (e.g., `feat/add-login`, `fix/null-pointer-on-checkout`) and
+   create the worktree directly from the fetched remote base:
    ```bash
-   git wt <branch-name>
+   git wt <branch-name> origin/<base-branch>
    ```
 
 Capture the worktree path printed by `git wt`; its location is configuration-dependent. Run every subsequent
 command relative to that path. Because shell state does not persist between tool calls, prefix commands that
 need the worktree with `cd <worktree-path> && <command>`.
 
-Recheck the relevant files after setup. If the updated base changed a material premise of the approved plan,
+Recheck the relevant files after setup. If the fetched base changed a material premise of the approved plan,
 return to Phase 2.
 
 ---
