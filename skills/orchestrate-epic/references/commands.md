@@ -324,23 +324,30 @@ if [ "$CHECK_FAILED" -ne 0 ]; then
   # move on to the next Issue in the round — do not reach sub-step 4 below for this Issue.
 else
   # 4. Push (repeat-safe), then create the PR — only if none exists yet for this branch
+  SCRIPTS="<create-pr skill dir>/scripts"
   git -C "$WT" push -u origin "$BRANCH"
-  gh pr list --repo "$REPO" --head "$BRANCH" --state all --json number   # non-empty → PR exists, skip creation
+  gh pr list --repo "$REPO" --head "$BRANCH" --state all --json number   # non-empty → PR exists: bash "$SCRIPTS/create-linked-pr.sh" --repo "$REPO" --link <number>, skip creation
   BASE=$(gh repo view "$REPO" --json defaultBranchRef -q .defaultBranchRef.name)
-  gh pr create --repo "$REPO" --head "$BRANCH" --base "$BASE" --title "<Issue title>" --body "$(cat <<'EOF'
+  if ! REFS=$(cd "$WT" && bash "$SCRIPTS/issue-refs.sh" "origin/$BASE"); then
+    # Exit 3 is a CONFLICT: park the Issue like a red check run, SKILL.md Step 7.
+    # Never create the PR and keep loop:in-progress.
+    echo "$REFS"
+  else
+    # $REFS holds the closing line for the body, SKILL.md Step 7
+    bash "$SCRIPTS/create-linked-pr.sh" --repo "$REPO" --head "$BRANCH" --base "$BASE" --title "<Issue title>" --body-file - <<'EOF'
 ## Summary
 <worker summary, condensed>
 
 ## Check evidence
 <CHECKS and CRITERIA sections from the worker report>
 
-Closes #<N>
+<closing line from issue-refs.sh or SKILL.md Step 7>
 Part of Epic #<EPIC>
 EOF
-)"
 
-  # 5. Clear the marker
-  gh issue edit "$N" --repo "$REPO" --remove-label "loop:in-progress"
+    # 5. Clear the marker
+    gh issue edit "$N" --repo "$REPO" --remove-label "loop:in-progress"
+  fi
 fi
 ```
 

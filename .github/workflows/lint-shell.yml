@@ -52,6 +52,19 @@ jobs:
       - name: Run self-review.sh test suite
         run: bash skills/implement/scripts/test-self-review.sh
 
+  create-pr-script-tests:
+    name: create-pr script tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Run create-linked-pr.sh test suite
+        run: bash skills/create-pr/scripts/test-create-linked-pr.sh
+
+      - name: Run issue-refs.sh test suite
+        run: bash skills/create-pr/scripts/test-issue-refs.sh
+
   shellcheck:
     name: ShellCheck
     runs-on: ubuntu-latest
