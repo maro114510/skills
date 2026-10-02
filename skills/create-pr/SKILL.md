@@ -1,19 +1,20 @@
 ---
 name: create-pr
 description: >
-  Create a GitHub pull request with a high-signal English title and description.
+  Create a GitHub pull request with a high-signal title and description, written
+  in Japanese by default; pass `lang en` to write it in English instead.
   Analyze the branch diff and complete commit history to explain the motivation,
   impact, risks, implementation choices, and review focus before running
   `gh pr create`. Use this skill when the user asks to open, create, submit, or
   send a PR for review.
 disable-model-invocation: true
 allowed-tools: Bash, Read, Glob, Grep
-argument-hint: "[ready] [base <branch>]"
+argument-hint: "[ready] [base <branch>] [lang <ja|en>]"
 ---
 
 # create-pr
 
-Analyze the branch changes and create a reviewer-focused GitHub pull request in English.
+Analyze the branch changes and create a reviewer-focused GitHub pull request in Japanese by default, or in English with `lang en`.
 
 ## Arguments
 
@@ -23,10 +24,11 @@ Analyze the branch changes and create a reviewer-focused GitHub pull request in 
 | `ready` | Ready-for-review PR |
 | `draft` | Same as none; kept for compatibility |
 | `base <branch>` | Use `<branch>` as the base |
+| `lang <ja\|en>` | Output language, stored as `LANG`; `ja` when omitted |
 
-Combine in any order, e.g. `ready base develop`. Stop and list the valid arguments on `ready` with `draft`, an unknown token, or `base` without a branch.
+Combine in any order, e.g. `ready base develop lang en`. Stop and list the valid arguments on `ready` with `draft`, an unknown token, `base` without a branch, or `lang` without `ja` or `en`.
 
-All PR titles, PR descriptions, and user-facing status messages produced by this skill must be written in English.
+All PR titles, PR descriptions, and user-facing status messages produced by this skill must be written in `LANG`, following Step 3.1.
 
 ## Step 1. Collect Context and Detect the PR Template
 
@@ -107,9 +109,11 @@ If the diff is large, meaning more than 20 files or more than 1,000 changed line
 
 ### 3.1 Language
 
-Write the PR title, PR description, and user-facing status messages in English by default. Do not auto-detect another language from previous PRs or commit messages.
+Write the PR title, PR description, and user-facing status messages in `LANG`: Japanese for `ja` (the default), English for `en`. Do not auto-detect another language from previous PRs or commit messages.
 
-If a repository template is written in another language, preserve the template's structure, but fill in the content in natural English unless the template explicitly requires otherwise.
+These stay in English regardless of `LANG`: the Conventional Commits type and scope in the title, the `Closes #NNN` / `Related #NNN` lines, code identifiers, commands, and paths, and script output that Step 6 says to show verbatim.
+
+If a repository template is written in another language, preserve the template's structure, but fill in the content in natural `LANG` unless the template explicitly requires otherwise.
 
 ### 3.2 When a template exists
 
@@ -121,6 +125,19 @@ Follow the template found in Step 1.2. Do not ignore it:
 - Add useful information that the template does not ask for, such as background, implementation details, risks, or future considerations, as extra sections at the end.
 
 ### 3.3 Default structure when no template exists
+
+Use the structure below. For `ja`, replace each heading with its Japanese form; for `en`, keep the headings as written.
+
+| `en` | `ja` |
+|---|---|
+| Background | 背景 |
+| Summary | 概要 |
+| Implementation Details | 実装方針 |
+| Changes | 変更内容 |
+| Impact | 影響範囲 |
+| Concerns | 懸念点 |
+| Future Considerations | 今後の検討事項 |
+| Test Plan | テスト計画 |
 
 ```markdown
 ## Background
@@ -208,7 +225,8 @@ If none of these apply, keep the draft as written — depth is intentional for t
 - Use Conventional Commits format: `feat:`, `fix:`, `refactor:`, and so on. Add a scope when useful, for example `fix(location):`.
 - For breaking changes, add `!` after the type or scope, for example `feat(config)!:` or `fix(api)!:`.
 - Keep the title under 70 characters.
-- Use the imperative mood: "add", not "added".
+- For `en`, use the imperative mood: "add", not "added".
+- For `ja`, keep the type and scope in English and write the subject in Japanese, for example `fix(auth): リフレッシュ時に期限切れの JWT を処理する`.
 - Be specific: prefer `fix(auth): handle expired JWT on refresh` over `fix: resolve crash`.
 
 ## Step 5. Consider Metadata
