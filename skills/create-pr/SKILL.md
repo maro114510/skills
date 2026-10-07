@@ -265,7 +265,7 @@ git push -u origin <current-branch>
 
 **6.2 Create the PR**
 
-Never run `gh pr create` directly. GitHub can lag hours before it links a closing keyword, so the script links each `Closes` line through the API and waits until the link appears. It rewrites `Closes` to `Related` for an issue with open sub-issues, so a partial PR never closes its parent. On a non-default base it keeps `Closes` but links nothing, because GitHub honors the keyword only once the PR targets the default branch.
+Never run `gh pr create` directly. GitHub can lag hours before it links a closing keyword, so the script links each `Closes` line through the API and waits until the link appears. It rewrites `Closes` to `Related` for an issue with open sub-issues, noting how many remain, so a partial PR never closes its parent; with `--link` it applies that rewrite to the existing PR body. On a non-default base it keeps `Closes` but links nothing, because GitHub honors the keyword only once the PR targets the default branch.
 
 Run the command; do not stop after showing it. Add `--draft` unless `ready` was given:
 
@@ -303,5 +303,5 @@ gh pr view --web
 ```
 
 Show the PR URL, whether it is draft or ready, every linked issue, and any `NOTICE` line verbatim.
-If a `NOTICE` rewrote an issue to `Related` while a commit footer still says `Closes` for it, warn that a merge commit would still close the issue; squash merging avoids that.
+If a `NOTICE` rewrote an issue to `Related` while a commit footer still says `Closes` for it, warn that merging would still close the issue through that footer, even with a squash merge under GitHub's default message; edit the squash message or reword the footer before merging.
 If a `NOTICE` kept `Closes` unlinked on a non-default base, tell the user to run `create-linked-pr.sh --link <url>` once the PR is retargeted to the default branch.

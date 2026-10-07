@@ -13,6 +13,8 @@ fail=0
 # - missing: issue numbers that do not exist
 # - open.<n>: open sub-issue count of issue <n>, 0 when absent
 # - no_subs: gh too old to know the subIssuesSummary field
+# - subs_fail: the subIssuesSummary query fails for another reason
+# - edited_body: body written by gh pr edit
 # - create_fail, pr_view_fail, link_noop: force that failure
 # - refs: linked issue numbers. lag: reads that still return the old list
 bin="${work}/bin"
@@ -32,6 +34,9 @@ case "${args}" in
   fi
   if [[ "${args}" != *subIssuesSummary* ]]; then
     echo "I_${n}"
+  elif [[ -f "${d}/subs_fail" ]]; then
+    echo "HTTP 502: Bad Gateway" >&2
+    exit 1
   elif [[ -f "${d}/no_subs" ]]; then
     echo 'Unknown JSON field: "subIssuesSummary"' >&2
     exit 1
@@ -66,6 +71,12 @@ case "${args}" in
     rm -f "${d}/pending"
   fi
   cat "${d}/refs" 2>/dev/null
+  ;;
+*" pr edit "*)
+  while [[ $# -gt 0 ]]; do
+    if [[ "$1" == "--body-file" ]]; then cp "$2" "${d}/edited_body"; fi
+    shift
+  done
   ;;
 *" pr view "*"baseRefName"*) cat "${d}/base" 2>/dev/null || echo main ;;
 *" pr view "*"body"*) cat "${d}/body" ;;
@@ -177,7 +188,7 @@ echo 3 >"${STUB_DIR}/open.12"
 create
 r=0
 [[ "${rc}" == 0 ]] || r=1
-grep -qx "Related #12" "${STUB_DIR}/created_body" 2>/dev/null || r=1
+grep -qx "Related #12 (3 open sub-issues remain)" "${STUB_DIR}/created_body" 2>/dev/null || r=1
 grep -q "Closes" "${STUB_DIR}/created_body" 2>/dev/null && r=1
 called "api graphql" && r=1
 has_line "NOTICE: #12 has 3 open sub-issues; rewrote to Related #12" || r=1
@@ -188,7 +199,7 @@ echo 2 >"${STUB_DIR}/open.12"
 create
 r=0
 [[ "${rc}" == 0 ]] || r=1
-grep -qx "Related #12" "${STUB_DIR}/created_body" 2>/dev/null || r=1
+grep -qx "Related #12 (2 open sub-issues remain)" "${STUB_DIR}/created_body" 2>/dev/null || r=1
 grep -qx "Closes #13" "${STUB_DIR}/created_body" 2>/dev/null || r=1
 called "i=I_12" && r=1
 has_line "LINKED #13" || r=1
@@ -200,9 +211,27 @@ echo 1 >"${STUB_DIR}/open.12"
 create --base develop
 r=0
 [[ "${rc}" == 0 ]] || r=1
-grep -qx "Related #12" "${STUB_DIR}/created_body" 2>/dev/null || r=1
+grep -qx "Related #12 (1 open sub-issues remain)" "${STUB_DIR}/created_body" 2>/dev/null || r=1
 called "api graphql" && r=1
 check "open sub-issues are rewritten on a non-default base too" "${r}"
+
+setup $'Closes #012'
+echo 3 >"${STUB_DIR}/open.12"
+create
+r=0
+[[ "${rc}" == 0 ]] || r=1
+grep -qx "Related #12 (3 open sub-issues remain)" "${STUB_DIR}/created_body" 2>/dev/null || r=1
+called "api graphql" && r=1
+check "leading zeros do not dodge the sub-issue rewrite" "${r}"
+
+setup $'Closes #12'
+touch "${STUB_DIR}/subs_fail"
+create
+r=0
+[[ "${rc}" == 2 ]] || r=1
+called "pr create" && r=1
+has_line "ISSUE_NOT_FOUND #12: HTTP 502: Bad Gateway" || r=1
+check "a failed sub-issue query stops instead of skipping the guard" "${r}"
 
 setup $'Closes #5'
 echo 5 >"${STUB_DIR}/missing"
@@ -295,9 +324,22 @@ run --link 7
 r=0
 [[ "${rc}" == 0 ]] || r=1
 called "i=I_12" && r=1
-has_line "NOTICE: #12 has 4 open sub-issues; not linked" || r=1
+has_line "NOTICE: #12 has 4 open sub-issues; rewrote to Related #12" || r=1
+grep -qx "Related #12 (4 open sub-issues remain)" "${STUB_DIR}/edited_body" 2>/dev/null || r=1
+grep -qx "Closes #13" "${STUB_DIR}/edited_body" 2>/dev/null || r=1
 has_line "LINKED #13" || r=1
-check "--link skips an issue with open sub-issues" "${r}"
+check "--link rewrites an issue with open sub-issues in the PR body" "${r}"
+
+setup ""
+printf 'Closes #12\n' >"${STUB_DIR}/body"
+echo develop >"${STUB_DIR}/base"
+echo 2 >"${STUB_DIR}/open.12"
+run --link 7
+r=0
+[[ "${rc}" == 0 ]] || r=1
+called "api graphql" && r=1
+grep -qx "Related #12 (2 open sub-issues remain)" "${STUB_DIR}/edited_body" 2>/dev/null || r=1
+check "--link on a non-default base still rewrites open sub-issues" "${r}"
 
 setup ""
 out="$(printf 'From stdin\nCloses #12\n' | PATH="${bin}:${PATH}" LINK_POLL_ATTEMPTS=3 LINK_POLL_INTERVAL=0 bash "${target}" --title t --body-file - 2>&1)"
