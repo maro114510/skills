@@ -123,7 +123,7 @@ Bad (file enumeration — "what" wearing structure, not why):
 - `Related #NNN` only on an explicit signal: the caller reports deferred items, such as a non-empty `SKIPPED`; the user says the work is partial; or the issue is only cited in passing rather than being the one this branch works on
 
 A criterion that lacks evidence but was not deferred does not by itself make it `Related`.
-On a follow-up commit, such as a review fix, reuse the keyword an earlier commit on this branch already carries for the issue, and never downgrade `Closes` to `Related` without one of the signals above.
+On a follow-up commit, such as a review fix, keep `Closes` if an earlier commit already carries it for the issue; never downgrade it to `Related` without one of the signals above. An earlier `Related` does not carry forward — judge afresh.
 create-pr copies this keyword into the PR, and a merge commit closes the issue from it alone.
 Add a `BREAKING CHANGE:` line when the change breaks an existing interface, config format, or behavior.
 

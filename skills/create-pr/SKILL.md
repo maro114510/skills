@@ -98,7 +98,7 @@ Run `bash <skill-dir>/scripts/issue-refs.sh <base>`. `<skill-dir>` is the direct
 |---|---|
 | Line printed | Copy it as is |
 | Exit 3 with `CONFLICT #NNN` | Stop. An older commit closes the issue that the newest commit marks Related |
-| Issue only in the branch name or a commit subject | `Closes #NNN`, or `Related #NNN` only on the commit skill's explicit partial signals |
+| Issue only in the branch name or a commit subject | `Closes #NNN`, or `Related #NNN` only when deferred items were reported, the user said the work is partial, or the issue is only cited in passing |
 
 - One reference per line. GitHub links only the first issue of `Closes #1, #2`.
 - For each `Related` issue, state what this PR resolves and what remains.
@@ -304,3 +304,4 @@ gh pr view --web
 
 Show the PR URL, whether it is draft or ready, every linked issue, and any `NOTICE` line verbatim.
 If a `NOTICE` rewrote an issue to `Related` while a commit footer still says `Closes` for it, warn that a merge commit would still close the issue; squash merging avoids that.
+If a `NOTICE` kept `Closes` unlinked on a non-default base, tell the user to run `create-linked-pr.sh --link <url>` once the PR is retargeted to the default branch.
