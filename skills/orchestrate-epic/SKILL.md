@@ -212,7 +212,7 @@ Every reviewer-APPROVE Issue from this round ships immediately — there is no s
 
    | Case | Action |
    |---|---|
-   | `issue-refs.sh` prints nothing for this Issue | `Closes #<number>` if `SKIPPED` is empty and every criterion has evidence, else `Related #<number>` with what remains |
+   | `issue-refs.sh` prints nothing for this Issue | `Closes #<number>` if `SKIPPED` is empty, else `Related #<number>` with what remains |
    | `issue-refs.sh` exits 3 | Park the Issue like a red check run |
    | PR already exists | Run `create-linked-pr.sh --link <pr>` instead of creating one |
    | `create-linked-pr.sh` exits 3 | Comment the missing link on the Issue and continue shipping |

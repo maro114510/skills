@@ -6,7 +6,7 @@ description: >
   Otherwise it commits automatically and reports what it did.
   Called by create-pr and implement when they need to commit changes.
   Can also be invoked directly with phrases like "commit this," "write a commit message," or "commit these changes."
-allowed-tools: Bash(git status:*, git diff:*, git log:*, git add:*, git restore:*, git commit:*), Read, AskUserQuestion
+allowed-tools: Bash(git status:*, git diff:*, git log:*, git add:*, git restore:*, git commit:*, gh issue view:*), Read, AskUserQuestion
 argument-hint: "[optional hint, e.g. an issue number or message override]"
 ---
 
@@ -19,6 +19,7 @@ git status --short
 git diff --staged
 git diff
 git log -5 --format="%s"
+git log --format="--- %h%n%B" origin/HEAD..HEAD 2>/dev/null
 ```
 
 If both `git status --short` and `git diff --staged` are empty, report "nothing to commit" and stop.
@@ -117,11 +118,13 @@ Bad (file enumeration — "what" wearing structure, not why):
 - create-pr/SKILL.md: cross-reference updated to match.
 ```
 
-**Footer**: when an issue number is inferable from the branch name or conversation context:
+**Footer**: when an issue number is inferable from the branch name, `$ARGUMENTS`, or conversation context, judge whether merging the whole branch resolves the issue, not this commit alone:
 
-- `Closes #NNN` only if the issue is fully resolved, such as when implement Phase 6.9 left nothing deferred or without evidence
-- `Related #NNN` otherwise
+- `Closes #NNN` by default, unless `gh issue view NNN --json subIssuesSummary` shows open sub-issues, where `completed` is below `total`; a partial branch must not close a parent, and a squash merge keeps commit footers by default. If the command fails, keep `Closes`
+- `Related #NNN` only on an explicit signal: the caller reports deferred items, such as a non-empty `SKIPPED`; the user says the work is partial; or the issue is only cited in passing rather than being the one this branch works on
 
+A criterion that lacks evidence but was not deferred does not by itself make it `Related`.
+On a follow-up commit, such as a review fix, keep `Closes` if an earlier branch commit, from the `origin/HEAD..HEAD` log, already carries it for the issue; never downgrade it to `Related` without one of the signals above. An earlier `Related` does not carry forward — judge afresh.
 create-pr copies this keyword into the PR, and a merge commit closes the issue from it alone.
 Add a `BREAKING CHANGE:` line when the change breaks an existing interface, config format, or behavior.
 

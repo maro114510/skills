@@ -39,15 +39,18 @@ tmp="$(mktemp "${TMPDIR:-/tmp}/create-linked-pr.XXXXXX")"
 err="${tmp}.err"
 trap 'rm -f "${tmp}" "${err}"' EXIT
 
-# Lists issue numbers of closing lines outside code fences, or with $2=rewrite turns them into Related.
+# Lists issue numbers of closing lines outside code fences, or with $2=rewrite turns those for the "<n>:<open count>" pairs in $3 into Related.
 closing() {
-  awk -v mode="${2:-list}" '
+  awk -v mode="${2:-list}" -v pairs="${3:-}" '
+    BEGIN { n = split(pairs, p, " "); for (i = 1; i <= n; i++) { split(p[i], kv, ":"); open[kv[1] + 0] = kv[2] } }
     /^[[:space:]]*(```|~~~)/ { fence = !fence; if (mode == "rewrite") print; next }
     {
       l = tolower($0)
       if (!fence && l ~ /^[[:space:]]*(close[sd]?|fix(e[sd])?|resolve[sd]?):?[[:space:]]+#[0-9]+[[:space:]]*$/) {
-        sub(/^[^#]*#/, "", l); sub(/[[:space:]]*$/, "", l)
-        if (mode == "rewrite") print "Related #" l; else print l
+        sub(/^[^#]*#/, "", l); l += 0
+        if (mode != "rewrite") print l
+        else if (l in open) print "Related #" l " (" open[l] " open sub-issues remain)"
+        else print
         next
       }
       if (mode == "rewrite") print
@@ -60,18 +63,44 @@ refs() {
     --jq '.closingIssuesReferences[].number'
 }
 
+# Keeps in $issues only those without open sub-issues; the rest go to $parents as "<n>:<open count>".
 resolve_issues() {
   issue_ids=()
-  local n id missing=0
+  parents=""
+  local n id open row kept="" missing=0
   for n in ${issues}; do
-    if id="$(gh issue view "${n}" ${repo_args[@]+"${repo_args[@]}"} --json id --jq .id 2>"${err}")" && [[ -n "${id}" ]]; then
-      issue_ids+=("${id}")
+    # Only a gh too old for sub-issues may skip the guard; any other failure must not.
+    if ! row="$(gh issue view "${n}" ${repo_args[@]+"${repo_args[@]}"} --json id,subIssuesSummary \
+      --jq '[.id, ((.subIssuesSummary.total // 0) - (.subIssuesSummary.completed // 0))] | @tsv' 2>"${err}")" &&
+      grep -q 'subIssuesSummary' "${err}"; then
+      row="$(gh issue view "${n}" ${repo_args[@]+"${repo_args[@]}"} --json id --jq .id 2>"${err}")"
+    fi
+    if [[ -n "${row}" ]]; then
+      id="${row%%$'\t'*}"
+      open=0
+      [[ "${row}" == *$'\t'* ]] && open="${row#*$'\t'}"
+      if [[ "${open}" =~ ^[1-9][0-9]*$ ]]; then
+        parents+="${n}:${open} "
+      else
+        issue_ids+=("${id}")
+        kept+="${n} "
+      fi
     else
       echo "ISSUE_NOT_FOUND #${n}: $(tr '\n' ' ' <"${err}" | sed 's/[[:space:]]*$//')"
       missing=1
     fi
   done
   [[ "${missing}" == 0 ]] || exit 2
+  issues="${kept}"
+}
+
+# Rewrites the closing lines of $parents in the body file to Related, so a partial PR never closes its parent.
+rewrite_parents() {
+  [[ -n "${parents}" ]] || return 1
+  local rewritten p
+  rewritten="$(closing "${tmp}" rewrite "${parents}")"
+  printf '%s\n' "${rewritten}" >"${tmp}"
+  for p in ${parents}; do echo "NOTICE: #${p%%:*} has ${p#*:} open sub-issues; rewrote to Related #${p%%:*}"; done
 }
 
 # Links each issue missing from PR $1, then polls until all appear.
@@ -125,11 +154,16 @@ if [[ -n "${link_pr}" ]]; then
   issues="$(closing "${tmp}")"
   [[ -z "${issues}" ]] && exit 0
   base="$(gh pr view "${link_pr}" ${repo_args[@]+"${repo_args[@]}"} --json baseRefName --jq .baseRefName)" || exit 1
+  resolve_issues
+  # The body keyword alone would still link the parent, so the PR body itself must change.
+  if rewrite_parents; then
+    gh pr edit "${link_pr}" ${repo_args[@]+"${repo_args[@]}"} --body-file "${tmp}" >/dev/null || exit 1
+  fi
   if [[ "${base}" != "${default}" ]]; then
     echo "NOTICE: base ${base} is not the default branch ${default}; nothing linked"
     exit 0
   fi
-  resolve_issues
+  [[ -z "${issues}" ]] && exit 0
   link_and_verify "${link_pr}"
   exit $?
 fi
@@ -143,15 +177,15 @@ if [[ -z "${base}" ]]; then
 fi
 
 issues="$(closing "${tmp}")"
+resolve_issues
+rewrite_parents
+# GitHub honors body keywords once the PR targets the default branch, for example after a retarget.
 if [[ -n "${issues}" && "${base}" != "${default}" ]]; then
-  rewritten="$(closing "${tmp}" rewrite)"
-  printf '%s\n' "${rewritten}" >"${tmp}"
   for n in ${issues}; do
-    echo "NOTICE: base ${base} is not the default branch ${default}; rewrote #${n} to Related #${n}"
+    echo "NOTICE: base ${base} is not the default branch ${default}; kept Closes #${n} unlinked"
   done
   issues=""
 fi
-resolve_issues
 
 create_args=(--title "${title}" --body-file "${tmp}" --base "${base}")
 [[ -n "${head}" ]] && create_args+=(--head "${head}")
