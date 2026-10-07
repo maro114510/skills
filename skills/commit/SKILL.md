@@ -18,7 +18,7 @@ argument-hint: "[optional hint, e.g. an issue number or message override]"
 git status --short
 git diff --staged
 git diff
-git log -5 --format="%s"
+git log -5 --format="%s%n%b"
 ```
 
 If both `git status --short` and `git diff --staged` are empty, report "nothing to commit" and stop.
@@ -117,11 +117,13 @@ Bad (file enumeration — "what" wearing structure, not why):
 - create-pr/SKILL.md: cross-reference updated to match.
 ```
 
-**Footer**: when an issue number is inferable from the branch name or conversation context:
+**Footer**: when an issue number is inferable from the branch name, `$ARGUMENTS`, or conversation context, judge whether merging the whole branch resolves the issue, not this commit alone:
 
-- `Closes #NNN` only if the issue is fully resolved, such as when implement Phase 6.9 left nothing deferred or without evidence
-- `Related #NNN` otherwise
+- `Closes #NNN` by default
+- `Related #NNN` only on an explicit signal: the caller reports deferred items, such as a non-empty `SKIPPED`; the user says the work is partial; or the issue is only cited in passing rather than being the one this branch works on
 
+A criterion that lacks evidence but was not deferred does not by itself make it `Related`.
+On a follow-up commit, such as a review fix, reuse the keyword an earlier commit on this branch already carries for the issue, and never downgrade `Closes` to `Related` without one of the signals above.
 create-pr copies this keyword into the PR, and a merge commit closes the issue from it alone.
 Add a `BREAKING CHANGE:` line when the change breaks an existing interface, config format, or behavior.
 

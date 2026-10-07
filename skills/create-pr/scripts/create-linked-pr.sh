@@ -39,15 +39,17 @@ tmp="$(mktemp "${TMPDIR:-/tmp}/create-linked-pr.XXXXXX")"
 err="${tmp}.err"
 trap 'rm -f "${tmp}" "${err}"' EXIT
 
-# Lists issue numbers of closing lines outside code fences, or with $2=rewrite turns them into Related.
+# Lists issue numbers of closing lines outside code fences, or with $2=rewrite turns those for the numbers in $3 into Related.
 closing() {
-  awk -v mode="${2:-list}" '
+  awk -v mode="${2:-list}" -v only=" ${3:-} " '
     /^[[:space:]]*(```|~~~)/ { fence = !fence; if (mode == "rewrite") print; next }
     {
       l = tolower($0)
       if (!fence && l ~ /^[[:space:]]*(close[sd]?|fix(e[sd])?|resolve[sd]?):?[[:space:]]+#[0-9]+[[:space:]]*$/) {
         sub(/^[^#]*#/, "", l); sub(/[[:space:]]*$/, "", l)
-        if (mode == "rewrite") print "Related #" l; else print l
+        if (mode != "rewrite") print l
+        else if (index(only, " " (l + 0) " ")) print "Related #" l
+        else print
         next
       }
       if (mode == "rewrite") print
@@ -60,18 +62,32 @@ refs() {
     --jq '.closingIssuesReferences[].number'
 }
 
+# Keeps in $issues only those without open sub-issues; the rest go to $parents as "<n>:<open count>".
 resolve_issues() {
   issue_ids=()
-  local n id missing=0
+  parents=""
+  local n id open row kept="" missing=0
   for n in ${issues}; do
-    if id="$(gh issue view "${n}" ${repo_args[@]+"${repo_args[@]}"} --json id --jq .id 2>"${err}")" && [[ -n "${id}" ]]; then
-      issue_ids+=("${id}")
+    # Without sub-issue support in gh or the host, treat the issue as having none.
+    if row="$(gh issue view "${n}" ${repo_args[@]+"${repo_args[@]}"} --json id,subIssuesSummary \
+      --jq '[.id, ((.subIssuesSummary.total // 0) - (.subIssuesSummary.completed // 0))] | @tsv' 2>"${err}" ||
+      gh issue view "${n}" ${repo_args[@]+"${repo_args[@]}"} --json id --jq .id 2>"${err}")" && [[ -n "${row}" ]]; then
+      id="${row%%$'\t'*}"
+      open=0
+      [[ "${row}" == *$'\t'* ]] && open="${row#*$'\t'}"
+      if [[ "${open}" =~ ^[1-9][0-9]*$ ]]; then
+        parents+="${n}:${open} "
+      else
+        issue_ids+=("${id}")
+        kept+="${n} "
+      fi
     else
       echo "ISSUE_NOT_FOUND #${n}: $(tr '\n' ' ' <"${err}" | sed 's/[[:space:]]*$//')"
       missing=1
     fi
   done
   [[ "${missing}" == 0 ]] || exit 2
+  issues="${kept}"
 }
 
 # Links each issue missing from PR $1, then polls until all appear.
@@ -130,6 +146,8 @@ if [[ -n "${link_pr}" ]]; then
     exit 0
   fi
   resolve_issues
+  for p in ${parents}; do echo "NOTICE: #${p%%:*} has ${p#*:} open sub-issues; not linked"; done
+  [[ -z "${issues}" ]] && exit 0
   link_and_verify "${link_pr}"
   exit $?
 fi
@@ -143,15 +161,20 @@ if [[ -z "${base}" ]]; then
 fi
 
 issues="$(closing "${tmp}")"
-if [[ -n "${issues}" && "${base}" != "${default}" ]]; then
-  rewritten="$(closing "${tmp}" rewrite)"
+resolve_issues
+# Closing an issue with open sub-issues would close a parent the PR only partly covers.
+if [[ -n "${parents}" ]]; then
+  rewritten="$(closing "${tmp}" rewrite "$(for p in ${parents}; do printf '%s ' "${p%%:*}"; done)")"
   printf '%s\n' "${rewritten}" >"${tmp}"
+  for p in ${parents}; do echo "NOTICE: #${p%%:*} has ${p#*:} open sub-issues; rewrote to Related #${p%%:*}"; done
+fi
+# GitHub honors body keywords once the PR targets the default branch, for example after a retarget.
+if [[ -n "${issues}" && "${base}" != "${default}" ]]; then
   for n in ${issues}; do
-    echo "NOTICE: base ${base} is not the default branch ${default}; rewrote #${n} to Related #${n}"
+    echo "NOTICE: base ${base} is not the default branch ${default}; kept Closes #${n} unlinked"
   done
   issues=""
 fi
-resolve_issues
 
 create_args=(--title "${title}" --body-file "${tmp}" --base "${base}")
 [[ -n "${head}" ]] && create_args+=(--head "${head}")

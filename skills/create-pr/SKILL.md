@@ -98,7 +98,7 @@ Run `bash <skill-dir>/scripts/issue-refs.sh <base>`. `<skill-dir>` is the direct
 |---|---|
 | Line printed | Copy it as is |
 | Exit 3 with `CONFLICT #NNN` | Stop. An older commit closes the issue that the newest commit marks Related |
-| Issue only in the branch name or a commit subject | `Closes #NNN`, or `Related #NNN` if the diff covers only part of the issue |
+| Issue only in the branch name or a commit subject | `Closes #NNN`, or `Related #NNN` only on the commit skill's explicit partial signals |
 
 - One reference per line. GitHub links only the first issue of `Closes #1, #2`.
 - For each `Related` issue, state what this PR resolves and what remains.
@@ -265,7 +265,7 @@ git push -u origin <current-branch>
 
 **6.2 Create the PR**
 
-Never run `gh pr create` directly. GitHub can lag hours before it links a closing keyword, so the script links each `Closes` line through the API and waits until the link appears. On a non-default base it rewrites `Closes` to `Related`, because GitHub ignores closing keywords there.
+Never run `gh pr create` directly. GitHub can lag hours before it links a closing keyword, so the script links each `Closes` line through the API and waits until the link appears. It rewrites `Closes` to `Related` for an issue with open sub-issues, so a partial PR never closes its parent. On a non-default base it keeps `Closes` but links nothing, because GitHub honors the keyword only once the PR targets the default branch.
 
 Run the command; do not stop after showing it. Add `--draft` unless `ready` was given:
 
@@ -303,3 +303,4 @@ gh pr view --web
 ```
 
 Show the PR URL, whether it is draft or ready, every linked issue, and any `NOTICE` line verbatim.
+If a `NOTICE` rewrote an issue to `Related` while a commit footer still says `Closes` for it, warn that a merge commit would still close the issue; squash merging avoids that.

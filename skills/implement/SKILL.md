@@ -43,7 +43,7 @@ The caller may pass `branch <name>` and `worktree <path>`. Everything not listed
 - **Phase 3**: build the implementation plan, but skip interactive approval only when every material decision is already supported by those authoritative sources. If the plan would introduce an unsupported product or technical decision, return BLOCKED instead.
 - **Phase 4**: skip it — the orchestrator already updated the base, and parallel workers would race on the shared checkout. The worktree was resolved before Phase 1.
 - **Phase 6.5**: skip it — the orchestrator's reviewer already reviews every diff in a fresh context.
-- **Phase 7**: skip difit — no human to review it. Commit in the worktree with the `commit` skill, telling it the Issue number and whether `SKIPPED` is non-empty or any criterion has no evidence; never push, never open a PR. Leave the commit there; the orchestrator ships it after human approval.
+- **Phase 7**: skip difit — no human to review it. Commit in the worktree with the `commit` skill, telling it the Issue number and whether `SKIPPED` is non-empty; never push, never open a PR. Leave the commit there; the orchestrator ships it after human approval.
 - **Final output**: exactly this report — it is the return value the caller parses, not a human-facing message:
 
 ```
@@ -309,6 +309,6 @@ difit .
 If review comments come back, address them and run again.
 If it exits without comments, treat that as approval to proceed.
 Invoke the `commit` skill to compose and make the commit — it decides on its own whether to commit automatically or ask first, independent of the difit review just completed.
-If the work traces to an Issue, tell the commit skill its number and whether Phase 6.9 left anything deferred or without evidence.
+If the work traces to an Issue, tell the commit skill its number and whether Phase 6.9 left anything deferred.
 
 **Do not create a PR until the user explicitly says "create a PR."**

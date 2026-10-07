@@ -11,6 +11,8 @@ fail=0
 # Stub state files in $STUB_DIR:
 # - default, base, body: repo default branch, PR base and PR body
 # - missing: issue numbers that do not exist
+# - open.<n>: open sub-issue count of issue <n>, 0 when absent
+# - no_subs: gh too old to know the subIssuesSummary field
 # - create_fail, pr_view_fail, link_noop: force that failure
 # - refs: linked issue numbers. lag: reads that still return the old list
 bin="${work}/bin"
@@ -28,7 +30,14 @@ case "${args}" in
     echo "GraphQL: Could not resolve to an issue with the number of ${n}." >&2
     exit 1
   fi
-  echo "I_${n}"
+  if [[ "${args}" != *subIssuesSummary* ]]; then
+    echo "I_${n}"
+  elif [[ -f "${d}/no_subs" ]]; then
+    echo 'Unknown JSON field: "subIssuesSummary"' >&2
+    exit 1
+  else
+    printf 'I_%s\t%s\n' "${n}" "$(cat "${d}/open.${n}" 2>/dev/null || echo 0)"
+  fi
   ;;
 *" pr create "*)
   if [[ -f "${d}/create_fail" ]]; then
@@ -149,11 +158,51 @@ setup $'Body\nCloses #12'
 create --base develop
 r=0
 [[ "${rc}" == 0 ]] || r=1
+grep -qx "Closes #12" "${STUB_DIR}/created_body" 2>/dev/null || r=1
+grep -q "Related" "${STUB_DIR}/created_body" 2>/dev/null && r=1
+called "api graphql" && r=1
+has_line "NOTICE: base develop is not the default branch main; kept Closes #12 unlinked" || r=1
+check "non-default base keeps Closes and skips linking" "${r}"
+
+setup $'Closes #5'
+echo 5 >"${STUB_DIR}/missing"
+create --base develop
+r=0
+[[ "${rc}" == 2 ]] || r=1
+called "pr create" && r=1
+check "non-default base still rejects a missing issue" "${r}"
+
+setup $'Body\nCloses #12'
+echo 3 >"${STUB_DIR}/open.12"
+create
+r=0
+[[ "${rc}" == 0 ]] || r=1
 grep -qx "Related #12" "${STUB_DIR}/created_body" 2>/dev/null || r=1
 grep -q "Closes" "${STUB_DIR}/created_body" 2>/dev/null && r=1
 called "api graphql" && r=1
-has_line "NOTICE: base develop is not the default branch main; rewrote #12 to Related #12" || r=1
-check "non-default base rewrites to Related and skips linking" "${r}"
+has_line "NOTICE: #12 has 3 open sub-issues; rewrote to Related #12" || r=1
+check "issue with open sub-issues is rewritten to Related" "${r}"
+
+setup $'Closes #12\nCloses #13'
+echo 2 >"${STUB_DIR}/open.12"
+create
+r=0
+[[ "${rc}" == 0 ]] || r=1
+grep -qx "Related #12" "${STUB_DIR}/created_body" 2>/dev/null || r=1
+grep -qx "Closes #13" "${STUB_DIR}/created_body" 2>/dev/null || r=1
+called "i=I_12" && r=1
+has_line "LINKED #13" || r=1
+has_line "LINKED #12" && r=1
+check "only the issue with open sub-issues is rewritten" "${r}"
+
+setup $'Closes #12'
+echo 1 >"${STUB_DIR}/open.12"
+create --base develop
+r=0
+[[ "${rc}" == 0 ]] || r=1
+grep -qx "Related #12" "${STUB_DIR}/created_body" 2>/dev/null || r=1
+called "api graphql" && r=1
+check "open sub-issues are rewritten on a non-default base too" "${r}"
 
 setup $'Closes #5'
 echo 5 >"${STUB_DIR}/missing"
@@ -163,6 +212,23 @@ r=0
 called "pr create" && r=1
 has_line "ISSUE_NOT_FOUND #5: GraphQL: Could not resolve to an issue with the number of 5." || r=1
 check "missing issue exits 2 with gh's reason before creating the PR" "${r}"
+
+setup $'Closes #12'
+touch "${STUB_DIR}/no_subs"
+create
+r=0
+[[ "${rc}" == 0 ]] || r=1
+has_line "LINKED #12" || r=1
+check "gh without subIssuesSummary still links" "${r}"
+
+setup $'Closes #5'
+touch "${STUB_DIR}/no_subs"
+echo 5 >"${STUB_DIR}/missing"
+create
+r=0
+[[ "${rc}" == 2 ]] || r=1
+has_line "ISSUE_NOT_FOUND #5: GraphQL: Could not resolve to an issue with the number of 5." || r=1
+check "gh without subIssuesSummary still rejects a missing issue" "${r}"
 
 setup $'Closes #12'
 touch "${STUB_DIR}/create_fail"
@@ -223,6 +289,17 @@ grep -q "NOTICE: base develop is not the default branch main" <<<"${out}" || r=1
 check "--link on a non-default base links nothing" "${r}"
 
 setup ""
+printf 'Closes #12\nCloses #13\n' >"${STUB_DIR}/body"
+echo 4 >"${STUB_DIR}/open.12"
+run --link 7
+r=0
+[[ "${rc}" == 0 ]] || r=1
+called "i=I_12" && r=1
+has_line "NOTICE: #12 has 4 open sub-issues; not linked" || r=1
+has_line "LINKED #13" || r=1
+check "--link skips an issue with open sub-issues" "${r}"
+
+setup ""
 out="$(printf 'From stdin\nCloses #12\n' | PATH="${bin}:${PATH}" LINK_POLL_ATTEMPTS=3 LINK_POLL_INTERVAL=0 bash "${target}" --title t --body-file - 2>&1)"
 rc=$?
 r=0
@@ -237,7 +314,7 @@ create
 r=0
 [[ "${rc}" == 0 ]] || r=1
 grep -q -- "pr create .*--base develop" "${STUB_DIR}/log" || r=1
-grep -qx "Related #12" "${STUB_DIR}/created_body" 2>/dev/null || r=1
+grep -qx "Closes #12" "${STUB_DIR}/created_body" 2>/dev/null || r=1
 called "api graphql" && r=1
 check "gh-merge-base of the current branch is the base" "${r}"
 
