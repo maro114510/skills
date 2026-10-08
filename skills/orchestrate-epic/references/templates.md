@@ -94,7 +94,7 @@ Q2: <あれば>
 #12, #13, #14, ...（<n> 件）
 
 ### 記録された前提・仮定
-<各 Issue の Q&A コメントおよび worker report の SKIPPED から集約、なければ「なし」>
+<各 Issue の Q&A コメント、worker report の SKIPPED と SUMMARY の decision log から集約、なければ「なし」>
 
 ### 保留・失敗した Issue
 | Issue | 理由 |
