@@ -2,8 +2,10 @@
 name: implement
 description: >
   A skill for executing implementation tasks with quality as the top priority. Grounds the request
-  in the codebase, resolves requirements and acceptance criteria, obtains approval for an implementation
-  plan, and applies TDD and Why validation as needed. Trigger on requests like
+  in the codebase, resolves requirements and acceptance criteria, decides autonomously from the Issue and
+  repository, and asks only when acceptance, a premise, or the sources are in doubt, or a critical decision
+  is unsettled. Applies TDD as needed.
+  Trigger on requests like
   「これを実装して」「機能を追加して」「バグを修正して」「変更して」「これを作って」
   「リファクタリングして」「対応して」 and similar implementation requests.
   Works in a worktree and asks for user approval via difit before committing.
@@ -39,8 +41,7 @@ The caller may pass `branch <name>` and `worktree <path>`. Everything not listed
   any repository inspection or edit. Never fall back to the current directory or another worktree. When
   blocking or failing before either value exists, emit `UNKNOWN` for its report field. Existing changes in a
   validated worktree are prior work — continue on top of them.
-- **Phases 1–2 still run.** Inspect the resolved worktree and treat the Issue body, Epic body, caller prompt, and persisted user answers as the only authoritative product decisions. Do not run an interactive Why check. If a missing Why, requirement, acceptance criterion, constraint, or critical behavior could materially change the implementation, return a BLOCKED report with concrete questions and options. Never guess — the orchestrator relays questions and re-dispatches you with answers.
-- **Phase 3**: build the implementation plan, but skip interactive approval only when every material decision is already supported by those authoritative sources. If the plan would introduce an unsupported product or technical decision, return BLOCKED instead.
+- **Phases 1–3 still run.** Inspect the resolved worktree and treat the Issue body, Epic body, caller prompt, and persisted user answers as the only authoritative product decisions. When a Phase 2 ask trigger fires, return a BLOCKED report with concrete questions and options instead of asking — the orchestrator relays them and re-dispatches you with answers. Otherwise decide as Phase 2 directs and carry the decision log into `SUMMARY`.
 - **Phase 4**: skip it — the orchestrator already updated the base, and parallel workers would race on the shared checkout. The worktree was resolved before Phase 1.
 - **Phase 6.5**: skip it — the orchestrator's reviewer already reviews every diff in a fresh context.
 - **Phase 7**: skip difit — no human to review it. Commit in the worktree with the `commit` skill, telling it the Issue number and whether `SKIPPED` is non-empty; never push, never open a PR. Leave the commit there; the orchestrator ships it after human approval.
@@ -57,7 +58,7 @@ CHECKS: <one per line, `<command> -> exit <code>`>
 CRITERIA: <every criterion from Phase 6.9, one per line, `<criterion verbatim from the source> -> <evidence>`; a criterion with no evidence is still listed, with `-> none`>
 SKIPPED: <criteria and requirements deferred rather than met, one per line, `<criterion> -> <what was done instead, and why>`; empty if none>
 FOUND: <defects found outside scope but not fixed, one per line; empty if none>
-SUMMARY: <what was implemented; key decisions and why>
+SUMMARY: <what was implemented; each decision-log entry as `<decision> -> <basis>; rejected: <alternative>`>
 QUESTIONS: <BLOCKED only — numbered, each with concrete answer options>
 ERROR: <FAILED only — what failed, what was attempted>
 ```
@@ -107,15 +108,13 @@ linked specifications:
 - **Constraints and compatibility**: supported environments, public interfaces, data or migration obligations,
   performance or operational limits, and prohibited changes
 - **Prerequisites and dependencies**: required services, data, permissions, tools, and upstream work
-- **Assumptions**: every implementation-relevant belief not guaranteed by a requirement or repository evidence
-
-Run the Why check only when the goal or value is missing and the answer could change whether or what to build.
-Ask what problem is being solved, the cost of leaving it unsolved, and whether a smaller change achieves the
-same outcome. If the proposed implementation is unnecessary, say so candidly and let the user decide.
+- **Decision log**: every choice or assumption no source settles — the decision, its basis, and the rejected alternative
 
 ### Scrutinize Critical Behavior
 
-For every applicable area, define the required behavior rather than merely noting the risk:
+For every applicable area, define the required behavior from the sources and repository conventions, and
+record what you chose in the decision log rather than merely noting the risk. Logging never replaces asking
+when trigger 4 below applies:
 
 - Authentication, authorization, privacy, secrets, and trust boundaries
 - Destructive operations, data integrity, migrations, and backward compatibility
@@ -123,28 +122,35 @@ For every applicable area, define the required behavior rather than merely notin
 - Validation, partial failure, rollback, cancellation, timeout, and recovery behavior
 - Resource limits, performance regressions, observability, rollout, and operational ownership
 
-Surface contradictions between the request and the repository, requirements that cannot all be satisfied,
-untestable acceptance criteria, and fatal flaws or logic gaps the user may not have noticed.
+### Decide by Default; Ask Only on a Trigger
 
-### Ask Only Decision-Relevant Questions
+An item is open only if it survives the Phase 1 lookup and its remaining readings lead to materially
+different results. Ask only when an open item meets one of these triggers:
 
-Classify each unresolved item:
+1. **Acceptance in doubt** — "done" cannot be judged: the criteria are missing and cannot be derived from the
+   request's intent, or they cannot be verified.
+2. **Premise in doubt** — the request conflicts with what you observed: the bug does not reproduce, the target
+   does not exist or already behaves as desired, or the change cannot achieve its stated goal.
+3. **Sources contradict** — the request's sources disagree with each other (Issue body, comments, Epic,
+   repository instructions, caller prompt, or criteria among themselves), and a later statement by the same
+   author does not resolve it.
+4. **Unsettled critical decision** — a security, authorization, data-loss, irreversible, or public-interface
+   breaking decision that no source settles. Only an explicit statement or an established repository convention
+   settles one; your own inference does not.
 
-- Resolve discoverable facts through further inspection.
-- State low-risk, reversible defaults as proposed assumptions in the plan.
-- Ask about any material decision whose alternatives change user-visible behavior, safety, compatibility,
-  scope, architecture, data, or acceptance criteria.
+Decide everything else yourself: follow repository conventions, prefer the smallest reversible option within
+scope, and record it in the decision log. These triggers govern clarification only; the operational stops
+elsewhere — an unresolvable base branch, Phase 6.5 exit 3, and the `commit` skill's own checks — are unchanged.
 
-Use `AskUserQuestion` with concrete, mutually exclusive options, a recommended default, and the consequence
-of each option. Ask in small groups and continue until no **material** uncertainty remains. Never convert a
-security, authorization, data-loss, irreversible, or otherwise potentially fatal gap into an assumption.
+When a trigger fires, ask before any repository mutation in one `AskUserQuestion` call: concrete, mutually
+exclusive options, the recommended one first, and the consequence of each. Ask again only when an answer
+raises a new trigger. If the requested change looks unnecessary or its premise wrong, say so candidly and let the user decide.
 
-In autonomous mode, return a BLOCKED report instead of asking whenever a material decision lacks an
-authoritative answer — see Autonomous Mode.
+In autonomous mode, return BLOCKED instead of asking — see Autonomous Mode.
 
 ---
 
-## Phase 3: Present and Approve the Plan
+## Phase 3: Present the Plan
 
 Before any repository mutation, present a decision-complete implementation plan containing:
 
@@ -153,16 +159,11 @@ Before any repository mutation, present a decision-complete implementation plan 
 - The implementation approach and affected interfaces or data flow
 - Failure, compatibility, migration, and operational behavior where applicable
 - A test strategy mapped to the acceptance criteria
-- Explicit non-goals, assumptions, risks, and rejected alternatives that materially affect the decision
+- Explicit non-goals, risks, and the decision log
 
-In normal mode, use `AskUserQuestion` to offer **Approve**, **Adjust**, or **Cancel**. Do not treat answers to
-individual clarification questions as approval of the complete plan. If the user adjusts it, update the
-implementation contract and present the complete revised plan again. Do not proceed without explicit approval.
-
-In autonomous mode, skip the interactive approval only as described in Autonomous Mode.
-
-If material new information, repository drift, or a scope change invalidates an approved plan, stop, update the
-contract and plan, and obtain approval again before continuing.
+Then proceed without waiting for approval; the user reviews the result in Phase 7. If new information,
+repository drift, or a scope change raises a Phase 2 trigger later, stop, ask, and update the plan before
+continuing. In autonomous mode, return BLOCKED and leave the partial work uncommitted for the re-dispatch.
 
 ---
 
@@ -172,7 +173,7 @@ In autonomous mode, follow the worktree rules in Autonomous Mode and skip the no
 
 For normal mode:
 
-1. Resolve the base branch from an explicit approved choice or `refs/remotes/origin/HEAD`. Do not assume `main`.
+1. Resolve the base branch from an explicit choice or `refs/remotes/origin/HEAD`. Do not assume `main`.
    If no trustworthy base can be resolved, ask before changing Git state.
 2. Update only the remote-tracking ref. Never `git switch` or `git pull` in the current checkout — it may be
    shared with other agents or sessions, and rewriting its files disrupts them:
@@ -190,14 +191,14 @@ Capture the worktree path printed by `git wt`; its location is configuration-dep
 command relative to that path. Because shell state does not persist between tool calls, prefix commands that
 need the worktree with `cd <worktree-path> && <command>`.
 
-Recheck the relevant files after setup. If the fetched base changed a material premise of the approved plan,
+Recheck the relevant files after setup. If the fetched base changed a material premise of the plan,
 return to Phase 2.
 
 ---
 
 ## Phase 5: Implement
 
-Choose and record the test approach in the approved plan.
+Choose and record the test approach in the plan.
 
 **Proceed with TDD when all conditions are met:**
 
@@ -208,7 +209,7 @@ Choose and record the test approach in the approved plan.
 **Do not force TDD when any condition applies:**
 
 - The change is limited to UI styling, a migration, configuration, or a one-shot operation.
-- No suitable test framework exists and adding one is outside the approved scope.
+- No suitable test framework exists and adding one is outside the planned scope.
 - Another verification method maps more directly to the acceptance criteria.
 
 ### With TDD
@@ -298,7 +299,7 @@ Lead with those last two lines whenever either has content. In autonomous mode t
 
 In autonomous mode, skip this phase entirely and emit the structured report — see Autonomous Mode.
 
-Use `difit` to have the user review the diff before committing.
+Restate the decision log, then use `difit` to have the user review the diff against it before committing.
 Use `difit` if `command -v difit` succeeds, otherwise use `npx difit`.
 
 ```bash

@@ -163,7 +163,7 @@ CHECKS: <one per line, `<command> -> exit <code>`>
 CRITERIA: <every criterion from the implement skill's Phase 6.9, one per line, `<criterion verbatim from the source> -> <evidence>`; a criterion with no evidence is still listed, with `-> none`>
 SKIPPED: <criteria and requirements deferred rather than met, one per line, `<criterion> -> <what was done instead, and why>`; empty if none>
 FOUND: <defects found outside scope but not fixed, one per line; empty if none>
-SUMMARY: <what was implemented; key decisions and why>
+SUMMARY: <what was implemented; each decision-log entry as `<decision> -> <basis>; rejected: <alternative>`>
 QUESTIONS: <BLOCKED only — numbered, each with concrete answer options>
 ERROR: <FAILED only — what failed, what was attempted>
 ```
