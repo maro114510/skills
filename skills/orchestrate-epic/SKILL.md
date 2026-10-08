@@ -163,7 +163,7 @@ CHECKS: <one per line, `<command> -> exit <code>`>
 CRITERIA: <every criterion from the implement skill's Phase 6.9, one per line, `<criterion verbatim from the source> -> <evidence>`; a criterion with no evidence is still listed, with `-> none`>
 SKIPPED: <criteria and requirements deferred rather than met, one per line, `<criterion> -> <what was done instead, and why>`; empty if none>
 FOUND: <defects found outside scope but not fixed, one per line; empty if none>
-SUMMARY: <what was implemented; each decision-log entry as `<decision> -> <basis>; rejected: <alternative>`>
+SUMMARY: <what was implemented, then each decision-log entry one per line, `<decision> -> <basis>; rejected: <alternative>`>
 QUESTIONS: <BLOCKED only — numbered, each with concrete answer options>
 ERROR: <FAILED only — what failed, what was attempted>
 ```
@@ -238,7 +238,7 @@ On every rescan, first clean up Issues that are closed with a merged PR, command
 When no dispatchable Issue remains `ready`, `in-progress`, `awaiting-merge`, or `waiting` — every non-container `Tn` and every `Tn.m`, per Step 2's derived state, so a container `Tn` counts once all its own `Tn.m` clear this bar, is either `done`, or sits in a state this loop cannot move on its own, `parked` with a `drop` decision or `rejected` with a `drop` decision — check the Epic for an existing completion comment, marker `<!-- orchestrate-epic:completion -->`, commands §1.5. If one is already there, do not post a second one. Otherwise post one **exit comment** on the Epic, commands §1.5, using the "Completion Exit Comment" template, then render the same content in this session's own output. This is a terminal report, not necessarily full success — a dropped Issue reaching this point is exactly what the "Parked or failed Issues" section below is for:
 
 - Shipped and merged Issues.
-- Every recorded assumption, aggregated from each Issue's Q&A comments in Step 5 and `SKIPPED` entries in worker reports.
+- Every recorded assumption, aggregated from each Issue's Q&A comments in Step 5 and the `SKIPPED` entries and `SUMMARY` decision-log entries in worker reports.
 - Parked or failed Issues, each with the reason it never shipped.
 - The six #141 metrics, best-effort from data this run already has: dispatch counts, state-comment `cycle` values, reviewer first-pass verdicts, round timestamps. CI-failure attribution now reads from `CHECKS_SET` (#143): a failure on a shipped PR's actual CI run that maps to a `runnable` entry this loop already ran locally is a genuine gap and should be 0; a failure on a `requires-runner` entry is expected, since this loop never executes those. Where a metric still depends on work not yet done, say so plainly instead of reporting a number.
 

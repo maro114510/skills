@@ -58,7 +58,7 @@ CHECKS: <one per line, `<command> -> exit <code>`>
 CRITERIA: <every criterion from Phase 6.9, one per line, `<criterion verbatim from the source> -> <evidence>`; a criterion with no evidence is still listed, with `-> none`>
 SKIPPED: <criteria and requirements deferred rather than met, one per line, `<criterion> -> <what was done instead, and why>`; empty if none>
 FOUND: <defects found outside scope but not fixed, one per line; empty if none>
-SUMMARY: <what was implemented; each decision-log entry as `<decision> -> <basis>; rejected: <alternative>`>
+SUMMARY: <what was implemented, then each decision-log entry one per line, `<decision> -> <basis>; rejected: <alternative>`>
 QUESTIONS: <BLOCKED only — numbered, each with concrete answer options>
 ERROR: <FAILED only — what failed, what was attempted>
 ```
@@ -134,17 +134,19 @@ different results. Ask only when an open item meets one of these triggers:
 3. **Sources contradict** — the request's sources disagree with each other (Issue body, comments, Epic,
    repository instructions, caller prompt, or criteria among themselves), and a later statement by the same
    author does not resolve it.
-4. **Unsettled critical decision** — a security, authorization, data-loss, irreversible, or public-interface
-   breaking decision that no source settles. Only an explicit statement or an established repository convention
+4. **Unsettled critical decision** — a decision that no source settles and where a wrong choice could cause a
+   security exposure, data loss or corruption, financial harm, an irreversible change, or a broken public
+   interface. Only an explicit statement or an established repository convention
    settles one; your own inference does not.
 
 Decide everything else yourself: follow repository conventions, prefer the smallest reversible option within
 scope, and record it in the decision log. These triggers govern clarification only; the operational stops
 elsewhere — an unresolvable base branch, Phase 6.5 exit 3, and the `commit` skill's own checks — are unchanged.
 
-When a trigger fires, ask before any repository mutation in one `AskUserQuestion` call: concrete, mutually
-exclusive options, the recommended one first, and the consequence of each. Ask again only when an answer
-raises a new trigger. If the requested change looks unnecessary or its premise wrong, say so candidly and let the user decide.
+When a trigger fires, ask every open triggered item before any repository mutation, in as few
+`AskUserQuestion` calls as its four-question limit allows, highest impact first: concrete, mutually exclusive
+options, the recommended one first, and the consequence of each. Ask again only when an answer raises a new
+trigger. If the requested change looks unnecessary or its premise wrong, say so candidly and let the user decide.
 
 In autonomous mode, return BLOCKED instead of asking — see Autonomous Mode.
 
@@ -163,7 +165,8 @@ Before any repository mutation, present a decision-complete implementation plan 
 
 Then proceed without waiting for approval; the user reviews the result in Phase 7. If new information,
 repository drift, or a scope change raises a Phase 2 trigger later, stop, ask, and update the plan before
-continuing. In autonomous mode, return BLOCKED and leave the partial work uncommitted for the re-dispatch.
+continuing. In autonomous mode, return BLOCKED with the partial work uncommitted and listed in
+`CHANGED_FILES`; a re-dispatched worker discards whatever of it the answer invalidates.
 
 ---
 
