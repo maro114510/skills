@@ -40,7 +40,8 @@ The caller may pass `branch <name>` and `worktree <path>`. Everything not listed
   repository, unregistered path, main checkout, detached HEAD, or branch mismatch must return FAILED before
   any repository inspection or edit. Never fall back to the current directory or another worktree. When
   blocking or failing before either value exists, emit `UNKNOWN` for its report field. Existing changes in a
-  validated worktree are prior work — continue on top of them.
+  validated worktree are prior work — continue on top of them, subject to Phase 3's rule on edits an
+  answer rejects.
 - **Phases 1–3 still run.** Inspect the resolved worktree and treat the Issue body, Epic body, caller prompt, and persisted user answers as the only authoritative product decisions. When a Phase 2 ask trigger fires, return a BLOCKED report with concrete questions and options instead of asking — the orchestrator relays them and re-dispatches you with answers. Otherwise decide as Phase 2 directs and carry the decision log into `SUMMARY`.
 - **Phase 4**: skip it — the orchestrator already updated the base, and parallel workers would race on the shared checkout. The worktree was resolved before Phase 1.
 - **Phase 6.5**: skip it — the orchestrator's reviewer already reviews every diff in a fresh context.
@@ -88,8 +89,8 @@ Inspect before asking questions:
 4. Separate facts discoverable from the repository from genuine product or design decisions. Never ask the
    user for a fact that can be established safely from available sources.
 
-If the repository is unavailable or the relevant source cannot be identified, treat that as a material gap
-in Phase 2 rather than inventing an implementation context.
+If the repository is unavailable, or code or a source the request depends on cannot be found, treat that as
+a premise in doubt (Phase 2 trigger 2) rather than inventing an implementation context.
 
 ---
 
@@ -140,8 +141,10 @@ different results. Ask only when an open item meets one of these triggers:
    settles one; your own inference does not.
 
 Decide everything else yourself: follow repository conventions, prefer the smallest reversible option within
-scope, and record it in the decision log. These triggers govern clarification only; the operational stops
-elsewhere — an unresolvable base branch, Phase 6.5 exit 3, and the `commit` skill's own checks — are unchanged.
+scope, and record it in the decision log. These triggers govern clarification only; every operational stop
+elsewhere in this skill — such as Autonomous Mode's worktree resolution (BLOCKED) and validation (FAILED),
+an unresolvable base branch, Phase 6.5 exit 3, and the `commit` skill's own checks — is unchanged and returns
+the status its own section names.
 
 When a trigger fires, ask every open triggered item before any repository mutation, in as few
 `AskUserQuestion` calls as its four-question limit allows, highest impact first: concrete, mutually exclusive
@@ -166,7 +169,8 @@ Before any repository mutation, present a decision-complete implementation plan 
 Then proceed without waiting for approval; the user reviews the result in Phase 7. If new information,
 repository drift, or a scope change raises a Phase 2 trigger later, stop, ask, and update the plan before
 continuing. In autonomous mode, return BLOCKED with the partial work uncommitted and listed in
-`CHANGED_FILES`; a re-dispatched worker discards whatever of it the answer invalidates.
+`CHANGED_FILES`. In either mode, once the answer arrives, inspect the uncommitted changes, untracked files
+included, and undo only the edits that implement an option the answer rejected; keep everything else.
 
 ---
 
@@ -279,13 +283,15 @@ Runs in both modes. Phase 2's criteria live in context, and context drifts towar
 against the source again, not against memory.
 
 1. **Re-fetch the source** — Issue body, linked spec, caller's prompt. If it changed since Phase 2, say so first.
-2. **Quote each acceptance criterion verbatim.** Paraphrasing is where a criterion gets softened.
+2. **Quote each acceptance criterion verbatim.** Paraphrasing is where a criterion gets softened. A criterion
+   derived from the request's intent has no source text: prefix it with `(derived)` and never present it as
+   a quote.
 3. **Attach evidence**: a command and its exit code, the covering test, a file path, or a quoted user decision.
 4. **No evidence means unsatisfied** — a TODO, a new Issue, "out of scope", "future work", a later Epic.
    Deferring a criterion is the user's call; surfacing it is yours.
 
 ```
-| Criterion (verbatim) | Evidence |
+| Criterion (verbatim, or `(derived)`) | Evidence |
 |---|---|
 | <the source's own words> | `go test ./...` -> exit 0 |
 
