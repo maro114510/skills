@@ -63,7 +63,7 @@ argument-hint: "[ready] [base <branch>]"
 |---|---|
 | `description` | Matched against user requests; include phrasings users naturally say |
 | `disable-model-invocation` | Optional; `true` runs the skill as a single-shot prompt without an agentic loop, and the body directs every tool call, as in `create-pr` |
-| `allowed-tools` | Comma-separated allowlist; `Bash(gh pr view:*)` allows only `gh pr view ...` |
+| `allowed-tools` | Comma-separated; restricts tool access; `Bash(gh pr view:*)` allows only `gh pr view ...` and blocks all other Bash commands |
 | `argument-hint` | Shown on `/help` |
 
 - The body is the full prompt; user arguments arrive as `$ARGUMENTS`
