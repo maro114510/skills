@@ -48,7 +48,7 @@
 | K13 | 中 | self-review.sh 27〜33 行 | 変更検知の指紋に、ステージ済みの差分と HEAD が入っていない | WP4 |
 | K14 | 低 | implement 238 行 | スクリプト名から CI の内容を推測するなという規則がない | WP4 |
 | K15 | 中 | 4 スキル全体 | 質問の方法、引数の受け取り方、他スキルの呼び出し、スキルの場所の解決が Claude Code に依存している | WP5 |
-| K16 | 高 | AGENTS.md の Skill Format 節 | `allowed-tools` と `disable-model-invocation` の説明が誤っている | WP6 |
+| K16 | 高 | AGENTS.md の Skill Format 節 | `allowed-tools` と `disable-model-invocation` の説明が誤っている（対応済み） | WP6 |
 | K17 | 要検証 | commit 9 行ほか約 10 スキル | 1 つの `Bash()` に複数のパターンを書く記法が効くか分からない | WP6 |
 | K18 | 低 | 配備手順 | 配備元が決まっておらず、未マージの版が配備されたことがある | WP6 |
 | K19 | 中 | commit 121〜131 行 | イシューを閉じるキーワードを書くかどうかを、モデルの判断だけで決めている。フックが書き足した場合も検査しない | WP1 |

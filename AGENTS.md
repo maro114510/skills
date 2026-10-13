@@ -62,8 +62,8 @@ argument-hint: "[ready] [base <branch>]"
 | Key | Rule |
 |---|---|
 | `description` | Matched against user requests; include phrasings users naturally say |
-| `disable-model-invocation` | Optional; `true` runs the skill as a single-shot prompt without an agentic loop, and the body directs every tool call, as in `create-pr` |
-| `allowed-tools` | Comma-separated; restricts tool access; `Bash(gh pr view:*)` allows only `gh pr view ...` and blocks all other Bash commands |
+| `disable-model-invocation` | Optional; `true` only stops Claude from loading the skill automatically. It does not disable the agentic loop: the skill still runs through `/name` and calls its tools normally, as in `create-pr` |
+| `allowed-tools` | Comma-separated; pre-approves the listed tools for the turn that invokes the skill. It does not restrict which tools are available, so unlisted tools stay governed by normal permissions and `Bash(gh pr view:*)` does not block other Bash commands; use `disallowed-tools` or deny rules to block |
 | `argument-hint` | Shown on `/help` |
 
 - The body is the full prompt; user arguments arrive as `$ARGUMENTS`
@@ -71,6 +71,7 @@ argument-hint: "[ready] [base <branch>]"
 - Japanese stays only in `description` trigger phrases and user-facing output templates
 - Convert an older Japanese body only when already editing it for another reason
 - Declare only the tools a skill needs; prefer scoped `Bash(cmd:*)` when the command set is small and predictable
+- This repository relies on the `PreToolUse` hook in `.claude/settings.json` to stop an unapproved `git push`; that stop is intended behavior
 
 ## Workflow
 
