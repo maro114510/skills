@@ -60,7 +60,8 @@ diff から記録する: 追加依存パッケージ、新規テストファイ�
   `$LOCAL_REPO_PATH` が空の場合はスキップする。
 - ファイル読み込み: 必ず `Read "$LOCAL_REPO_PATH/<相対パス>"` で絶対パスを使う。
   `$LOCAL_REPO_PATH` が空の場合は `gh api "repos/$REPO_SLUG/contents/<path>?ref=$HEAD" --jq '.content' | base64 -d` で取得する。
-- 関連 ADR・RFC・設計メモ・CLAUDE.md: `"$LOCAL_REPO_PATH/docs/"` `"$LOCAL_REPO_PATH/adr/"` `"$LOCAL_REPO_PATH/CLAUDE.md"` 配下から `Read`。
+- 関連 ADR・RFC・設計メモ・CLAUDE.md・AGENTS.md: `"$LOCAL_REPO_PATH/docs/"` `"$LOCAL_REPO_PATH/adr/"` `"$LOCAL_REPO_PATH/CLAUDE.md"` `"$LOCAL_REPO_PATH/AGENTS.md"` 配下から `Read`。
+  変更ファイルの祖先ディレクトリにある `CLAUDE.md`・`AGENTS.md` も読む（例: `ml/AGENTS.md`）。どちらか一方しかない場合もその規約を使う。
 - 同責務の既存 helper を 2〜3 件 `Read "$LOCAL_REPO_PATH/..."` で照合する。
 
 ## Step 2.5: Routing Decision
@@ -109,8 +110,9 @@ Step 2 で収集した diff・ファイルパス・変更概要を元に以下�
 $SPECIALISTS に含まれる specialist のみを `Agent` (subagent_type: general-purpose) で並列起動する。
 各プロンプトは責務に絞り、低 confidence でも候補に含めるよう指示する。
 返却は `path:line` + 引用元 + 仮重要度を必須とする。
-各 specialist の冒頭で `Read ~/.claude/skills/pr-review-pe/references/<該当>.md` を読ませてからレビューさせる
-（インストール済みパスを使う。`skills/pr-review-pe/references/` のようなカレントディレクトリ相対パスは使わない）。
+各 specialist の冒頭で `Read <skill-dir>/references/<該当>.md` を読ませてからレビューさせる。
+`<skill-dir>` はスキル起動時にハーネスが提示するこのスキルの base directory（この SKILL.md があるディレクトリ）の絶対パスに置き換えて渡す
+（インストール先を推測しない。`skills/pr-review-pe/references/` のようなカレントディレクトリ相対パスも使わない）。
 
 - **correctness-reviewer**: PR description と実装の一致、ビジネスロジック、状態遷移、条件分岐、エッジケース処理。
   必須サブ質問は null/nil/空配列/0/負数/MaxInt/空文字列の全パストレースと、AI 生成テストの確認バイアス (テストと実装が同じ誤前提を共有していないか)。
@@ -128,7 +130,7 @@ $SPECIALISTS に含まれる specialist のみを `Agent` (subagent_type: genera
   参照: `references/observability-gap.md`。
 
 specialist 共通注記: 既存コメント・PR description で対処済みの指摘は出さない。
-指摘ごとに { diff hunk, 関連既存コード, 関連 ADR・RFC, CLAUDE.md・プロジェクト規約, 関連過去 PR } の少なくとも 1 件を引用元として記録する。
+指摘ごとに { diff hunk, 関連既存コード, 関連 ADR・RFC, CLAUDE.md・AGENTS.md・プロジェクト規約, 関連過去 PR } の少なくとも 1 件を引用元として記録する。
 
 ## Step 4: Self-Refine
 
@@ -150,7 +152,7 @@ Step 4 の go deeper 再起動と同様、Agent 呼び出しはデフォルト�
 そのため再起動時は「force-investigate」の追加指示だけでなく、diff・specialist の役割定義・Step 3 で与えた関連コンテキストを含む元のプロンプト全体と、その specialist 自身がそれまでに返した候補一覧を併せて再送する。
 再起動後も発見なければ `N/A: scope confirmed — <確認した具体的根拠 (ファイルパス・ADR ID・メトリクス名) を 20 語以上で記録>` とする。
 
-1. **Existing-code alignment**: ADR・CLAUDE.md・既存実装パターン・ユビキタス言語との整合。担当: architecture-reviewer。
+1. **Existing-code alignment**: ADR・CLAUDE.md・AGENTS.md・既存実装パターン・ユビキタス言語との整合。担当: architecture-reviewer。
 2. **Release / Rollback / Compat.**: マルチ PR 順序・フィーチャーフラグ・ロールバック経路・データ移行順。担当: operational-reviewer。
 3. **Observability**: 本番で壊れたとき root cause に到達できる metrics / logs / alerts / traces の充足。担当: operational-reviewer。
 4. **Scalability**: N+1・上限なしバルク処理・OOM・タイムアウトを引き起こすパスの充足確認。担当: scalability-reviewer。
@@ -170,7 +172,7 @@ Mandatory Pillars テーブルと指摘事項の双方に記録する (テーブ
 
 1. 既存パターン一致でも指摘を廃棄しない: Confidence-Low に分類したうえで、`references/existing-pattern-matching.md` の risk-exception passthrough リスト (セキュリティ・データ整合性・API 契約・runtime crash・計算可能なスケーラビリティ後退) のいずれかに該当する場合は通常 Confidence・Severity で出力する。
 2. PR description の設計意図と矛盾する指摘も廃棄しない: 3 つの reverse-generated alternative intents (各 1 文) を内部生成し、PR description が選択意図をいずれの代替に対しても正当化できていない場合は `[ask]` でその正当化を求める (出力に代替は列挙しない)。
-3. 引用は diff hunk に限らない: { diff hunk / 関連既存コード / 関連 ADR・RFC / CLAUDE.md・プロジェクト規約 / 関連過去 PR } のうち少なくとも 1 件を引用元として持てば候補に残す。
+3. 引用は diff hunk に限らない: { diff hunk / 関連既存コード / 関連 ADR・RFC / CLAUDE.md・AGENTS.md・プロジェクト規約 / 関連過去 PR } のうち少なくとも 1 件を引用元として持てば候補に残す。
 
 Confidence-Low かつ risk-exception に該当せず Pillar でない候補は除外し、除外件数と理由を False-Negative log として記録する。
 **deep** に分類された候補が除外される場合は、specialist 名・指摘概要（10 語以内）・除外理由を個別に記録し、最終出力の FN log に含める。
@@ -233,7 +235,7 @@ Step 2 の共有収集（`gh pr diff`・`gh pr view --json commits`）はカウ�
 ### 指摘事項
 
 **[must] `path/to/file:42`**: 問題の説明
-> `diff hunk または関連既存コード・ADR・CLAUDE.md からの引用`
+> `diff hunk または関連既存コード・ADR・CLAUDE.md・AGENTS.md からの引用`
 → 改善案: 具体的なコードまたは手順
 
 （[imo] は影響と改善案、[ask] は確認事項を同形式で記載する。reverse-generated 代替への正当化要求は [ask] 内で行う）

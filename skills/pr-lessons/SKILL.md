@@ -29,32 +29,21 @@ PR レビュー教訓まとめ。責務の分担：
 
 ## Step 0: スキルディレクトリの特定
 
-以下を実行し、出力された **実パス文字列** を後続ステップで使う。
-Read ツール・Bash コマンドともに、この Bash 出力に表示されるパスをそのまま使うこと（シェル変数名 `$SKILL_DIR` をそのまま Read に渡さない）。
+`SKILL_DIR` は、スキル起動時にハーネスが提示するこのスキルの base directory（この SKILL.md があるディレクトリ）の絶対パスとする。
+インストール先は Claude Code・Codex・OpenCode で異なるため、パスを推測・探索しない。
+Read ツール・Bash コマンドともに、この **実パス文字列** をそのまま使うこと（シェル変数名 `$SKILL_DIR` をそのまま Read に渡さない）。
+
+以下で存在を確認する（`<base directory>` を実パスに置き換える）。
 
 ```bash
-# marketplace を優先（cache より新しいため）
-SKILL_DIR=$(find ~/.claude/plugins/marketplaces -path "*/pr-lessons" -type d 2>/dev/null | head -1)
-# marketplace になければ cache を探す（バージョン降順で最新を選ぶ）
-[ -z "$SKILL_DIR" ] && \
-  SKILL_DIR=$(find ~/.claude/plugins/cache -path "*/pr-lessons" -type d 2>/dev/null \
-    | sort -rV | head -1)
-# それでもなければ git リポジトリ内を探す
-[ -z "$SKILL_DIR" ] && \
-  SKILL_DIR=$(find "$(git rev-parse --show-toplevel 2>/dev/null || echo .)" \
-    -path "*/pr-lessons" -type d 2>/dev/null | head -1)
-
-# 取得できなければ即停止
-if [ -z "$SKILL_DIR" ]; then
-  echo "ERROR: pr-lessons スキルディレクトリが見つかりません。"
-  echo "確認: claude plugin list | grep pr-lessons"
+SKILL_DIR="<base directory>"
+if [ ! -f "$SKILL_DIR/scripts/fetch-pr-reviews.sh" ]; then
+  echo "ERROR: pr-lessons スキルディレクトリが見つかりません: $SKILL_DIR"
   exit 1
 fi
-
 echo "SKILL_DIR: $SKILL_DIR"
 ```
 
-上記の出力例: `SKILL_DIR: /Users/xxx/.claude/plugins/marketplaces/maro114510-agent-skills/skills/pr-lessons`
 この実パスを以降のすべての Read・Bash で使う。
 
 ---

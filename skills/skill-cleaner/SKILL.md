@@ -1,7 +1,7 @@
 ---
 name: skill-cleaner
 description: >
-  Slim an agent instruction file (a skill's SKILL.md, a slash command, or a CLAUDE.md) while preserving
+  Slim an agent instruction file (a skill's SKILL.md, a slash command, or a CLAUDE.md / AGENTS.md) while preserving
   its purpose, triggers, critical constraints, and permission boundaries. Pass a directory instead of a
   file to also scan for skills sharing a duplicate `name:`.
   「スキルを軽くして」「説明を短くして」でも起動。
