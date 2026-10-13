@@ -27,7 +27,6 @@ gh skill install maro114510/skills --agent claude-code --scope user
 | `pr-review-pe` | Review code diffs from a Principal Engineer perspective. |
 | `research-transfer-checker` | Check whether a claim stays within the scope of its cited research. |
 | `skill-cleaner` | Audit and slim down skill definitions. |
-| `tdd-test-cases` | Design practical TDD test cases. |
 | `tear-down` | Blank-slate red-team a plan or design instead of defending or polishing it. |
 | `write-researched-document` | Research, verify, and draft an evidence-backed Markdown document. |
 | `why-man` | Challenge assumptions with higher-level Why questions. |
