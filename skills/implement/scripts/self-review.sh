@@ -48,8 +48,19 @@ codex)
   ;;
 opencode)
   # OpenCode has no OS sandbox, so write-capable git options and redirects are denied explicitly.
-  OPENCODE_CONFIG_CONTENT='{"permission":{"edit":"deny","webfetch":"deny","bash":{"*":"deny","git diff*":"allow","git status*":"allow","git log*":"allow","git show*":"allow","git ls-files*":"allow","*--output*":"deny","*>*":"deny"}}}' \
-    opencode run --agent plan --command review </dev/null >"${out}" 2>"${log}"
+  # /review runs without --agent plan, whose follow-up reply only adds a plan; edits stay denied here.
+  # The one-command rule keeps the reviewer off pipes and 2>&1, which the redirect deny would reject.
+  # The last matching rule wins, so denies for options that run another program follow the allows.
+  # OpenCode does not apply `*>*` to a redirect inside a compound command, so a write outside the
+  # worktree is not prevented; the fingerprint only catches writes inside it.
+  OPENCODE_CONFIG_CONTENT='{"permission":{"edit":"deny","webfetch":"deny","bash":{"*":"deny",
+    "git diff*":"allow","git status*":"allow","git log*":"allow","git show*":"allow","git ls-files*":"allow",
+    "git branch --show-current":"allow","git rev-parse*":"allow","git merge-base*":"allow","git blame*":"allow",
+    "echo*":"allow","head*":"allow","cat*":"allow","ls*":"allow","rg*":"allow","go vet*":"allow","go test*":"allow",
+    "go *-exec*":"deny","go *-toolexec*":"deny","go vet*-vettool*":"deny","rg*--pre*":"deny",
+    "rg*--hostname-bin*":"deny",
+    "*--output*":"deny","*>*":"deny"}}}' \
+    opencode run --command review "Review the uncommitted changes. Run exactly one command per bash call, with no pipes, &&, ;, or redirects such as 2>&1." </dev/null >"${out}" 2>"${log}"
   ;;
 esac
 reviewer_rc=$?
