@@ -5,10 +5,12 @@ on:
     branches: [main]
     paths:
       - '**.sh'
+      - '**.bats'
       - '.shellcheckrc'
   pull_request:
     paths:
       - '**.sh'
+      - '**.bats'
       - '.shellcheckrc'
 
 permissions:
@@ -49,8 +51,11 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Install bats
+        run: sudo apt-get update && sudo apt-get install -y bats
+
       - name: Run self-review.sh test suite
-        run: bash skills/implement/scripts/test-self-review.sh
+        run: bats skills/implement/scripts/test-self-review.bats
 
   create-pr-script-tests:
     name: create-pr script tests
