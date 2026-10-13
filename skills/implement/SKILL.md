@@ -188,15 +188,24 @@ For normal mode:
    git fetch origin <base-branch>
    ```
    If the fetch fails, stop and report the state.
-3. Choose a GitHub Flow-compliant branch name (e.g., `feat/add-login`, `fix/null-pointer-on-checkout`) and
-   create the worktree directly from the fetched remote base:
+3. Without an Issue, choose a GitHub Flow-compliant branch name (e.g., `feat/add-login`,
+   `fix/null-pointer-on-checkout`) and create the worktree directly from the fetched remote base:
    ```bash
    git wt <branch-name> origin/<base-branch>
    ```
+4. For Issue `<N>`, reuse before creating. A worktree belongs to the Issue when its `branch refs/heads/<name>`
+   line in `git worktree list --porcelain` names a branch from `gh issue develop --list <N>` — match by branch,
+   never by directory name. Reuse it if one exists. Otherwise, unless a linked branch already exists, create
+   `<type>/issue-<N>-<slug>`, with a Conventional Commits type and a kebab-case slug of the title:
+   ```bash
+   gh issue develop <N> --name <type>/issue-<N>-<slug> --base <base-branch>
+   ```
+   Then run `git fetch origin <branch>` and `git wt <branch>` with no start-point, which `git wt` rejects for
+   an existing remote branch. Ask if several branches qualify; if `gh issue develop` fails, stop and report.
 
-Capture the worktree path printed by `git wt`; its location is configuration-dependent. Run every subsequent
-command relative to that path. Because shell state does not persist between tool calls, prefix commands that
-need the worktree with `cd <worktree-path> && <command>`.
+Capture the worktree path printed by `git wt`, or the reused path; its location is configuration-dependent.
+Run every subsequent command relative to that path. Because shell state does not persist between tool calls,
+prefix commands that need the worktree with `cd <worktree-path> && <command>`.
 
 Recheck the relevant files after setup. If the fetched base changed a material premise of the plan,
 return to Phase 2.
