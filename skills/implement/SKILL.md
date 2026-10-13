@@ -185,12 +185,27 @@ In autonomous mode, follow Worktree Resolution and skip this phase. In normal mo
    ```bash
    git fetch origin <base-branch>
    ```
-3. Choose a GitHub Flow branch name such as `feat/add-login` or `fix/null-pointer-on-checkout`, and create the worktree directly from the fetched remote base.
+3. Without an Issue, choose a GitHub Flow branch name such as `feat/add-login` or `fix/null-pointer-on-checkout`, and create the worktree directly from the fetched remote base.
    ```bash
    git wt <branch-name> origin/<base-branch>
    ```
+4. For Issue `<N>`, reuse a worktree before creating one. Match by branch, never by directory name: a worktree belongs to the Issue when its `branch refs/heads/<name>` line in `git worktree list --porcelain` names a branch from `gh issue develop --list <N>`.
 
-Capture the worktree path that `git wt` prints, because its location depends on configuration. Run every later command in that path. Shell state does not persist between tool calls, so prefix each such command with `cd <worktree-path> && <command>`.
+   | State | Action |
+   |---|---|
+   | A worktree for a linked branch exists | Reuse it |
+   | A linked branch exists without a worktree | Run `git fetch origin <branch>` and `git wt <branch>` |
+   | No linked branch exists | Create `<type>/issue-<N>-<slug>` with the command below, using a Conventional Commits type and a kebab-case slug of the title, then run `git fetch origin <branch>` and `git wt <branch>` |
+   | Several branches qualify | Ask the user |
+   | `gh issue develop` fails | Stop and report |
+
+   ```bash
+   gh issue develop <N> --name <type>/issue-<N>-<slug> --base <base-branch>
+   ```
+
+   Run `git wt <branch>` without a start-point, because `git wt` rejects one for an existing remote branch.
+
+Capture the worktree path that `git wt` prints, or the reused path, because its location depends on configuration. Run every later command in that path. Shell state does not persist between tool calls, so prefix each such command with `cd <worktree-path> && <command>`.
 
 Recheck the relevant files after setup. If the fetched base changed a material premise of the plan, return to Phase 2.
 
