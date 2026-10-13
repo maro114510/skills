@@ -66,6 +66,7 @@
 
 保証しないもの:
 
+- safe-commit.sh を経由しない直接の `git commit`
 - 既存の履歴と、変更していない既存の行
 - サブモジュールの中身
 - モデルが申告し忘れた判断条件
@@ -150,9 +151,9 @@ flowchart TD
 
 | 用途 | コマンド |
 |---|---|
-| 変更パスと種別 | `git diff --no-renames -z --raw --numstat` |
-| 追加行と行番号 | `git diff --no-renames -U0 --no-color --no-ext-diff` |
-| 削除条件の判定 | `git diff -M -z --raw`。名前の変更は削除に数えない |
+| 変更パスと種別 | `git diff --cached --no-renames -z --raw --numstat` |
+| 追加行と行番号 | `git diff --cached --no-renames -U0 --no-color --no-ext-diff` |
+| 削除条件の判定 | `git diff --cached -M -z --raw`。名前の変更は削除に数えない |
 | `--scan` の対象 | ステージ済み、未ステージ、無視されていない未追跡ファイル |
 
 秘密情報の検査:
