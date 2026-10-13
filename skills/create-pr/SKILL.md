@@ -18,7 +18,9 @@ Analyze the branch changes and create a reviewer-focused GitHub pull request in 
 
 ## Arguments
 
-| `$ARGUMENTS` | Result |
+Parse `$ARGUMENTS`:
+
+| Argument | Result |
 |---|---|
 | none | Draft PR against the default branch |
 | `ready` | Ready-for-review PR |
