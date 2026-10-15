@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
-# Claims a GitHub Issue for one session on this machine, and lists branches that already carry its number.
-# Usage: claim.sh acquire <owner/repo> <issue> [<token>]
-#        claim.sh takeover <owner/repo> <issue> <token>
-#        claim.sh release <owner/repo> <issue> <token>
+# Claims a GitHub Issue for one session through the Git ref refs/claims/issue-<N>, and lists branches
+# that already carry its number. The ref points to a blob holding the owner; list claims with
+# `git for-each-ref refs/claims` and read one with `git cat-file -p refs/claims/issue-<N>`.
+# Usage: claim.sh acquire <issue> [<token>]
+#        claim.sh takeover <issue> <token>
+#        claim.sh release <issue> <token>
 # Run from inside the repository. Set CLAIM_PID to the harness process, normally the calling shell's $PPID.
 # Exit: 0 claimed or released, 10 claimed and matching branches exist, 20 held by another session, 2 error.
 set -uo pipefail
 
 cmd="${1:-}"
-repo="${2:-}"
-issue="${3:-}"
-token="${4:-}"
+issue="${2:-}"
+token="${3:-}"
 
 die() {
   echo "$1" >&2
@@ -21,16 +22,15 @@ case "${cmd}" in
 acquire | takeover | release) ;;
 *) die "Unknown command: ${cmd:-<none>}" ;;
 esac
-[[ "${repo}" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || die "Invalid repo: ${repo:-<none>}"
-case "/${repo}/" in
-*/./* | */../*) die "Invalid repo: ${repo}" ;;
-esac
 [[ "${issue}" =~ ^[1-9][0-9]*$ ]] || die "Invalid issue number: ${issue:-<none>}"
 [[ -z "${token}" || "${token}" =~ ^[A-Za-z0-9-]+$ ]] || die "Invalid token"
 [[ "${cmd}" == acquire || -n "${token}" ]] || die "${cmd} needs a token"
+git rev-parse --git-dir >/dev/null 2>&1 || die "Not inside a Git repository"
 
-claim="${XDG_STATE_HOME:-${HOME}/.local/state}/agent-claims/${repo}/issue-${issue}"
+ref="refs/claims/issue-${issue}"
 pid="${CLAIM_PID:-${PPID}}"
+# The all-zero object name tells update-ref that the ref must not exist yet; its length follows the hash.
+zero="$(git hash-object --stdin </dev/null | tr '0-9a-f' '0')"
 
 new_token() {
   if command -v uuidgen >/dev/null 2>&1; then
@@ -46,70 +46,65 @@ lstart_of() {
   ps -o lstart= -p "$1" 2>/dev/null | sed -e 's/^ *//' -e 's/ *$//'
 }
 
-owner_field() {
-  sed -n "s/^$1=//p" "${claim}/owner" 2>/dev/null | head -n1
+current() {
+  git rev-parse -q --verify "${ref}" 2>/dev/null
 }
 
-# Writes the owner file through a rename, so a reader never sees it half written.
-write_owner() {
-  local tmp
-  tmp="$(mktemp "${claim}/.owner.XXXXXX")" || return 1
-  printf 'token=%s\npid=%s\nlstart=%s\nstarted=%s\ncwd=%s\n' \
-    "${token}" "${pid}" "$(lstart_of "${pid}")" "$(date -u +%FT%TZ)" "${PWD}" >"${tmp}" &&
-    mv -f "${tmp}" "${claim}/owner"
+# Prints field $1 of the owner blob $2.
+field() {
+  git cat-file -p "$2" 2>/dev/null | sed -n "s/^$1=//p" | head -n1
 }
 
-drop_claim() {
-  rm -f -- "${claim}/owner" && rmdir -- "${claim}"
+owner_blob() {
+  printf 'token=%s\npid=%s\nlstart=%s\nstarted=%s\n' \
+    "${token}" "${pid}" "$(lstart_of "${pid}")" "$(date -u +%FT%TZ)" | git hash-object -w --stdin
 }
 
 report_held() {
-  echo "claim=${claim}"
-  if [[ ! -f "${claim}/owner" ]]; then
-    echo "owner=missing"
-    exit 20
-  fi
   local opid olstart alive=no
-  opid="$(owner_field pid)"
-  olstart="$(owner_field lstart)"
+  opid="$(field pid "$1")"
+  olstart="$(field lstart "$1")"
   if [[ "${opid}" =~ ^[0-9]+$ && -n "${olstart}" && "$(lstart_of "${opid}")" == "${olstart}" ]]; then
     alive=yes
   fi
-  echo "owner_token=$(owner_field token)"
+  echo "claim=${ref}"
+  echo "owner_token=$(field token "$1")"
   echo "owner_pid=${opid}"
-  echo "owner_started=$(owner_field started)"
-  echo "owner_cwd=$(owner_field cwd)"
+  echo "owner_started=$(field started "$1")"
   echo "alive=${alive}"
   exit 20
 }
 
+held="$(current)"
+
 if [[ "${cmd}" == release ]]; then
-  [[ -e "${claim}" ]] || exit 0
-  [[ "$(owner_field token)" == "${token}" ]] || report_held
-  drop_claim || die "Could not remove ${claim}"
+  [[ -n "${held}" ]] || exit 0
+  [[ "$(field token "${held}")" == "${token}" ]] || report_held "${held}"
+  # Deleting against the value just read refuses if another session changed the claim in between.
+  git update-ref -d "${ref}" "${held}" 2>/dev/null || report_held "$(current)"
   exit 0
 fi
 
-mkdir -p -- "$(dirname -- "${claim}")" 2>/dev/null || die "Cannot create $(dirname -- "${claim}")"
 [[ -n "${token}" ]] || token="$(new_token)"
-created=0
-if mkdir -- "${claim}" 2>/dev/null; then
-  created=1
-  write_owner || {
-    drop_claim
-    die "Cannot write ${claim}/owner"
-  }
-elif [[ ! -d "${claim}" ]]; then
-  die "Cannot create ${claim}"
-elif [[ "${cmd}" == takeover ]]; then
-  write_owner || die "Cannot write ${claim}/owner"
-elif [[ "$(owner_field token)" != "${token}" ]]; then
-  report_held
+created=""
+if [[ -n "${held}" && "$(field token "${held}")" == "${token}" ]]; then
+  : # This session's own claim from an earlier run.
+elif [[ -n "${held}" && "${cmd}" == acquire ]]; then
+  report_held "${held}"
+else
+  blob="$(owner_blob)" || die "Cannot write the owner blob"
+  # update-ref compares against the expected value under Git's ref lock, so only one session wins.
+  if ! git update-ref "${ref}" "${blob}" "${held:-${zero}}" 2>/dev/null; then
+    now="$(current)"
+    [[ -n "${now}" ]] || die "Cannot update ${ref}"
+    report_held "${now}"
+  fi
+  [[ -z "${held}" ]] && created="${blob}"
 fi
 
 # A failed ls-remote would otherwise read as "no branch" and hide work that is already pushed.
 if ! remote="$(git ls-remote --heads origin 2>/dev/null)"; then
-  [[ "${created}" -eq 1 ]] && drop_claim
+  [[ -n "${created}" ]] && git update-ref -d "${ref}" "${created}" 2>/dev/null
   die "git ls-remote origin failed"
 fi
 
@@ -121,7 +116,7 @@ worktrees="$(git worktree list --porcelain | awk '
   /^branch refs\/heads\// { print substr($0, 19) "\t" path }')"
 matches="$(printf '%s\n%s\n' "${local_branches}" "${remote_branches}" | grep -E "${pattern}" | sort -u)"
 
-echo "claim=${claim}"
+echo "claim=${ref}"
 echo "token=${token}"
 [[ -n "${matches}" ]] || exit 0
 while IFS= read -r b; do

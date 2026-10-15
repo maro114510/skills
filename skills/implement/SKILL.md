@@ -89,23 +89,24 @@ Determine the execution mode and task type from `$ARGUMENTS` and the conversatio
 
 Run this in normal mode when the request names a GitHub Issue `<N>`, before Phase 1, so a second session handed the same Issue stops before duplicating work. Autonomous mode skips it, because the orchestrator owns the Issue.
 
-1. Resolve `<owner>/<repo>` with `gh repo view --json nameWithOwner --jq .nameWithOwner`. If it fails, stop and report.
-2. Run the script from the repository, where `<skill-dir>` is the directory containing this SKILL.md. Pass `<token>` only when this session already holds one from an earlier run; otherwise the script prints a new one. Keep the printed `token=` in context, because it, not the process, identifies this session.
+The claim is the Git ref `refs/claims/issue-<N>` in this clone, shared by all its worktrees. It never enters history and is not pushed. `git for-each-ref refs/claims` lists claims, and `git cat-file -p refs/claims/issue-<N>` shows the owner.
+
+1. Run the script from the repository, where `<skill-dir>` is the directory containing this SKILL.md. Pass `<token>` only when this session already holds one from an earlier run; otherwise the script prints a new one. Keep the printed `token=` in context, because it, not the process, identifies this session.
 
    ```bash
-   CLAIM_PID="$PPID" bash <skill-dir>/scripts/claim.sh acquire <owner>/<repo> <N> [<token>]
+   CLAIM_PID="$PPID" bash <skill-dir>/scripts/claim.sh acquire <N> [<token>]
    ```
 
-3. Act on the exit code:
+2. Act on the exit code:
 
    | Exit | Meaning | Action |
    |---|---|---|
    | 0 | Claimed, no branch carries `issue-<N>` | Proceed |
    | 10 | Claimed, and the printed `branch=` lines carry `issue-<N>`, including unlinked ones such as orchestrate-epic's | Ask: resume one, start a separate branch, or abort. Show each line, plus the last commit time of each branch |
-   | 20 | Another session holds the claim | Show the printed owner. Ask: abort, recommended when `alive=yes` or `owner=missing`, or take over with `claim.sh takeover <owner>/<repo> <N> <token>`, then act on its exit code the same way. Taking over a live session makes both edit the same Issue |
-   | 2 | Error, such as a sandbox blocking the state directory or `origin` unreachable | Show the error and ask whether to proceed without a claim. Never skip it silently |
+   | 20 | Another session holds the claim | Show the printed owner. Ask: abort, recommended when `alive=yes`, or take over with `claim.sh takeover <N> <token>`, then act on its exit code the same way. Taking over a live session makes both edit the same Issue |
+   | 2 | Error, such as `origin` unreachable | Show the error and ask whether to proceed without a claim. Never skip it silently |
 
-4. Release the claim with `claim.sh release <owner>/<repo> <N> <token>` after the Phase 7 commit, when the user aborts, and before any stop that ends this run without a commit. A later session still finds the branch through exit 10.
+3. Release the claim with `claim.sh release <N> <token>` after the Phase 7 commit, when the user aborts, and before any stop that ends this run without a commit. A later session still finds the branch through exit 10.
 
 ---
 
