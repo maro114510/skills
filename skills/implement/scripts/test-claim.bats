@@ -94,6 +94,18 @@ claim_token() {
   [ "$(claim_token)" = tok-a ]
 }
 
+@test "held claim prints this session's new token, and taking over with it changes the owner" {
+  bash "${target}" acquire 7 tok-a
+  claim acquire 7
+  [ "${status}" -eq 20 ]
+  mine="$(value token)"
+  [ -n "${mine}" ]
+  [ "${mine}" != tok-a ]
+  claim takeover 7 "${mine}"
+  [ "${status}" -eq 0 ]
+  [ "$(claim_token)" = "${mine}" ]
+}
+
 @test "dead owner process is reported as not alive" {
   CLAIM_PID=999999 bash "${target}" acquire 7 tok-a
   claim acquire 7 tok-b
@@ -145,7 +157,17 @@ claim_token() {
   git remote set-url origin "${work}/missing.git"
   claim acquire 7 tok-a
   [ "${status}" -eq 2 ]
+  has_line "token=tok-a"
   [ "$(claim_token)" = tok-a ]
+}
+
+@test "unreachable origin after a takeover reports the claim as held" {
+  bash "${target}" acquire 7 tok-a
+  git remote set-url origin "${work}/missing.git"
+  claim takeover 7 tok-b
+  [ "${status}" -eq 2 ]
+  has_line "token=tok-b"
+  [ "$(claim_token)" = tok-b ]
 }
 
 @test "concurrent acquires give exactly one claim" {

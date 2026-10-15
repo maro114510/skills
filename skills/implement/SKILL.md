@@ -103,8 +103,8 @@ The claim is the Git ref `refs/claims/issue-<N>` in this clone, shared by all it
    |---|---|---|
    | 0 | Claimed, no branch carries `issue-<N>` | Proceed |
    | 10 | Claimed, and the printed `branch=` lines carry `issue-<N>`, including unlinked ones such as orchestrate-epic's | Ask: resume one, start a separate branch, or abort. Show each line, plus the last commit time of each branch |
-   | 20 | Another session holds the claim | Show the printed owner. Ask: abort, recommended when `alive=yes`, or take over with `claim.sh takeover <N> <token>`, then act on its exit code the same way. Taking over a live session makes both edit the same Issue |
-   | 2 | Error, such as `origin` unreachable | Show the error and ask whether to proceed without a claim. Never skip it silently |
+   | 20 | Another session holds the claim | Show the printed owner. Ask: abort, recommended when `alive=yes`, or take over with `claim.sh takeover <N> <token>` using this session's printed `token=`, never `owner_token=`, then act on its exit code the same way. Taking over a live session makes both edit the same Issue |
+   | 2 | Error, such as `origin` unreachable | Show the error and ask whether to proceed. If `token=` was printed, this session still holds the claim: release it on abort. Otherwise it proceeds without a claim. Never skip it silently |
 
 3. Release the claim with `claim.sh release <N> <token>` after the Phase 7 commit, when the user aborts, and before any stop that ends this run without a commit. A later session still finds the branch through exit 10.
 

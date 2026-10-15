@@ -68,6 +68,8 @@ report_held() {
     alive=yes
   fi
   echo "claim=${ref}"
+  # This session's own token, so a takeover or a later run can pass it back.
+  echo "token=${token}"
   echo "owner_token=$(field token "$1")"
   echo "owner_pid=${opid}"
   echo "owner_started=$(field started "$1")"
@@ -81,7 +83,10 @@ if [[ "${cmd}" == release ]]; then
   [[ -n "${held}" ]] || exit 0
   [[ "$(field token "${held}")" == "${token}" ]] || report_held "${held}"
   # Deleting against the value just read refuses if another session changed the claim in between.
-  git update-ref -d "${ref}" "${held}" 2>/dev/null || report_held "$(current)"
+  if ! git update-ref -d "${ref}" "${held}" 2>/dev/null; then
+    now="$(current)"
+    [[ -n "${now}" ]] && report_held "${now}"
+  fi
   exit 0
 fi
 
@@ -104,7 +109,13 @@ fi
 
 # A failed ls-remote would otherwise read as "no branch" and hide work that is already pushed.
 if ! remote="$(git ls-remote --heads origin 2>/dev/null)"; then
-  [[ -n "${created}" ]] && git update-ref -d "${ref}" "${created}" 2>/dev/null
+  if [[ -n "${created}" ]]; then
+    git update-ref -d "${ref}" "${created}" 2>/dev/null
+  else
+    # The claim existed before this run or was just taken over, so it stays held; say so.
+    echo "claim=${ref}"
+    echo "token=${token}"
+  fi
   die "git ls-remote origin failed"
 fi
 
