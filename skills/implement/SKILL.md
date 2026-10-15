@@ -9,6 +9,7 @@ description: >
   「これを実装して」「機能を追加して」「バグを修正して」「変更して」「これを作って」
   「リファクタリングして」「対応して」 and similar implementation requests.
   Works in a worktree and asks for user approval via difit before committing.
+  Claims an Issue locally first, so a second session handed the same Issue stops and asks instead of duplicating the work.
   Does not create a PR until the user explicitly requests it.
   Also runs in a non-interactive autonomous mode when invoked with `autonomous` by an orchestrator such as orchestrate-epic inside a subagent.
 allowed-tools: AskUserQuestion, Bash, Read, Edit, Write, Glob, Grep
@@ -82,7 +83,30 @@ Determine the execution mode and task type from `$ARGUMENTS` and the conversatio
 
 - Record what the user already decided so they never have to repeat it.
 - Defer the TDD decision until the repository is inspected and acceptance criteria exist.
-- Do not mutate repository state in Phases 0 to 3. Worktree Resolution in autonomous mode is the only exception.
+- Do not mutate repository state in Phases 0 to 3. Worktree Resolution in autonomous mode and the Issue Claim below are the only exceptions.
+
+### Issue Claim
+
+Run this in normal mode when the request names a GitHub Issue `<N>`, before Phase 1, so a second session handed the same Issue stops before duplicating work. Autonomous mode skips it, because the orchestrator owns the Issue.
+
+The claim is the Git ref `refs/claims/issue-<N>` in this clone, shared by all its worktrees. It never enters history and is not pushed. `git for-each-ref refs/claims` lists claims, and `git cat-file -p refs/claims/issue-<N>` shows the owner.
+
+1. Run the script from the repository, where `<skill-dir>` is the directory containing this SKILL.md. Pass `<token>` only when this session already holds one from an earlier run; otherwise the script prints a new one. Keep the printed `token=` in context, because it, not the process, identifies this session.
+
+   ```bash
+   CLAIM_PID="$PPID" bash <skill-dir>/scripts/claim.sh acquire <N> [<token>]
+   ```
+
+2. Act on the exit code:
+
+   | Exit | Meaning | Action |
+   |---|---|---|
+   | 0 | Claimed, no branch carries `issue-<N>` | Proceed |
+   | 10 | Claimed, and the printed `branch=` lines carry `issue-<N>`, including unlinked ones such as orchestrate-epic's | Ask: resume one, start a separate branch, or abort. Show each line, plus the last commit time of each branch |
+   | 20 | Another session holds the claim | Show the printed owner. Ask: abort, recommended when `alive=yes`, or take over with `claim.sh takeover <N> <token>` using this session's printed `token=`, never `owner_token=`, then act on its exit code the same way. Taking over a live session makes both edit the same Issue |
+   | 2 | Error, such as `origin` unreachable | Show the error and ask whether to proceed. If `token=` was printed, this session still holds the claim: release it on abort. Otherwise it proceeds without a claim. Never skip it silently |
+
+3. Release the claim with `claim.sh release <N> <token>` after the Phase 7 commit, when the user aborts, and before any stop that ends this run without a commit. A later session still finds the branch through exit 10.
 
 ---
 
@@ -193,6 +217,8 @@ In autonomous mode, follow Worktree Resolution and skip this phase. In normal mo
 
    | State | Action |
    |---|---|
+   | The user chose to resume a branch in Issue Claim | Use that branch, linked or not: reuse its worktree, or run `git wt <branch>`, preceded by `git fetch origin <branch>` only when the branch is on the remote |
+   | The user chose a separate branch in Issue Claim | Treat it as no linked branch, and suffix the name with `-2`, or the next number free both locally and on the remote |
    | A worktree for a linked branch exists | Reuse it |
    | A linked branch exists without a worktree | Run `git fetch origin <branch>` and `git wt <branch>` |
    | No linked branch exists | Create `<type>/issue-<N>-<slug>` with the command below, using a Conventional Commits type and a kebab-case slug of the title, then run `git fetch origin <branch>` and `git wt <branch>` |
@@ -308,5 +334,6 @@ difit .
 - If difit exits without comments, treat that as approval to proceed.
 - Invoke the `commit` skill to compose and make the commit. It decides on its own whether to commit automatically or ask first, independent of the difit review.
 - If the work traces to an Issue, tell the `commit` skill its number and whether Phase 6.9 left anything deferred.
+- After the commit, release the Issue Claim.
 
 Do not create a PR until the user explicitly says "create a PR."
