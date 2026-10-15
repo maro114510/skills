@@ -7,11 +7,13 @@ on:
       - '**.sh'
       - '**.bats'
       - '.shellcheckrc'
+      - '.github/workflows/lint-shell.yml'
   pull_request:
     paths:
       - '**.sh'
       - '**.bats'
       - '.shellcheckrc'
+      - '.github/workflows/lint-shell.yml'
 
 permissions:
   contents: read
@@ -21,8 +23,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  self-review-tests:
-    name: Self-review script tests
+  # Test files are discovered, so adding one needs no workflow change.
+  bats-tests:
+    name: Bats script tests
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -31,21 +34,25 @@ jobs:
       - name: Install bats
         run: sudo apt-get update && sudo apt-get install -y bats
 
-      - name: Run self-review.sh test suite
-        run: bats skills/implement/scripts/test-self-review.bats
+      - name: Run every skills/**/*.bats suite
+        run: find skills -name '*.bats' -print0 | sort -z | xargs -0 bats
 
-  create-pr-script-tests:
-    name: create-pr script tests
+  shell-script-tests:
+    name: Shell script tests
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Run create-linked-pr.sh test suite
-        run: bash skills/create-pr/scripts/test-create-linked-pr.sh
-
-      - name: Run issue-refs.sh test suite
-        run: bash skills/create-pr/scripts/test-issue-refs.sh
+      - name: Run every skills/*/scripts/test-*.sh suite
+        run: |
+          rc=0
+          for t in skills/*/scripts/test-*.sh; do
+            echo "::group::${t}"
+            bash "${t}" || rc=1
+            echo "::endgroup::"
+          done
+          exit "${rc}"
 
   shellcheck:
     name: ShellCheck
