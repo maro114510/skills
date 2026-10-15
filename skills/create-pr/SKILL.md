@@ -49,14 +49,14 @@ Base: the `base` argument, else the detected default branch without `origin/`.
 
 **1.2 Find the PR template**
 
-Search in this order and use the first template found in Step 3:
+Check these paths sequentially in order for file existence, without reading their contents during probing. Stop probing immediately at the first existing file; do not check any remaining candidates:
 
 1. `.github/PULL_REQUEST_TEMPLATE.md`
 2. `.github/pull_request_template.md`
 3. `docs/pull_request_template.md`
 4. `PULL_REQUEST_TEMPLATE.md`
 
-If a template exists, read it before generating the PR description.
+Read only that first template, exactly once, and retain its contents for Step 3. Do not probe or read the other candidates, even if a case-insensitive filesystem resolves another candidate name to the same file. If no candidate exists, use the default structure in Step 3.3.
 
 **1.3 Get the diff after choosing the base branch**
 
@@ -119,7 +119,7 @@ If a repository template is written in another language, preserve the template's
 
 ### 3.2 When a template exists
 
-Follow the template found in Step 1.2. Do not ignore it:
+Follow the template contents retained from Step 1.2 without reading the file again. Do not ignore it:
 
 - Fill in every section.
 - Follow any inline comments or section-specific instructions.
