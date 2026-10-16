@@ -5,7 +5,7 @@ Read only the section for the step you are on. Commands run from the main checko
 
 ## §1 Load State — Step 2
 
-Three `gh` calls, whatever the child count. Never loop `gh issue view` per child: that payload embeds every blocker's full title and URL, so both the call count and the response size scale with the Epic.
+Four `gh` calls, whatever the child count. Never loop `gh issue view` or a comment read per child: that payload embeds every blocker's full title and URL, so both the call count and the response size scale with the Epic. No call reads a label: a child's state comes from its branches, PRs, and orchestrate-epic comments alone, and a label left on an Issue by an earlier version of this skill is ignored.
 
 ```bash
 # 1. Epic, its Tn's states, one level of Tn.m grandchildren, and the leftover-token check —
@@ -41,13 +41,13 @@ gh api graphql \
      children:[.subIssues.nodes[]|{n:.number,s:.state,t:.title,
        grandchildren:[.subIssues.nodes[]|{n:.number,s:.state,t:.title}]}]}'
 
-# 2. Labels and dependency edges, open Tn AND open Tn.m grandchildren of any container Tn.
+# 2. Dependency edges, open Tn AND open Tn.m grandchildren of any container Tn.
 #    CONTAINERS is the set of Tn numbers from call 1 that have a non-empty grandchildren list.
 EPIC="$EPIC" CONTAINERS="$CONTAINERS" gh issue list --repo "$REPO" --state open --limit 200 \
-  --json number,labels,blockedBy,parent \
+  --json number,blockedBy,parent \
   --jq --argjson containers "${CONTAINERS:-[]}" \
   '[.[]|select(.parent.number == (env.EPIC|tonumber) or ([.parent.number] | inside($containers)))
-        |{n:.number, l:[.labels[].name],
+        |{n:.number,
           b:[.blockedBy.nodes[]|select(.state=="OPEN")|.number]}]'
 
 # 3. Every PR on a loop branch, keyed by Issue number. headRefOid is the PR's current head
@@ -59,7 +59,41 @@ gh pr list --repo "$REPO" --state all --limit 200 \
         |{i:(.headRefName|capture("^feat/issue-(?<n>[0-9]+)").n|tonumber),
           p:.number, s:(if .mergedAt then "MERGED" else .state end), h:.headRefName,
           sha:.headRefOid}]'
+
+# 4. The orchestrate-epic comments of every open dispatchable Issue — every open non-container Tn
+#    and every open Tn.m — in ONE aliased GraphQL query, so the call count stays at one whatever the
+#    Epic size. OPEN_ISSUES is the JSON array of those numbers, from calls 1 and 2; skip this call
+#    when it is empty, since a query with no field is invalid. Define §1.5's ME and OE_JQ in this
+#    same call. Each line is one Issue:
+#      {n, total, state:{id,updated_at,body}|null, start:{created_at,body}|null,
+#       rejected:{created_at}|null, signals:[human_comments-shaped objects]}
+#    — the latest state comment, start comment, and rejection comment this identity posted, and the
+#    trusted human comments created after the state comment's updated_at, or after the rejection
+#    comment's created_at when no state comment exists; [] when neither exists, since such an Issue
+#    can be neither parked nor rejected. The jq definitions are the same ones marker_comment and
+#    human_comments use, so both paths classify identically. pipefail makes a gh failure, including
+#    a GraphQL error, stop the run instead of reading as "no comments".
+FIELDS='comments(first: 100) { totalCount nodes { databaseId createdAt updatedAt authorAssociation author { __typename login } body } }'
+QUERY="query(\$owner: String!, \$repo: String!) { repository(owner: \$owner, name: \$repo) { $(
+  jq -r --arg f "$FIELDS" '.[] | "i\(.): issue(number: \(.)) { number \($f) }"' <<<"$OPEN_ISSUES") } }"
+COMMENTS=$(set -o pipefail
+  gh api graphql -f query="$QUERY" -f owner="$OWNER" -f repo="$REPO_NAME" |
+    jq -c --arg me "$ME" "$OE_JQ"'
+      .data.repository | to_entries[] | .value
+      | (.comments.nodes | map(oe_rest)) as $c
+      | ($c | oe_latest($me; "<!-- orchestrate-epic-state -->")) as $state
+      | ($c | oe_latest($me; "orchestrate-epic: rejected")) as $rej
+      | {n: .number, total: .comments.totalCount,
+         state: ($state | if . then {id, updated_at, body} else null end),
+         start: ($c | oe_latest($me; "orchestrate-epic: 実装を開始しました")
+                    | if . then {created_at, body} else null end),
+         rejected: ($rej | if . then {created_at} else null end),
+         signals: (($state.updated_at // $rej.created_at) as $since
+                   | if $since then [$c | oe_human($since)] else [] end)}') \
+  || { echo "comment read failed — stop and report, do not classify" >&2; exit 1; }
 ```
+
+Call 4 is complete only when it returns exactly one line per number in `OPEN_ISSUES`; fewer means the read is partial, so stop rather than classify. An Issue whose `total` exceeds 100 has comments beyond the first page, so its projection can miss the latest state comment: discard that Issue's line and read it with §1.5's paginated REST helpers instead — `marker_comment` for the state, start, and rejection markers, and `human_comments` for the signals, with the same window. Only those Issues cost an extra call. A rejected Issue's check in SKILL.md Step 2 additionally drops every signal not created after `rejected.created_at`, since its window is the later of the two timestamps.
 
 `--jq` filters client-side, so only the projection reaches the context. `tokens: true` is the leftover-`{{Tn}}`/`{{Tn.m}}` signal Step 2 escalates on — it costs nothing, unlike carrying the Epic body. `CONTAINERS` is derived from call 1's output before call 2 runs, via `[.children[]|select(.grandchildren|length>0)|.n]` — a `Tn` with a non-empty `grandchildren` array in call 1 is a container; every other `Tn` is a leaf and is never expected to have children of its own. Step 2's depth cap in create-github-issues means a `Tn.m` never has grandchildren of its own, so this single extra nesting level is always enough — no recursion needed.
 
@@ -70,6 +104,7 @@ Branch and worktree recovery stays local and free:
 ```bash
 git fetch origin --prune
 git branch --list "feat/issue-*"
+git branch -r --list "origin/feat/issue-*"   # a remote branch counts as "a branch anywhere" too, SKILL.md Step 2
 git worktree list
 ```
 
@@ -88,22 +123,46 @@ Fallback when `subIssues`/`blockedBy` are unavailable — older gh, GHES, or the
 # or get the state upsert to read and edit a comment they planted instead of the real state.
 ME=$(gh api user --jq .login)
 
+# Shared jq definitions over REST-shaped comment arrays, used by marker_comment and human_comments
+# below and by §1's call 4, so a GraphQL read and a REST read reach the same answer. oe_rest maps a
+# GraphQL comment node onto the REST fields, restoring the `[bot]` suffix REST puts on a bot login and
+# GraphQL omits; oe_latest is the latest comment by $me whose body starts
+# with $m, or null; oe_human is the trusted human-signal filter documented on human_comments.
+OE_JQ='
+  def oe_rest: {id: .databaseId, created_at: .createdAt, updated_at: .updatedAt,
+                author_association: .authorAssociation, user: {login: ((.author.login // "") + (if .author.__typename == "Bot" then "[bot]" else "" end))}, body};
+  def oe_latest($me; $m): [.[] | select(.user.login == $me and ((.body // "") | startswith($m)))][-1];
+  def oe_human($since):
+    .[]
+    | select(.created_at > $since)
+    | select(.author_association == "OWNER" or .author_association == "MEMBER"
+             or .author_association == "COLLABORATOR")
+    | (.body // "") as $b
+    | select(($b | startswith("orchestrate-epic") or startswith("<!--")) | not)
+    | [$b | split("\n")[] | gsub("^\\s+|\\s+$"; "") | select(. != "")] as $lines
+    | select($lines | length > 0)
+    | {id, created_at, author: .user.login, body: $b,
+       command: (if all($lines[]; . == $lines[0])
+                    and ($lines[0] | IN("epic-approve", "epic-retry", "epic-redo", "epic-drop"))
+                 then $lines[0] else null end)};
+'
+
 # The one marker-comment lookup, used here and by §2.5, §2.6, and §3. Prints the latest comment on
 # Issue $1 posted by $ME whose body starts with $2, as one JSON object; prints nothing and exits 0
 # when none matches; exits non-zero when gh, jq, or $ME fails. --paginate --slurp fetches every
 # page (an Epic can carry more comments than one page holds) and `add` flattens the pages before
 # [-1] picks the latest. gh rejects slurping combined with its own jq filter flag, so the filter
 # runs in jq, which §1.6 already requires; pipefail keeps a gh failure from reading as "no comment".
-# Shell state does not persist between tool calls: define it, ME, and REPO in the same call as each lookup.
+# Shell state does not persist between tool calls: define it, OE_JQ, ME, and REPO in the same call as each lookup.
 marker_comment() (
   set -o pipefail
   [ -n "$ME" ] || { echo "marker_comment: ME is empty" >&2; exit 1; }
   gh api "repos/$REPO/issues/$1/comments" --paginate --slurp |
-    jq -c --arg me "$ME" --arg m "$2" \
-      'add // [] | [.[] | select(.user.login == $me and (.body | startswith($m)))][-1] // empty'
+    jq -c --arg me "$ME" --arg m "$2" "$OE_JQ"'add // [] | oe_latest($me; $m) // empty'
 )
 
-# The one human-signal lookup, used here and by SKILL.md Step 2's un-parking and rejected checks.
+# The one human-signal lookup, used here and, for an Issue §1's call 4 cannot cover, by SKILL.md
+# Step 2's un-parking and rejected checks.
 # Prints every trusted human comment on Issue $1 created strictly after the ISO-8601 timestamp $2,
 # oldest first, one compact JSON object per line: {id, created_at, author, body, command}.
 # Trusted means author_association OWNER, MEMBER, or COLLABORATOR, and a body that does not start
@@ -117,19 +176,7 @@ marker_comment() (
 human_comments() (
   set -o pipefail
   gh api "repos/$REPO/issues/$1/comments" --paginate --slurp |
-    jq -c --arg since "$2" '
-      add // [] | .[]
-      | select(.created_at > $since)
-      | select(.author_association == "OWNER" or .author_association == "MEMBER"
-               or .author_association == "COLLABORATOR")
-      | (.body // "") as $b
-      | select(($b | startswith("orchestrate-epic") or startswith("<!--")) | not)
-      | [$b | split("\n")[] | gsub("^\\s+|\\s+$"; "") | select(. != "")] as $lines
-      | select($lines | length > 0)
-      | {id, created_at, author: .user.login, body: $b,
-         command: (if all($lines[]; . == $lines[0])
-                      and ($lines[0] | IN("epic-approve", "epic-retry", "epic-redo", "epic-drop"))
-                   then $lines[0] else null end)}'
+    jq -c --arg since "$2" "$OE_JQ"'add // [] | oe_human($since)'
 )
 
 # Find the Run Plan comment. A failed lookup stops here — never read it as "no Run Plan" and post one
@@ -243,7 +290,6 @@ Each output line is one compact JSON object — `.command` embeds internal newli
 
 ```bash
 # Once per run
-gh label create "loop:in-progress" --repo "$REPO" --color "BFD4F2" --description "orchestrate-epic worker is implementing" 2>/dev/null || true
 BASE=$(gh repo view "$REPO" --json defaultBranchRef -q .defaultBranchRef.name)   # same resolution as §1.5 — never hardcode main
 git fetch origin "$BASE"   # once, before any worker; updates only origin/$BASE. Never switch or pull the starting checkout — other sessions may share it. On failure: stop and tell the user
 
@@ -256,7 +302,8 @@ else
   git wt "$BRANCH" "origin/$BASE"   # new branch: starts from the fetched default branch, never the possibly stale local one
 fi
 # git wt prints the worktree path — capture it for the worker prompt
-gh issue edit "$N" --repo "$REPO" --add-label "loop:in-progress"
+# The start comment is the in-flight marker SKILL.md Step 2 reads through §1's call 4: keep its
+# leading "orchestrate-epic: 実装を開始しました" exactly, or a resumed run cannot find it.
 gh issue comment "$N" --repo "$REPO" --body "orchestrate-epic: 実装を開始しました (branch: \`$BRANCH\`)"
 
 # Per answered BLOCKED question (Step 5) — human answers must survive the session
@@ -274,7 +321,7 @@ One sticky comment per Issue, distinct from the start/Q&A comments above, identi
 
 ```bash
 ME=$(gh api user --jq .login)   # same resolution as §1.5 — read it fresh here if this section runs on its own
-# Define §1.5's marker_comment in this same call too.
+# Define §1.5's OE_JQ and marker_comment in this same call too.
 
 # Read the latest state comment. Empty output means none exists yet — still cycle 0. A failed
 # lookup is not "none": stop instead of resuming at cycle 0 or creating a second state comment.
@@ -315,7 +362,7 @@ orchestrate-epic state:
 gh api "repos/$REPO/issues/comments/$CONTEXT_ID" --jq '{author: .user.login, created_at, body}'
 ```
 
-`pending_findings` holds the findings, blocking or nit, handed to an in-flight fix cycle — including the nits of an APPROVE, which Step 6 treats as REQUEST_CHANGES for state purposes. It is cleared by the next review result and by an `epic-retry`/`epic-redo`, and it never makes Step 2 classify the Issue `parked`; only `unresolved_blockers` does. A resumed `in-progress` Issue passes it into the fresh worker's prompt, Step 4.
+`pending_findings` holds the findings, blocking or nit, handed to an in-flight fix cycle — including the nits of an APPROVE, which Step 6 treats as REQUEST_CHANGES for state purposes. It is cleared by the next review result and by an `epic-retry`/`epic-redo`, and it never makes Step 2 classify the Issue `parked`; only a non-empty `unresolved_blockers` or an `epic-drop` in `decisions` does. A resumed `in-progress` Issue passes it into the fresh worker's prompt, Step 4.
 
 `head_sha` alone is not an approval — it is written after every review, including a REQUEST_CHANGES. The ship-integrity pair is `reviewed_sha` + `verified_base`: Step 6 sets both only on a finding-free APPROVE whose pre-review pin (`REVIEW_HEAD`, `REVIEW_BASE`) still matches after the review, and resets both to `none` on a REQUEST_CHANGES, an APPROVE carrying nits, a park, a stale gate in Step 7, or a human `epic-retry`/`epic-redo` restart. Step 2's open-PR sanity check compares them against the PR's `headRefOid` and the current `origin/$BASE`, classifying a mismatch `reverify` so §2.6 re-verifies it; Step 7's verdict gate compares them against the worktree HEAD and `origin/$BASE` before shipping; #145's merge request sends `reviewed_sha` as its expected SHA. A mismatch on either field means the recorded verdict cannot authorize a ship or a merge.
 
@@ -379,7 +426,7 @@ git -C "$WT" rev-parse --verify -q "origin/$BRANCH" >/dev/null 2>&1 && echo "PUS
 # Read the recorded state once. HEAD_SHA is the state comment's head_sha — the worker's report
 # value, advanced whenever the Publisher commits itself (Step 6's integration merge, the fallback
 # commit below) — not the original worker report, which a promoted commit has superseded.
-ME=$(gh api user --jq .login)   # same resolution as §1.5 / §2.5, with §1.5's marker_comment defined in this call
+ME=$(gh api user --jq .login)   # same resolution as §1.5 / §2.5, with §1.5's OE_JQ and marker_comment defined in this call
 STATE=$(marker_comment "$N" '<!-- orchestrate-epic-state -->') \
   || { echo "state comment lookup failed — stop and report, do not ship" >&2; exit 1; }
 STATE_BODY=$(jq -r '.body // empty' <<<"$STATE")
@@ -430,7 +477,7 @@ fi
 # 3. Verdict freshness gate — after sub-step 2 has frozen the committed artifact, before any check,
 #    push, or PR. The recorded APPROVE is bound to exactly (reviewed_sha, verified_base), the values
 #    SKILL.md Step 6 wrote; a HEAD or default branch that moved since makes the verdict stale and
-#    none of sub-steps 4-6 may run for that Issue. A fallback commit from sub-step 2 moves HEAD off
+#    none of sub-steps 4-5 may run for that Issue. A fallback commit from sub-step 2 moves HEAD off
 #    reviewed_sha and is caught here. $REVIEWED_SHA / $VERIFIED_BASE were read from the §2.5 state
 #    comment before sub-step 2; "none" means no live approval exists. This is the same pair #145's merge request will
 #    send as its expected head SHA, so a HEAD that changes between this comparison and the merge
@@ -467,7 +514,7 @@ while IFS= read -r entry; do
   fi
 done <<<"$CHECKS_SET_RUNNABLE"
 if [ "$CHECK_FAILED" -ne 0 ]; then
-  # Treat exactly like a secret-screen hit — this actually stops sub-steps 5-6, it is not only a
+  # Treat exactly like a secret-screen hit — this actually stops sub-step 5, it is not only a
   # comment. Restore the worktree to exactly what the worker committed first: a failed check can
   # leave $WT dirty (build output, a partial lockfile write), and Step 4 reuses this same worktree on
   # the next dispatch, Step 6 re-runs `add -N .` over it — neither should see check-run leftovers as
@@ -475,7 +522,7 @@ if [ "$CHECK_FAILED" -ne 0 ]; then
   git -C "$WT" reset --hard "$REVIEWED_SHA"   # == HEAD here, guaranteed by the sub-step 3 gate
   git -C "$WT" clean -fd
   # Post the failing command(s), exit code, and captured output as a comment on the Issue, upsert
-  # the state comment's unresolved_blockers (SKILL.md Step 7), leave loop:in-progress in place, and
+  # the state comment's unresolved_blockers (SKILL.md Step 7), which is what parks it, and
   # move on to the next Issue in the round — do not reach sub-step 5 below for this Issue.
 elif ! git -C "$WT" fetch origin "$BASE" \
      || [ "$(git -C "$WT" rev-parse "origin/$BASE")" != "$VERIFIED_BASE" ] \
@@ -495,7 +542,7 @@ else
   gh pr list --repo "$REPO" --head "$BRANCH" --state all --json number   # non-empty → PR exists: bash "$SCRIPTS/create-linked-pr.sh" --repo "$REPO" --link <number>, skip creation
   if ! REFS=$(cd "$WT" && bash "$SCRIPTS/issue-refs.sh" "origin/$BASE"); then
     # Exit 3 is a CONFLICT: park the Issue like a red check run, SKILL.md Step 7.
-    # Never create the PR and keep loop:in-progress.
+    # Never create the PR; upsert unresolved_blockers so it stays parked.
     echo "$REFS"
   else
     # $REFS holds the closing line for the body, SKILL.md Step 7
@@ -514,9 +561,7 @@ else
 <closing line from issue-refs.sh or SKILL.md Step 7>
 Part of Epic #<EPIC>
 EOF
-
-    # 6. Clear the marker
-    gh issue edit "$N" --repo "$REPO" --remove-label "loop:in-progress"
+    # No marker to clear: the open PR is what SKILL.md Step 2 now classifies this Issue by.
   fi
 fi
 ```
