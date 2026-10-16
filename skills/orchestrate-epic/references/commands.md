@@ -127,7 +127,8 @@ ME=$(gh api user --jq .login)
 # below and by §1's call 4, so a GraphQL read and a REST read reach the same answer. oe_rest maps a
 # GraphQL comment node onto the REST fields, restoring the `[bot]` suffix REST puts on a bot login and
 # GraphQL omits; oe_latest is the latest comment by $me whose body starts
-# with $m, or null; oe_human is the trusted human-signal filter documented on human_comments.
+# with $m, or null; oe_human is the trusted human-signal filter documented on human_comments;
+# oe_merge_authorized is the merge-grant rule documented on merge_authorized.
 OE_JQ='
   def oe_rest: {id: .databaseId, created_at: .createdAt, updated_at: .updatedAt,
                 author_association: .authorAssociation, user: {login: ((.author.login // "") + (if .author.__typename == "Bot" then "[bot]" else "" end))}, body};
@@ -143,8 +144,13 @@ OE_JQ='
     | select($lines | length > 0)
     | {id, created_at, author: .user.login, body: $b,
        command: (if all($lines[]; . == $lines[0])
-                    and ($lines[0] | IN("epic-approve", "epic-retry", "epic-redo", "epic-drop"))
+                    and ($lines[0] | IN("epic-approve", "epic-retry", "epic-redo", "epic-drop",
+                                        "epic-auto-merge", "epic-revoke-auto-merge"))
                  then $lines[0] else null end)};
+  def oe_merge_authorized:
+    any(.[]; .command == "epic-approve")
+    and ([.[] | select(.command == "epic-auto-merge" or .command == "epic-revoke-auto-merge")]
+         | sort_by(.created_at, .id) | last | .command) == "epic-auto-merge";
 '
 
 # The one marker-comment lookup, used here and by §2.5, §2.6, and §3. Prints the latest comment on
@@ -168,7 +174,8 @@ marker_comment() (
 # Trusted means author_association OWNER, MEMBER, or COLLABORATOR, and a body that does not start
 # with `orchestrate-epic` or `<!--` (A6/A7, docs/design/skills-remediation-policy.md). `command` is
 # set only when every non-blank line, trimmed of surrounding whitespace, is exactly the same one of
-# epic-approve, epic-retry, epic-redo, epic-drop, in lowercase; otherwise it is null and the comment
+# epic-approve, epic-retry, epic-redo, epic-drop, epic-auto-merge, epic-revoke-auto-merge, in
+# lowercase; otherwise it is null and the comment
 # is context, never a decision. "let's not epic-retry yet", "EPIC-RETRY", "epic-retry please", and
 # a comment mixing two different commands therefore all carry command: null. created_at, not
 # updated_at: a comment edited into a command after the fact does not move into the window. A blank
@@ -193,6 +200,25 @@ PLAN_AT=$(jq -r '.created_at' <<<"$RUN_PLAN")
 SIGNALS=$(human_comments "$EPIC" "$PLAN_AT") \
   || { echo "approval lookup failed — stop and report, do not dispatch" >&2; exit 1; }
 [ "$(jq -s 'any(.[]; .command == "epic-approve")' <<<"$SIGNALS")" = "true" ] || { echo "no epic-approve after the Run Plan — exit at the gate" >&2; exit 0; }
+
+# The one merge-authorization check, SKILL.md Step 3 "Merge Authorization". Run it fresh,
+# immediately before every merge request, never once per round, so an epic-revoke-auto-merge
+# posted mid-round stops every later merge. Prints `granted` only when the Epic's trusted signals
+# after the Run Plan — the same window and trust check as epic-approve above — contain an
+# epic-approve AND the latest of epic-auto-merge / epic-revoke-auto-merge, by created_at, is
+# epic-auto-merge; prints `not-granted` otherwise, including when no Run Plan exists. epic-approve
+# alone authorizes dispatch, shipping, and PR creation, never a merge. Exits non-zero when any read
+# fails; the caller then treats merging as not authorized, since an unreadable grant is never one:
+#   AUTH=$(merge_authorized) || AUTH=unreadable; [ "$AUTH" = granted ] || <do not merge>
+# Define OE_JQ, ME, REPO, EPIC, marker_comment, and human_comments in this same call.
+merge_authorized() (
+  set -o pipefail
+  PLAN=$(marker_comment "$EPIC" '<!-- orchestrate-epic:run-plan -->') || exit 1
+  [ -n "$PLAN" ] || { echo not-granted; exit 0; }
+  AT=$(jq -r '.created_at' <<<"$PLAN") || exit 1
+  SIG=$(human_comments "$EPIC" "$AT") || exit 1
+  jq -rs "$OE_JQ"'if oe_merge_authorized then "granted" else "not-granted" end' <<<"$SIG"
+)
 
 # Repository facts for the Run Plan. Only a confirmed 404 means "no protection configured" — every
 # other failure (auth, permission, network, 5xx) must stop and be reported, never be read as "no protection"
