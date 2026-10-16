@@ -5,11 +5,15 @@ on:
     branches: [main]
     paths:
       - '**.sh'
+      - '**.bats'
       - '.shellcheckrc'
+      - '.github/workflows/lint-shell.yml'
   pull_request:
     paths:
       - '**.sh'
+      - '**.bats'
       - '.shellcheckrc'
+      - '.github/workflows/lint-shell.yml'
 
 permissions:
   contents: read
@@ -19,38 +23,36 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # The scanner's awk runs against multibyte Japanese, and awk
-  # implementations disagree about it in two ways: whether length() counts
-  # bytes or characters, and whether a character class of multibyte
-  # characters is a set of characters or a set of bytes. macOS ships an older
-  # onetrue awk that counts bytes; this runner ships gawk, which counts
-  # characters. Neither difference is visible on a developer's machine alone,
-  # so the suite runs here too.
-  scanner-tests:
-    name: Scanner tests (Linux awk)
+  # Test files are discovered, so adding one needs no workflow change.
+  bats-tests:
+    name: Bats script tests
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Run scan.sh test suite
-        env:
-          LANG: en_US.UTF-8
-          LC_ALL: en_US.UTF-8
+      - name: Install bats
+        run: sudo apt-get update && sudo apt-get install -y bats
+
+      - name: Run every skills/**/*.bats suite
+        run: find skills -name '*.bats' -print0 | sort -z | xargs -0 bats
+
+  shell-script-tests:
+    name: Shell script tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Run every skills/*/scripts/test-*.sh suite
         run: |
-          sudo locale-gen en_US.UTF-8
-          awk --version 2>&1 | head -1 || true
-          bash skills/ja-style-check/scripts/test-scan.sh
-
-  self-review-tests:
-    name: Self-review script tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Run self-review.sh test suite
-        run: bash skills/implement/scripts/test-self-review.sh
+          rc=0
+          for t in skills/*/scripts/test-*.sh; do
+            echo "::group::${t}"
+            bash "${t}" || rc=1
+            echo "::endgroup::"
+          done
+          exit "${rc}"
 
   shellcheck:
     name: ShellCheck

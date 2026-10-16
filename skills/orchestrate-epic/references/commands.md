@@ -179,7 +179,6 @@ Each output line is one compact JSON object — `.command` embeds internal newli
 | Workflow | Kept? | Entries in `CHECKS_SET` | Classification |
 |---|---|---|---|
 | `lint-actions.yml` (`pull_request`, `push:[main]`) | yes | `action: rhysd/actionlint@914e7df...` | requires-runner (`uses:`-only step) |
-| `lint-shell.yml` (`pull_request`, `push:[main]`) | yes | `sudo locale-gen …` / `awk --version …` / `bash skills/ja-style-check/scripts/test-scan.sh` (one step, one entry, multi-line, `env: {LANG, LC_ALL}` captured alongside it) | requires-runner (`sudo` — `env` capture is moot here, but the entry still carries it) |
 | `lint-shell.yml` | yes | `action: ludeeus/action-shellcheck@00cae50...` | requires-runner (`uses:`-only step) |
 | `lint-shell.yml` | yes | `pip install semgrep` | requires-runner (`pip install` mutates the ambient Python environment) |
 | `lint-shell.yml` | yes | `semgrep --config p/security-audit --config p/secrets --error .` | runnable, but only meaningful if `semgrep` is already on `PATH` — the preceding step is `requires-runner` and this loop never runs it |
@@ -378,9 +377,16 @@ elif ! git -C "$WT" fetch origin "$BASE" \
   echo "STALE VERDICT AFTER CHECKS — base or HEAD moved; re-verify before shipping" >&2
 else
   # 5. Push (repeat-safe), then create the PR — only if none exists yet for this branch
+  SCRIPTS="<create-pr skill dir>/scripts"
   git -C "$WT" push -u origin "$BRANCH"
-  gh pr list --repo "$REPO" --head "$BRANCH" --state all --json number   # non-empty → PR exists, skip creation
-  gh pr create --repo "$REPO" --head "$BRANCH" --base "$BASE" --title "<Issue title>" --body "$(cat <<'EOF'
+  gh pr list --repo "$REPO" --head "$BRANCH" --state all --json number   # non-empty → PR exists: bash "$SCRIPTS/create-linked-pr.sh" --repo "$REPO" --link <number>, skip creation
+  if ! REFS=$(cd "$WT" && bash "$SCRIPTS/issue-refs.sh" "origin/$BASE"); then
+    # Exit 3 is a CONFLICT: park the Issue like a red check run, SKILL.md Step 7.
+    # Never create the PR and keep loop:in-progress.
+    echo "$REFS"
+  else
+    # $REFS holds the closing line for the body, SKILL.md Step 7
+    bash "$SCRIPTS/create-linked-pr.sh" --repo "$REPO" --head "$BRANCH" --base "$BASE" --title "<Issue title>" --body-file - <<'EOF'
 ## Summary
 <worker summary, condensed>
 
@@ -392,13 +398,13 @@ else
 - verified_base: <$VERIFIED_BASE>
 - Reviewer nits and resolution: <each nit from every review pass, `<file>:<line> — <nit> -> <how it was resolved, citing the fix commit>`; or なし>
 
-Closes #<N>
+<closing line from issue-refs.sh or SKILL.md Step 7>
 Part of Epic #<EPIC>
 EOF
-)"
 
-  # 6. Clear the marker
-  gh issue edit "$N" --repo "$REPO" --remove-label "loop:in-progress"
+    # 6. Clear the marker
+    gh issue edit "$N" --repo "$REPO" --remove-label "loop:in-progress"
+  fi
 fi
 ```
 

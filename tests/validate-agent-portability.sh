@@ -48,7 +48,28 @@ done
 
 if [[ "${status}" -ne 0 ]]; then
   printf '%s\n' "${GUIDANCE}" >&2
+fi
+
+# Skills must resolve their own files from the harness-provided base directory,
+# not from a Claude Code-only install location.
+skills_dir="${repo_root}/skills"
+if [[ -d "${skills_dir}" ]]; then
+  grep_status=0
+  # The patterns are literal text to match, not paths to expand.
+  # shellcheck disable=SC2016,SC2088
+  hits="$(grep -rnF -e '~/.claude' -e '$HOME/.claude' -e '${HOME}/.claude' "${skills_dir}")" || grep_status=$?
+  if [[ "${grep_status}" -eq 0 ]]; then
+    printf '%s\n' "${hits}" | sed "s|^${repo_root}/||" >&2
+    printf '%s\n' 'skills must not hard-code ~/.claude paths; resolve files from the skill base directory' >&2
+    status=1
+  elif [[ "${grep_status}" -ne 1 ]]; then
+    printf 'grep failed while scanning skills/ (exit %s)\n' "${grep_status}" >&2
+    status=1
+  fi
+fi
+
+if [[ "${status}" -ne 0 ]]; then
   exit 1
 fi
 
-printf 'agent portability OK (%s file(s))\n' "${count}"
+printf 'agent portability OK (%s agent file(s); skills free of ~/.claude paths)\n' "${count}"

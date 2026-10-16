@@ -110,17 +110,30 @@ check_opencode() {
     return
   fi
 
-  local list_output
-  if ! list_output="$(cd "${project_dir}" && HOME="${home_dir}" "${OPENCODE_CLI}" agent list 2>&1)"; then
+  local list_file="${project_dir}/../agent-list.log" missing_agent=0
+  if ! (cd "${project_dir}" && HOME="${home_dir}" "${OPENCODE_CLI}" agent list) >"${list_file}" 2>&1; then
     fail "[opencode] ${OPENCODE_CLI} failed to load the project agents:"
-    printf '%s\n' "${list_output}" | sed 's/^/  /' >&2
+    sed 's/^/  /' "${list_file}" >&2
     return
   fi
   for name in "${AGENT_NAMES[@]}"; do
-    if ! printf '%s\n' "${list_output}" | grep -q "${name}"; then
+    if ! grep -q "${name}" "${list_file}"; then
       fail "[opencode] ${OPENCODE_CLI} agent list does not include ${name}"
+      missing_agent=1
     fi
   done
+  if [[ "${missing_agent}" -ne 0 ]]; then
+    printf '[opencode] agent list output: %s bytes\n' "$(wc -c <"${list_file}" | tr -d '[:space:]')" >&2
+    printf '[opencode] Listed agent name lines:\n' >&2
+    # Agent headers are unindented; their permission details are indented.
+    if ! grep -E '^[^[:space:]]+ \(' "${list_file}" >&2; then
+      printf '  (no agent name lines)\n' >&2
+    fi
+    printf '[opencode] Deployed .opencode/agents/ files:\n' >&2
+    ls -laR "${project_dir}/.opencode/agents/" >&2 || true
+    printf '[opencode] APM install log:\n' >&2
+    sed 's/^/  /' "${log_file}" >&2
+  fi
 }
 
 for target in "${targets[@]}"; do

@@ -120,7 +120,7 @@ follow-up: <広い方の解釈。将来の Issue や別対応で扱う内容>
 #12, #13, #14, ...（<n> 件）
 
 ### 記録された前提・仮定
-<各 Issue の Q&A コメントおよび worker report の SKIPPED から集約、なければ「なし」>
+<各 Issue の Q&A コメント、worker report の SKIPPED と SUMMARY の decision log から集約、なければ「なし」>
 
 ### 保留・失敗した Issue
 | Issue | 理由 |

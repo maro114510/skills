@@ -8,7 +8,7 @@ description: >
   form a safety list that must never be dropped. Use this proactively for requests like
   "compress this", "make this more concise", "just give me the key points", "trim the fluff",
   "this AI output is too long", "the argument keeps wandering", "Extreme Compact", or "compact this as much as possible".
-  Do not use it for simple typo fixes or general Japanese prose-style polishing — that's ja-style-check's job.
+  Do not use it for simple typo fixes or general Japanese prose-style polishing.
 argument-hint: "[text | file path]"
 allowed-tools: Read, Write
 ---
@@ -29,11 +29,11 @@ The goal is not fewer characters but a reader who grasps the point fast. Watch o
 
 Handles pasted chat text or a file path passed via `$ARGUMENTS`. Works regardless of length or language. Ask the user if the target isn't clear.
 
-**Japanese targets come out better if ja-style-check runs first.** It unfolds brackets into the sentence and replaces bare Latin words with Japanese, both of which lengthen the text, so compressing first only re-introduces what it would have removed.
+**For Japanese targets, finish any style pass before compressing.** A style pass unfolds brackets into the sentence and replaces bare Latin words with Japanese; both lengthen the text, so compressing first only re-introduces what that pass would have removed.
 
-This skill cannot run it: `allowed-tools` is Read and Write, with no Bash and no way to invoke another skill. So when the caller has already run ja-style-check, compress what it returned. Otherwise compress anyway and note in the reply that ja-style-check has not run and would improve the result. Never refuse the compression over this.
+This skill cannot run that pass itself: `allowed-tools` is Read and Write, with no Bash and no way to invoke another skill. So when the caller has already applied a style pass, compress what it returned. Otherwise compress anyway and note in the reply that a style pass has not run and would improve the result. Never refuse the compression over this.
 
-Either way its two rules bind the output: outside a first-use definition, the compressed Japanese carries no parenthetical supplement and no bare Latin word. See `skills/ja-style-check/references/rubric.md`, Checks #2 and #8.
+Either way two rules bind the output: outside a first-use definition, the compressed Japanese carries no parenthetical supplement and no bare Latin word.
 
 ## Procedure
 
@@ -83,14 +83,14 @@ Stitch the surviving block summaries together, then repeat the following.
 
    Both disallowed versions park explanatory content mid-sentence instead of just stating it. The allowed versions fold the same information into a clause that reads linearly.
 
-   Japanese sets a higher bar than the jump test: every parenthetical except a first-use definition is disallowed outright, and dashes inside a Japanese sentence fall under rubric.md Check #14. The jump test still governs English.
+   Japanese sets a higher bar than the jump test: every parenthetical except a first-use definition is disallowed outright, and a dash inside a Japanese sentence counts as decorative notation and is disallowed. The jump test still governs English.
 3. Check that every safety-list item is still present — reworded is fine, dropped is not. If even one is missing, discard this pass, revert, and try a different cut.
 4. Compare the character count before and after, and handle the result as exactly one of three cases.
    - The count stayed the same or grew: discard this pass's output, revert to the version from before it, and try a different cut next pass.
    - The text shrank by 5% or more: keep this output and run another pass.
    - The text shrank by less than 5%: keep this output as final and stop. This is the fixed point.
 
-   Measure against the text you were handed, which for Japanese is ja-style-check's output. Length added by a style rule — a bracket unfolded into the sentence, a Latin word replaced by its Japanese term — is not a failed pass. Never re-introduce a bracket or a bare Latin word to reach the 5% threshold; stop iterating instead.
+   Measure against the text you were handed, which for Japanese is the output of the style pass. Length added by a style rule — a bracket unfolded into the sentence, a Latin word replaced by its Japanese term — is not a failed pass. Never re-introduce a bracket or a bare Latin word to reach the 5% threshold; stop iterating instead.
 5. As a safety margin, stop after 5 passes even if the fixed point hasn't been reached, keeping the most recent output that wasn't discarded under the first case above.
 
 ### Step 5: Final consistency check
@@ -114,7 +114,7 @@ If the input was a file path, ask whether to overwrite that file with the compre
 ## Don't
 
 - Start compressing before the safety list is fixed
-- Compress Japanese that ja-style-check has not seen without saying so in the reply
+- Compress Japanese that has not had a style pass without saying so in the reply
 - Drop a safety-list item — numbers, conditions, proper nouns — on the theory that "the meaning is the same". A paraphrase usually can't replace them.
 - Skip the safety-list check on any pass
 - Delete a block in the structural redundancy check without first confirming no safety-list element exists only there

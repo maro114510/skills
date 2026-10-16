@@ -48,7 +48,7 @@ validate: check-version validate-plugin validate-agent-portability ## Validate m
 validate-plugin: ## Validate the plugin and marketplace manifests with Claude Code.
 	@$(CLAUDE) plugin validate .
 
-validate-agent-portability: ## Validate that shared agents only use portable frontmatter.
+validate-agent-portability: ## Validate portable agent frontmatter and harness-neutral skill paths.
 	@tests/validate-agent-portability.sh
 
 validate-apm: ## Verify APM deploys the agents portably (APM_TARGET=claude|codex|opencode, default all).

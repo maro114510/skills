@@ -1,30 +1,36 @@
 ---
 name: create-pr
 description: >
-  Create a GitHub pull request with a high-signal English title and description.
+  Create a GitHub pull request with a high-signal title and description, written
+  in Japanese by default; pass `lang en` to write it in English instead.
   Analyze the branch diff and complete commit history to explain the motivation,
   impact, risks, implementation choices, and review focus before running
   `gh pr create`. Use this skill when the user asks to open, create, submit, or
   send a PR for review.
 disable-model-invocation: true
 allowed-tools: Bash, Read, Glob, Grep
-argument-hint: "[draft] [base <branch>]"
+argument-hint: "[ready] [base <branch>] [lang <ja|en>]"
 ---
 
 # create-pr
 
-Analyze the branch changes and create a reviewer-focused GitHub pull request in English.
+Analyze the branch changes and create a reviewer-focused GitHub pull request in Japanese by default, or in English with `lang en`.
 
 ## Arguments
 
-Parse `$ARGUMENTS` as follows:
+Parse `$ARGUMENTS`:
 
-- No arguments -> auto-detect the base branch and create a regular PR.
-- `draft` -> create a draft PR.
-- `base <branch>` -> use the specified base branch.
-- Arguments may be combined, for example: `draft base develop`.
+| Argument | Result |
+|---|---|
+| none | Draft PR against the default branch |
+| `ready` | Ready-for-review PR |
+| `draft` | Same as none; kept for compatibility |
+| `base <branch>` | Use `<branch>` as the base |
+| `lang <ja\|en>` | Output language, stored as `LANG`; `ja` when omitted |
 
-All PR titles, PR descriptions, and user-facing status messages produced by this skill must be written in English.
+Combine in any order, e.g. `ready base develop lang en`. Stop and list the valid arguments on `ready` with `draft`, an unknown token, `base` without a branch, or `lang` without `ja` or `en`.
+
+All PR titles, PR descriptions, and user-facing status messages produced by this skill must be written in `LANG`, following Step 3.1.
 
 ## Step 1. Collect Context and Detect the PR Template
 
@@ -35,28 +41,31 @@ Run the following checks in parallel:
 ```bash
 git branch --show-current
 git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null || echo "no upstream"
-git remote show origin | grep 'HEAD branch'
+git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null || gh repo view --json defaultBranchRef --jq .defaultBranchRef.name
 git status --short
 ```
 
+Base: the `base` argument, else the detected default branch without `origin/`.
+
 **1.2 Find the PR template**
 
-Search in this order and use the first template found in Step 3:
+Check these paths sequentially in order for file existence, without reading their contents during probing. Stop probing immediately at the first existing file; do not check any remaining candidates:
 
 1. `.github/PULL_REQUEST_TEMPLATE.md`
 2. `.github/pull_request_template.md`
 3. `docs/pull_request_template.md`
 4. `PULL_REQUEST_TEMPLATE.md`
 
-If a template exists, read it before generating the PR description.
+Read only that first template, exactly once, and retain its contents for Step 3. Do not probe or read the other candidates, even if a case-insensitive filesystem resolves another candidate name to the same file. If no candidate exists, use the default structure in Step 3.3.
 
 **1.3 Get the diff after choosing the base branch**
 
 ```bash
 git log --oneline <base>..HEAD
 git diff --stat <base>...HEAD
-git diff <base>...HEAD
 ```
+
+Within 20 files and 1,000 lines, run `git diff <base>...HEAD`. Otherwise read meaningful files with `-- <path>` and skip lockfiles, generated files, and vendored code.
 
 **1.4 Stop conditions**
 
@@ -85,7 +94,16 @@ Read the diff and the full commit history, not only the latest commit, to identi
 
 **2.3 Related issues**
 
-Extract `#NNN` references from the branch name and commit messages. Default to `Closes #NNN` for every extracted issue. Use `Related: #NNN` instead only when the diff, commit messages, or branch name make it clear the issue is not actually resolved by this PR (for example, it covers only part of the issue's scope).
+Run `bash <skill-dir>/scripts/issue-refs.sh <base>`. `<skill-dir>` is the directory containing this SKILL.md.
+
+| Case | Reference |
+|---|---|
+| Line printed | Copy it as is |
+| Exit 3 with `CONFLICT #NNN` | Stop. An older commit closes the issue that the newest commit marks Related |
+| Issue only in the branch name or a commit subject | `Closes #NNN`, or `Related #NNN` only when deferred items were reported, the user said the work is partial, or the issue is only cited in passing |
+
+- One reference per line. GitHub links only the first issue of `Closes #1, #2`.
+- For each `Related` issue, state what this PR resolves and what remains.
 
 If the diff is large, meaning more than 20 files or more than 1,000 changed lines, organize the description into logical groups.
 
@@ -93,13 +111,15 @@ If the diff is large, meaning more than 20 files or more than 1,000 changed line
 
 ### 3.1 Language
 
-Write the PR title, PR description, and user-facing status messages in English by default. Do not auto-detect another language from previous PRs or commit messages.
+Write the PR title, PR description, and user-facing status messages in `LANG`: Japanese for `ja` (the default), English for `en`. Do not auto-detect another language from previous PRs or commit messages.
 
-If a repository template is written in another language, preserve the template's structure, but fill in the content in natural English unless the template explicitly requires otherwise.
+These stay in English regardless of `LANG`: the Conventional Commits type and scope in the title, the `Closes #NNN` / `Related #NNN` lines, code identifiers, commands, and paths, and script output that Step 6 says to show verbatim.
+
+If a repository template is written in another language, preserve the template's structure, but fill in the content in natural `LANG` unless the template explicitly requires otherwise.
 
 ### 3.2 When a template exists
 
-Follow the template found in Step 1.2. Do not ignore it:
+Follow the template contents retained from Step 1.2 without reading the file again. Do not ignore it:
 
 - Fill in every section.
 - Follow any inline comments or section-specific instructions.
@@ -107,6 +127,19 @@ Follow the template found in Step 1.2. Do not ignore it:
 - Add useful information that the template does not ask for, such as background, implementation details, risks, or future considerations, as extra sections at the end.
 
 ### 3.3 Default structure when no template exists
+
+Use the structure below. For `ja`, replace each heading with its Japanese form; for `en`, keep the headings as written.
+
+| `en` | `ja` |
+|---|---|
+| Background | 背景 |
+| Summary | 概要 |
+| Implementation Details | 実装方針 |
+| Changes | 変更内容 |
+| Impact | 影響範囲 |
+| Concerns | 懸念点 |
+| Future Considerations | 今後の検討事項 |
+| Test Plan | テスト計画 |
 
 ```markdown
 ## Background
@@ -194,19 +227,15 @@ If none of these apply, keep the draft as written — depth is intentional for t
 - Use Conventional Commits format: `feat:`, `fix:`, `refactor:`, and so on. Add a scope when useful, for example `fix(location):`.
 - For breaking changes, add `!` after the type or scope, for example `feat(config)!:` or `fix(api)!:`.
 - Keep the title under 70 characters.
-- Use the imperative mood: "add", not "added".
+- For `en`, use the imperative mood: "add", not "added".
+- For `ja`, keep the type and scope in English and write the subject in Japanese, for example `fix(auth): リフレッシュ時に期限切れの JWT を処理する`.
 - Be specific: prefer `fix(auth): handle expired JWT on refresh` over `fix: resolve crash`.
-
-**4.2 Match existing PRs**
-
-If the repository has existing PRs, check their title style and stay consistent unless it conflicts with the rules above.
 
 ## Step 5. Consider Metadata
 
-Before creating the PR, run the following `gh` commands and use the results to propose choices to the user.
+Before creating the PR, run the following `gh` commands and use the results to choose metadata.
 Do not merely show the commands; execute them.
-Complete 5.3 and 5.4, including user confirmation, before continuing to Step 6.
-Step 5.2 does not require user confirmation because the AI chooses labels automatically.
+Do not ask the user for confirmation.
 
 **5.1 Assignee**
 
@@ -217,24 +246,14 @@ Add `--assignee @me` by default.
 Run:
 
 ```bash
-gh label list
+gh label list --limit 200 --json name,description
 ```
 
-Compare the available labels with the Step 2 analysis and automatically choose the most appropriate labels.
-Tell the user which labels were selected and why in one concise sentence.
-If no label matches, continue without labels.
+- Apply at most two labels that clearly match the change type or area. No clear match means no label.
+- Never apply status labels such as `wip` or `draft`, and never create labels.
+- Tell the user the choice and reason in one sentence.
 
-**5.3 Milestone**
-
-Run:
-
-```bash
-gh api repos/{owner}/{repo}/milestones
-```
-
-If open milestones exist, compare them with the change and ask the user whether to attach one.
-
-**5.4 Issue links**
+**5.3 Issue links**
 
 Confirm that any issue numbers extracted in Step 2.3 are included in the description using the `Closes`/`Related` choice already made there. Do not ask the user to choose between them.
 
@@ -248,23 +267,36 @@ git push -u origin <current-branch>
 
 **6.2 Create the PR**
 
-Run the following command. Do not stop after merely showing the command to the user:
+Never run `gh pr create` directly. GitHub can lag hours before it links a closing keyword, so the script links each `Closes` line through the API and waits until the link appears. It rewrites `Closes` to `Related` for an issue with open sub-issues, noting how many remain, so a partial PR never closes its parent; with `--link` it applies that rewrite to the existing PR body. On a non-default base it keeps `Closes` but links nothing, because GitHub honors the keyword only once the PR targets the default branch.
+
+Run the command; do not stop after showing it. Add `--draft` unless `ready` was given:
 
 ```bash
-gh pr create \
+bash <skill-dir>/scripts/create-linked-pr.sh \
   --title "<title>" \
-  --body "$(cat <<'EOF'
-<description>
-EOF
-)" \
+  --body-file - \
   [--draft] \
   [--base <base-branch>] \
   [--assignee @me] \
-  [--label "<label>"] \
-  [--milestone "<milestone>"]
+  [--label "<label>"] <<'EOF'
+<description>
+EOF
 ```
 
-**6.3 Finish**
+**6.3 Handle the result**
+
+| Exit | Output | Action |
+|---|---|---|
+| 0 | PR URL, `LINKED #NNN`, `NOTICE` | Continue to 6.4 |
+| 1 | PR already exists | Show its URL and stop. Do not edit it |
+| 1 | Draft not supported | Ask: ready or abort. Ready reruns without `--draft` |
+| 1 | Other | Show the error verbatim and stop |
+| 2 | `ISSUE_NOT_FOUND #NNN` | No PR was created. Name the issues and stop |
+| 3 | PR URL, `LINK_MISSING #NNN` | Rerun once with `--link <url>`. If still missing, ask the user to link it from the Development sidebar |
+
+Never push again or retry blindly.
+
+**6.4 Finish**
 
 After creating the PR, run:
 
@@ -272,4 +304,6 @@ After creating the PR, run:
 gh pr view --web
 ```
 
-Show the PR URL to the user.
+Show the PR URL, whether it is draft or ready, every linked issue, and any `NOTICE` line verbatim.
+If a `NOTICE` rewrote an issue to `Related` while a commit footer still says `Closes` for it, warn that merging would still close the issue through that footer, even with a squash merge under GitHub's default message; edit the squash message or reword the footer before merging.
+If a `NOTICE` kept `Closes` unlinked on a non-default base, tell the user to run `create-linked-pr.sh --link <url>` once the PR is retargeted to the default branch.
