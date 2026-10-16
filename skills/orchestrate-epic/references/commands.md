@@ -200,12 +200,19 @@ Each output line is one compact JSON object — `.command` embeds internal newli
 # Once per run
 gh label create "loop:in-progress" --repo "$REPO" --color "BFD4F2" --description "orchestrate-epic worker is implementing" 2>/dev/null || true
 BASE=$(gh repo view "$REPO" --json defaultBranchRef -q .defaultBranchRef.name)   # same resolution as §1.5 — never hardcode main
-git switch "$BASE" && git pull origin "$BASE"   # once, before any worker; on dirty-tree failure: stop and tell the user
+git fetch origin "$BASE"   # once, before any worker; updates only origin/$BASE. Never switch or pull the starting checkout — other sessions may share it. On failure: stop and tell the user
 
 # Per dispatched Issue, serially
-git wt "feat/issue-$N"   # prints the worktree path — capture it for the worker prompt; reuses existing worktrees
+BRANCH="feat/issue-$N"   # or the state comment's recorded redo branch, such as feat/issue-$N-2
+if git show-ref --verify --quiet "refs/heads/$BRANCH" \
+   || git show-ref --verify --quiet "refs/remotes/origin/$BRANCH"; then
+  git wt "$BRANCH"                  # existing branch: reuses its worktree, or checks it out; git wt rejects a start-point here
+else
+  git wt "$BRANCH" "origin/$BASE"   # new branch: starts from the fetched default branch, never the possibly stale local one
+fi
+# git wt prints the worktree path — capture it for the worker prompt
 gh issue edit "$N" --repo "$REPO" --add-label "loop:in-progress"
-gh issue comment "$N" --repo "$REPO" --body "orchestrate-epic: 実装を開始しました (branch: \`feat/issue-$N\`)"
+gh issue comment "$N" --repo "$REPO" --body "orchestrate-epic: 実装を開始しました (branch: \`$BRANCH\`)"
 
 # Per answered BLOCKED question (Step 5) — human answers must survive the session
 gh issue comment "$N" --repo "$REPO" --body "$(cat <<'EOF'
@@ -311,7 +318,7 @@ BASE=$(gh repo view "$REPO" --json defaultBranchRef -q .defaultBranchRef.name)  
 # 1. Inspect what ships — input for the secret screen
 git -C "$WT" add -N .                                      # intent-to-add: makes untracked files diff-visible (content stays unstaged)
 git -C "$WT" status --short
-git -C "$WT" diff "$(git -C "$WT" merge-base "$BASE" HEAD)"   # uncommitted changes plus the worker's own commit(s), without post-branch main noise
+git -C "$WT" diff "$(git -C "$WT" merge-base "origin/$BASE" HEAD)"   # uncommitted changes plus the worker's own commit(s), without post-branch main noise; origin/$BASE, never the local default branch, which this loop never updates
 git -C "$WT" fetch origin "$BRANCH" 2>/dev/null
 git -C "$WT" rev-parse --verify -q "origin/$BRANCH" >/dev/null 2>&1 && echo "PUSHED EXTERNALLY — flag to the user"   # succeeds only if the branch reached the remote before this step pushed it
 
