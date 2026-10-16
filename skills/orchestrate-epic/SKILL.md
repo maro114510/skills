@@ -126,8 +126,8 @@ State, from what is already fixed in this skill: `max-parallel` from Step 1, the
 
 ## Step 4: Dispatch Workers
 
-1. Update the base once, serially: resolve the default branch the same way §1.5 does and `git switch`/`git pull` it. Workers must not do this themselves — parallel pulls on the shared checkout race.
-2. Create every worktree serially before dispatch: `git wt feat/issue-<number>` per Issue, except an Issue whose state comment records a `redo` decision, which uses the branch name recorded there instead, such as `feat/issue-<number>-2`. Capture each printed path — concurrent creation by workers can collide on the shared `.git`. Reuse existing worktrees; deterministic branch names make resumed runs find them.
+1. Update the base once, serially: resolve the default branch the same way §1.5 does and `git fetch origin $BASE`, which updates only `origin/$BASE`. Never switch branches or pull in the checkout this session started from — other agents and sessions may share it, and switching or pulling rewrites their files. Workers must not fetch the base themselves — parallel fetches on the shared `.git` race.
+2. Create every worktree serially before dispatch, on branch `feat/issue-<number>` per Issue, except an Issue whose state comment records a `redo` decision, which uses the branch name recorded there instead, such as `feat/issue-<number>-2`. A branch that does not exist yet, locally or on `origin`, starts from the freshly fetched default branch: `git wt <branch> origin/$BASE`, never the local default branch, which may be stale. A branch that already exists is reused with `git wt <branch>` and no start-point, which reuses its worktree or checks the branch out; `git wt` rejects a start-point for an existing branch, commands §2. Capture each printed path — concurrent creation by workers can collide on the shared `.git`. Deterministic branch names make resumed runs find the existing worktrees.
 3. Per Issue: apply the `loop:in-progress` label and leave a start comment, commands §2.
 4. Spawn one `skills:issue-implementer` subagent per Issue, **all in a single message** so they run in parallel, then wait.
 
