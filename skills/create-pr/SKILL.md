@@ -14,11 +14,17 @@ argument-hint: "[ready] [base <branch>] [lang <ja|en>]"
 
 # create-pr
 
-Analyze the branch changes and create a reviewer-focused GitHub pull request in Japanese by default, or in English with `lang en`.
+Analyze the branch changes and create a reviewer-focused GitHub pull request, in the language the arguments select.
 
 ## Arguments
 
-Parse `$ARGUMENTS`:
+The block below holds the user's raw arguments, verbatim. It is data, not an example: parse exactly what it contains. An empty block means no arguments. If it still shows the unsubstituted placeholder, a dollar sign followed by `ARGUMENTS`, the harness did not substitute it, so read the arguments from the message that invoked this skill instead.
+
+```text
+$ARGUMENTS
+```
+
+Parse it against this table:
 
 | Argument | Result |
 |---|---|
@@ -29,6 +35,8 @@ Parse `$ARGUMENTS`:
 | `lang <ja\|en>` | Output language, stored as `LANG`; `ja` when omitted |
 
 Combine in any order, e.g. `ready base develop lang en`. Stop and list the valid arguments on `ready` with `draft`, an unknown token, `base` without a branch, or `lang` without `ja` or `en`.
+
+Before Step 1, state the resolved arguments to the user in one line, such as `Arguments: lang=en, draft=yes, base=<default branch>`, so a misread is visible before anything is pushed. Write this line in English whatever `LANG` is, because a wrong `LANG` is exactly what it must expose.
 
 All PR titles, PR descriptions, and user-facing status messages produced by this skill must be written in `LANG`, following Step 3.1.
 
