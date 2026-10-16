@@ -34,8 +34,9 @@ risk ラベルが無い Issue は risk:high 扱いです（表示のみで、実
 - [!] wall-clock / 予算による自動停止はまだありません（#171 未実装）
 
 ### 次のアクション
-このプランに問題がなければ、Epic に `oe:go` ラベルを追加してください。追加されるまで dispatch は行われません。
-ラベルを追加した後は、通常どおり実行しても問題があれば Issue や Epic へのコメントで介入できます — 以後このループが対話で確認を求めることはありません。
+このプランに問題がなければ、この Epic に `epic-approve` とだけ書いたコメントを投稿してください。この Run Plan より後に、OWNER・MEMBER・COLLABORATOR が投稿したものだけが承認になります。投稿されるまで dispatch は行われません。
+`epic-approve` を文中に含めただけのコメント（例: 「確認したら epic-approve します」）は承認になりません。補足や条件は別のコメントに書いてください。ラベルは承認として読み取りません。
+承認した後は、通常どおり実行しても問題があれば Issue や Epic へのコメントで介入できます — 以後このループが対話で確認を求めることはありません。
 ```
 
 ## Blocked Question（Step 5、Issue コメント）
@@ -49,7 +50,8 @@ Q1: <workerのQUESTIONS 1つ目>
 Q2: <あれば>
 ...
 
-回答はこの Issue へのコメントとして残してください。次回このループを実行すると worker が読み取ります。
+回答はこの Issue へのコメントとして自由に書いてください。次回このループを実行すると worker が読み取ります。
+この Issue は parked ではないため、`epic-retry` / `epic-redo` / `epic-drop` は不要です。これらのコマンドは、parked または rejected になった Issue の判断にだけ使います。
 ```
 
 回答済みの問いを次回コメントするときは、既存の Q&A 形式（commands §2）に従う。
@@ -67,8 +69,12 @@ orchestrate-epic: ship-class の判断が必要なため、この Issue を保�
 内容: <何を判断する必要があるか>
 選択肢: <考えられる選択肢をそのまま列挙>
 
-この問いはループ自身では決めません。方針をこの Issue へのコメントとして残してください。次回実行時に、信頼できるコメントとして読み取ります。回答が無い限り再開しません。
-回答には `retry`（同じ worktree で修正を続ける）/ `redo`（新しいブランチでやり直す）/ `drop`（出荷しない）のいずれか 1 語を、独立した語として含めてください。この語が無いコメントは判断として読み取られず、Issue は parked のままになります。
+この問いはループ自身では決めません。回答が無い限り再開しません。
+判断は、次のコマンドのどれか 1 つだけを書いたコメントとして投稿してください。OWNER・MEMBER・COLLABORATOR のコメントだけを読み取ります。
+- `epic-retry` — 同じ worktree で修正を続ける
+- `epic-redo` — 新しいブランチでやり直す
+- `epic-drop` — 出荷しない
+コマンドを文中に含めただけのコメント（例: 「まだ epic-retry しないで」）は判断として読み取られず、Issue は parked のままになります。理由や修正方針は、コマンドより先に別のコメントとして書いてください。コマンドを読み取った時点までに投稿されたコメントだけを、`epic-retry` / `epic-redo` のときに worker へ渡します。
 ```
 
 `risk:low` の scope dispute だけは ship-class ではありません。Park せず、狭い解釈を採用して広い解釈を follow-up として記録し、続行します。
@@ -143,5 +149,5 @@ Epic 本体は close していません。close するかどうかはあなた�
 ```
 [!] #<N> は今回の round から除外しました。
 理由: <worker の2回目の失敗内容 / 未解消の blocking findings / secret screen ヒット 等>
-Issue には同内容をコメント済みです。BLOCKED の再送はこのまま次回も自動で試みますが、fix-cycle cap 到達 / secret screen ヒットで parked になった Issue は、この Issue に対応方針をコメントしない限り再開しません。
+Issue には同内容をコメント済みです。BLOCKED の再送はこのまま次回も自動で試みますが、fix-cycle cap 到達 / secret screen ヒットで parked になった Issue は、`epic-retry` / `epic-redo` / `epic-drop` のどれか 1 つだけを書いたコメントがこの Issue に投稿されない限り再開しません。理由や修正方針は、コマンドより先に別のコメントとして書いてください。
 ```
