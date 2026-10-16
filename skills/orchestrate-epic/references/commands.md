@@ -378,6 +378,16 @@ orchestrate-epic state:
 - pending_findings: <なし、または実行中の fix cycle に渡したレビューア指摘（blocking・nit とも）を番号付きで file:line — 要約。parked 判定には使わない>
 - unresolved_blockers: <なし、または park の原因になった指摘・問いを番号付きで file:line — 要約>
 - decisions: <このIssueについて人間が下した判断。`<epic-retry|epic-redo|epic-drop>[ — <epic-redo のブランチ>] (comment <判断コメントの id>; context: <文脈コメントの id をカンマ区切り、無ければ なし>)`。なければ なし>
+- review_evidence: <有効な承認がなければ none。あれば空にして、次の行から reviewed_sha の APPROVE を出した reviewer report の BEHAVIOR_CHANGE 行と CRITERIA 各行を、それぞれ先頭に 2 スペースを付けてそのまま並べる>
+```
+
+`review_evidence` is always the last field, and its value lines are indented by two spaces, so the single-line `^- <field>:` lookups in §3 never read a criterion's text as another field. The field is **present** only when an empty header is followed by at least one indented line — exactly what §3's `REVIEW_EVIDENCE` extraction returns non-empty for; `none`, a header with no lines under it, or no such field at all is not present, everywhere this skill checks it. A bound verdict looks like:
+
+```
+- review_evidence:
+  BEHAVIOR_CHANGE: yes — <basis>
+  1. <criterion verbatim> -> verified [behavior] — <command or input and observed result>
+  2. <criterion verbatim> -> verified [static] — <file:line>
 ```
 
 `cycle` counts every fix cycle from Step 6 — a fresh-worker re-dispatch for reviewer findings plus its re-review; one for blocking findings and one for nit-only findings each add 1, since the 2-cycle cap is what bounds nit resolution too, not only blocking. A staleness re-verification pass, Step 6, dispatches no worker and leaves it unchanged; so does a BLOCKED answer or FAILED retry from Step 5, and neither resets it. The one exception is an authorized `epic-retry` or `epic-redo` decision on a `parked` or `rejected` Issue, SKILL.md Step 2's un-parking check, which resets `cycle` to 0 — a human decision restarts the fix-cycle budget on purpose. Short of that, Step 6 reads it back on a resumed session so the 2-cycle cap holds across a restart instead of starting over at 0.
@@ -390,7 +400,7 @@ gh api "repos/$REPO/issues/comments/$CONTEXT_ID" --jq '{author: .user.login, cre
 
 `pending_findings` holds the findings, blocking or nit, handed to an in-flight fix cycle — including the nits of an APPROVE, which Step 6 treats as REQUEST_CHANGES for state purposes. It is cleared by the next review result and by an `epic-retry`/`epic-redo`, and it never makes Step 2 classify the Issue `parked`; only a non-empty `unresolved_blockers` or an `epic-drop` in `decisions` does. A resumed `in-progress` Issue passes it into the fresh worker's prompt, Step 4.
 
-`head_sha` alone is not an approval — it is written after every review, including a REQUEST_CHANGES. The ship-integrity pair is `reviewed_sha` + `verified_base`: Step 6 sets both only on a finding-free APPROVE whose pre-review pin (`REVIEW_HEAD`, `REVIEW_BASE`) still matches after the review, and resets both to `none` on a REQUEST_CHANGES, an APPROVE carrying nits, a park, a stale gate in Step 7, or a human `epic-retry`/`epic-redo` restart. Step 2's open-PR sanity check compares them against the PR's `headRefOid` and the current `origin/$BASE`, classifying a mismatch `reverify` so §2.6 re-verifies it; Step 7's verdict gate compares them against the worktree HEAD and `origin/$BASE` before shipping; #145's merge request sends `reviewed_sha` as its expected SHA. A mismatch on either field means the recorded verdict cannot authorize a ship or a merge.
+`head_sha` alone is not an approval — it is written after every review, including a REQUEST_CHANGES. The bound verdict is `reviewed_sha` + `verified_base` + `review_evidence`, written in the same upsert so no reader ever sees one without the others: Step 6 sets all three only on a finding-free APPROVE that passes its "Acceptance Evidence" validation and whose pre-review pin (`REVIEW_HEAD`, `REVIEW_BASE`) still matches after the review, and resets all three to `none` on a REQUEST_CHANGES, an APPROVE carrying nits or failing validation, a park, a stale gate in Step 7, or a human `epic-retry`/`epic-redo` restart. Step 2's open-PR sanity check compares the SHAs against the PR's `headRefOid` and the current `origin/$BASE`, classifying a mismatch, or a `review_evidence` that is not present, `reverify` so §2.6 re-verifies it; Step 7's verdict gate does the same against the worktree HEAD and `origin/$BASE` before shipping; #145's merge request sends `reviewed_sha` as its expected SHA. A mismatch on either SHA, or missing evidence, means the recorded verdict cannot authorize a ship or a merge. A state comment written before `review_evidence` existed has no such line, which reads as missing evidence: its open PR is re-verified once instead of trusted.
 
 git-wt may place worktrees outside the repo, depending on its config — always use the printed path, never an assumed `.wt/`.
 
@@ -402,15 +412,19 @@ git-wt may place worktrees outside the repo, depending on its config — always 
 MARK="<!-- orchestrate-epic:stale-verdict $PR_HEAD $(git rev-parse "origin/$BASE") -->"
 STALE=$(marker_comment "$N" "$MARK") \
   || { echo "stale-verdict lookup failed — stop and report" >&2; exit 1; }   # §1.5's marker_comment
+# REASON matches why Step 2 classified it reverify: the SHAs no longer match the bound pair, or they
+# match but review_evidence is not present (§2.5), such as a state comment from before that field.
+REASON="PR の HEAD または default branch が承認時から変わったため、承認は無効です。再検証します。"
+# REASON="承認に受け入れ条件ごとの review 証跡が記録されていないため、承認は無効です。再検証します。"   # evidence-only case
 [ -n "$STALE" ] || gh issue comment "$N" --repo "$REPO" --body "$MARK
-orchestrate-epic: PR の HEAD または default branch が承認時から変わったため、承認は無効です。再検証します。"   # non-empty → already reported, skip
+orchestrate-epic: $REASON"   # non-empty → already reported, skip
 git -C "$WT" fetch origin "$BRANCH"
 if [ "$(git -C "$WT" rev-parse HEAD)" != "$PR_HEAD" ]; then
   git -C "$WT" merge-base --is-ancestor HEAD "$PR_HEAD" \
     && git -C "$WT" merge --ff-only "$PR_HEAD" \
     || { echo "worktree and PR head diverged — stop and tell the user" >&2; exit 1; }
 fi
-# then upsert the state comment: head_sha=$PR_HEAD, reviewed_sha/verified_base=none
+# then upsert the state comment: head_sha=$PR_HEAD, reviewed_sha/verified_base/review_evidence=none
 
 # Step 6, every review: pin the base, integrate it if HEAD does not already contain it
 git -C "$WT" fetch origin "$BASE"
@@ -476,6 +490,9 @@ HEAD_SHA=$(field head_sha)
 # Issue back for re-review rather than shipping a commit the reviewer never saw.
 REVIEWED_SHA=$(field reviewed_sha)
 VERIFIED_BASE=$(field verified_base)
+# The reviewer's per-criterion evidence bound to REVIEWED_SHA, §2.5: the two-space-indented lines
+# under an empty `- review_evidence:` header. Empty when the field is `none` or absent.
+REVIEW_EVIDENCE=$(printf '%s\n' "$STATE_BODY" | sed -n '/^- review_evidence:[[:space:]]*$/,${/^  /p;}')
 CUR=$(git -C "$WT" rev-parse HEAD)
 if { { [ -n "$HEAD_SHA" ] && [ "$HEAD_SHA" != "UNKNOWN" ] && [ "$HEAD_SHA" != "none" ] && [ "$CUR" = "$HEAD_SHA" ]; } \
      || { [ -n "$REVIEWED_SHA" ] && [ "$REVIEWED_SHA" != "none" ] && [ "$CUR" = "$REVIEWED_SHA" ]; }; } \
@@ -501,19 +518,21 @@ EOF
 fi
 
 # 3. Verdict freshness gate — after sub-step 2 has frozen the committed artifact, before any check,
-#    push, or PR. The recorded APPROVE is bound to exactly (reviewed_sha, verified_base), the values
-#    SKILL.md Step 6 wrote; a HEAD or default branch that moved since makes the verdict stale and
-#    none of sub-steps 4-5 may run for that Issue. A fallback commit from sub-step 2 moves HEAD off
-#    reviewed_sha and is caught here. $REVIEWED_SHA / $VERIFIED_BASE were read from the §2.5 state
-#    comment before sub-step 2; "none" means no live approval exists. This is the same pair #145's merge request will
+#    push, or PR. The recorded APPROVE is bound to exactly (reviewed_sha, verified_base,
+#    review_evidence), the values SKILL.md Step 6 wrote; a HEAD or default branch that moved since
+#    makes the verdict stale and none of sub-steps 4-5 may run for that Issue. A fallback commit
+#    from sub-step 2 moves HEAD off reviewed_sha and is caught here. $REVIEWED_SHA, $VERIFIED_BASE,
+#    and $REVIEW_EVIDENCE were read from the §2.5 state comment before sub-step 2; "none" or empty
+#    evidence means no live approval exists. This is the same pair #145's merge request will
 #    send as its expected head SHA, so a HEAD that changes between this comparison and the merge
 #    fails that request instead of merging an unreviewed commit.
 git -C "$WT" fetch origin --prune
 if [ -z "$REVIEWED_SHA" ] || [ "$REVIEWED_SHA" = "none" ] \
    || [ -z "$VERIFIED_BASE" ] || [ "$VERIFIED_BASE" = "none" ] \
+   || [ -z "$REVIEW_EVIDENCE" ] \
    || [ "$(git -C "$WT" rev-parse HEAD)" != "$REVIEWED_SHA" ] \
    || [ "$(git -C "$WT" rev-parse "origin/$BASE")" != "$VERIFIED_BASE" ]; then
-  # Stale or missing verdict: reset reviewed_sha/verified_base to none and go back to SKILL.md
+  # Stale or missing verdict: reset reviewed_sha/verified_base/review_evidence to none and go back to SKILL.md
   # Step 6's staleness re-verification pass (at most one per Issue per round), which re-pins
   # origin/$BASE, re-reviews, rebinds the pair — then rerun Step 7 from sub-step 3. Do not check,
   # push, or open a PR from here.
@@ -555,7 +574,7 @@ elif ! git -C "$WT" fetch origin "$BASE" \
      || [ "$(git -C "$WT" rev-parse HEAD)" != "$REVIEWED_SHA" ]; then
   # 5a. Publication gate — sub-step 3's fetch ran before CHECKS_SET, so a base that advanced
   # (or a HEAD that moved) while the checks ran is only visible to a fresh fetch here. Treat it
-  # exactly like a sub-step 3 mismatch: no push, no PR; reset reviewed_sha/verified_base to none
+  # exactly like a sub-step 3 mismatch: no push, no PR; reset reviewed_sha/verified_base/review_evidence to none
   # and return the Issue to SKILL.md Step 6's re-verification pass. Clear check-run leftovers
   # first, without moving HEAD, so the re-review does not see them as new changes.
   git -C "$WT" reset --hard HEAD
@@ -577,7 +596,11 @@ else
 <worker summary, condensed>
 
 ## Check evidence
-<CHECKS and CRITERIA sections from the worker report>
+<CHECKS section from the worker report>
+
+## Acceptance evidence
+Gathered by the independent reviewer on reviewed_sha against verified_base; valid only while both still match. This is a snapshot taken when the PR was created; the Issue's state comment holds the evidence currently bound, and is the one every gate reads.
+<$REVIEW_EVIDENCE, verbatim — never the worker's CRITERIA in its place>
 
 ## Review
 - reviewed_sha: <$REVIEWED_SHA>
