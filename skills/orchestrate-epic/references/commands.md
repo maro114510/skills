@@ -242,22 +242,25 @@ else
 fi
 ```
 
-`$BODY` carries all four fields every time, even when a field is empty — a partial write is worse than a stale one, since a missing field reads as "never recorded" on the next resume:
+`$BODY` carries every field below every time, even when a field is empty — a partial write is worse than a stale one, since a missing field reads as "never recorded" on the next resume:
 
 ```
 <!-- orchestrate-epic-state -->
 orchestrate-epic state:
-- cycle: <reviewer 再 review 回数。blocking 修正・nit のみの修正を問わず 1 回として数え、初回 review は 0>
+- cycle: <fix cycle 回数。reviewer 指摘を受けた worker 再 dispatch と再 review を、blocking・nit のみを問わず 1 回として数え、初回 review は 0。staleness 再検証は数えない>
 - head_sha: <workerが報告した HEAD_SHA。コミットがまだなければ none>
 - reviewed_sha: <直近の APPROVE が束縛された HEAD。有効な承認がなければ none>
-- verified_base: <その APPROVE が比較した default branch の commit SHA。有効な承認がなければ none>
-- unresolved_blockers: <なし、またはレビューア指摘を番号付きで file:line — 要約>
+- verified_base: <その APPROVE の review 開始前に固定した default branch の commit SHA。有効な承認がなければ none>
+- pending_findings: <なし、または実行中の fix cycle に渡したレビューア指摘（blocking・nit とも）を番号付きで file:line — 要約。parked 判定には使わない>
+- unresolved_blockers: <なし、または park の原因になった指摘・問いを番号付きで file:line — 要約>
 - decisions: <このIssueについて人間が下した判断。なければ なし>
 ```
 
-`cycle` counts every reviewer re-pass after the first review, from Step 6 — a re-dispatch for blocking findings and one for nit-only findings each add 1, since the 2-cycle cap is what bounds nit resolution too, not only blocking; a BLOCKED answer or FAILED retry from Step 5 leaves it unchanged, and neither resets it. The one exception is an authorized `retry` or `redo` decision on a `parked` or `rejected` Issue, SKILL.md Step 2's un-parking check, which resets `cycle` to 0 — a human decision restarts the fix-cycle budget on purpose. Short of that, Step 6 reads it back on a resumed session so the 2-cycle cap holds across a restart instead of starting over at 0.
+`cycle` counts every fix cycle from Step 6 — a fresh-worker re-dispatch for reviewer findings plus its re-review; one for blocking findings and one for nit-only findings each add 1, since the 2-cycle cap is what bounds nit resolution too, not only blocking. A staleness re-verification pass, Step 6, dispatches no worker and leaves it unchanged; so does a BLOCKED answer or FAILED retry from Step 5, and neither resets it. The one exception is an authorized `retry` or `redo` decision on a `parked` or `rejected` Issue, SKILL.md Step 2's un-parking check, which resets `cycle` to 0 — a human decision restarts the fix-cycle budget on purpose. Short of that, Step 6 reads it back on a resumed session so the 2-cycle cap holds across a restart instead of starting over at 0.
 
-`head_sha` alone is not an approval — it is written after every review, including a REQUEST_CHANGES. The ship-integrity pair is `reviewed_sha` + `verified_base`: Step 6 sets both only on an APPROVE, and resets both to `none` on a REQUEST_CHANGES, a park, or a human `retry`/`redo` restart. Step 2's `awaiting-merge` sanity check compares them against the PR's `headRefOid` and the current `origin/$BASE`; Step 7's verdict gate compares them against the worktree HEAD and `origin/$BASE` before shipping; #145's merge request sends `reviewed_sha` as its expected SHA. A mismatch on either field means the recorded verdict cannot authorize a ship or a merge.
+`pending_findings` holds the findings, blocking or nit, handed to an in-flight fix cycle — including the nits of an APPROVE, which Step 6 treats as REQUEST_CHANGES for state purposes. It is cleared by the next review result and by a `retry`/`redo`, and it never makes Step 2 classify the Issue `parked`; only `unresolved_blockers` does. A resumed `in-progress` Issue passes it into the fresh worker's prompt, Step 4.
+
+`head_sha` alone is not an approval — it is written after every review, including a REQUEST_CHANGES. The ship-integrity pair is `reviewed_sha` + `verified_base`: Step 6 sets both only on a finding-free APPROVE whose pre-review pin (`REVIEW_HEAD`, `REVIEW_BASE`) still matches after the review, and resets both to `none` on a REQUEST_CHANGES, an APPROVE carrying nits, a park, a stale gate in Step 7, or a human `retry`/`redo` restart. Step 2's `awaiting-merge` sanity check compares them against the PR's `headRefOid` and the current `origin/$BASE`; Step 7's verdict gate compares them against the worktree HEAD and `origin/$BASE` before shipping; #145's merge request sends `reviewed_sha` as its expected SHA. A mismatch on either field means the recorded verdict cannot authorize a ship or a merge.
 
 git-wt may place worktrees outside the repo, depending on its config — always use the printed path, never an assumed `.wt/`.
 
@@ -285,8 +288,9 @@ git -C "$WT" rev-parse --verify -q "origin/$BRANCH" >/dev/null 2>&1 && echo "PUS
 # lockfile) stays intent-to-add in the index and would ride into a bare `git commit`, which is why
 # this sub-step stages only the worker's own CHANGED_FILES paths. Stage exactly those paths — never
 # `add -A`/`add -u`, which would also pick up that same reviewer-left untracked or in-place-modified
-# state. After a secret-screen hit specifically, unstage the flagged path first with
-# `git -C "$WT" restore --staged -- <path>`, then stage the remaining CHANGED_FILES as usual.
+# state. A secret-screen hit never reaches this sub-step: it exits this Issue after sub-step 1,
+# so nothing from that Issue is staged or committed here — excluding the flagged path and
+# committing the rest is not an option, since the flagged content may already be in HEAD.
 # A commit made here moves HEAD off reviewed_sha; sub-step 3's gate catches that and sends the
 # Issue back for re-review rather than shipping a commit the reviewer never saw.
 if [ -n "$HEAD_SHA" ] && [ "$HEAD_SHA" != "UNKNOWN" ] \
@@ -324,8 +328,9 @@ if [ -z "$REVIEWED_SHA" ] || [ "$REVIEWED_SHA" = "none" ] \
    || [ -z "$VERIFIED_BASE" ] || [ "$VERIFIED_BASE" = "none" ] \
    || [ "$(git -C "$WT" rev-parse HEAD)" != "$REVIEWED_SHA" ] \
    || [ "$(git -C "$WT" rev-parse "origin/$BASE")" != "$VERIFIED_BASE" ]; then
-  # Stale or missing verdict: go back to SKILL.md Step 6, re-evaluate against the latest
-  # origin/$BASE, re-review, rebind the pair — then rerun Step 7 from sub-step 3. Do not check,
+  # Stale or missing verdict: reset reviewed_sha/verified_base to none and go back to SKILL.md
+  # Step 6's staleness re-verification pass (at most one per Issue per round), which re-pins
+  # origin/$BASE, re-reviews, rebinds the pair — then rerun Step 7 from sub-step 3. Do not check,
   # push, or open a PR from here.
   echo "STALE VERDICT — reviewed_sha=$REVIEWED_SHA verified_base=$VERIFIED_BASE; re-review before shipping" >&2
   exit 1
@@ -360,17 +365,32 @@ if [ "$CHECK_FAILED" -ne 0 ]; then
   # Post the failing command(s), exit code, and captured output as a comment on the Issue, upsert
   # the state comment's unresolved_blockers (SKILL.md Step 7), leave loop:in-progress in place, and
   # move on to the next Issue in the round — do not reach sub-step 5 below for this Issue.
+elif ! git -C "$WT" fetch origin "$BASE" \
+     || [ "$(git -C "$WT" rev-parse "origin/$BASE")" != "$VERIFIED_BASE" ] \
+     || [ "$(git -C "$WT" rev-parse HEAD)" != "$REVIEWED_SHA" ]; then
+  # 5a. Publication gate — sub-step 3's fetch ran before CHECKS_SET, so a base that advanced
+  # (or a HEAD that moved) while the checks ran is only visible to a fresh fetch here. Treat it
+  # exactly like a sub-step 3 mismatch: no push, no PR; reset reviewed_sha/verified_base to none
+  # and return the Issue to SKILL.md Step 6's re-verification pass. Clear check-run leftovers
+  # first, without moving HEAD, so the re-review does not see them as new changes.
+  git -C "$WT" reset --hard HEAD
+  git -C "$WT" clean -fd
+  echo "STALE VERDICT AFTER CHECKS — base or HEAD moved; re-verify before shipping" >&2
 else
   # 5. Push (repeat-safe), then create the PR — only if none exists yet for this branch
   git -C "$WT" push -u origin "$BRANCH"
   gh pr list --repo "$REPO" --head "$BRANCH" --state all --json number   # non-empty → PR exists, skip creation
-  BASE=$(gh repo view "$REPO" --json defaultBranchRef -q .defaultBranchRef.name)
   gh pr create --repo "$REPO" --head "$BRANCH" --base "$BASE" --title "<Issue title>" --body "$(cat <<'EOF'
 ## Summary
 <worker summary, condensed>
 
 ## Check evidence
 <CHECKS and CRITERIA sections from the worker report>
+
+## Review
+- reviewed_sha: <$REVIEWED_SHA>
+- verified_base: <$VERIFIED_BASE>
+- Reviewer nits and resolution: <each nit from every review pass, `<file>:<line> — <nit> -> <how it was resolved, citing the fix commit>`; or なし>
 
 Closes #<N>
 Part of Epic #<EPIC>
@@ -382,7 +402,7 @@ EOF
 fi
 ```
 
-Secret screen, run before step 2 above: the commit skill's Step 2 patterns against the status paths and diff — `.env*`, `*.pem`, `*.key`, `id_rsa*`, `*credentials*`, `*secret*`, `*.p12`, `service-account*.json`; `AKIA[0-9A-Z]{16}`, private-key headers, `gh[pousr]_[A-Za-z0-9]{20,}`, `\bsk-[A-Za-z0-9_-]{20,}`, `xox[baprs]-`, literal values assigned to `password`/`token`. Any hit: unstage it via `restore --staged`, since `add -N` touched the index, post the finding as a comment on the Issue, and park it per SKILL.md Step 7 — never ship it silently.
+Secret screen, run before step 2 above: the commit skill's Step 2 patterns against the status paths and diff — `.env*`, `*.pem`, `*.key`, `id_rsa*`, `*credentials*`, `*secret*`, `*.p12`, `service-account*.json`; `AKIA[0-9A-Z]{16}`, private-key headers, `gh[pousr]_[A-Za-z0-9]{20,}`, `\bsk-[A-Za-z0-9_-]{20,}`, `xox[baprs]-`, literal values assigned to `password`/`token`. Any hit stops this Issue before sub-step 2: run `git -C "$WT" reset` only to drop sub-step 1's intent-to-add entries from the index, stage and commit nothing, post the finding as a comment on the Issue, upsert the state comment's `unresolved_blockers`, and park it per SKILL.md Step 7 — no commit, no check run, no push, no PR for that Issue, and never ship the remaining files without the flagged one.
 
 ## §4 Cleanup After Merge — Step 8 rescan
 

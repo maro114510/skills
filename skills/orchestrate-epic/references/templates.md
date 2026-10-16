@@ -29,8 +29,8 @@ risk ラベルが無い Issue は risk:high 扱いです（表示のみで、実
 
 ### Bounds
 - max-parallel: <M>
-- fix-cycle cap: 2（Issue あたり。初回 review 後の再 review は blocking 修正・nit のみの修正を問わず 1 cycle として数えるため、nit のみの修正も同じ上限で止まります）
-- 今回のワースト想定（予測ではなく上限）: <N 件 Issue> × 最大 5 回試行（初回 + 回答済みBLOCKEDの再送1回 + FAILED再試行1回 + reviewer修正2回 = blocking/nit いずれも1 cycle、を積み上げた最悪ケース）× 最大 3 回 reviewer 実行（FAILED再試行時は reviewer を呼ばない。cap 到達後は残指摘のまま park し、それ以上は dispatch しません）
+- fix-cycle cap: 2（Issue あたり。reviewer 指摘を受けた worker 再 dispatch と再 review は blocking 修正・nit のみの修正を問わず 1 cycle として数えるため、nit のみの修正も同じ上限で止まります）
+- 今回のワースト想定（予測ではなく上限）: <N 件 Issue> × 最大 5 回試行（初回 + 回答済みBLOCKEDの再送1回 + FAILED再試行1回 + reviewer修正2回 = blocking/nit いずれも1 cycle、を積み上げた最悪ケース）× 最大 4 回 reviewer 実行（初回 + fix cycle 2 回 + default branch 前進・HEAD 移動による staleness 再検証 1 回。FAILED再試行時は reviewer を呼ばない。cap 到達後は残指摘のまま park し、それ以上は dispatch しません。同じ round で再び stale になった Issue は再検証せず次回実行に回します）
 - [!] wall-clock / 予算による自動停止はまだありません（#171 未実装）
 
 ### 次のアクション
@@ -54,7 +54,9 @@ Q2: <あれば>
 
 回答済みの問いを次回コメントするときは、既存の Q&A 形式（commands §2）に従う。
 
-## Ship-class Question（Step 6、Issue コメント）
+## Ship-class Question（Step 5–7、Issue コメント）
+
+worker の BLOCKED 質問（Step 5）、reviewer の指摘（Step 6）、secret screen（Step 7）のどこで発生しても、この形式を使う。
 
 suspected secret、change-size split、`risk:high` の scope dispute は、ループ自身が決めてはいけない ship-class の問いです。回答が来るまで Issue は parked のままにし、時間経過・無回答を承認として扱いません。
 
