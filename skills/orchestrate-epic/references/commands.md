@@ -108,7 +108,7 @@ git branch -r --list "origin/feat/issue-*"   # a remote branch counts as "a bran
 git worktree list
 ```
 
-PR state decoding: `OPEN` → awaiting-merge, or reverify when its `sha` or the current base no longer matches the state comment's bound pair, SKILL.md Step 2; `MERGED` → merged; `CLOSED` with `mergedAt: null` → rejected, escalate.
+PR state decoding: `OPEN` → awaiting-merge only when its `sha` and the current base match the state comment's bound pair and its `review_evidence` is present, §2.5; otherwise reverify, including a matching pair with `review_evidence` `none` or absent, SKILL.md Step 2; `MERGED` → merged; `CLOSED` with `mergedAt: null` → rejected, escalate.
 
 Fetch the Epic body itself, via `--jq .body`, only on the fallback path below, or when a leftover token needs to be shown to the user.
 
