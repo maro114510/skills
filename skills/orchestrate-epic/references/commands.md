@@ -73,7 +73,7 @@ git branch --list "feat/issue-*"
 git worktree list
 ```
 
-PR state decoding: `OPEN` → awaiting-merge; `MERGED` → merged; `CLOSED` with `mergedAt: null` → rejected, escalate.
+PR state decoding: `OPEN` → awaiting-merge, or reverify when its `sha` or the current base no longer matches the state comment's bound pair, SKILL.md Step 2; `MERGED` → merged; `CLOSED` with `mergedAt: null` → rejected, escalate.
 
 Fetch the Epic body itself, via `--jq .body`, only on the fallback path below, or when a leftover token needs to be shown to the user.
 
@@ -247,7 +247,7 @@ fi
 <!-- orchestrate-epic-state -->
 orchestrate-epic state:
 - cycle: <fix cycle 回数。reviewer 指摘を受けた worker 再 dispatch と再 review を、blocking・nit のみを問わず 1 回として数え、初回 review は 0。staleness 再検証は数えない>
-- head_sha: <workerが報告した HEAD_SHA。コミットがまだなければ none>
+- head_sha: <現在記録している HEAD。worker が報告した HEAD_SHA、または Publisher 自身が作った base 取り込みの merge commit・fallback commit。コミットがまだなければ none>
 - reviewed_sha: <直近の APPROVE が束縛された HEAD。有効な承認がなければ none>
 - verified_base: <その APPROVE の review 開始前に固定した default branch の commit SHA。有効な承認がなければ none>
 - pending_findings: <なし、または実行中の fix cycle に渡したレビューア指摘（blocking・nit とも）を番号付きで file:line — 要約。parked 判定には使わない>
@@ -259,9 +259,46 @@ orchestrate-epic state:
 
 `pending_findings` holds the findings, blocking or nit, handed to an in-flight fix cycle — including the nits of an APPROVE, which Step 6 treats as REQUEST_CHANGES for state purposes. It is cleared by the next review result and by a `retry`/`redo`, and it never makes Step 2 classify the Issue `parked`; only `unresolved_blockers` does. A resumed `in-progress` Issue passes it into the fresh worker's prompt, Step 4.
 
-`head_sha` alone is not an approval — it is written after every review, including a REQUEST_CHANGES. The ship-integrity pair is `reviewed_sha` + `verified_base`: Step 6 sets both only on a finding-free APPROVE whose pre-review pin (`REVIEW_HEAD`, `REVIEW_BASE`) still matches after the review, and resets both to `none` on a REQUEST_CHANGES, an APPROVE carrying nits, a park, a stale gate in Step 7, or a human `retry`/`redo` restart. Step 2's `awaiting-merge` sanity check compares them against the PR's `headRefOid` and the current `origin/$BASE`; Step 7's verdict gate compares them against the worktree HEAD and `origin/$BASE` before shipping; #145's merge request sends `reviewed_sha` as its expected SHA. A mismatch on either field means the recorded verdict cannot authorize a ship or a merge.
+`head_sha` alone is not an approval — it is written after every review, including a REQUEST_CHANGES. The ship-integrity pair is `reviewed_sha` + `verified_base`: Step 6 sets both only on a finding-free APPROVE whose pre-review pin (`REVIEW_HEAD`, `REVIEW_BASE`) still matches after the review, and resets both to `none` on a REQUEST_CHANGES, an APPROVE carrying nits, a park, a stale gate in Step 7, or a human `retry`/`redo` restart. Step 2's open-PR sanity check compares them against the PR's `headRefOid` and the current `origin/$BASE`, classifying a mismatch `reverify` so §2.6 re-verifies it; Step 7's verdict gate compares them against the worktree HEAD and `origin/$BASE` before shipping; #145's merge request sends `reviewed_sha` as its expected SHA. A mismatch on either field means the recorded verdict cannot authorize a ship or a merge.
 
 git-wt may place worktrees outside the repo, depending on its config — always use the printed path, never an assumed `.wt/`.
+
+## §2.6 Pin and Integrate the Base, Re-verify an Open PR — Steps 2, 4, 6
+
+```bash
+# Step 2 / Step 4, reverify only: comment a stale open PR once per stale pair, then sync the
+# worktree to the PR head before review. $PR_HEAD is call 3's headRefOid.
+MARK="<!-- orchestrate-epic:stale-verdict $PR_HEAD $(git rev-parse "origin/$BASE") -->"
+gh api "repos/$REPO/issues/$N/comments" --paginate --slurp --jq --arg me "$ME" --arg m "$MARK" \
+  'add | any(.[]; .user.login==$me and (.body|startswith($m)))'   # true → already reported, skip
+gh issue comment "$N" --repo "$REPO" --body "$MARK
+orchestrate-epic: PR の HEAD または default branch が承認時から変わったため、承認は無効です。再検証します。"
+git -C "$WT" fetch origin "$BRANCH"
+if [ "$(git -C "$WT" rev-parse HEAD)" != "$PR_HEAD" ]; then
+  git -C "$WT" merge-base --is-ancestor HEAD "$PR_HEAD" \
+    && git -C "$WT" merge --ff-only "$PR_HEAD" \
+    || { echo "worktree and PR head diverged — stop and tell the user" >&2; exit 1; }
+fi
+# then upsert the state comment: head_sha=$PR_HEAD, reviewed_sha/verified_base=none
+
+# Step 6, every review: pin the base, integrate it if HEAD does not already contain it
+git -C "$WT" fetch origin "$BASE"
+REVIEW_BASE=$(git -C "$WT" rev-parse "origin/$BASE")
+if ! git -C "$WT" merge-base --is-ancestor "$REVIEW_BASE" HEAD; then
+  if [ -z "$(git -C "$WT" status --porcelain --untracked-files=no)" ] \
+     && git -C "$WT" merge --no-ff --no-edit -m "Merge $BASE into $BRANCH" "$REVIEW_BASE"; then
+    : # then upsert the state comment's head_sha to $(git -C "$WT" rev-parse HEAD)
+  else
+    git -C "$WT" merge --abort 2>/dev/null || true
+    # Dirty tree or conflict: no review this pass. Hand "merge $REVIEW_BASE and resolve the
+    # conflicts" to a fresh worker as a blocking finding — a fix cycle, SKILL.md Step 6.
+  fi
+fi
+git -C "$WT" add -N .
+REVIEW_HEAD=$(git -C "$WT" rev-parse HEAD)
+```
+
+A merge, never a rebase: a branch that already has a PR must move forward without a force-push, and the merge commit is exactly the combination the reviewer and `CHECKS_SET` then evaluate.
 
 ## §3 Ship an Approved Issue — Step 7
 
@@ -278,9 +315,22 @@ git -C "$WT" diff "$(git -C "$WT" merge-base "$BASE" HEAD)"   # uncommitted chan
 git -C "$WT" fetch origin "$BRANCH" 2>/dev/null
 git -C "$WT" rev-parse --verify -q "origin/$BRANCH" >/dev/null 2>&1 && echo "PUSHED EXTERNALLY — flag to the user"   # succeeds only if the branch reached the remote before this step pushed it
 
-# 2. Stage and commit — skip only when HEAD already matches the worker report's own HEAD_SHA
-# (non-empty, not UNKNOWN) AND none of the worker's CHANGED_FILES paths still has an uncommitted
-# change. The worker's commit contract is supposed to cover everything it changed, but if any of
+#    A reverify Issue's branch is on the remote by design — the flag above applies only when no PR
+#    for this branch was known to this round.
+
+# Read the recorded state once. HEAD_SHA is the state comment's head_sha — the worker's report
+# value, advanced whenever the Publisher commits itself (Step 6's integration merge, the fallback
+# commit below) — not the original worker report, which a promoted commit has superseded.
+ME=$(gh api user --jq .login)   # same resolution as §1.5 / §2.5
+STATE_BODY=$(gh api "repos/$REPO/issues/$N/comments" --paginate --slurp --jq --arg me "$ME" \
+  'add | [.[]|select(.user.login==$me and (.body|startswith("<!-- orchestrate-epic-state -->")))][-1].body // empty')
+field() { printf '%s' "$STATE_BODY" | sed -nE "s/^- $1:[[:space:]]*(.*)\$/\\1/p" | head -n1; }
+HEAD_SHA=$(field head_sha)
+
+# 2. Stage and commit — skip when HEAD already equals the recorded HEAD_SHA or reviewed_sha
+# (non-empty, not UNKNOWN/none) AND none of the worker's CHANGED_FILES paths still has an
+# uncommitted change. A reverify Issue has no worker report this round, so its CHANGED_FILES list
+# is empty. The worker's commit contract is supposed to cover everything it changed, but if any of
 # those paths is still dirty, shipping HEAD alone would drop reviewed work; commit the remainder
 # here instead. Otherwise `reset` first, to undo sub-step 1's `add -N .` — without it, an untracked
 # file Step 6's reviewer left behind while running CHECKS_SET in this same worktree (a cache dir, a
@@ -292,14 +342,18 @@ git -C "$WT" rev-parse --verify -q "origin/$BRANCH" >/dev/null 2>&1 && echo "PUS
 # committing the rest is not an option, since the flagged content may already be in HEAD.
 # A commit made here moves HEAD off reviewed_sha; sub-step 3's gate catches that and sends the
 # Issue back for re-review rather than shipping a commit the reviewer never saw.
-if [ -n "$HEAD_SHA" ] && [ "$HEAD_SHA" != "UNKNOWN" ] \
-   && [ "$(git -C "$WT" rev-parse HEAD)" = "$HEAD_SHA" ] \
+REVIEWED_SHA=$(field reviewed_sha)
+VERIFIED_BASE=$(field verified_base)
+CUR=$(git -C "$WT" rev-parse HEAD)
+if { { [ -n "$HEAD_SHA" ] && [ "$HEAD_SHA" != "UNKNOWN" ] && [ "$HEAD_SHA" != "none" ] && [ "$CUR" = "$HEAD_SHA" ]; } \
+     || { [ -n "$REVIEWED_SHA" ] && [ "$REVIEWED_SHA" != "none" ] && [ "$CUR" = "$REVIEWED_SHA" ]; }; } \
    && [ -z "$(git -C "$WT" status --porcelain -- <CHANGED_FILES paths from the worker report>)" ]; then
   : # nothing left to commit — proceed to the verdict gate
 else
   git -C "$WT" reset
   git -C "$WT" add -- <CHANGED_FILES paths from the worker report>
-  git -C "$WT" commit -m "$(cat <<'EOF'
+  if ! git -C "$WT" diff --cached --quiet; then   # never run an empty commit
+    git -C "$WT" commit -m "$(cat <<'EOF'
 <type>(<scope>): <summary derived from the Issue title>
 
 <1-3 lines: what and why, from the worker summary>
@@ -307,22 +361,22 @@ else
 Refs #<N>
 EOF
 )"
+    # Promote the fallback commit: upsert the state comment's head_sha to it (§2.5), so a re-entry
+    # after sub-step 3's re-review finds HEAD == head_sha and skips this sub-step instead of
+    # attempting a second, empty commit.
+    HEAD_SHA=$(git -C "$WT" rev-parse HEAD)
+  fi
 fi
 
 # 3. Verdict freshness gate — after sub-step 2 has frozen the committed artifact, before any check,
 #    push, or PR. The recorded APPROVE is bound to exactly (reviewed_sha, verified_base), the values
 #    SKILL.md Step 6 wrote; a HEAD or default branch that moved since makes the verdict stale and
 #    none of sub-steps 4-6 may run for that Issue. A fallback commit from sub-step 2 moves HEAD off
-#    reviewed_sha and is caught here. $REVIEWED_SHA / $VERIFIED_BASE come from the §2.5 state
-#    comment; "none" means no live approval exists. This is the same pair #145's merge request will
+#    reviewed_sha and is caught here. $REVIEWED_SHA / $VERIFIED_BASE were read from the §2.5 state
+#    comment before sub-step 2; "none" means no live approval exists. This is the same pair #145's merge request will
 #    send as its expected head SHA, so a HEAD that changes between this comparison and the merge
 #    fails that request instead of merging an unreviewed commit.
 git -C "$WT" fetch origin --prune
-ME=$(gh api user --jq .login)   # same resolution as §1.5 / §2.5
-STATE_BODY=$(gh api "repos/$REPO/issues/$N/comments" --paginate --slurp --jq --arg me "$ME" \
-  'add | [.[]|select(.user.login==$me and (.body|startswith("<!-- orchestrate-epic-state -->")))][-1].body // empty')
-REVIEWED_SHA=$(printf '%s' "$STATE_BODY" | sed -nE 's/^- reviewed_sha:[[:space:]]*(.*)$/\1/p' | head -n1)
-VERIFIED_BASE=$(printf '%s' "$STATE_BODY" | sed -nE 's/^- verified_base:[[:space:]]*(.*)$/\1/p' | head -n1)
 if [ -z "$REVIEWED_SHA" ] || [ "$REVIEWED_SHA" = "none" ] \
    || [ -z "$VERIFIED_BASE" ] || [ "$VERIFIED_BASE" = "none" ] \
    || [ "$(git -C "$WT" rev-parse HEAD)" != "$REVIEWED_SHA" ] \
@@ -359,7 +413,7 @@ if [ "$CHECK_FAILED" -ne 0 ]; then
   # leave $WT dirty (build output, a partial lockfile write), and Step 4 reuses this same worktree on
   # the next dispatch, Step 6 re-runs `add -N .` over it — neither should see check-run leftovers as
   # if they were new changes.
-  git -C "$WT" reset --hard "$HEAD_SHA"
+  git -C "$WT" reset --hard "$REVIEWED_SHA"   # == HEAD here, guaranteed by the sub-step 3 gate
   git -C "$WT" clean -fd
   # Post the failing command(s), exit code, and captured output as a comment on the Issue, upsert
   # the state comment's unresolved_blockers (SKILL.md Step 7), leave loop:in-progress in place, and
