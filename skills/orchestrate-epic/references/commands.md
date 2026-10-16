@@ -91,13 +91,27 @@ gh label create "oe:go" --repo "$REPO" --color "0E8A16" --description "human app
 # or get the state upsert to read and edit a comment they planted instead of the real state.
 ME=$(gh api user --jq .login)
 
-# Find the Run Plan comment — --paginate --slurp fetches every page (an Epic can carry more
-# comments than one page holds), `add` flattens the resulting array-of-arrays before [-1] picks the latest
-gh api "repos/$REPO/issues/$EPIC/comments" --paginate --slurp --jq --arg me "$ME" \
-  'add | [.[]|select(.user.login==$me and (.body|startswith("<!-- orchestrate-epic:run-plan -->")))][-1] // empty'
+# The one marker-comment lookup, used here and by §2.5, §2.6, and §3. Prints the latest comment on
+# Issue $1 posted by $ME whose body starts with $2, as one JSON object; prints nothing and exits 0
+# when none matches; exits non-zero when gh, jq, or $ME fails. --paginate --slurp fetches every
+# page (an Epic can carry more comments than one page holds) and `add` flattens the pages before
+# [-1] picks the latest. gh rejects slurping combined with its own jq filter flag, so the filter
+# runs in jq, which §1.6 already requires; pipefail keeps a gh failure from reading as "no comment".
+# Shell state does not persist between tool calls: define it, ME, and REPO in the same call as each lookup.
+marker_comment() (
+  set -o pipefail
+  [ -n "$ME" ] || { echo "marker_comment: ME is empty" >&2; exit 1; }
+  gh api "repos/$REPO/issues/$1/comments" --paginate --slurp |
+    jq -c --arg me "$ME" --arg m "$2" \
+      'add // [] | [.[] | select(.user.login == $me and (.body | startswith($m)))][-1] // empty'
+)
 
-# Post it (create only — never edit/replace an existing Run Plan)
-gh issue comment "$EPIC" --repo "$REPO" --body "$RUN_PLAN_BODY"
+# Find the Run Plan comment. A failed lookup stops here — never read it as "no Run Plan" and post one
+RUN_PLAN=$(marker_comment "$EPIC" '<!-- orchestrate-epic:run-plan -->') \
+  || { echo "Run Plan lookup failed — stop and report, do not post a Run Plan" >&2; exit 1; }
+
+# Post it only when the lookup succeeded with empty output (create only — never edit/replace an existing Run Plan)
+[ -n "$RUN_PLAN" ] || gh issue comment "$EPIC" --repo "$REPO" --body "$RUN_PLAN_BODY"
 
 # Check for oe:go
 gh issue view "$EPIC" --repo "$REPO" --json labels --jq '[.labels[].name]|any(.=="oe:go")'
@@ -117,9 +131,9 @@ git ls-tree -r "origin/$BASE" --name-only -- .github/workflows
 
 # Completion exit comment (Step 9) — marked the same way as the Run Plan, so a rerun after completion
 # doesn't post a second one; $EXIT_COMMENT_BODY must start with <!-- orchestrate-epic:completion -->
-gh api "repos/$REPO/issues/$EPIC/comments" --paginate --slurp --jq --arg me "$ME" \
-  'add | [.[]|select(.user.login==$me and (.body|startswith("<!-- orchestrate-epic:completion -->")))][-1] // empty'
-gh issue comment "$EPIC" --repo "$REPO" --body "$EXIT_COMMENT_BODY"   # only when the check above found none
+COMPLETION=$(marker_comment "$EPIC" '<!-- orchestrate-epic:completion -->') \
+  || { echo "completion lookup failed — stop and report, do not post an exit comment" >&2; exit 1; }
+[ -n "$COMPLETION" ] || gh issue comment "$EPIC" --repo "$REPO" --body "$EXIT_COMMENT_BODY"
 ```
 
 ## §1.6 Derive the Check Set — Step 3
@@ -135,7 +149,7 @@ Derived once per round, from `.github/workflows/` on the default branch — neve
 5. Classify every captured entry: **requires-runner** if its command text *or* its effective `env:` contains a `${{ ... }}` GitHub Actions expression, if its command text contains `sudo` or a global-scope install or mutation (`npm install -g`, any `-g`/`--global` package-manager flag, `gh release create`, a `--scope user` plugin/package install, `git config --global`, or `pip install` in any form — unlike `npm install`, which defaults to a project-local `node_modules`, a bare `pip install` has no project-local default and mutates the ambient Python environment), if its effective `shell:` is set to anything other than `bash`, `sh`, or unset (a runner-specific interpreter — `pwsh`, `python`, a custom invocation like `bash -e {0}` — cannot be safely replayed by the plain `bash`/`sh` execution the other three roles use), or if it came from step 4 (a `uses:`-only step, checkout/setup/cache excluded already). Everything else is **runnable**. Do not narrow this further by guessing intent from the command's name — the point is whether it is safe and possible to execute unattended in a worktree, not whether it "looks like a check."
 6. Only **runnable** entries are ever executed, by the worker, the reviewer, or the Publisher's own pre-push run — and always with their captured `env:` exported first, in their captured `working_directory`. **requires-runner** entries are still reported — in the Run Plan and in whatever surfaces `CHECKS_SET` — as "not locally verifiable," never silently dropped and never executed. Two entries whose command comes from the same job can be classified differently even when one depends on the other's setup — for example a `pip install <linter>` step (`requires-runner`, a global-scope install) followed by a step invoking that linter (`runnable` on its own text, but a no-op in an environment where the install never ran). This rule classifies **per entry**, not per dependency chain: tracking which `runnable` entries transitively depend on a `requires-runner` one would mean inferring intent between steps, which is exactly what this rule forbids elsewhere. Report a `runnable` entry that fails only because a preceding `requires-runner` step was — correctly — never run as an expected, documented gap, not a defect in the derivation.
 
-Fast path with `yq` (mikefarah, v4+) and `jq`, streaming each workflow's content straight through both — no temp file, so two Publisher sessions on the same repo never collide on one. Both are required dependencies for this section and for the check-run loop in §3, alongside the `gh`/`git` this file already assumes:
+Fast path with `yq` (mikefarah, v4+) and `jq`, streaming each workflow's content straight through both — no temp file, so two Publisher sessions on the same repo never collide on one. Both are required dependencies for this section and for the check-run loop in §3, and `jq` also for §1.5's marker-comment lookup, alongside the `gh`/`git` this file already assumes:
 
 ```bash
 BASE=$(gh repo view "$REPO" --json defaultBranchRef -q .defaultBranchRef.name)
@@ -229,18 +243,18 @@ One sticky comment per Issue, distinct from the start/Q&A comments above, identi
 
 ```bash
 ME=$(gh api user --jq .login)   # same resolution as §1.5 — read it fresh here if this section runs on its own
+# Define §1.5's marker_comment in this same call too.
 
-# Read the latest state comment (empty output if none exists yet — still cycle 0).
-# --paginate --slurp fetches every page — a long-running Issue can carry more comments than one
-# page holds, and [-1] alone would silently pick a stale mid-list comment instead of the real latest.
+# Read the latest state comment. Empty output means none exists yet — still cycle 0. A failed
+# lookup is not "none": stop instead of resuming at cycle 0 or creating a second state comment.
+# Every page is read, since a long-running Issue can carry more comments than one page holds.
 # $ME filters out any comment planted by someone other than this run's own identity — otherwise an
 # attacker-authored marker could be read as, or overwritten as, real state.
-gh api "repos/$REPO/issues/$N/comments" --paginate --slurp --jq --arg me "$ME" \
-  'add | [.[]|select(.user.login==$me and (.body|startswith("<!-- orchestrate-epic-state -->")))][-1] // empty'
+STATE=$(marker_comment "$N" '<!-- orchestrate-epic-state -->') \
+  || { echo "state comment lookup failed — stop and report, do not assume cycle 0" >&2; exit 1; }
 
-# Upsert: edit the existing state comment if found, else create it
-STATE_ID=$(gh api "repos/$REPO/issues/$N/comments" --paginate --slurp --jq --arg me "$ME" \
-  'add | [.[]|select(.user.login==$me and (.body|startswith("<!-- orchestrate-epic-state -->")))][-1].id // empty')
+# Upsert: re-run the lookup above in this same call, then edit the existing state comment if found, else create it
+STATE_ID=$(jq -r '.id // empty' <<<"$STATE")
 if [ -n "$STATE_ID" ]; then
   gh api "repos/$REPO/issues/comments/$STATE_ID" -X PATCH -f body="$BODY"
 else
@@ -276,10 +290,10 @@ git-wt may place worktrees outside the repo, depending on its config — always 
 # Step 2 / Step 4, reverify only: comment a stale open PR once per stale pair, then sync the
 # worktree to the PR head before review. $PR_HEAD is call 3's headRefOid.
 MARK="<!-- orchestrate-epic:stale-verdict $PR_HEAD $(git rev-parse "origin/$BASE") -->"
-gh api "repos/$REPO/issues/$N/comments" --paginate --slurp --jq --arg me "$ME" --arg m "$MARK" \
-  'add | any(.[]; .user.login==$me and (.body|startswith($m)))'   # true → already reported, skip
-gh issue comment "$N" --repo "$REPO" --body "$MARK
-orchestrate-epic: PR の HEAD または default branch が承認時から変わったため、承認は無効です。再検証します。"
+STALE=$(marker_comment "$N" "$MARK") \
+  || { echo "stale-verdict lookup failed — stop and report" >&2; exit 1; }   # §1.5's marker_comment
+[ -n "$STALE" ] || gh issue comment "$N" --repo "$REPO" --body "$MARK
+orchestrate-epic: PR の HEAD または default branch が承認時から変わったため、承認は無効です。再検証します。"   # non-empty → already reported, skip
 git -C "$WT" fetch origin "$BRANCH"
 if [ "$(git -C "$WT" rev-parse HEAD)" != "$PR_HEAD" ]; then
   git -C "$WT" merge-base --is-ancestor HEAD "$PR_HEAD" \
@@ -328,9 +342,10 @@ git -C "$WT" rev-parse --verify -q "origin/$BRANCH" >/dev/null 2>&1 && echo "PUS
 # Read the recorded state once. HEAD_SHA is the state comment's head_sha — the worker's report
 # value, advanced whenever the Publisher commits itself (Step 6's integration merge, the fallback
 # commit below) — not the original worker report, which a promoted commit has superseded.
-ME=$(gh api user --jq .login)   # same resolution as §1.5 / §2.5
-STATE_BODY=$(gh api "repos/$REPO/issues/$N/comments" --paginate --slurp --jq --arg me "$ME" \
-  'add | [.[]|select(.user.login==$me and (.body|startswith("<!-- orchestrate-epic-state -->")))][-1].body // empty')
+ME=$(gh api user --jq .login)   # same resolution as §1.5 / §2.5, with §1.5's marker_comment defined in this call
+STATE=$(marker_comment "$N" '<!-- orchestrate-epic-state -->') \
+  || { echo "state comment lookup failed — stop and report, do not ship" >&2; exit 1; }
+STATE_BODY=$(jq -r '.body // empty' <<<"$STATE")
 field() { printf '%s' "$STATE_BODY" | sed -nE "s/^- $1:[[:space:]]*(.*)\$/\\1/p" | head -n1; }
 HEAD_SHA=$(field head_sha)
 
