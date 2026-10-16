@@ -18,14 +18,14 @@
 - [!] required checks も required reviewers も未設定です。このループの reviewer pass と CHECKS_SET の実行可能エントリが、マージ前の唯一のゲートです。   ← 該当する場合のみ
 
 ### Issue 一覧
-| Issue | タイトル | 状態 | risk | 依存 | base branch |
-|-------|---------|------|------|------|-------------|
-| #12 | ... | done | - | - | - |
-| #13 | ... | awaiting-merge | risk:low | #12 | main |
-| #14 | ... | ready | risk:high | #12 | main |
-| #15 | ... | waiting | risk:low（未設定→risk:high 扱い） | #13 | main |
+| Issue | タイトル | 状態 | 依存 | base branch |
+|-------|---------|------|------|-------------|
+| #12 | ... | done | - | - |
+| #13 | ... | awaiting-merge | #12 | main |
+| #14 | ... | ready | #12 | main |
+| #15 | ... | waiting | #13 | main |
 
-risk ラベルが無い Issue は risk:high 扱いです（表示のみで、実行順や出荷可否は変えません）。
+状態はブランチ・PR・このループのコメントから判定しています。ラベルは読み取りも付与もしません。
 
 ### Bounds
 - max-parallel: <M>
@@ -60,12 +60,12 @@ Q2: <あれば>
 
 worker の BLOCKED 質問（Step 5）、reviewer の指摘（Step 6）、secret screen（Step 7）のどこで発生しても、この形式を使う。
 
-suspected secret、change-size split、`risk:high` の scope dispute は、ループ自身が決めてはいけない ship-class の問いです。回答が来るまで Issue は parked のままにし、時間経過・無回答を承認として扱いません。
+suspected secret、change-size split、scope dispute（どの Issue でも）は、ループ自身が決めてはいけない ship-class の問いです。回答が来るまで Issue は parked のままにし、時間経過・無回答を承認として扱いません。
 
 ```
 orchestrate-epic: ship-class の判断が必要なため、この Issue を保留しました。
 
-種類: <suspected secret / change-size split / risk:high の scope dispute>
+種類: <suspected secret / change-size split / scope dispute>
 内容: <何を判断する必要があるか>
 選択肢: <考えられる選択肢をそのまま列挙>
 
@@ -77,14 +77,7 @@ orchestrate-epic: ship-class の判断が必要なため、この Issue を保�
 コマンドを文中に含めただけのコメント（例: 「まだ epic-retry しないで」）は判断として読み取られず、Issue は parked のままになります。理由や修正方針は、コマンドより先に別のコメントとして書いてください。コマンドを読み取った時点までに投稿されたコメントだけを、`epic-retry` / `epic-redo` のときに worker へ渡します。
 ```
 
-`risk:low` の scope dispute だけは ship-class ではありません。Park せず、狭い解釈を採用して広い解釈を follow-up として記録し、続行します。
-
-```
-orchestrate-epic: scope dispute を risk:low として記録しました。
-
-採用した解釈: <狭い方の解釈>
-follow-up: <広い方の解釈。将来の Issue や別対応で扱う内容>
-```
+scope dispute に例外はありません。どの Issue でも park し、ループが解釈を選ぶことはありません。
 
 ## Ship Report（Step 7）
 
