@@ -82,9 +82,6 @@ Fallback when `subIssues`/`blockedBy` are unavailable — older gh, GHES, or the
 ## §1.5 Entry Gate — Step 3
 
 ```bash
-# Once per run
-gh label create "oe:go" --repo "$REPO" --color "0E8A16" --description "human approved the orchestrate-epic Run Plan" 2>/dev/null || true
-
 # Resolve this run's own identity once — every marker lookup below trusts only a comment this identity
 # posted, never merely one that starts with the right prefix. On a public repo anyone can comment
 # "<!-- orchestrate-epic:run-plan -->..." to spoof a marker and suppress the real lifecycle comment,
@@ -106,15 +103,49 @@ marker_comment() (
       'add // [] | [.[] | select(.user.login == $me and (.body | startswith($m)))][-1] // empty'
 )
 
+# The one human-signal lookup, used here and by SKILL.md Step 2's un-parking and rejected checks.
+# Prints every trusted human comment on Issue $1 created strictly after the ISO-8601 timestamp $2,
+# oldest first, one compact JSON object per line: {id, created_at, author, body, command}.
+# Trusted means author_association OWNER, MEMBER, or COLLABORATOR, and a body that does not start
+# with `orchestrate-epic` or `<!--` (A6/A7, docs/design/skills-remediation-policy.md). `command` is
+# set only when every non-blank line, trimmed of surrounding whitespace, is exactly the same one of
+# epic-approve, epic-retry, epic-redo, epic-drop, in lowercase; otherwise it is null and the comment
+# is context, never a decision. "let's not epic-retry yet", "EPIC-RETRY", "epic-retry please", and
+# a comment mixing two different commands therefore all carry command: null. created_at, not
+# updated_at: a comment edited into a command after the fact does not move into the window. A blank
+# comment is skipped. Prints nothing and exits 0 when none matches; exits non-zero when gh or jq fails.
+human_comments() (
+  set -o pipefail
+  gh api "repos/$REPO/issues/$1/comments" --paginate --slurp |
+    jq -c --arg since "$2" '
+      add // [] | .[]
+      | select(.created_at > $since)
+      | select(.author_association == "OWNER" or .author_association == "MEMBER"
+               or .author_association == "COLLABORATOR")
+      | (.body // "") as $b
+      | select(($b | startswith("orchestrate-epic") or startswith("<!--")) | not)
+      | [$b | split("\n")[] | gsub("^\\s+|\\s+$"; "") | select(. != "")] as $lines
+      | select($lines | length > 0)
+      | {id, created_at, author: .user.login, body: $b,
+         command: (if all($lines[]; . == $lines[0])
+                      and ($lines[0] | IN("epic-approve", "epic-retry", "epic-redo", "epic-drop"))
+                   then $lines[0] else null end)}'
+)
+
 # Find the Run Plan comment. A failed lookup stops here — never read it as "no Run Plan" and post one
 RUN_PLAN=$(marker_comment "$EPIC" '<!-- orchestrate-epic:run-plan -->') \
   || { echo "Run Plan lookup failed — stop and report, do not post a Run Plan" >&2; exit 1; }
 
 # Post it only when the lookup succeeded with empty output (create only — never edit/replace an existing Run Plan)
-[ -n "$RUN_PLAN" ] || gh issue comment "$EPIC" --repo "$REPO" --body "$RUN_PLAN_BODY"
+[ -n "$RUN_PLAN" ] || { gh issue comment "$EPIC" --repo "$REPO" --body "$RUN_PLAN_BODY"; exit; }   # Step 3 exits after posting, with gh's status
 
-# Check for oe:go
-gh issue view "$EPIC" --repo "$REPO" --json labels --jq '[.labels[].name]|any(.=="oe:go")'
+# Check for approval: a trusted `epic-approve` comment created after the Run Plan comment. A comment
+# posted before the Run Plan, or by any other author_association, never approves. This gate reads no
+# label. A failed lookup stops the run; it never reads as approved or as not approved.
+PLAN_AT=$(jq -r '.created_at' <<<"$RUN_PLAN")
+SIGNALS=$(human_comments "$EPIC" "$PLAN_AT") \
+  || { echo "approval lookup failed — stop and report, do not dispatch" >&2; exit 1; }
+[ "$(jq -s 'any(.[]; .command == "epic-approve")' <<<"$SIGNALS")" = "true" ] || { echo "no epic-approve after the Run Plan — exit at the gate" >&2; exit 0; }
 
 # Repository facts for the Run Plan. Only a confirmed 404 means "no protection configured" — every
 # other failure (auth, permission, network, 5xx) must stop and be reported, never be read as "no protection"
@@ -217,7 +248,7 @@ BASE=$(gh repo view "$REPO" --json defaultBranchRef -q .defaultBranchRef.name)  
 git fetch origin "$BASE"   # once, before any worker; updates only origin/$BASE. Never switch or pull the starting checkout — other sessions may share it. On failure: stop and tell the user
 
 # Per dispatched Issue, serially
-BRANCH="feat/issue-$N"   # or the state comment's recorded redo branch, such as feat/issue-$N-2
+BRANCH="feat/issue-$N"   # or the state comment's recorded epic-redo branch, such as feat/issue-$N-2
 if git show-ref --verify --quiet "refs/heads/$BRANCH" \
    || git show-ref --verify --quiet "refs/remotes/origin/$BRANCH"; then
   git wt "$BRANCH"                  # existing branch: reuses its worktree, or checks it out; git wt rejects a start-point here
@@ -273,14 +304,20 @@ orchestrate-epic state:
 - verified_base: <その APPROVE の review 開始前に固定した default branch の commit SHA。有効な承認がなければ none>
 - pending_findings: <なし、または実行中の fix cycle に渡したレビューア指摘（blocking・nit とも）を番号付きで file:line — 要約。parked 判定には使わない>
 - unresolved_blockers: <なし、または park の原因になった指摘・問いを番号付きで file:line — 要約>
-- decisions: <このIssueについて人間が下した判断。なければ なし>
+- decisions: <このIssueについて人間が下した判断。`<epic-retry|epic-redo|epic-drop>[ — <epic-redo のブランチ>] (comment <判断コメントの id>; context: <文脈コメントの id をカンマ区切り、無ければ なし>)`。なければ なし>
 ```
 
-`cycle` counts every fix cycle from Step 6 — a fresh-worker re-dispatch for reviewer findings plus its re-review; one for blocking findings and one for nit-only findings each add 1, since the 2-cycle cap is what bounds nit resolution too, not only blocking. A staleness re-verification pass, Step 6, dispatches no worker and leaves it unchanged; so does a BLOCKED answer or FAILED retry from Step 5, and neither resets it. The one exception is an authorized `retry` or `redo` decision on a `parked` or `rejected` Issue, SKILL.md Step 2's un-parking check, which resets `cycle` to 0 — a human decision restarts the fix-cycle budget on purpose. Short of that, Step 6 reads it back on a resumed session so the 2-cycle cap holds across a restart instead of starting over at 0.
+`cycle` counts every fix cycle from Step 6 — a fresh-worker re-dispatch for reviewer findings plus its re-review; one for blocking findings and one for nit-only findings each add 1, since the 2-cycle cap is what bounds nit resolution too, not only blocking. A staleness re-verification pass, Step 6, dispatches no worker and leaves it unchanged; so does a BLOCKED answer or FAILED retry from Step 5, and neither resets it. The one exception is an authorized `epic-retry` or `epic-redo` decision on a `parked` or `rejected` Issue, SKILL.md Step 2's un-parking check, which resets `cycle` to 0 — a human decision restarts the fix-cycle budget on purpose. Short of that, Step 6 reads it back on a resumed session so the 2-cycle cap holds across a restart instead of starting over at 0.
 
-`pending_findings` holds the findings, blocking or nit, handed to an in-flight fix cycle — including the nits of an APPROVE, which Step 6 treats as REQUEST_CHANGES for state purposes. It is cleared by the next review result and by a `retry`/`redo`, and it never makes Step 2 classify the Issue `parked`; only `unresolved_blockers` does. A resumed `in-progress` Issue passes it into the fresh worker's prompt, Step 4.
+`decisions` holds the latest human decision only, replaced by the next one: the `epic-*` command, the `id` of the comment that carried it, and the `id`s of the trusted non-command comments posted in the same window, SKILL.md Step 2. The command comment carries nothing but the command, so the human's reasons live in those context comments; Step 4 hands their full bodies to every worker it dispatches for this Issue after an `epic-retry` or `epic-redo`, fetched by `id` so they still reach the worker after a restart, when the state comment's newer `updated_at` has moved the window past them:
 
-`head_sha` alone is not an approval — it is written after every review, including a REQUEST_CHANGES. The ship-integrity pair is `reviewed_sha` + `verified_base`: Step 6 sets both only on a finding-free APPROVE whose pre-review pin (`REVIEW_HEAD`, `REVIEW_BASE`) still matches after the review, and resets both to `none` on a REQUEST_CHANGES, an APPROVE carrying nits, a park, a stale gate in Step 7, or a human `retry`/`redo` restart. Step 2's open-PR sanity check compares them against the PR's `headRefOid` and the current `origin/$BASE`, classifying a mismatch `reverify` so §2.6 re-verifies it; Step 7's verdict gate compares them against the worktree HEAD and `origin/$BASE` before shipping; #145's merge request sends `reviewed_sha` as its expected SHA. A mismatch on either field means the recorded verdict cannot authorize a ship or a merge.
+```bash
+gh api "repos/$REPO/issues/comments/$CONTEXT_ID" --jq '{author: .user.login, created_at, body}'
+```
+
+`pending_findings` holds the findings, blocking or nit, handed to an in-flight fix cycle — including the nits of an APPROVE, which Step 6 treats as REQUEST_CHANGES for state purposes. It is cleared by the next review result and by an `epic-retry`/`epic-redo`, and it never makes Step 2 classify the Issue `parked`; only `unresolved_blockers` does. A resumed `in-progress` Issue passes it into the fresh worker's prompt, Step 4.
+
+`head_sha` alone is not an approval — it is written after every review, including a REQUEST_CHANGES. The ship-integrity pair is `reviewed_sha` + `verified_base`: Step 6 sets both only on a finding-free APPROVE whose pre-review pin (`REVIEW_HEAD`, `REVIEW_BASE`) still matches after the review, and resets both to `none` on a REQUEST_CHANGES, an APPROVE carrying nits, a park, a stale gate in Step 7, or a human `epic-retry`/`epic-redo` restart. Step 2's open-PR sanity check compares them against the PR's `headRefOid` and the current `origin/$BASE`, classifying a mismatch `reverify` so §2.6 re-verifies it; Step 7's verdict gate compares them against the worktree HEAD and `origin/$BASE` before shipping; #145's merge request sends `reviewed_sha` as its expected SHA. A mismatch on either field means the recorded verdict cannot authorize a ship or a merge.
 
 git-wt may place worktrees outside the repo, depending on its config — always use the printed path, never an assumed `.wt/`.
 
@@ -323,7 +360,7 @@ A merge, never a rebase: a branch that already has a PR must move forward withou
 
 ## §3 Ship an Approved Issue — Step 7
 
-`WT` is the worktree path; `BRANCH` is the branch selected for this Issue in Step 4 — `feat/issue-<N>` normally, or its state-comment-recorded `redo` branch when one applies.
+`WT` is the worktree path; `BRANCH` is the branch selected for this Issue in Step 4 — `feat/issue-<N>` normally, or its state-comment-recorded `epic-redo` branch when one applies.
 Every sub-step is guarded so a mid-failure rerun resumes instead of erroring: commit only when work is left uncommitted, push is repeat-safe, create the PR only when none exists for the branch.
 
 ```bash
