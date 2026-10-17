@@ -135,13 +135,52 @@ expect_permission() {
   has_line "finding without newline"
 }
 
-@test "opencode runs /review without the plan agent and asks for one command per call" {
+@test "opencode passes the review prompt as the message and asks for one command per call" {
   # shellcheck disable=SC2016 # expanded by the stub, not here
   run_stub 'echo "ARGS: $*"' '' opencode
   [ "${status}" -eq 0 ]
-  grep -qF -- "ARGS: run --command review Review the uncommitted changes." <<<"${output}"
+  grep -qF -- "ARGS: run --standalone Review the uncommitted changes." <<<"${output}"
   grep -qF -- "one command per bash call" <<<"${output}"
+  if grep -qF -- "--command" <<<"${output}"; then return 1; fi
   if grep -qF -- "--agent" <<<"${output}"; then return 1; fi
+}
+
+# `run --command review` named a flag OpenCode V2 does not have, so the CLI printed help and exited
+# 1 before reading the diff: no OpenCode review ever ran, and the stub below cannot notice because it
+# accepts any argument. `--standalone` is pinned because the shared background service ignores
+# OPENCODE_CONFIG_CONTENT, which would leave the deny block below inert. The installed CLI's own
+# flags are checked in the test after this one.
+@test "opencode runs the review standalone, and --standalone is its only flag" {
+  # shellcheck disable=SC2016 # expanded by the stub, not here
+  run_stub 'echo "ARGS: $*"' '' opencode
+  [ "${status}" -eq 0 ]
+  argv="$(sed -n 's/^ARGS: //p' <<<"${output}")"
+  [ "${argv#run }" != "${argv}" ] || return 1
+  for arg in ${argv#run }; do
+    case "${arg}" in
+    -*) [ "${arg}" = "--standalone" ] || {
+      printf 'unexpected flag passed to opencode run: %s\n' "${arg}"
+      return 1
+    } ;;
+    esac
+  done
+}
+
+@test "opencode uses only flags the installed CLI accepts" {
+  command -v opencode >/dev/null 2>&1 || skip "opencode is not installed"
+  # shellcheck disable=SC2016 # expanded by the stub, not here
+  run_stub 'echo "ARGS: $*"' '' opencode
+  [ "${status}" -eq 0 ]
+  argv="$(sed -n 's/^ARGS: //p' <<<"${output}")"
+  help="$(opencode run --help 2>&1)"
+  for arg in ${argv#run }; do
+    case "${arg}" in
+    -*) grep -qF -- "${arg}" <<<"${help}" || {
+      printf 'the installed opencode rejects %s\n' "${arg}"
+      return 1
+    } ;;
+    esac
+  done
 }
 
 @test "opencode allows read-only review commands" {
