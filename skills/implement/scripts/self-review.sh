@@ -48,7 +48,13 @@ codex)
   ;;
 opencode)
   # OpenCode has no OS sandbox, so write-capable git options and redirects are denied explicitly.
-  # /review runs without --agent plan, whose follow-up reply only adds a plan; edits stay denied here.
+  # `--standalone` is required for OPENCODE_CONFIG_CONTENT to be read at all: the shared background
+  # service drops it, so without the flag this whole deny block is inert and the reviewer keeps its
+  # write, shell, and fetch tools. With it, denied tools disappear from the tool list.
+  # The review prompt is the message, with no flag at all: OpenCode V2's `run` has no `--command`
+  # flag and no `review` command is installed for it, so a flag form fails argument parsing and the
+  # review never runs. Nothing is pinned with `--agent` either, since a plan agent only appends a
+  # plan reply; edits stay denied here.
   # The one-command rule keeps the reviewer off pipes and 2>&1, which the redirect deny would reject.
   # The last matching rule wins, so denies for options that run another program follow the allows.
   # OpenCode does not apply `*>*` to a redirect inside a compound command, so a write outside the
@@ -60,7 +66,7 @@ opencode)
     "go *-exec*":"deny","go *-toolexec*":"deny","go vet*-vettool*":"deny","rg*--pre*":"deny",
     "rg*--hostname-bin*":"deny",
     "*--output*":"deny","*>*":"deny"}}}' \
-    opencode run --command review "Review the uncommitted changes. Run exactly one command per bash call, with no pipes, &&, ;, or redirects such as 2>&1." </dev/null >"${out}" 2>"${log}"
+    opencode run --standalone "Review the uncommitted changes. Run exactly one command per bash call, with no pipes, &&, ;, or redirects such as 2>&1." </dev/null >"${out}" 2>"${log}"
   ;;
 esac
 reviewer_rc=$?
