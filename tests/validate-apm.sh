@@ -123,16 +123,22 @@ check_opencode() {
   cli_version="$("${OPENCODE_CLI}" --version 2>&1 || true)"
   cli_major="$(printf '%s\n' "${cli_version}" | grep -oE '[0-9]+\.[0-9]+' | head -n1 | cut -d. -f1)"
   if [[ "${cli_major:-0}" -ge 2 ]]; then
-    # The first listing of a project the shared service has not indexed yet comes back empty, and the
-    # second reliably lists it, so retry before concluding anything.
-    local attempt
-    for attempt in 1 2 3; do
+    # The service reports built-in agents before it has indexed the project, so retry until the
+    # expected project agents appear rather than until the listing is merely non-empty.
+    local attempt missing
+    for attempt in 1 2 3 4 5; do
       if ! (cd "${project_dir}" && "${OPENCODE_CLI}" debug agents) >"${list_file}" 2>&1; then
         fail "[opencode] ${OPENCODE_CLI} failed to list agents:"
         sed 's/^/  /' "${list_file}" >&2
         return
       fi
-      if grep -q '"id"' "${list_file}"; then
+      missing=0
+      for name in "${AGENT_NAMES[@]}"; do
+        if ! grep -q "${name}" "${list_file}"; then
+          missing=1
+        fi
+      done
+      if [[ "${missing}" -eq 0 ]]; then
         break
       fi
       sleep 1
