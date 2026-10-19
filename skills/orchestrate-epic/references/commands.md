@@ -145,7 +145,7 @@ OE_JQ='
     | {id, created_at, author: .user.login, body: $b,
        command: (if all($lines[]; . == $lines[0])
                     and ($lines[0] | IN("epic-approve", "epic-retry", "epic-redo", "epic-drop",
-                                        "epic-auto-merge", "epic-revoke-auto-merge"))
+                                        "epic-auto-merge", "epic-revoke-auto-merge", "epic-release"))
                  then $lines[0] else null end)};
   def oe_merge_authorized:
     any(.[]; .command == "epic-approve")
@@ -174,8 +174,8 @@ marker_comment() (
 # Trusted means author_association OWNER, MEMBER, or COLLABORATOR, and a body that does not start
 # with `orchestrate-epic` or `<!--` (A6/A7, docs/design/skills-remediation-policy.md). `command` is
 # set only when every non-blank line, trimmed of surrounding whitespace, is exactly the same one of
-# epic-approve, epic-retry, epic-redo, epic-drop, epic-auto-merge, epic-revoke-auto-merge, in
-# lowercase; otherwise it is null and the comment
+# epic-approve, epic-retry, epic-redo, epic-drop, epic-auto-merge, epic-revoke-auto-merge,
+# epic-release, in lowercase; otherwise it is null and the comment
 # is context, never a decision. "let's not epic-retry yet", "EPIC-RETRY", "epic-retry please", and
 # a comment mixing two different commands therefore all carry command: null. created_at, not
 # updated_at: a comment edited into a command after the fact does not move into the window. A blank
@@ -311,6 +311,67 @@ Each output line is one compact JSON object — `.command` embeds internal newli
 | `test-plugin-install.yml` | yes | `claude plugin list \| grep skills` | runnable |
 
 `actions/checkout` and `actions/setup-node` steps in every job are dropped by step 4's named exclusion, so they never clutter the list. `release.yml` is the case the trigger filter exists to catch: without it, `CHECKS_SET` would include `gh release create`, and Step 7 would run that against every shipped worktree. The two `npm install -g` entries, the `git config --global` entry, and the `pip install semgrep` entry show the requires-runner classification catching global-state mutation even where nothing about the command's *name* looks unlike an ordinary check — and `semgrep`'s own invocation shows that a `runnable` entry can still be a no-op in practice when the `requires-runner` step it depends on was, correctly, never run.
+
+## §1.7 Freeze Check and Epic Ledger — Steps 3 to 7
+
+`<skill-dir>` is this skill's base directory, which the harness states on invocation. The script resolves this run's identity itself and reads every page of the Epic's comments; it never posts or edits. Pass reservations only for what is about to spawn, SKILL.md Step 3's "Freeze and Release":
+
+```bash
+FREEZE=$(bash "<skill-dir>/scripts/epic-freeze.sh" "$REPO" "$EPIC" [worker_dispatches=<n>] [reviewer_passes=<n>] [fix_cycles=<n>])
+RC=$?
+STATUS=$(sed -n 's/^status=//p' <<<"$FREEZE")
+RESERVE=$(sed -n 's/^reserve=//p' <<<"$FREEZE")
+# RC 1 / UNREADABLE → stop and report; act as frozen, post nothing
+# FROZEN            → render "Frozen Epic" and exit; post nothing, the freeze comment already notified once
+# RELEASE           → reset the ledger below, then run the check again
+# CLEAR, no ledger  → create the ledger below, then run the check again
+# CLEAR, exceed     → post the freeze comment below; spawn nothing, stop the round
+# CLEAR, ok         → write the reserved counts below, then spawn
+```
+
+Output lines: `status=`, `reason=`, `freeze_id=`, `release_id=`, `ledger_id=`; when a ledger exists, `ledger_release=` and one `<counter>=<used>/<bound>` per counter; `reserve=ok|exceed` only on `CLEAR` with a reservation. The reason names every counter a reservation would exceed, as `<counter> <used> + <n> > <bound>`. `--snapshot <file|-> --me <login>` classifies a saved comment array instead of calling `gh`, which is how `scripts/test-epic-freeze.bats` exercises every rule.
+
+Ledger writes, in the same call as the check so `$FREEZE` is the result just read. `N` is the count of dispatchable Issues not `done` from this invocation's Step 2, at least 1:
+
+```bash
+# $1 release id or none, then used and bound for worker_dispatches, reviewer_passes, fix_cycles
+render_ledger() {
+  printf '%s\n' '<!-- orchestrate-epic:ledger -->' 'orchestrate-epic ledger:' "- release: $1" \
+    "- worker_dispatches: $2 / $3" "- reviewer_passes: $4 / $5" "- fix_cycles: $6 / $7"
+}
+# Edits the ledger in place, or creates it when none exists. A failed write stops the run — never spawn after one.
+upsert_ledger() {
+  LEDGER_ID=$(sed -n 's/^ledger_id=//p' <<<"$FREEZE")
+  if [ -n "$LEDGER_ID" ] && [ "$LEDGER_ID" != none ]; then
+    gh api "repos/$REPO/issues/comments/$LEDGER_ID" -X PATCH -f body="$1" >/dev/null
+  else
+    gh issue comment "$EPIC" --repo "$REPO" --body "$1"
+  fi || { echo "ledger write failed — stop and report, spawn nothing" >&2; exit 1; }
+}
+used()  { sed -n "s/^$1=\([0-9]*\)\/.*/\1/p" <<<"$FREEZE"; }
+bound() { sed -n "s/^$1=[0-9]*\/\([0-9]*\)$/\1/p" <<<"$FREEZE"; }
+
+# Create (CLEAR, ledger_id=none) — every counter at 0
+upsert_ledger "$(render_ledger none 0 $((5 * N)) 0 $((4 * N)) 0 $((2 * N)))"
+
+# Release (RELEASE) — counters to 0, bounds recomputed, the release recorded so it is processed once
+upsert_ledger "$(render_ledger "$(sed -n 's/^release_id=//p' <<<"$FREEZE")" 0 $((5 * N)) 0 $((4 * N)) 0 $((2 * N)))"
+
+# Reserve (CLEAR, reserve=ok) — add exactly what was reserved, W/R/F being the reserved n or 0
+upsert_ledger "$(render_ledger "$(sed -n 's/^ledger_release=//p' <<<"$FREEZE")" \
+  $(($(used worker_dispatches) + W)) "$(bound worker_dispatches)" \
+  $(($(used reviewer_passes) + R)) "$(bound reviewer_passes)" \
+  $(($(used fix_cycles) + F)) "$(bound fix_cycles)")"
+```
+
+Freeze (CLEAR, `reserve=exceed`), only from that `CLEAR` result, so a freeze is posted once: `$FREEZE_BODY` is the "Freeze Comment" template, starting with `<!-- orchestrate-epic:freeze -->`, its `- reason:` line the check's `reason=` value on one line, and its counts the ledger's current `<used> / <bound>`:
+
+```bash
+gh issue comment "$EPIC" --repo "$REPO" --body "$FREEZE_BODY" \
+  || { echo "freeze comment failed — stop and report; spawn, ship, and merge nothing" >&2; exit 1; }
+```
+
+The script reads the freeze reason back from that `- reason:` line, so a re-invoked loop reports why the Epic is frozen without any session memory. Only the latest ledger and freeze comment posted by this run's identity count; the release is the earliest trusted `epic-release` created after the latest freeze, by the same trust rule as §1.5's `human_comments`.
 
 ## §2 Dispatch Bookkeeping — Step 4
 
