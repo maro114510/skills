@@ -30,14 +30,17 @@ except Exception:
   exit 1
 }
 
-GIT_PUSH='(^|[[:space:]])git([[:space:]]+[^[:space:]]*)*[[:space:]]+push([[:space:]]|$)'
+# Command boundaries before a command word and after its last word, shared by both patterns, so
+# `cd x&&git push`, `(git push)`, or `oe land merge>log` are seen as well.
+START="(^|[[:space:];&|(\`\"'/{])"
+END="([[:space:]\"';&|)<>}]|$)"
+GIT_PUSH="${START}git([[:space:]]+[^[:space:]]*)*[[:space:]]+push${END}"
 # An `oe` token: the bare name or the last path segment, or a shell variable that may hold the
 # wrapper path, optionally quoted; then any words; then `ship ... publish` or `land ... merge`,
 # where flags may sit between the two words.
-OE_TOKEN="((^|[[:space:];&|(\`\"'/])oe[\"']?|\\$\\{?[A-Za-z_][A-Za-z0-9_]*\\}?[\"']?)"
+OE_TOKEN="(${START}oe[\"']?|\\$\\{?[A-Za-z_][A-Za-z0-9_]*\\}?[\"']?)"
 OE_WORDS='([[:space:]]+[^[:space:]]+)*[[:space:]]+'
-OE_END="([[:space:]\"';&|)<>}]|$)"
-OE_MUTATION="${OE_TOKEN}${OE_WORDS}(ship${OE_WORDS}publish|land${OE_WORDS}merge)${OE_END}"
+OE_MUTATION="${OE_TOKEN}${OE_WORDS}(ship${OE_WORDS}publish|land${OE_WORDS}merge)${END}"
 MARKER='#[[:space:]]*user-approved[[:space:]]*$'
 
 # guarded_in <text> prints what <text> runs that needs approval, or nothing.

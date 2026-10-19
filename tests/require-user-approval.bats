@@ -29,6 +29,22 @@ assert_allowed() {
   assert_blocked 'git push origin feat/x'
 }
 
+@test "git push next to a shell operator is blocked" {
+  assert_blocked 'cd repo&&git push origin x'
+  assert_blocked '(git push origin x)'
+  assert_blocked 'echo a;git push'
+  assert_blocked 'git push;echo done'
+  assert_blocked 'git push>log'
+  assert_blocked '/usr/bin/git push origin x'
+  assert_blocked '{ git push; }'
+}
+
+@test "git commands that are not a push are allowed" {
+  assert_allowed 'git pushx origin'
+  assert_allowed 'git status&&git log'
+  assert_allowed 'echo legit push'
+}
+
 @test "git push with the marker is allowed" {
   assert_allowed 'git push origin feat/x # user-approved'
 }

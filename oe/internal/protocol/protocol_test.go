@@ -116,6 +116,29 @@ func TestEncodeStateRejectsBadKey(t *testing.T) {
 }
 
 // TestDecodeStateFailsClosed covers every malformed state of contract §3: each exits 6.
+// TestEncodeStateKeepsCodeFences: a string value carrying a Markdown code fence still reads
+// back, unchanged, from the encoded body.
+func TestEncodeStateKeepsCodeFences(t *testing.T) {
+	t.Parallel()
+
+	fence := "see:\n```go\nx := 1\n```\n`inline`"
+	in := sample{
+		Envelope: protocol.Envelope{ProtocolVersion: 2, Entity: "sample", Key: "issue:7", Revision: 1, UpdatedBy: "t"},
+		Count:    0, Note: &fence, Items: []item{{Name: "```"}}, Nested: inner{Flag: false}, Tags: []string{"`"},
+	}
+	body, err := protocol.EncodeState(&in)
+	if err != nil {
+		t.Fatalf("EncodeState() error = %v", err)
+	}
+	var out sample
+	if _, err := protocol.DecodeState(body, &out); err != nil {
+		t.Fatalf("DecodeState(EncodeState()) error = %v", err)
+	}
+	if *out.Note != fence || out.Items[0].Name != "```" || out.Tags[0] != "`" {
+		t.Errorf("round trip = %+v, want the backticks unchanged", out)
+	}
+}
+
 // TestEncodeStateRejectsUnreadableEnvelope: the writer refuses any state its own reader would
 // reject, so a bad write cannot leave every later run stopping with exit 6.
 func TestEncodeStateRejectsUnreadableEnvelope(t *testing.T) {

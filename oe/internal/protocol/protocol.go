@@ -212,7 +212,20 @@ func EncodeState(s State) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("encode state %q: %w", env.Key, err)
 	}
-	return fmt.Sprintf("<!-- oe:v%d %s %s -->\n%s%s%s\n", Version, KindState, env.Key, fenceOpen, js, fenceClose), nil
+	// A backtick can only sit inside a JSON string, so escaping it is lossless, and a value such
+	// as a Markdown code fence can no longer close the comment's json fence.
+	js = bytes.ReplaceAll(js, []byte("`"), []byte(`\u0060`))
+	body := fmt.Sprintf("<!-- oe:v%d %s %s -->\n%s%s%s\n", Version, KindState, env.Key, fenceOpen, js, fenceClose)
+	// Read the body back before anyone posts it: any encode/decode mismatch fails here instead
+	// of stopping every later run with exit 6.
+	back, ok := reflect.TypeAssert[State](reflect.New(reflect.TypeOf(s).Elem()))
+	if !ok {
+		return "", exitcode.New(exitcode.Usage, "state type cannot be read back")
+	}
+	if _, err := DecodeState(body, back); err != nil {
+		return "", exitcode.Wrap(exitcode.Protocol, err, fmt.Sprintf("encoded state %q does not read back", env.Key))
+	}
+	return body, nil
 }
 
 // decodeStrict checks the exact protocol version and the presence of every field, then

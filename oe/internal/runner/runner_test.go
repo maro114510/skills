@@ -28,6 +28,25 @@ func TestExecPassesArgvWithoutShell(t *testing.T) {
 	}
 }
 
+// TestExecPinsGHHost: a child never inherits GH_HOST or GH_REPO; GH_HOST is github.com.
+func TestExecPinsGHHost(t *testing.T) {
+	t.Setenv("GH_HOST", "ghe.example.com")
+	t.Setenv("GH_REPO", "other/repo")
+
+	// A git alias starting with ! runs through a shell, which is enough to print the child env.
+	res, err := runner.Exec{}.Run(t.Context(), runner.Git, []string{"-c", "alias.envdump=!env", "envdump"})
+	if err != nil || res.ExitCode != 0 {
+		t.Fatalf("env dump: exit %d, err %v, stderr %s", res.ExitCode, err, res.Stderr)
+	}
+	env := "\n" + string(res.Stdout)
+	if !strings.Contains(env, "\nGH_HOST=github.com\n") {
+		t.Errorf("child env lacks GH_HOST=github.com")
+	}
+	if strings.Contains(env, "ghe.example.com") || strings.Contains(env, "GH_REPO=") {
+		t.Errorf("child env inherited GH_HOST or GH_REPO")
+	}
+}
+
 func TestExecReportsNonZeroExit(t *testing.T) {
 	t.Parallel()
 

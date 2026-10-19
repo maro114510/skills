@@ -57,7 +57,7 @@ func (Exec) Run(ctx context.Context, prog Program, args []string) (Result, error
 	default:
 		return Result{}, fmt.Errorf("%w: %q", ErrUnknownProgram, prog)
 	}
-	cmd.Env = append(os.Environ(), "GH_PROMPT_DISABLED=1", "GH_NO_UPDATE_NOTIFIER=1", "GIT_TERMINAL_PROMPT=0")
+	cmd.Env = childEnv(os.Environ())
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -71,6 +71,20 @@ func (Exec) Run(ctx context.Context, prog Program, args []string) (Result, error
 		return res, fmt.Errorf("run %s: %w", prog, err)
 	}
 	return res, nil
+}
+
+// childEnv is the environment for every child process. An inherited GH_HOST or GH_REPO could
+// point a gh command at another host or repository, so both are dropped and the host is pinned.
+func childEnv(parent []string) []string {
+	env := make([]string, 0, len(parent)+4) //nolint:mnd // The four variables set below.
+	for _, kv := range parent {
+		name, _, _ := strings.Cut(kv, "=")
+		if name == "GH_HOST" || name == "GH_REPO" {
+			continue
+		}
+		env = append(env, kv)
+	}
+	return append(env, "GH_HOST=github.com", "GH_PROMPT_DISABLED=1", "GH_NO_UPDATE_NOTIFIER=1", "GIT_TERMINAL_PROMPT=0")
 }
 
 // Call is one recorded invocation. Argv starts with the program name.
