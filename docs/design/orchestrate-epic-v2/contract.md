@@ -274,7 +274,7 @@ Every `oe` subcommand prints one JSON payload or one verdict line.
 
 ## 12. Inputs and Snapshot Mode
 
-`oe` lives at `oe/`, with vendored dependencies, built with `CGO_ENABLED=0`. It runs only `gh` and `git`, always as an argv array, never through a shell. Global flags: `--epic <number|url>`, `--repo <owner/name>`, `--max-parallel <n>`, `--snapshot <file>`.
+`oe` lives at `oe/`, built with `CGO_ENABLED=0`. Dependencies are not vendored: users run release binaries (#281) and never build, so `go.sum` and `go mod verify` guard dependency integrity, and CI checks `go.mod` and `go.sum` stay tidy. It runs only `gh` and `git`, always as an argv array, never through a shell. Global flags: `--epic <number|url>`, `--repo <owner/name>`, `--max-parallel <n>`, `--snapshot <file>`.
 
 Every subcommand that needs the run inputs resolves them one way, in this order, before any write:
 

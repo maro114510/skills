@@ -3,11 +3,11 @@ VERSION := $(shell git describe --tags --match 'oe-v*' --always --dirty 2>/dev/n
 LDFLAGS := -s -w -X main.version=$(VERSION)
 
 export CGO_ENABLED := 0
-export GOFLAGS := -mod=vendor
+export GOFLAGS := -mod=readonly
 
 .DEFAULT_GOAL := help
 
-.PHONY: build test vet fmt lint vendor clean help
+.PHONY: build test vet fmt lint tidy clean help
 
 build: ## Build the binary without cgo
 	go build -ldflags "$(LDFLAGS)" -o $(BINARY) .
@@ -24,8 +24,8 @@ fmt: ## Check formatting with gofmt
 lint: ## Run golangci-lint
 	golangci-lint run
 
-vendor: ## Tidy go.mod and refresh vendor/
-	GOFLAGS= go mod tidy && GOFLAGS= go mod vendor
+tidy: ## Tidy go.mod and go.sum, then verify module checksums
+	GOFLAGS= go mod tidy && go mod verify
 
 clean: ## Remove build artifacts
 	rm -f $(BINARY)

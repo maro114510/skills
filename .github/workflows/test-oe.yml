@@ -24,7 +24,7 @@ defaults:
 
 env:
   CGO_ENABLED: '0'
-  GOFLAGS: -mod=vendor
+  GOFLAGS: -mod=readonly
 
 jobs:
   test:
@@ -40,19 +40,22 @@ jobs:
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version-file: oe/go.mod
-          cache: false
+          cache-dependency-path: oe/go.sum
 
       - name: Check formatting
         run: |
           unformatted="$(gofmt -l main.go cmd internal)"
           test -z "${unformatted}" || { printf '%s\n' "${unformatted}"; exit 1; }
 
-      - name: Check that vendor matches go.mod
+      - name: Verify module checksums
+        run: go mod verify
+
+      - name: Check that go.mod and go.sum are tidy
         env:
           GOFLAGS: ''
         run: |
-          go mod tidy && go mod vendor
-          drift="$(git status --porcelain -- vendor go.mod go.sum)"
+          go mod tidy
+          drift="$(git status --porcelain -- go.mod go.sum)"
           test -z "${drift}" || { printf '%s\n' "${drift}"; exit 1; }
 
       - name: go vet
@@ -77,7 +80,7 @@ jobs:
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version-file: oe/go.mod
-          cache: false
+          cache-dependency-path: oe/go.sum
 
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
