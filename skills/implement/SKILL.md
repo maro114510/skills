@@ -91,7 +91,7 @@ Run this in normal mode when the request names a GitHub Issue `<N>`, before Phas
 
 The claim is the Git ref `refs/claims/issue-<N>` in this clone, shared by all its worktrees. It never enters history and is not pushed. `git for-each-ref refs/claims` lists claims, and `claim.sh status <N>` shows the owner and its `state=` without changing the claim; it exits 20 whenever the claim is held, by this session too, so compare `owner_token=` with your own.
 
-Inside a [herdr](https://herdr.dev) pane, the claim records the pane and its agent session, so `state=` tells whether the owner session still runs, for Claude Code, Codex, and opencode alike. `alive=` only says the owner's harness process exists, which stays true for a long-lived process that hosts many sessions. Rerunning `acquire` with this session's own token records the current process and pane again.
+Inside a [herdr](https://herdr.dev) pane, the claim records the pane, its agent session, and the herdr server, so `state=` tells whether the owner session still runs, for Claude Code, Codex, and opencode alike. `alive=` only says the owner's harness process exists, which stays true for a long-lived process that hosts many sessions. Rerunning `acquire` with this session's own token records the current process and pane again.
 
 | `state=` | Meaning |
 |---|---|
@@ -99,9 +99,9 @@ Inside a [herdr](https://herdr.dev) pane, the claim records the pane and its age
 | `blocked` | It waits on an approval or a question |
 | `idle`, `done` | It finished its turn and waits for input; `done` means nobody has looked at it yet |
 | `gone` | herdr answered and no pane runs the owner session: its pane closed, or the pane switched to another session, as after `/clear`. Unless it was resumed outside herdr, that session no longer runs and will never release the claim |
-| `unknown` | Not determinable: the claim was taken outside herdr, by an older version of this script, or by a session herdr could not tie to a pane; or herdr or `jq` is unavailable now |
+| `unknown` | Not determinable: the claim was taken outside herdr, by an older version of this script, or by a session herdr could not tie to a pane; the owner's pane shows no agent session for now; or the recording herdr server, herdr, or `jq` is unavailable now |
 
-1. Run the script from the repository, where `<skill-dir>` is the directory containing this SKILL.md. Pass `<token>` only when this session already holds one from an earlier run; otherwise the script prints a new one. Keep the printed `token=` in context, because it, not the process, identifies this session.
+1. Run the script from the repository, where `<skill-dir>` is the directory containing this SKILL.md. Pass `<token>` only when this session already holds one from an earlier run; otherwise the script prints a new one. Keep the printed `token=` in context, because it, not the process, identifies this session. Whenever this session resumes, as after `--resume`, a fork, or a restart, rerun `acquire` with that token before editing: a resumed session can run under a new session ID, and until it reruns, other sessions read its claim as `gone`.
 
    ```bash
    CLAIM_PID="$PPID" bash <skill-dir>/scripts/claim.sh acquire <N> [<token>]

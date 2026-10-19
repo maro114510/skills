@@ -15,15 +15,23 @@ setup() {
   cd "${repo}" || return 1
   # A fake herdr answers from files in ${herdr_dir}, so no test depends on a real herdr server.
   # Tests start outside herdr and outside any harness; the ones that need a pane or a harness session set them.
-  unset HERDR_PANE_ID CLAUDE_CODE_SESSION_ID CODEX_THREAD_ID
+  unset HERDR_PANE_ID HERDR_SOCKET_PATH CLAUDE_CODE_SESSION_ID CODEX_THREAD_ID
   herdr_dir="${work}/herdr"
   mkdir -p "${work}/bin" "${herdr_dir}"
   cat >"${work}/bin/herdr" <<'EOF'
 #!/usr/bin/env bash
+# The data in FAKE_HERDR_DIR belongs to the server at FAKE_HERDR_SOCKET, or to the default server when that is
+# unset; any other server answers that it has no panes.
+d="${FAKE_HERDR_DIR}"
+if [[ -n "${HERDR_SOCKET_PATH:-}" && "${HERDR_SOCKET_PATH}" != "${FAKE_HERDR_SOCKET:-}" ]]; then
+  d="${FAKE_HERDR_DIR}/other"
+  mkdir -p "${d}"
+  echo '{"result":{"panes":[],"type":"pane_list"}}' >"${d}/list.json"
+fi
 case "$1 $2" in
-"pane get") f="${FAKE_HERDR_DIR}/get-$3" ;;
-"pane list") f="${FAKE_HERDR_DIR}/list" ;;
-"pane process-info") f="${FAKE_HERDR_DIR}/process-$4" ;;
+"pane get") f="${d}/get-$3" ;;
+"pane list") f="${d}/list" ;;
+"pane process-info") f="${d}/process-$4" ;;
 *) exit 2 ;;
 esac
 # Like the real herdr, errors go to stderr and leave stdout empty.
@@ -361,8 +369,8 @@ claim_token() {
   [ "${status}" -eq 0 ]
   run git cat-file -p "${ref}"
   has_line "pane="
-  # The owner fields are exactly token, pid, lstart, started, pane, and session, with nothing injected.
-  [ "${#lines[@]}" -eq 6 ]
+  # The owner fields are exactly token, pid, lstart, started, pane, session, and socket, with nothing injected.
+  [ "${#lines[@]}" -eq 7 ]
   [ "$(value token)" = tok-a ]
 }
 
@@ -373,7 +381,7 @@ claim_token() {
   run git cat-file -p "${ref}"
   has_line "pane="
   has_line "session="
-  [ "${#lines[@]}" -eq 6 ]
+  [ "${#lines[@]}" -eq 7 ]
   bash "${target}" release 7 tok-a
   show_pane w1:p1 "/sessions/a b.jsonl" working
   HERDR_PANE_ID=w1:p1 bash "${target}" acquire 7 tok-a
@@ -423,13 +431,40 @@ claim_token() {
   has_line "state=gone"
 }
 
-@test "pane left with no agent is gone" {
+@test "pane showing no agent, as during a detection gap, is unknown, never gone" {
   acquire_in_pane tok-a w1:p1 ses-a
   show_pane w1:p1 "" unknown -
   claim acquire 7 tok-b
   [ "${status}" -eq 20 ]
   has_line "pane_session=-"
-  has_line "state=gone"
+  has_line "state=unknown"
+}
+
+@test "claim is read from the herdr server that recorded it, not the checker's" {
+  export FAKE_HERDR_SOCKET=/run/herdr-a.sock
+  show_pane w1:p1 ses-a working
+  HERDR_SOCKET_PATH=/run/herdr-a.sock HERDR_PANE_ID=w1:p1 bash "${target}" acquire 7 tok-a >/dev/null
+  run git cat-file -p "${ref}"
+  has_line "socket=/run/herdr-a.sock"
+  HERDR_SOCKET_PATH=/run/herdr-b.sock claim status 7
+  [ "${status}" -eq 20 ]
+  has_line "state=working"
+}
+
+@test "concurrent reruns with this session's own token all succeed" {
+  bash "${target}" acquire 7 tok-a
+  local i
+  for i in $(seq 1 20); do
+    (
+      bash "${target}" acquire 7 tok-a >/dev/null 2>&1
+      echo $? >"${work}/own.${i}"
+    ) &
+  done
+  wait
+  for i in $(seq 1 20); do
+    [ "$(cat "${work}/own.${i}")" -eq 0 ]
+  done
+  [ "$(claim_token)" = tok-a ]
 }
 
 @test "pane without an agent status reports unknown" {

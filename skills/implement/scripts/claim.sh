@@ -68,10 +68,20 @@ single() {
 # printed line nor be recorded.
 jq_one='def one: if type == "string" and (test("[[:cntrl:]]") | not) then . else "" end;'
 
+# Runs herdr against the server in herdr_socket when set, so a claim is read from the herdr that recorded it:
+# another herdr server would not know the owner's pane and session, and would make it look gone.
+herdr_at() {
+  if [[ -n "${herdr_socket:-}" ]]; then
+    HERDR_SOCKET_PATH="${herdr_socket}" herdr "$@"
+  else
+    herdr "$@"
+  fi
+}
+
 # Prints herdr's view of pane $1 as agent status, agent, and agent session, separated by the unit separator;
 # fails when the pane is closed or herdr or jq is unavailable.
 pane_info() {
-  herdr pane get "$1" 2>/dev/null | jq -er "${jq_one}"'
+  herdr_at pane get "$1" 2>/dev/null | jq -er "${jq_one}"'
     .result.pane | objects
     | "\(.agent_status | one | if . == "" then "unknown" else . end)\u001f\(.agent | one)\u001f\(.agent_session.value | one)"' \
     2>/dev/null
@@ -80,7 +90,7 @@ pane_info() {
 # Prints the pane that runs agent session $1 and its agent status, separated by the unit separator, preferring the
 # pane doing the most work; prints an empty pane and gone when no pane runs it, and fails when herdr or jq does.
 session_pane() {
-  herdr pane list 2>/dev/null | jq -er --arg s "$1" "${jq_one}"'
+  herdr_at pane list 2>/dev/null | jq -er --arg s "$1" "${jq_one}"'
     [.result.panes[] | select(.agent_session.value == $s)]
     | sort_by(.agent_status != "working", .agent_status != "blocked")
     | first // {pane_id: "", agent_status: "gone"}
@@ -109,22 +119,24 @@ in_pane() {
 #   wherever this process sits; Codex runs tools from a daemon outside the pane.
 # - Otherwise, as for opencode, HERDR_PANE_ID counts only when this process runs inside that pane.
 owner_blob() {
-  local pane="" session="" own status agent
+  local pane="" session="" socket own status
   own="$(single "${CLAUDE_CODE_SESSION_ID:-${CODEX_THREAD_ID:-}}")"
   if [[ -n "${own}" ]]; then
     IFS=$'\x1f' read -r pane status <<<"$(session_pane "${own}")"
     session="${own}"
   elif pane="$(single "${HERDR_PANE_ID:-}")" && in_pane "${pane}"; then
-    IFS=$'\x1f' read -r status agent session <<<"$(pane_info "${pane}")"
+    IFS=$'\x1f' read -r status _ session <<<"$(pane_info "${pane}")"
   fi
   pane="$(single "${pane}")"
   session="$(single "${session}")"
+  socket="$(single "${HERDR_SOCKET_PATH:-}")"
   if [[ -z "${pane}" || -z "${session}" ]]; then
     pane=""
     session=""
+    socket=""
   fi
-  printf 'token=%s\npid=%s\nlstart=%s\nstarted=%s\npane=%s\nsession=%s\n' \
-    "${token}" "${pid}" "$(lstart_of "${pid}")" "$(date -u +%FT%TZ)" "${pane}" "${session}" |
+  printf 'token=%s\npid=%s\nlstart=%s\nstarted=%s\npane=%s\nsession=%s\nsocket=%s\n' \
+    "${token}" "${pid}" "$(lstart_of "${pid}")" "$(date -u +%FT%TZ)" "${pane}" "${session}" "${socket}" |
     git hash-object -w --stdin
 }
 
@@ -132,22 +144,24 @@ owner_blob() {
 # state is herdr's agent status for the pane running the owner session, gone when herdr answers and no pane
 # runs it, and unknown otherwise; a herdr or jq failure is never read as gone, which would invite a takeover.
 owner_state() {
-  local info status agent
+  local info status
   owner_pane="$(field pane "$1")"
   owner_session="$(field session "$1")"
+  herdr_socket="$(field socket "$1")"
   pane_session=""
   active_pane=""
   state=unknown
   [[ -n "${owner_pane}" && -n "${owner_session}" ]] || return 0
   if info="$(pane_info "${owner_pane}")"; then
-    IFS=$'\x1f' read -r status agent pane_session <<<"${info}"
+    IFS=$'\x1f' read -r status _ pane_session <<<"${info}"
     if [[ "${pane_session}" == "${owner_session}" ]]; then
       active_pane="${owner_pane}"
       state="${status}"
       return 0
     fi
-    # An agent that has not reported its session yet may still be the owner.
-    [[ -z "${pane_session}" && -n "${agent}" ]] && return 0
+    # A pane that shows no session, whether its agent has not reported one or herdr briefly lost the agent,
+    # may still be the owner's.
+    [[ -z "${pane_session}" ]] && return 0
   fi
   # The recorded pane is closed, unreadable, or runs another session, and herdr's pane list decides: the owner
   # may have been resumed in another pane. A list herdr cannot give leaves the state unknown.
@@ -205,12 +219,14 @@ fi
 # as after a resume or after a claim written by an older version of this script.
 blob="$(owner_blob)" || die "Cannot write the owner blob"
 # update-ref compares against the expected value under Git's ref lock, so only one session wins.
-if ! git update-ref "${ref}" "${blob}" "${held:-${zero}}" 2>/dev/null; then
+if git update-ref "${ref}" "${blob}" "${held:-${zero}}" 2>/dev/null; then
+  [[ -z "${held}" ]] && created="${blob}"
+else
   now="$(current)"
   [[ -n "${now}" ]] || die "Cannot update ${ref}"
-  report_held "${now}"
+  # A concurrent rerun with this session's own token won the race; the claim is still this session's.
+  [[ "$(field token "${now}")" == "${token}" ]] || report_held "${now}"
 fi
-[[ -z "${held}" ]] && created="${blob}"
 
 # A failed ls-remote would otherwise read as "no branch" and hide work that is already pushed.
 if ! remote="$(git ls-remote --heads origin 2>/dev/null)"; then
