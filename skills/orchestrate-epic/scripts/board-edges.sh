@@ -65,6 +65,7 @@ FILTER='
        elif (.blockedBy.totalCount // 0) > (.blockedBy.nodes | length) then error("#\(.number) blockedBy truncated")
        else . end
      | {n: .number, b: [.blockedBy.nodes[] | select(.state == "OPEN") | .number]}]'
-EDGES=$(jq -c --argjson epic "${EPIC}" --argjson containers "${CONTAINERS}" "${FILTER}" <<<"${BOARD}") ||
+# -e fails an empty response, which yields no JSON value, instead of printing a blank line.
+EDGES=$(jq -ce --argjson epic "${EPIC}" --argjson containers "${CONTAINERS}" "${FILTER}" <<<"${BOARD}") ||
   fail "board filter failed"
 printf '%s\n' "${EDGES}"

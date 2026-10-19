@@ -135,6 +135,17 @@ offline_gh() {
   [ -z "${output}" ]
 }
 
+@test "an empty board response exits 1 and prints no dependency list" {
+  stub_gh "exit 0"
+  PATH="${stub_dir}:${PATH}" run --separate-stderr bash "${target}" owner/repo 10
+  [ "${status}" -eq 1 ]
+  [ -z "${output}" ]
+  : >"${BATS_TEST_TMPDIR}/empty.json"
+  run --separate-stderr bash "${target}" --snapshot "${BATS_TEST_TMPDIR}/empty.json" 10
+  [ "${status}" -eq 1 ]
+  [ -z "${output}" ]
+}
+
 @test "an Issue missing its blockedBy connection exits 1 instead of reading as no dependencies" {
   run --separate-stderr bash "${target}" --snapshot - 10 <<<'[{"number":11,"parent":{"number":10}}]'
   [ "${status}" -eq 1 ]
