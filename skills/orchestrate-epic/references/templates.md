@@ -33,6 +33,8 @@
 - 今回のワースト想定（予測ではなく上限）: <N 件 Issue> × 最大 5 回試行（初回 + 回答済みBLOCKEDの再送1回 + FAILED再試行1回 + reviewer修正2回 = blocking/nit いずれも1 cycle、を積み上げた最悪ケース）× 最大 4 回 reviewer 実行（初回 + fix cycle 2 回 + default branch 前進・HEAD 移動による staleness 再検証 1 回。FAILED再試行時は reviewer を呼ばない。cap 到達後は残指摘のまま park し、それ以上は dispatch しません。同じ round で再び stale になった Issue は再検証せず次回実行に回します）
 - Epic 全体の予算（セッションや再実行をまたいで累積。N = 未完了 Issue <N> 件）: worker dispatch <5N> 回、reviewer 実行 <4N> 回（他の PR のマージなどで承認が古くなった際の staleness 再検証は数えません）、fix cycle <2N> 回。Epic のコメントに記録し、spawn の前に毎回差し引きます。超える操作をしようとした時点で Epic を凍結し、`epic-release` が投稿されるまで dispatch・review・PR 作成・マージをすべて止めます。`epic-retry` で Issue 単位の cycle を戻しても、この予算は戻りません
 - [!] 予算は spawn の回数だけを数えます。wall-clock やトークン消費量による自動停止はありません
+- PR の修復（CI 失敗・レビュー指摘・conflict）は fix cycle として数え、上記の fix-cycle cap と Epic 全体の予算に含めます。修復専用の上限は設けません
+- CI 待ちのポーリング: 1 回の実行につき 60 秒間隔で最大 30 回（マージのたびに数え直し）。使い切ったら待ち中の PR は次回の実行に回します
 
 ### 次のアクション
 このプランに問題がなければ、この Epic に `epic-approve` とだけ書いたコメントを投稿してください。この Run Plan より後に、OWNER・MEMBER・COLLABORATOR が投稿したものだけが承認になります。投稿されるまで dispatch は行われません。
@@ -43,6 +45,8 @@
 `epic-approve` が許可するのは実装と PR 作成までです。PR の自動マージは許可しません。
 ループに自動マージも任せる場合は、この Run Plan より後に `epic-auto-merge` とだけ書いたコメントを別に投稿してください。取り消すときは `epic-revoke-auto-merge` とだけ書いたコメントを投稿します。両者のうち最も新しいコメントが有効で、ループはマージの直前に毎回読み直します。取り消した後に始まるマージは行いません。
 自動マージを許可しても、必須レビュー・ruleset・人の確認を求めるリポジトリ側の制御は迂回しません。
+マージは 1 件ずつ、レビュー済みの HEAD を expected SHA として指定して行います。GitHub の auto-merge は使いません。
+CI 失敗・レビュー指摘・conflict の修復は `epic-approve` だけで行います。マージ権限が無い場合も PR を修復し、マージはあなたに任せます。
 ```
 
 ## Blocked Question（Step 5、Issue コメント）
@@ -125,23 +129,59 @@ orchestrate-epic: この Epic を凍結しました。解除されるまで、wo
 | #16 | - | [!] push 失敗（詳細: ...） |
 ```
 
-## Round Boundary（Step 8）
+## Merge Hold（Step 8、Issue コメント）
+
+`next=human` として扱うとき（pr-readiness.sh の `next=human`、信頼できない作成者の未解決レビュー、前回の修復以降に新しい指摘が無い、マージ要求の拒否）、PR の HEAD ごとに 1 度だけ投稿する。先頭にマーカー `<!-- orchestrate-epic:merge-hold <PR> <HEAD> -->` を付ける（commands §3.6 が付ける）。
+
+```
+orchestrate-epic: PR #<PR> は、ループでは解消できない理由があるためマージを保留しています。人の対応をお願いします。
+
+HEAD: <HEAD>
+理由: <pr-readiness.sh の reason= の値 / 信頼できない作成者の未解決レビュー / 前回の修復以降に新しい指摘が無く、レビュアーまたは CI の反応待ち / マージ要求の拒否: GitHub のメッセージ>
+
+ループはリポジトリ側の制御を迂回しません（`--admin` もリポジトリ設定の変更も行いません）。対応が済むと、次の landing pass か次回の実行で改めて判定します。
+```
+
+## Merge Result（Step 8、Issue コメント）
+
+マージを試みるたびに投稿する。先頭にマーカー `<!-- orchestrate-epic:merge-result <PR> <reviewed_sha> <result> -->` を付ける（commands §3.6 が付ける）。この記録が書けるまで、次の PR はマージしない。
+
+```
+orchestrate-epic: PR #<PR> のマージ結果: <merged / head-moved / rejected / unknown>
+
+- expected SHA (reviewed_sha): <reviewed_sha>
+- verified_base: <verified_base>
+- 方式: <merge / squash>
+- 詳細: <merged ならマージコミットの SHA、それ以外は GitHub のメッセージ>
+```
+
+結果ごとの意味（コメントには該当する 1 行だけを書き足す）:
+- merged: マージされました。
+- head-moved: レビュー後に HEAD が変わったため GitHub がマージを拒否しました。再検証してからやり直します。
+- rejected: リポジトリがマージを拒否しました。理由を確認してください。
+- unknown: マージ要求の応答を受け取れず、マージされたかも確認できませんでした。この実行ではこれ以上マージしません。
+
+## Round Boundary（Step 9）
 
 ```
 ## 次の round はマージ待ちです
 
-マージ待ち PR: <PR URL 一覧>
+今回マージした PR: <PR URL 一覧、なければ なし>
+マージ待ち PR:
+| PR | 理由 |
+|----|------|
+| <PR URL> | <マージ権限なし / リポジトリ側で人の確認待ち: <reason> / CI 待ちのポーリング上限 / 再検証待ち> |
 これらの Issue が close されると解放されるタスク: #17, #18
 
 続け方:
-- いま続ける: 上記 PR を 1 件だけマージしてから `/orchestrate-epic epic <EPIC>` を再実行してください。残りの PR は新しい default branch で再検証します。
+- いま続ける: マージ権限が無い場合は、上記 PR を 1 件だけマージしてから `/orchestrate-epic epic <EPIC>` を再実行してください。残りの PR は新しい default branch で再検証します。人の確認待ちの PR は、その確認が済んでから再実行してください。
 - あとで続ける: このまま終了して構いません。再実行すれば GitHub の状態から再開します。
 
 並列数上限で今回見送った ready Issue がある場合は、次の行を必ず添える:
 「#19, #20 は並列数上限で見送っただけなので、マージを待たずに再実行すれば次のバッチを開始できます。」
 ```
 
-## Completion Exit Comment（Step 9、Epic コメント）
+## Completion Exit Comment（Step 10、Epic コメント）
 
 先頭にマーカー `<!-- orchestrate-epic:completion -->` を必ず付ける。既に投稿済みなら再投稿しない。
 

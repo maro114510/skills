@@ -233,7 +233,7 @@ elif [ "$HTTP_STATUS" != "200" ]; then
 fi
 git ls-tree -r "origin/$BASE" --name-only -- .github/workflows
 
-# Completion exit comment (Step 9) — marked the same way as the Run Plan, so a rerun after completion
+# Completion exit comment (Step 10) — marked the same way as the Run Plan, so a rerun after completion
 # doesn't post a second one; $EXIT_COMMENT_BODY must start with <!-- orchestrate-epic:completion -->
 COMPLETION=$(marker_comment "$EPIC" '<!-- orchestrate-epic:completion -->') \
   || { echo "completion lookup failed — stop and report, do not post an exit comment" >&2; exit 1; }
@@ -461,7 +461,7 @@ gh api "repos/$REPO/issues/comments/$CONTEXT_ID" --jq '{author: .user.login, cre
 
 `pending_findings` holds the findings, blocking or nit, handed to an in-flight fix cycle — including the nits of an APPROVE, which Step 6 treats as REQUEST_CHANGES for state purposes. It is cleared by the next review result and by an `epic-retry`/`epic-redo`, and it never makes Step 2 classify the Issue `parked`; only a non-empty `unresolved_blockers` or an `epic-drop` in `decisions` does. A resumed `in-progress` Issue passes it into the fresh worker's prompt, Step 4.
 
-`head_sha` alone is not an approval — it is written after every review, including a REQUEST_CHANGES. The bound verdict is `reviewed_sha` + `verified_base` + `review_evidence`, written in the same upsert so no reader ever sees one without the others: Step 6 sets all three only on a finding-free APPROVE that passes its "Acceptance Evidence" validation and whose pre-review pin (`REVIEW_HEAD`, `REVIEW_BASE`) still matches after the review, and resets all three to `none` on a REQUEST_CHANGES, an APPROVE carrying nits or failing validation, a park, a stale gate in Step 7, or a human `epic-retry`/`epic-redo` restart. Step 2's open-PR sanity check compares the SHAs against the PR's `headRefOid` and the current `origin/$BASE`, classifying a mismatch, or a `review_evidence` that is not present, `reverify` so §2.6 re-verifies it; Step 7's verdict gate does the same against the worktree HEAD and `origin/$BASE` before shipping; #145's merge request sends `reviewed_sha` as its expected SHA. A mismatch on either SHA, or missing evidence, means the recorded verdict cannot authorize a ship or a merge. A state comment written before `review_evidence` existed has no such line, which reads as missing evidence: its open PR is re-verified once instead of trusted.
+`head_sha` alone is not an approval — it is written after every review, including a REQUEST_CHANGES. The bound verdict is `reviewed_sha` + `verified_base` + `review_evidence`, written in the same upsert so no reader ever sees one without the others: Step 6 sets all three only on a finding-free APPROVE that passes its "Acceptance Evidence" validation and whose pre-review pin (`REVIEW_HEAD`, `REVIEW_BASE`) still matches after the review, and resets all three to `none` on a REQUEST_CHANGES, an APPROVE carrying nits or failing validation, a park, a stale gate in Step 7, or a human `epic-retry`/`epic-redo` restart. Step 2's open-PR sanity check compares the SHAs against the PR's `headRefOid` and the current `origin/$BASE`, classifying a mismatch, or a `review_evidence` that is not present, `reverify` so §2.6 re-verifies it; Step 7's verdict gate does the same against the worktree HEAD and `origin/$BASE` before shipping; Step 8's merge request, §3.6, sends `reviewed_sha` as its expected SHA. A mismatch on either SHA, or missing evidence, means the recorded verdict cannot authorize a ship or a merge. A state comment written before `review_evidence` existed has no such line, which reads as missing evidence: its open PR is re-verified once instead of trusted.
 
 git-wt may place worktrees outside the repo, depending on its config — always use the printed path, never an assumed `.wt/`.
 
@@ -584,8 +584,8 @@ fi
 #    makes the verdict stale and none of sub-steps 4-5 may run for that Issue. A fallback commit
 #    from sub-step 2 moves HEAD off reviewed_sha and is caught here. $REVIEWED_SHA, $VERIFIED_BASE,
 #    and $REVIEW_EVIDENCE were read from the §2.5 state comment before sub-step 2; "none" or empty
-#    evidence means no live approval exists. This is the same pair #145's merge request will
-#    send as its expected head SHA, so a HEAD that changes between this comparison and the merge
+#    evidence means no live approval exists. This is the same pair Step 8's merge request, §3.6,
+#    sends as its expected head SHA, so a HEAD that changes between this comparison and the merge
 #    fails that request instead of merging an unreviewed commit.
 git -C "$WT" fetch origin --prune
 if [ -z "$REVIEWED_SHA" ] || [ "$REVIEWED_SHA" = "none" ] \
@@ -686,7 +686,7 @@ Secret screen, run before step 2 above: the commit skill's Step 2 patterns again
 # Freeze check first, §1.7: a freeze posted mid-round, by this session or another, holds every merge
 FREEZE=$(bash "<skill-dir>/scripts/epic-freeze.sh" "$REPO" "$EPIC")
 [ $? -eq 0 ] && [ "$(sed -n 's/^status=//p' <<<"$FREEZE")" = CLEAR ] \
-  || { echo "Epic not CLEAR — do not merge: $FREEZE" >&2; exit 1; }
+  || { echo "Epic not CLEAR — do not merge: $FREEZE" >&2; exit 4; }   # stop landing, SKILL.md Step 8
 STATE=$(marker_comment "$N" '<!-- orchestrate-epic-state -->') \
   || { echo "state comment lookup failed — do not merge" >&2; exit 1; }
 STATE_BODY=$(jq -r '.body // empty' <<<"$STATE")
@@ -708,9 +708,112 @@ PR_HEAD=$(sed -n 's/^head=//p' <<<"$READINESS")
   || { echo "not merge-ready: $READINESS" >&2; exit 1; }   # hold the merge
 ```
 
-The freeze check holds the merge on anything but exit 0 with `status=CLEAR`, `FROZEN`, `RELEASE`, and `UNREADABLE` alike. The next part re-checks the whole bound verdict, SKILL.md Step 6, right before the merge: `reviewed_sha` and `review_evidence` present, and `verified_base` still the current `origin/$BASE`. Only a moved base exits 3, so the caller can route it to re-verification, SKILL.md Step 3 "Landing Order"; every other hold exits 1. Output is `status=`, `reason=`, `pr=`, and `head=` lines; `head=` is the PR head the snapshot was taken on, so a `READY` for a head other than the state comment's `reviewed_sha`, §2.5, classified a commit nobody reviewed and holds the merge too. Exit 1 means a required signal was unreadable — `gh` failed, a field was missing, or a connection held more than 100 nodes — and prints `status=BLOCKED`. Exit 2 is a usage error. `--snapshot <file|->` classifies a saved response of the same GraphQL query instead of calling `gh`, which is how `scripts/test-pr-readiness.bats` exercises every rule. Every check on the head counts, required or not, so a pending one waits and a failed one blocks; a repository with no PR checks at all stays `WAITING` and its PRs are merged by a human.
+The freeze check holds the merge on anything but exit 0 with `status=CLEAR`, `FROZEN`, `RELEASE`, and `UNREADABLE` alike. The next part re-checks the whole bound verdict, SKILL.md Step 6, right before the merge: `reviewed_sha` and `review_evidence` present, and `verified_base` still the current `origin/$BASE`. Only a moved base exits 3, so the caller can route it to re-verification, SKILL.md Step 3 "Landing Order", and only a freeze check that is not `CLEAR` exits 4, so the caller stops landing; every other hold exits 1. Step 8's landing pass runs the same block without the final `READY` guard, to read `$READINESS`'s `next=` and `repair=` lines for a PR that is not merge-ready; a merge itself still needs the guard, §3.6. Output is `status=`, `reason=`, `pr=`, `head=`, `next=`, and, on `next=repair`, `repair=` lines; `head=` is the PR head the snapshot was taken on, so a `READY` for a head other than the state comment's `reviewed_sha`, §2.5, classified a commit nobody reviewed and holds the merge too. Exit 1 means a required signal was unreadable — `gh` failed, a field was missing, or a connection held more than 100 nodes — and prints `status=BLOCKED`. Exit 2 is a usage error. `--snapshot <file|->` classifies a saved response of the same GraphQL query instead of calling `gh`, which is how `scripts/test-pr-readiness.bats` exercises every rule. Every check on the head counts, required or not, so a pending one waits and a failed one blocks; a repository with no PR checks at all stays `WAITING` and its PRs are merged by a human.
 
-## §4 Cleanup After Merge — Step 8 rescan
+## §3.6 Land — Step 8
+
+Same call setup as §3.5: §1.5's `ME`, `OE_JQ`, `marker_comment`, `human_comments`, and `merge_authorized`, plus `REPO`, `EPIC`, `BASE`, `N`, and `PR`. `HEAD_NOW` is the `head=` line §3.5 just printed. Every lookup that fails stops the action it guards; a failed read is never "nothing found".
+
+```bash
+TRUSTED='(.authorAssociation | IN("OWNER", "MEMBER", "COLLABORATOR")) or .author.__typename == "Bot"'
+
+# Repair input. The latest repair marker for this PR — the trailing space keeps PR 12 from matching 123.
+REPAIR=$(marker_comment "$N" "<!-- orchestrate-epic:pr-repair $PR ") \
+  || { echo "repair marker lookup failed — do not repair" >&2; exit 1; }
+REPAIR_AT=$(jq -r '.created_at // "1970-01-01T00:00:00Z"' <<<"${REPAIR:-null}")
+REPAIR_HEAD=$(jq -r '.body // ""' <<<"${REPAIR:-null}" | sed -n '1s/^<!-- orchestrate-epic:pr-repair [0-9]* \([0-9a-f]*\) -->$/\1/p')
+KINDS=$(sed -n 's/^repair=//p' <<<"$READINESS")   # §3.5's repair= line: checks,conflict,review subset
+case ",$KINDS," in *,conflict,*) CONFLICT=yes ;; *) CONFLICT=no ;; esac
+
+# checks: failed check runs, the latest run per name, and failed commit statuses on the head.
+# A GitHub Actions check run's id is its job id: the worker reads `gh run view --job <id> --log-failed`.
+FAILED=$(gh api "repos/$REPO/commits/$HEAD_NOW/check-runs?filter=latest" --paginate \
+      --jq '.check_runs[] | select(.status == "completed" and (.conclusion | IN("success", "neutral", "skipped") | not))
+            | {name, job_id: .id, url: .html_url}' || exit 1
+    gh api "repos/$REPO/commits/$HEAD_NOW/status" \
+      --jq '.statuses[] | select(.state == "failure" or .state == "error") | {name: .context, url: .target_url}' || exit 1
+  ) || { echo "failed-check read failed — do not repair" >&2; exit 1; }   # either read failing stops it
+# This head was already handed to a worker: neither its failed checks nor a conflict on it counts again
+[ "$REPAIR_HEAD" = "$HEAD_NOW" ] && { FAILED=""; CONFLICT=no; }
+
+# review: unresolved threads and each reviewer's current CHANGES_REQUESTED review. Only trusted
+# feedback created after the latest repair marker goes to the worker. A thread with no trusted
+# comment, or an untrusted CHANGES_REQUESTED review, is counted as untrusted and never passed on.
+# shellcheck disable=SC2016
+REVIEW=$(set -o pipefail
+  gh api graphql -F owner="${REPO%/*}" -F repo="${REPO#*/}" -F num="$PR" -f query='
+    query($owner: String!, $repo: String!, $num: Int!) { repository(owner: $owner, name: $repo) { pullRequest(number: $num) {
+      reviewThreads(first: 100) { nodes { isResolved path line comments(first: 50) { totalCount nodes {
+        createdAt authorAssociation author { __typename login } body } } } }
+      latestOpinionatedReviews(first: 100) { nodes {
+        state createdAt authorAssociation author { __typename login } body } } } } }' |
+  jq -c --arg since "$REPAIR_AT" '.data.repository.pullRequest
+    | def ok: '"$TRUSTED"';
+      def item: {author: .author.login, created_at: .createdAt, body};
+      [.reviewThreads.nodes[] | select(.isResolved == false)] as $open
+    | [.latestOpinionatedReviews.nodes[] | select(.state == "CHANGES_REQUESTED")] as $changes
+    | {threads: [$open[] | {path, line, truncated: (.comments.totalCount > 50),
+                            comments: [.comments.nodes[] | select(ok and .createdAt > $since) | item]}
+                 | select(.comments | length > 0)],
+       reviews: [$changes[] | select(ok and .createdAt > $since) | item],
+       untrusted: ([$open[] | select(any(.comments.nodes[]; ok) | not)] | length)
+                  + ([$changes[] | select(ok | not)] | length)}') \
+  || { echo "review read failed — do not repair" >&2; exit 1; }
+# untrusted > 0 → next=human, no repair. No checks, no conflict, no threads, no reviews → next=human.
+
+# Persist, then mark, then spawn: reserve (§1.7), upsert the state comment with pending_findings (§2.5),
+# then post the marker. A failed marker post spawns nothing.
+gh issue comment "$N" --repo "$REPO" --body "<!-- orchestrate-epic:pr-repair $PR $HEAD_NOW -->
+orchestrate-epic: PR #$PR の修復を worker に依頼しました（種類: $KINDS）。" \
+  || { echo "repair marker post failed — spawn nothing" >&2; exit 1; }
+
+# Merge Hold, once per PR head — $HOLD_BODY is the "Merge Hold" template
+MARK="<!-- orchestrate-epic:merge-hold $PR $HEAD_NOW -->"
+HOLD=$(marker_comment "$N" "$MARK") || { echo "merge-hold lookup failed" >&2; exit 1; }
+[ -n "$HOLD" ] || gh issue comment "$N" --repo "$REPO" --body "$MARK
+$HOLD_BODY"
+```
+
+The merge request, in one call, with nothing between the last check and the request:
+
+```bash
+AUTH=$(merge_authorized) || AUTH=unreadable
+[ "$AUTH" = granted ] || { echo "merge not authorized ($AUTH) — leave it for the human" >&2; exit 1; }
+# <§3.5's block here, unchanged: freeze CLEAR, bound verdict, base == verified_base (exit 3), READY on reviewed_sha>
+[ "$(sed -n 's/^next=//p' <<<"$READINESS")" = merge ] || { echo "not next=merge — do not merge" >&2; exit 1; }
+# GraphQL, since REST omits the allow_* fields for a token without admin rights. null fails the read.
+# shellcheck disable=SC2016
+METHOD=$(gh api graphql -F owner="${REPO%/*}" -F repo="${REPO#*/}" \
+  -f query='query($owner: String!, $repo: String!) { repository(owner: $owner, name: $repo) { mergeCommitAllowed squashMergeAllowed } }' \
+  --jq '.data.repository | if (.mergeCommitAllowed | type) != "boolean" or (.squashMergeAllowed | type) != "boolean" then error("unreadable")
+        elif .mergeCommitAllowed then "merge" elif .squashMergeAllowed then "squash" else "" end') \
+  || { echo "merge settings unreadable — do not merge" >&2; exit 1; }
+[ -n "$METHOD" ] || { echo "only rebase merging is allowed — leave it for the human" >&2; exit 1; }
+# REST, never `gh pr merge`: it turns on auto-merge or enqueues the PR when requirements are unmet.
+# sha= makes GitHub refuse with 409 if the head is no longer the reviewed commit.
+RESP=$(gh api -i -X PUT "repos/$REPO/pulls/$PR/merge" -f sha="$REVIEWED_SHA" -f merge_method="$METHOD" 2>/dev/null)
+HTTP=$(sed -n '1s/^HTTP\/[0-9.]* \([0-9]*\).*/\1/p' <<<"$RESP")
+BODY=$(sed '1,/^\r*$/d' <<<"$RESP")
+case "$HTTP" in
+  200) RESULT=merged;     DETAIL=$(jq -r '.sha' <<<"$BODY") ;;
+  409) RESULT=head-moved; DETAIL=$(jq -r '.message // empty' <<<"$BODY") ;;
+  ""|5*)  # No response or a server error, which may still have merged: read what GitHub did, never retry blindly
+       DETAIL=$(gh pr view "$PR" --repo "$REPO" --json state,mergeCommit --jq 'if .state == "MERGED" then .mergeCommit.oid else "" end') || DETAIL=""
+       if [ -n "$DETAIL" ]; then RESULT=merged; else RESULT=unknown; fi ;;
+  *)   RESULT=rejected;   DETAIL="HTTP $HTTP: $(jq -r '.message // empty' <<<"$BODY")" ;;
+esac
+
+# Record before anything else merges — once per PR, reviewed_sha, and result. $RESULT_BODY is the "Merge Result"
+# template. A failed record stops landing: no further merge this invocation.
+MARK="<!-- orchestrate-epic:merge-result $PR $REVIEWED_SHA $RESULT -->"
+DONE=$(marker_comment "$N" "$MARK") || { echo "merge-result lookup failed — stop landing" >&2; exit 1; }
+[ -n "$DONE" ] || gh issue comment "$N" --repo "$REPO" --body "$MARK
+$RESULT_BODY" || { echo "merge result not recorded — stop landing" >&2; exit 1; }
+```
+
+The result marker names `reviewed_sha` and the result, so an earlier `rejected` or `unknown` never suppresses the record of a later attempt that merged, on the same verdict or a renewed one. A merged PR closes its Issue through the PR body's `Closes` line; with `Related`, the Issue stays open and Step 2's merged-PR-but-Issue-open check handles it.
+
+## §4 Cleanup After Merge — Step 9 rescan
 
 Only for an Issue that is **closed** with a **merged** PR:
 
