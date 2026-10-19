@@ -185,31 +185,49 @@ checks() {
   done
 }
 
-@test "a failed check re-run to success on the same head is READY" {
-  classify "$(checks '[{"__typename":"CheckRun","name":"test","status":"COMPLETED","conclusion":"FAILURE",
-      "startedAt":"2026-10-19T01:00:00Z","checkSuite":{"app":{"slug":"github-actions"},"workflowRun":{"workflow":{"name":"CI"}}}},
-    {"__typename":"CheckRun","name":"test","status":"COMPLETED","conclusion":"SUCCESS",
-      "startedAt":"2026-10-19T02:00:00Z","checkSuite":{"app":{"slug":"github-actions"},"workflowRun":{"workflow":{"name":"CI"}}}}]')"
+# Prints one CheckRun node: $1 name, $2 status, $3 conclusion or null, $4 startedAt or null,
+# $5 check suite databaseId or null.
+run_node() {
+  jq -nc --arg n "$1" --arg s "$2" --argjson c "$3" --argjson t "$4" --argjson id "$5" \
+    '{__typename: "CheckRun", name: $n, status: $s, conclusion: $c, startedAt: $t,
+      checkSuite: {databaseId: $id, app: {slug: "github-actions"}, workflowRun: {workflow: {name: "CI"}}}}'
+}
+
+@test "a failed check re-run to success in the same check suite is READY" {
+  classify "$(checks "[$(run_node test COMPLETED '"FAILURE"' '"2026-10-19T01:00:00Z"' 11),
+    $(run_node test COMPLETED '"SUCCESS"' '"2026-10-19T02:00:00Z"' 11)]")"
   [ "${status}" -eq 0 ]
   has_line "status=READY"
 }
 
 @test "a re-run that has not started yet supersedes the earlier result and is WAITING" {
-  classify "$(checks '[{"__typename":"CheckRun","name":"test","status":"QUEUED","conclusion":null,"startedAt":null,
-      "checkSuite":{"app":{"slug":"github-actions"},"workflowRun":{"workflow":{"name":"CI"}}}},
-    {"__typename":"CheckRun","name":"test","status":"COMPLETED","conclusion":"FAILURE",
-      "startedAt":"2026-10-19T01:00:00Z","checkSuite":{"app":{"slug":"github-actions"},"workflowRun":{"workflow":{"name":"CI"}}}}]')"
+  classify "$(checks "[$(run_node test QUEUED null null 11),
+    $(run_node test COMPLETED '"FAILURE"' '"2026-10-19T01:00:00Z"' 11)]")"
   has_line "status=WAITING"
   reason_has "check pending: test"
 }
 
-@test "same-named checks from different workflows are both kept" {
-  classify "$(checks '[{"__typename":"CheckRun","name":"build","status":"COMPLETED","conclusion":"FAILURE",
-      "startedAt":"2026-10-19T01:00:00Z","checkSuite":{"app":{"slug":"github-actions"},"workflowRun":{"workflow":{"name":"Lint"}}}},
-    {"__typename":"CheckRun","name":"build","status":"COMPLETED","conclusion":"SUCCESS",
-      "startedAt":"2026-10-19T02:00:00Z","checkSuite":{"app":{"slug":"github-actions"},"workflowRun":{"workflow":{"name":"Test"}}}}]')"
+@test "same-named checks from workflows sharing a display name stay separate" {
+  # Both fixtures report workflow name "CI"; only the check suite tells the two files apart.
+  classify "$(checks "[$(run_node build COMPLETED '"FAILURE"' '"2026-10-19T01:00:00Z"' 11),
+    $(run_node build COMPLETED '"SUCCESS"' '"2026-10-19T02:00:00Z"' 22)]")"
   has_line "status=BLOCKED"
   reason_has "check failed: build"
+}
+
+@test "one workflow triggered twice on the same head keeps both runs" {
+  # A push run and a pull_request run of one file land in two check suites.
+  classify "$(checks "[$(run_node test COMPLETED '"SUCCESS"' '"2026-10-19T02:00:00Z"' 11),
+    $(run_node test COMPLETED '"FAILURE"' '"2026-10-19T01:00:00Z"' 22)]")"
+  has_line "status=BLOCKED"
+  reason_has "check failed: test"
+}
+
+@test "check runs without a check suite id are never collapsed" {
+  classify "$(checks "[$(run_node test COMPLETED '"FAILURE"' '"2026-10-19T01:00:00Z"' null),
+    $(run_node test COMPLETED '"SUCCESS"' '"2026-10-19T02:00:00Z"' null)]")"
+  has_line "status=BLOCKED"
+  reason_has "check failed: test"
 }
 
 @test "a re-posted commit status supersedes the earlier one" {
