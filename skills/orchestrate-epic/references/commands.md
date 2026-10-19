@@ -108,6 +108,8 @@ git branch -r --list "origin/feat/issue-*"   # a remote branch counts as "a bran
 git worktree list
 ```
 
+Post-merge health, one more read whatever the child count: run `bash "<skill-dir>/scripts/base-health.sh" "$REPO" "$EPIC"`, §3.7, once, and keep its output for Step 3. When it prints an `issue=` line and a `status=` other than `CLEAR`, `PASS`, or `HANDLED`, that closed Issue is `verifying`, never `done`, SKILL.md Step 2. Any non-zero exit stops the run, like every other failed read here.
+
 PR state decoding: `OPEN` → awaiting-merge only when its `sha` and the current base match the state comment's bound pair and its `review_evidence` is present, §2.5; otherwise reverify, including a matching pair with `review_evidence` `none` or absent, SKILL.md Step 2; `MERGED` → merged; `CLOSED` with `mergedAt: null` → rejected, escalate.
 
 Fetch the Epic body itself, via `--jq .body`, only on the fallback path below, or when a leftover token needs to be shown to the user.
@@ -371,7 +373,7 @@ gh issue comment "$EPIC" --repo "$REPO" --body "$FREEZE_BODY" \
   || { echo "freeze comment failed — stop and report; spawn, ship, and merge nothing" >&2; exit 1; }
 ```
 
-The script reads the freeze reason back from that `- reason:` line, so a re-invoked loop reports why the Epic is frozen without any session memory. Only the latest ledger and freeze comment posted by this run's identity count; the release is the earliest trusted `epic-release` created after the latest freeze, by the same trust rule as §1.5's `human_comments`.
+A freeze for unhealthy post-merge checks, §3.7, adds one `- merge: <merge commit>` line after `- reason:`; `base-health.sh` reads it to know this failure already notified the human. The script reads the freeze reason back from that `- reason:` line, so a re-invoked loop reports why the Epic is frozen without any session memory. Only the latest ledger and freeze comment posted by this run's identity count; the release is the earliest trusted `epic-release` created after the latest freeze, by the same trust rule as §1.5's `human_comments`.
 
 ## §2 Dispatch Bookkeeping — Step 4
 
@@ -712,7 +714,7 @@ The freeze check holds the merge on anything but exit 0 with `status=CLEAR`, `FR
 
 ## §3.6 Land — Step 8
 
-Same call setup as §3.5: §1.5's `ME`, `OE_JQ`, `marker_comment`, `human_comments`, and `merge_authorized`, plus `REPO`, `EPIC`, `BASE`, `N`, and `PR`. `HEAD_NOW` is the `head=` line §3.5 just printed. Every lookup that fails stops the action it guards; a failed read is never "nothing found".
+Same call setup as §3.5: §1.5's `ME`, `OE_JQ`, `marker_comment`, `human_comments`, and `merge_authorized`, §3.7's `health_gate`, plus `REPO`, `EPIC`, `BASE`, `N`, and `PR`. `HEAD_NOW` is the `head=` line §3.5 just printed. Every lookup that fails stops the action it guards; a failed read is never "nothing found".
 
 ```bash
 TRUSTED='(.authorAssociation | IN("OWNER", "MEMBER", "COLLABORATOR")) or .author.__typename == "Bot"'
@@ -785,7 +787,10 @@ $HOLD_BODY" || echo "merge-hold post failed — report it; the next pass retries
 The merge request, in one call, with nothing between the last check and the request:
 
 ```bash
-# Settings first, so nothing slow sits between the last base read and the request.
+# Post-merge health first, §3.7: the previous merge's default-branch checks must have passed before
+# anything else lands. 5 → wait and poll; 4 → stop landing, after posting §3.7's freeze if it says so.
+health_gate || exit $?
+# Settings next, so nothing slow sits between the last base read and the request.
 # GraphQL, since REST omits the allow_* fields for a token without admin rights. null fails the read.
 # shellcheck disable=SC2016
 METHOD=$(gh api graphql -F owner="${REPO%/*}" -F repo="${REPO#*/}" \
@@ -798,6 +803,16 @@ AUTH=$(merge_authorized) || AUTH=unreadable
 [ "$AUTH" = granted ] || { echo "merge not authorized ($AUTH) — leave it for the human" >&2; exit 1; }
 # <§3.5's block here, unchanged: freeze CLEAR, bound verdict, base == verified_base (exit 3), READY on reviewed_sha>
 [ "$(sed -n 's/^next=//p' <<<"$READINESS")" = merge ] || { echo "not next=merge — do not merge" >&2; exit 1; }
+# The post-merge record, once every gate passed and before the last base read, so a restart right
+# after the merge still checks this merge's health before the next one, and a PR the loop never
+# tried to merge is never recorded. A failed write merges nothing.
+HEALTH_RECORD="$(printf '%s\n' '<!-- orchestrate-epic:post-merge -->' 'orchestrate-epic post-merge:' "- pr: $PR" "- issue: $N")"
+RECORD_ID=$(sed -n 's/^record_id=//p' <<<"$HEALTH")
+if [ -n "$RECORD_ID" ] && [ "$RECORD_ID" != none ]; then
+  gh api "repos/$REPO/issues/comments/$RECORD_ID" -X PATCH -f body="$HEALTH_RECORD" >/dev/null
+else
+  gh issue comment "$EPIC" --repo "$REPO" --body "$HEALTH_RECORD" >/dev/null
+fi || { echo "post-merge record not written — do not merge" >&2; exit 1; }
 # Last read before the request: §3.5's base check ran before its readiness query, so read the
 # base ref from GitHub once more. A moved base exits 3, like §3.5.
 LIVE_BASE=$(gh api "repos/$REPO/git/ref/heads/$BASE" --jq .object.sha) \
@@ -844,7 +859,54 @@ if [ "$RESULT" = merged-unverified-base ]; then
 fi
 ```
 
-`merged-unverified-base` closes the one gap the head-only `sha=` leaves: the default branch advancing between the last base read and the request. Prevention there is only atomic with the repository's up-to-date requirement or a merge queue, which this loop never requires, so the loop detects it on the merge commit instead and freezes before anything else lands. The result marker names `reviewed_sha` and the result, so an earlier `rejected` or `unknown` never suppresses the record of a later attempt that merged, on the same verdict or a renewed one. A merged PR closes its Issue through the PR body's `Closes` line; with `Related`, the Issue stays open and Step 2's merged-PR-but-Issue-open check handles it.
+`merged-unverified-base` closes the one gap the head-only `sha=` leaves: the default branch advancing between the last base read and the request. Prevention there is only atomic with the repository's up-to-date requirement or a merge queue, which this loop never requires, so the loop detects it on the merge commit instead and freezes before anything else lands. The result marker names `reviewed_sha` and the result, so an earlier `rejected` or `unknown` never suppresses the record of a later attempt that merged, on the same verdict or a renewed one. A merged PR closes its Issue through the PR body's `Closes` line; with `Related`, the Issue stays open and Step 2's merged-PR-but-Issue-open check handles it. The post-merge record is written only after the grant and readiness passed. If the request still does not merge — a moved base, a 409, a rejection — the record names a PR that is not merged, which §3.7 reads as `CLEAR`.
+
+## §3.7 Post-merge Health — Steps 2 and 8
+
+`<skill-dir>` is this skill's base directory. `scripts/base-health.sh` reads this loop's sticky post-merge record on the Epic, marker `<!-- orchestrate-epic:post-merge -->`, which §3.6 upserts before every merge request with the PR and Issue it is about to merge. It then reads that PR's merge commit and every check on it. It never posts or edits.
+
+```bash
+# Sets HEALTH; returns 0 proceed, 5 wait, 4 stop landing. On a freeze it also prints
+# `freeze_merge=` and `freeze_reason=` to stdout, since shell state ends with this call. Then, in
+# the next call, post §1.7's freeze comment — only when §1.7's check prints status=CLEAR, so it is
+# posted once — with `- reason: <freeze_reason>` and `- merge: <freeze_merge>`, both copied verbatim
+# from those lines; a `- merge:` line that is not exactly the SHA never matches, and every
+# epic-release would freeze the Epic again. Then stop landing. Never revert.
+health_gate() {
+  local rc next status
+  FREEZE_REASON="" FREEZE_MERGE=""
+  HEALTH=$(bash "<skill-dir>/scripts/base-health.sh" "$REPO" "$EPIC")
+  rc=$?
+  next=$(sed -n 's/^next=//p' <<<"$HEALTH")
+  status=$(sed -n 's/^status=//p' <<<"$HEALTH")
+  [ "$rc" -eq 0 ] || { echo "post-merge health unreadable — merge nothing, stop landing: $HEALTH" >&2; return 4; }
+  case "$next" in
+  proceed) return 0 ;;
+  wait) echo "default-branch checks pending — merge nothing yet: $HEALTH" >&2; return 5 ;;
+  freeze)
+    FREEZE_MERGE=$(sed -n 's/^merge=//p' <<<"$HEALTH")
+    FREEZE_REASON="post-merge default-branch checks $status on $FREEZE_MERGE (PR #$(sed -n 's/^pr=//p' <<<"$HEALTH")): $(sed -n 's/^reason=//p' <<<"$HEALTH")"
+    printf 'freeze_merge=%s\nfreeze_reason=%s\n' "$FREEZE_MERGE" "$FREEZE_REASON"
+    echo "default branch unhealthy — freeze the Epic, merge nothing" >&2
+    return 4 ;;
+  *) echo "unexpected post-merge health: $HEALTH" >&2; return 4 ;;
+  esac
+}
+```
+
+| `status=` | `next=` | Meaning |
+|---|---|---|
+| `CLEAR` | `proceed` | No record, or the recorded PR did not merge |
+| `PASS` | `proceed` | Every check on the merge commit passed; the merged Issue counts as `done` |
+| `PENDING` | `wait` | A check is pending, or none reported yet within 10 minutes of the merge |
+| `FAIL` | `freeze` | A check on the merge commit failed, timed out, went stale, or asks for human action |
+| `UNCONFIRMED` | `freeze` | A check was cancelled — usually superseded by a later push — or none was reported 10 minutes after the merge, so health cannot be confirmed |
+| `HANDLED` | `proceed` | `FAIL` or `UNCONFIRMED` already named by a freeze this loop posted; that freeze and its `epic-release` own it |
+| `UNREADABLE` | `hold` | Exit 1: the record, the PR, or a check could not be read |
+
+`health_gate`'s return 4 means two things: with `freeze_merge=` on stdout, freeze the Epic; without it, the health could not be read, so stop landing and report, posting nothing.
+
+Other lines: `reason=`, `record_id=` (`none` without a record), and, with a record, `pr=`, `issue=`, and, once merged, `merge=`. Every check counts, required or not, and only a pass confirms health. The classification is `pr-readiness.sh`'s, so a check reads the same before and after its merge, with one exception: `ACTION_REQUIRED`, a human hold on a PR, is a failure here, since a merge that already landed cannot wait for one. `HANDLED` matches only a freeze whose `- merge:` line names this merge commit, which is what lets `epic-release` resume the Epic without the same failure freezing it again. `--snapshot <file|-> --me <login>` classifies a saved `{comments, pull, now}` object instead of calling `gh`, which is how `scripts/test-base-health.bats` exercises every rule.
 
 ## §4 Cleanup After Merge — Step 9 rescan
 
