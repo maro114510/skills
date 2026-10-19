@@ -50,16 +50,35 @@ type omitted struct {
 	Maybe string `json:"maybe,omitempty"`
 }
 
+type nestedOmitted struct {
+	protocol.Envelope
+
+	Items []omittedItem `json:"items"`
+}
+
+type omittedItem struct {
+	Name string `json:"name,omitzero"`
+}
+
+// TestOmitemptyFieldIsRejected: a state type with a field the reader cannot require is refused
+// with exit 6 on both sides, never written and never a panic.
 func TestOmitemptyFieldIsRejected(t *testing.T) {
 	t.Parallel()
 
-	defer func() {
-		if recover() == nil {
-			t.Error("DecodeState(omitempty type) did not panic")
+	env := protocol.Envelope{ProtocolVersion: 2, Entity: "e", Key: "k", Revision: 1, UpdatedBy: "u"}
+	top := omitted{Envelope: env, Maybe: ""}
+	nested := nestedOmitted{Envelope: env, Items: nil}
+	for name, s := range map[string]protocol.State{"top-level": &top, "nested in a slice": &nested} {
+		body, err := protocol.EncodeState(s)
+		if err == nil {
+			t.Errorf("%s: EncodeState() = %q, nil; want an error", name, body)
+			continue
 		}
-	}()
-	var s omitted
-	_, _ = protocol.DecodeState(stateBody("k", `{"protocol_version":2}`), &s)
+		wantProtocol(t, err)
+	}
+	var out omitted
+	_, err := protocol.DecodeState(stateBody("k", `{"protocol_version":2,"entity":"e","key":"k","revision":1,"updated_by":"u","maybe":""}`), &out)
+	wantProtocol(t, err)
 }
 
 func TestDecodeStateValid(t *testing.T) {

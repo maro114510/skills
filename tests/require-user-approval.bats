@@ -70,6 +70,17 @@ assert_allowed() {
   assert_blocked "'/plugins/skills/orchestrate-epic/scripts/oe' ship publish"
 }
 
+@test "shell-escaped or split-quoted command names do not bypass the hook" {
+  assert_blocked '\oe ship publish'
+  assert_blocked "'o'e ship publish"
+  assert_blocked '"o"e land merge'
+  assert_blocked 'o\e land merge'
+  assert_blocked '\git push origin x'
+  assert_blocked "g'i't push origin x"
+  assert_blocked 'git "push" origin x'
+  assert_allowed '\oe ship publish # user-approved'
+}
+
 @test "flags between the subcommand words do not bypass the hook" {
   assert_blocked 'oe ship --epic 3 publish'
   assert_blocked 'skills/orchestrate-epic/scripts/oe land --pr 9 merge'

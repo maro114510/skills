@@ -283,6 +283,9 @@ func TestAPICallsArePinnedToGitHub(t *testing.T) {
 	for _, args := range [][]string{
 		{"api", "--hostname", "ghe.example.com", "user"},
 		{"api", "--hostname=ghe.example.com", "user"},
+		{"api", "--hostname", "github.com", "--hostname", "ghe.example.com", "user"},
+		{"api", "--hostname=github.com", "--hostname=ghe.example.com", "user"},
+		{"api", "user", "--hostname"},
 	} {
 		s := newSpy()
 		c := gh.New(s, false)

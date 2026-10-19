@@ -207,6 +207,9 @@ func EncodeState(s State) (string, error) {
 	if err := checkEnvelope(env, env.Key); err != nil {
 		return "", err
 	}
+	if err := checkSchema(reflect.TypeOf(s)); err != nil {
+		return "", protoErr("state %q: %v", env.Key, err)
+	}
 	env.ProtocolVersion = Version
 	js, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
@@ -359,7 +362,10 @@ func checkStruct(raw json.RawMessage, t reflect.Type, path string) error {
 	if err != nil {
 		return fmt.Errorf("%s: %w", path, err)
 	}
-	want := jsonFields(t)
+	want, err := jsonFields(t)
+	if err != nil {
+		return err
+	}
 	for _, name := range slices.Sorted(maps.Keys(want)) {
 		v, ok := fields[name]
 		if !ok {
@@ -377,22 +383,53 @@ func checkStruct(raw json.RawMessage, t reflect.Type, path string) error {
 	return nil
 }
 
+// omittable reports whether json tag options let encoding/json drop the field.
+func omittable(opts string) bool {
+	o := "," + opts + ","
+	return strings.Contains(o, ",omitempty,") || strings.Contains(o, ",omitzero,")
+}
+
+// checkSchema walks a state type the way checkFields walks a value, so a type with a field the
+// reader cannot require is rejected before anything is marshaled.
+func checkSchema(t reflect.Type) error {
+	for t.Kind() == reflect.Pointer || t.Kind() == reflect.Slice {
+		t = t.Elem()
+	}
+	if t.Kind() != reflect.Struct {
+		return nil
+	}
+	fields, err := jsonFields(t)
+	if err != nil {
+		return err
+	}
+	for _, name := range slices.Sorted(maps.Keys(fields)) {
+		if err := checkSchema(fields[name]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // jsonFields maps each JSON field name of struct t, embedded structs flattened, to its type.
-func jsonFields(t reflect.Type) map[string]reflect.Type {
+// Every field is required on read, so a field that could be omitted on write is an error:
+// oe would write states it cannot read back.
+func jsonFields(t reflect.Type) (map[string]reflect.Type, error) {
 	out := map[string]reflect.Type{}
 	for f := range t.Fields() {
 		tag := f.Tag.Get("json")
 		if tag == "-" {
 			continue
 		}
-		// Every field is required on read, so a field that could be omitted on write is a
-		// programming error: oe would write states it cannot read back.
 		name, opts, _ := strings.Cut(tag, ",")
-		if strings.Contains(","+opts+",", ",omitempty,") || strings.Contains(","+opts+",", ",omitzero,") {
-			panic("protocol: state field " + t.Name() + "." + f.Name + " must not be omitempty or omitzero")
+		if omittable(opts) {
+			return nil, fmt.Errorf("state field %s.%s must not be omitempty or omitzero", t.Name(), f.Name)
 		}
 		if f.Anonymous && name == "" && f.Type.Kind() == reflect.Struct {
-			maps.Copy(out, jsonFields(f.Type))
+			embedded, err := jsonFields(f.Type)
+			if err != nil {
+				return nil, err
+			}
+			maps.Copy(out, embedded)
 			continue
 		}
 		if !f.IsExported() {
@@ -403,5 +440,5 @@ func jsonFields(t reflect.Type) map[string]reflect.Type {
 		}
 		out[name] = f.Type
 	}
-	return out
+	return out, nil
 }

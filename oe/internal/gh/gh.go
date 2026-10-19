@@ -258,23 +258,31 @@ func operation(query string) string {
 	return q[:end]
 }
 
-// pinHost adds `--hostname github.com` to a `gh api` call. A call that names any other host
-// is refused, so no environment or argument can redirect oe away from github.com.
+// pinHost adds `--hostname github.com` to a `gh api` call. Every `--hostname` already present
+// must name github.com, because gh honors the last one, so no environment or argument can
+// redirect oe away from github.com.
 func pinHost(args []string) ([]string, error) {
 	if len(args) == 0 || args[0] != apiCmd {
 		return args, nil
 	}
+	named := false
 	for i, a := range args {
 		name, value, inline := strings.Cut(a, "=")
 		if name != hostnameFlag {
 			continue
 		}
-		if !inline && i+1 < len(args) {
-			value = args[i+1]
+		if !inline {
+			value = ""
+			if i+1 < len(args) {
+				value = args[i+1]
+			}
 		}
 		if value != Host {
 			return nil, exitcode.New(exitcode.Refused, "gh api must target "+Host+", not "+value)
 		}
+		named = true
+	}
+	if named {
 		return args, nil
 	}
 	return append([]string{apiCmd, hostnameFlag, Host}, args[1:]...), nil

@@ -43,11 +43,15 @@ OE_WORDS='([[:space:]]+[^[:space:]]+)*[[:space:]]+'
 OE_MUTATION="${OE_TOKEN}${OE_WORDS}(ship${OE_WORDS}publish|land${OE_WORDS}merge)${END}"
 MARKER='#[[:space:]]*user-approved[[:space:]]*$'
 
-# guarded_in <text> prints what <text> runs that needs approval, or nothing.
+# guarded_in <text> prints what <text> runs that needs approval, or nothing. Backslashes and
+# quotes are removed first, because bash drops them before running a word: `\oe`, `'o'e`, and
+# `g"i"t` all run the real command.
 guarded_in() {
-  if printf '%s' "$1" | grep -qE "${GIT_PUSH}"; then
+  local text
+  text="$(printf '%s' "$1" | tr -d "\\\\'\"")"
+  if printf '%s' "${text}" | grep -qE "${GIT_PUSH}"; then
     printf 'git push'
-  elif printf '%s' "$1" | grep -qE "${OE_MUTATION}"; then
+  elif printf '%s' "${text}" | grep -qE "${OE_MUTATION}"; then
     printf 'oe ship publish / oe land merge'
   fi
 }
