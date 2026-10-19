@@ -34,7 +34,7 @@
 - Epic 全体の予算（セッションや再実行をまたいで累積。N = 未完了 Issue <N> 件）: worker dispatch <5N> 回、reviewer 実行 <4N> 回（他の PR のマージなどで承認が古くなった際の staleness 再検証は数えません）、fix cycle <2N> 回。Epic のコメントに記録し、spawn の前に毎回差し引きます。超える操作をしようとした時点で Epic を凍結し、`epic-release` が投稿されるまで dispatch・review・PR 作成・マージをすべて止めます。`epic-retry` で Issue 単位の cycle を戻しても、この予算は戻りません
 - [!] 予算は spawn の回数だけを数えます。wall-clock やトークン消費量による自動停止はありません
 - PR の修復（CI 失敗・レビュー指摘・conflict）は fix cycle として数え、上記の fix-cycle cap と Epic 全体の予算に含めます。修復専用の上限は設けません
-- CI 待ちのポーリング: 1 回の実行につき 60 秒間隔で最大 30 回（マージのたびに数え直し）。使い切ったら待ち中の PR は次回の実行に回します
+- CI 待ちのポーリング: 1 回の実行につき 60 秒間隔で最大 30 回（マージのたびに数え直し）。チェックが 1 件も報告されない PR は push から 5 回で打ち切り、人の対応待ちにします。使い切ったら待ち中の PR は次回の実行に回します
 
 ### 次のアクション
 このプランに問題がなければ、この Epic に `epic-approve` とだけ書いたコメントを投稿してください。この Run Plan より後に、OWNER・MEMBER・COLLABORATOR が投稿したものだけが承認になります。投稿されるまで dispatch は行われません。
@@ -131,7 +131,7 @@ orchestrate-epic: この Epic を凍結しました。解除されるまで、wo
 
 ## Merge Hold（Step 8、Issue コメント）
 
-`next=human` として扱うとき（pr-readiness.sh の `next=human`、信頼できない作成者の未解決レビュー、前回の修復以降に新しい指摘が無い、マージ要求の拒否）、PR の HEAD ごとに 1 度だけ投稿する。先頭にマーカー `<!-- orchestrate-epic:merge-hold <PR> <HEAD> -->` を付ける（commands §3.6 が付ける）。
+`next=human` として扱うとき（pr-readiness.sh の `next=human`、信頼できない作成者の未解決レビュー、前回の修復以降に新しい指摘が無い、マージ要求の拒否）、PR の HEAD と理由の組ごとに 1 度だけ投稿する。先頭にマーカー `<!-- orchestrate-epic:merge-hold <PR> <HEAD> <理由の cksum> -->` を付ける（commands §3.6 が付ける）。
 
 ```
 orchestrate-epic: PR #<PR> は、ループでは解消できない理由があるためマージを保留しています。人の対応をお願いします。

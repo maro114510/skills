@@ -708,7 +708,7 @@ PR_HEAD=$(sed -n 's/^head=//p' <<<"$READINESS")
   || { echo "not merge-ready: $READINESS" >&2; exit 1; }   # hold the merge
 ```
 
-The freeze check holds the merge on anything but exit 0 with `status=CLEAR`, `FROZEN`, `RELEASE`, and `UNREADABLE` alike. The next part re-checks the whole bound verdict, SKILL.md Step 6, right before the merge: `reviewed_sha` and `review_evidence` present, and `verified_base` still the current `origin/$BASE`. Only a moved base exits 3, so the caller can route it to re-verification, SKILL.md Step 3 "Landing Order", and only a freeze check that is not `CLEAR` exits 4, so the caller stops landing; every other hold exits 1. Step 8's landing pass runs the same block without the final `READY` guard, to read `$READINESS`'s `next=` and `repair=` lines for a PR that is not merge-ready; a merge itself still needs the guard, §3.6. Output is `status=`, `reason=`, `pr=`, `head=`, `next=`, and, on `next=repair`, `repair=` lines; `head=` is the PR head the snapshot was taken on, so a `READY` for a head other than the state comment's `reviewed_sha`, §2.5, classified a commit nobody reviewed and holds the merge too. Exit 1 means a required signal was unreadable — `gh` failed, a field was missing, or a connection held more than 100 nodes — and prints `status=BLOCKED`. Exit 2 is a usage error. `--snapshot <file|->` classifies a saved response of the same GraphQL query instead of calling `gh`, which is how `scripts/test-pr-readiness.bats` exercises every rule. Every check on the head counts, required or not, so a pending one waits and a failed one blocks; a repository with no PR checks at all stays `WAITING` and its PRs are merged by a human.
+The freeze check holds the merge on anything but exit 0 with `status=CLEAR`, `FROZEN`, `RELEASE`, and `UNREADABLE` alike. The next part re-checks the whole bound verdict, SKILL.md Step 6, right before the merge: `reviewed_sha` and `review_evidence` present, and `verified_base` still the current `origin/$BASE`. Only a moved base exits 3, so the caller can route it to re-verification, SKILL.md Step 3 "Landing Order", and only a freeze check that is not `CLEAR` exits 4, so the caller stops landing; every other hold exits 1. Step 8's landing pass runs the same block without the final `READY` guard, to read `$READINESS`'s `next=` and `repair=` lines for a PR that is not merge-ready; a merge itself still needs the guard, §3.6. Output is `status=`, `reason=`, `pr=`, `head=`, `next=`, and, on `next=repair`, `repair=` lines; `head=` is the PR head the snapshot was taken on, so a `READY` for a head other than the state comment's `reviewed_sha`, §2.5, classified a commit nobody reviewed and holds the merge too. Exit 1 means a required signal was unreadable — `gh` failed, a field was missing, or a connection held more than 100 nodes — and prints `status=BLOCKED`. Exit 2 is a usage error. `--snapshot <file|->` classifies a saved response of the same GraphQL query instead of calling `gh`, which is how `scripts/test-pr-readiness.bats` exercises every rule. Every check on the head counts, required or not, so a pending one waits and a failed one blocks; a repository with no PR checks at all stays `WAITING` and, after Step 8's short no-checks bound, `next=human`, so a human merges its PRs.
 
 ## §3.6 Land — Step 8
 
@@ -720,8 +720,13 @@ TRUSTED='(.authorAssociation | IN("OWNER", "MEMBER", "COLLABORATOR")) or .author
 # Repair input. The latest repair marker for this PR — the trailing space keeps PR 12 from matching 123.
 REPAIR=$(marker_comment "$N" "<!-- orchestrate-epic:pr-repair $PR ") \
   || { echo "repair marker lookup failed — do not repair" >&2; exit 1; }
-REPAIR_AT=$(jq -r '.created_at // "1970-01-01T00:00:00Z"' <<<"${REPAIR:-null}")
-REPAIR_HEAD=$(jq -r '.body // ""' <<<"${REPAIR:-null}" | sed -n '1s/^<!-- orchestrate-epic:pr-repair [0-9]* \([0-9a-f]*\) -->$/\1/p')
+# The marker carries the head it repaired and `since`, the newest feedback createdAt handed over then.
+# Filtering on that, not the marker's own created_at, keeps feedback posted while the repair was being
+# persisted — after the read, before the marker — from falling into a gap no later repair reads.
+MARKER_LINE=$(jq -r '.body // ""' <<<"${REPAIR:-null}" | head -n1)
+REPAIR_HEAD=$(sed -n 's/^<!-- orchestrate-epic:pr-repair [0-9]* \([0-9a-f]*\) [^ ]* -->$/\1/p' <<<"$MARKER_LINE")
+REPAIR_AT=$(sed -n 's/^<!-- orchestrate-epic:pr-repair [0-9]* [0-9a-f]* \([^ ]*\) -->$/\1/p' <<<"$MARKER_LINE")
+REPAIR_AT=${REPAIR_AT:-1970-01-01T00:00:00Z}   # no marker yet: all feedback is new
 KINDS=$(sed -n 's/^repair=//p' <<<"$READINESS")   # §3.5's repair= line: checks,conflict,review subset
 case ",$KINDS," in *,conflict,*) CONFLICT=yes ;; *) CONFLICT=no ;; esac
 
@@ -730,7 +735,7 @@ case ",$KINDS," in *,conflict,*) CONFLICT=yes ;; *) CONFLICT=no ;; esac
 FAILED=$(gh api "repos/$REPO/commits/$HEAD_NOW/check-runs?filter=latest" --paginate \
       --jq '.check_runs[] | select(.status == "completed" and (.conclusion | IN("success", "neutral", "skipped") | not))
             | {name, job_id: .id, url: .html_url}' || exit 1
-    gh api "repos/$REPO/commits/$HEAD_NOW/status" \
+    gh api "repos/$REPO/commits/$HEAD_NOW/status" --paginate \
       --jq '.statuses[] | select(.state == "failure" or .state == "error") | {name: .context, url: .target_url}' || exit 1
   ) || { echo "failed-check read failed — do not repair" >&2; exit 1; }   # either read failing stops it
 # This head was already handed to a worker: neither its failed checks nor a conflict on it counts again
@@ -760,18 +765,21 @@ REVIEW=$(set -o pipefail
                   + ([$changes[] | select(ok | not)] | length)}') \
   || { echo "review read failed — do not repair" >&2; exit 1; }
 # untrusted > 0 → next=human, no repair. No checks, no conflict, no threads, no reviews → next=human.
+# The next marker's since: the newest createdAt handed over now, or the previous since when none was.
+SINCE=$(jq -r --arg prev "$REPAIR_AT" '[$prev, (.threads[].comments[].created_at), (.reviews[].created_at)] | max' <<<"$REVIEW")
 
 # Persist, then mark, then spawn: reserve (§1.7), upsert the state comment with pending_findings (§2.5),
 # then post the marker. A failed marker post spawns nothing.
-gh issue comment "$N" --repo "$REPO" --body "<!-- orchestrate-epic:pr-repair $PR $HEAD_NOW -->
+gh issue comment "$N" --repo "$REPO" --body "<!-- orchestrate-epic:pr-repair $PR $HEAD_NOW $SINCE -->
 orchestrate-epic: PR #$PR の修復を worker に依頼しました（種類: $KINDS）。" \
   || { echo "repair marker post failed — spawn nothing" >&2; exit 1; }
 
-# Merge Hold, once per PR head — $HOLD_BODY is the "Merge Hold" template
-MARK="<!-- orchestrate-epic:merge-hold $PR $HEAD_NOW -->"
+# Merge Hold, once per PR head and reason — $HOLD_REASON is the template's 理由 value, $HOLD_BODY the
+# "Merge Hold" template. A new reason on the same head, such as a rejected merge after a draft, posts again.
+MARK="<!-- orchestrate-epic:merge-hold $PR $HEAD_NOW $(printf '%s' "$HOLD_REASON" | cksum | cut -d' ' -f1) -->"
 HOLD=$(marker_comment "$N" "$MARK") || { echo "merge-hold lookup failed" >&2; exit 1; }
 [ -n "$HOLD" ] || gh issue comment "$N" --repo "$REPO" --body "$MARK
-$HOLD_BODY"
+$HOLD_BODY" || echo "merge-hold post failed — report it; the next pass retries" >&2
 ```
 
 The merge request, in one call, with nothing between the last check and the request:
