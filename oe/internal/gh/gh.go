@@ -17,6 +17,15 @@ import (
 	"github.com/maro114510/skills/oe/internal/runner"
 )
 
+// Host is the only GitHub host oe talks to. Every `gh api` call is pinned to it, so GH_HOST
+// cannot point a read or a write at another host's identity or repositories.
+const Host = "github.com"
+
+const (
+	apiCmd       = "api"
+	hostnameFlag = "--hostname"
+)
+
 // ErrExitStatus marks a call that ran and exited non-zero.
 var ErrExitStatus = errors.New("exited non-zero")
 
@@ -50,7 +59,11 @@ func (c *Client) Read(ctx context.Context, args ...string) ([]byte, error) {
 	if err := readOnlyAPI(args); err != nil {
 		return nil, err
 	}
-	return c.read(ctx, runner.GH, args)
+	pinned, err := pinHost(args)
+	if err != nil {
+		return nil, err
+	}
+	return c.read(ctx, runner.GH, pinned)
 }
 
 // Git runs a read-only git command and returns its stdout.
@@ -65,6 +78,10 @@ func (c *Client) Write(ctx context.Context, args ...string) ([]byte, error) {
 	}
 	if err := c.Err(); err != nil {
 		return nil, exitcode.Wrap(exitcode.Unreadable, err, "an earlier read failed or was partial, so no write is authorized")
+	}
+	args, err := pinHost(args)
+	if err != nil {
+		return nil, err
 	}
 	res, err := c.r.Run(ctx, runner.GH, args)
 	if err != nil {
@@ -82,8 +99,8 @@ func (c *Client) GraphQL(ctx context.Context, query string, vars []Var, out any)
 	if op := operation(query); op != "query" {
 		return exitcode.New(exitcode.Refused, "GraphQL is read-only; a "+op+" must go through Write")
 	}
-	args := make([]string, 0, 4+2*len(vars)) //nolint:mnd // Four fixed words, then a flag and a value per variable.
-	args = append(args, "api", "graphql", "-f", "query="+query)
+	args := make([]string, 0, 6+2*len(vars)) //nolint:mnd // Six fixed words, then a flag and a value per variable.
+	args = append(args, apiCmd, "graphql", hostnameFlag, Host, "-f", "query="+query)
 	for _, v := range vars {
 		args = append(args, v.flag, v.name+"="+v.value)
 	}
@@ -241,10 +258,32 @@ func operation(query string) string {
 	return q[:end]
 }
 
+// pinHost adds `--hostname github.com` to a `gh api` call. A call that names any other host
+// is refused, so no environment or argument can redirect oe away from github.com.
+func pinHost(args []string) ([]string, error) {
+	if len(args) == 0 || args[0] != apiCmd {
+		return args, nil
+	}
+	for i, a := range args {
+		name, value, inline := strings.Cut(a, "=")
+		if name != hostnameFlag {
+			continue
+		}
+		if !inline && i+1 < len(args) {
+			value = args[i+1]
+		}
+		if value != Host {
+			return nil, exitcode.New(exitcode.Refused, "gh api must target "+Host+", not "+value)
+		}
+		return args, nil
+	}
+	return append([]string{apiCmd, hostnameFlag, Host}, args[1:]...), nil
+}
+
 // readOnlyAPI refuses a `gh api` call that would not be a GET: GraphQL, which has its own
 // method, an explicit non-GET method, or fields without an explicit GET, since gh then POSTs.
 func readOnlyAPI(args []string) error {
-	if len(args) == 0 || args[0] != "api" {
+	if len(args) == 0 || args[0] != apiCmd {
 		return nil
 	}
 	if len(args) > 1 && args[1] == "graphql" {
@@ -306,7 +345,14 @@ func failure(prog runner.Program, args []string, res runner.Result) error {
 
 // describe names a call by its program and first two arguments, never a query body.
 func describe(prog runner.Program, args []string) string {
-	head := args
+	head := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		if args[i] == hostnameFlag {
+			i++ // Skip the pinned host; it is the same on every call.
+			continue
+		}
+		head = append(head, args[i])
+	}
 	if len(head) > 2 { //nolint:mnd // Program plus a two-word subcommand, such as `gh api user`.
 		head = head[:2]
 	}

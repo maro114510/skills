@@ -33,7 +33,7 @@ func call(stdout string, exit int, argv ...string) runner.Call {
 }
 
 func probe(stdout string, exit int) runner.Call {
-	return call(stdout, exit, "gh", "api", "graphql", "-f", "query="+inputs.ProbeQuery,
+	return call(stdout, exit, "gh", "api", "graphql", "--hostname", "github.com", "-f", "query="+inputs.ProbeQuery,
 		"-f", "owner=maro114510", "-f", "name=skills", "-F", "epic=277")
 }
 
@@ -43,7 +43,7 @@ func world(overrides ...runner.Call) *spy {
 	calls = append(calls,
 		call("gh version 2.102.0 (2026-09-30)\nhttps://github.com/cli/cli/releases/tag/v2.102.0\n", 0, "gh", "--version"),
 		call("", 0, "gh", "auth", "status", "--hostname", "github.com"),
-		call(`{"login":"maro114510"}`, 0, "gh", "api", "user"),
+		call(`{"login":"maro114510"}`, 0, "gh", "api", "--hostname", "github.com", "user"),
 		call("git@github.com:maro114510/skills.git\n", 0, "git", "remote", "get-url", "origin"),
 		probe(probeOK, 0),
 	)
@@ -304,7 +304,7 @@ func TestGHFailureStops(t *testing.T) {
 			want: "rate limited",
 		},
 		"api user fails": {
-			call: runner.Call{Argv: []string{"gh", "api", "user"}, Stdout: "", Stderr: "gh: HTTP 502", ExitCode: 1},
+			call: runner.Call{Argv: []string{"gh", "api", "--hostname", "github.com", "user"}, Stdout: "", Stderr: "gh: HTTP 502", ExitCode: 1},
 			want: "HTTP 502",
 		},
 	}
@@ -331,7 +331,7 @@ func TestEmptyRepositoryIsRefused(t *testing.T) {
 func TestEmptyLoginIsUnreadable(t *testing.T) {
 	t.Parallel()
 
-	if _, err := resolve(t, world(call(`{"login":""}`, 0, "gh", "api", "user")), epic("277")); exitcode.CodeOf(err) != exitcode.Unreadable {
+	if _, err := resolve(t, world(call(`{"login":""}`, 0, "gh", "api", "--hostname", "github.com", "user")), epic("277")); exitcode.CodeOf(err) != exitcode.Unreadable {
 		t.Errorf("code = %d, want Unreadable", exitcode.CodeOf(err))
 	}
 }

@@ -45,11 +45,11 @@ func healthy(probeBody string, probeExit int) []runner.Call {
 	return []runner.Call{
 		{Argv: []string{"gh", "--version"}, Stdout: "gh version 2.102.0 (2026-09-30)\n", Stderr: "", ExitCode: 0},
 		{Argv: []string{"gh", "auth", "status", "--hostname", "github.com"}, Stdout: "", Stderr: "", ExitCode: 0},
-		{Argv: []string{"gh", "api", "user"}, Stdout: `{"login":"maro114510"}`, Stderr: "", ExitCode: 0},
+		{Argv: []string{"gh", "api", "--hostname", "github.com", "user"}, Stdout: `{"login":"maro114510"}`, Stderr: "", ExitCode: 0},
 		{Argv: []string{"git", "remote", "get-url", "origin"}, Stdout: "https://github.com/maro114510/skills.git\n", Stderr: "", ExitCode: 0},
 		{
 			Argv: []string{
-				"gh", "api", "graphql", "-f", "query=" + inputs.ProbeQuery,
+				"gh", "api", "graphql", "--hostname", "github.com", "-f", "query=" + inputs.ProbeQuery,
 				"-f", "owner=maro114510", "-f", "name=skills", "-F", "epic=277",
 			},
 			Stdout: probeBody, Stderr: "", ExitCode: probeExit,

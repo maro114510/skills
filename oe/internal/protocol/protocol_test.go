@@ -116,6 +116,29 @@ func TestEncodeStateRejectsBadKey(t *testing.T) {
 }
 
 // TestDecodeStateFailsClosed covers every malformed state of contract §3: each exits 6.
+// TestEncodeStateRejectsUnreadableEnvelope: the writer refuses any state its own reader would
+// reject, so a bad write cannot leave every later run stopping with exit 6.
+func TestEncodeStateRejectsUnreadableEnvelope(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]protocol.Envelope{
+		"empty entity":      {ProtocolVersion: 2, Entity: "", Key: "ledger", Revision: 1, UpdatedBy: "t"},
+		"empty updated_by":  {ProtocolVersion: 2, Entity: "sample", Key: "ledger", Revision: 1, UpdatedBy: ""},
+		"negative revision": {ProtocolVersion: 2, Entity: "sample", Key: "ledger", Revision: -1, UpdatedBy: "t"},
+	}
+	for name, env := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			in := sample{Envelope: env, Count: 0, Note: nil, Items: []item{}, Nested: inner{Flag: false}, Tags: []string{}}
+			body, err := protocol.EncodeState(&in)
+			if err == nil {
+				t.Fatalf("EncodeState() = %q, nil; want an error", body)
+			}
+			wantProtocol(t, err)
+		})
+	}
+}
+
 func TestDecodeStateFailsClosed(t *testing.T) {
 	t.Parallel()
 

@@ -202,6 +202,11 @@ func EncodeState(s State) (string, error) {
 	if env.Key == "" || strings.ContainsFunc(env.Key, unicode.IsSpace) || strings.Contains(env.Key, "-->") {
 		return "", exitcode.New(exitcode.Usage, fmt.Sprintf("invalid state key %q", env.Key))
 	}
+	// The writer applies the reader's envelope checks, so it never posts a state that
+	// DecodeState would reject and every later run would stop on.
+	if err := checkEnvelope(env, env.Key); err != nil {
+		return "", err
+	}
 	env.ProtocolVersion = Version
 	js, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {

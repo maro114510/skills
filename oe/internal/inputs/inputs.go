@@ -27,8 +27,6 @@ const (
 	minGHPatch = 0
 )
 
-const host = "github.com"
-
 // ProbeQuery reads the default branch and the Epic, and fails on a host whose schema lacks
 // sub-issues or blocked-by.
 const ProbeQuery = `query($owner:String!,$name:String!,$epic:Int!){repository(owner:$owner,name:$name){` +
@@ -130,7 +128,7 @@ func ParseEpic(raw string) (int, string, error) {
 
 func parseIssueURL(raw string) (int, string, error) {
 	u, err := url.Parse(raw)
-	if err != nil || u.Scheme != "https" || u.Host != host {
+	if err != nil || u.Scheme != "https" || u.Host != gh.Host {
 		return 0, "", usage(fmt.Sprintf("--epic %q is neither an Issue number nor a https://github.com Issue URL", raw))
 	}
 	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
@@ -173,7 +171,7 @@ func ParseRemote(remote string) (string, error) {
 		hostname, path = u.Hostname(), u.Path
 	}
 	repo := strings.TrimSuffix(strings.Trim(path, "/"), ".git")
-	if hostname != host || !repoRe.MatchString(repo) {
+	if hostname != gh.Host || !repoRe.MatchString(repo) {
 		return "", exitcode.New(exitcode.Refused, fmt.Sprintf("origin %q is not a github.com repository; pass --repo", r))
 	}
 	return repo, nil
@@ -196,11 +194,11 @@ func checkGH(ctx context.Context, c *gh.Client) (string, error) {
 		return "", exitcode.New(exitcode.Refused, fmt.Sprintf("gh %d.%d.%d is older than the supported %d.%d.%d; upgrade gh",
 			v[0], v[1], v[2], minGHMajor, minGHMinor, minGHPatch))
 	}
-	if _, err := c.Read(ctx, "auth", "status", "--hostname", host); err != nil {
+	if _, err := c.Read(ctx, "auth", "status", "--hostname", gh.Host); err != nil {
 		// Only a completed check that said no is a refusal; a rate limit or a call that never
 		// ran stays unreadable.
 		if errors.Is(err, gh.ErrExitStatus) {
-			return "", exitcode.Wrap(exitcode.Refused, err, "gh auth status failed for "+host+"; run gh auth login")
+			return "", exitcode.Wrap(exitcode.Refused, err, "gh auth status failed for "+gh.Host+"; run gh auth login")
 		}
 		return "", err
 	}

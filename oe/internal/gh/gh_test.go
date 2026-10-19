@@ -34,13 +34,13 @@ func newSpy(calls ...runner.Call) *spy {
 const query = "query{viewer{login}}"
 
 func gqlCall(stdout, stderr string, exit int) runner.Call {
-	return runner.Call{Argv: []string{"gh", "api", "graphql", "-f", "query=" + query}, Stdout: stdout, Stderr: stderr, ExitCode: exit}
+	return runner.Call{Argv: []string{"gh", "api", "graphql", "--hostname", "github.com", "-f", "query=" + query}, Stdout: stdout, Stderr: stderr, ExitCode: exit}
 }
 
 func TestReadReturnsStdout(t *testing.T) {
 	t.Parallel()
 
-	c := gh.New(newSpy(runner.Call{Argv: []string{"gh", "api", "user"}, Stdout: "ok", Stderr: "", ExitCode: 0}), false)
+	c := gh.New(newSpy(runner.Call{Argv: []string{"gh", "api", "--hostname", "github.com", "user"}, Stdout: "ok", Stderr: "", ExitCode: 0}), false)
 	out, err := c.Read(t.Context(), "api", "user")
 	if err != nil || string(out) != "ok" {
 		t.Errorf("Read() = %q, %v; want ok, nil", out, err)
@@ -51,7 +51,7 @@ func TestReadFailureIsUnreadable(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]runner.Call{
-		"non-zero exit": {Argv: []string{"gh", "api", "user"}, Stdout: "", Stderr: "gh: Not Found (HTTP 404)", ExitCode: 1},
+		"non-zero exit": {Argv: []string{"gh", "api", "--hostname", "github.com", "user"}, Stdout: "", Stderr: "gh: Not Found (HTTP 404)", ExitCode: 1},
 	}
 	for name, call := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -82,9 +82,9 @@ func TestRateLimitIsReported(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]runner.Call{
-		"REST primary":   {Argv: []string{"gh", "api", "user"}, Stdout: "", Stderr: "gh: API rate limit exceeded for user ID 1. (HTTP 403)", ExitCode: 1},
-		"REST secondary": {Argv: []string{"gh", "api", "user"}, Stdout: "", Stderr: "gh: You have exceeded a secondary rate limit (HTTP 403)", ExitCode: 1},
-		"HTTP 429":       {Argv: []string{"gh", "api", "user"}, Stdout: "", Stderr: "gh: Too Many Requests (HTTP 429)", ExitCode: 1},
+		"REST primary":   {Argv: []string{"gh", "api", "--hostname", "github.com", "user"}, Stdout: "", Stderr: "gh: API rate limit exceeded for user ID 1. (HTTP 403)", ExitCode: 1},
+		"REST secondary": {Argv: []string{"gh", "api", "--hostname", "github.com", "user"}, Stdout: "", Stderr: "gh: You have exceeded a secondary rate limit (HTTP 403)", ExitCode: 1},
+		"HTTP 429":       {Argv: []string{"gh", "api", "--hostname", "github.com", "user"}, Stdout: "", Stderr: "gh: Too Many Requests (HTTP 429)", ExitCode: 1},
 	}
 	for name, call := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -131,7 +131,7 @@ func TestGraphQLVariablesKeepOrderAndType(t *testing.T) {
 	s := newSpy()
 	var out struct{}
 	_ = gh.New(s, false).GraphQL(t.Context(), query, []gh.Var{gh.String("owner", "o"), gh.Int("n", 7)}, &out)
-	want := []string{"gh", "api", "graphql", "-f", "query=" + query, "-f", "owner=o", "-F", "n=7"}
+	want := []string{"gh", "api", "graphql", "--hostname", "github.com", "-f", "query=" + query, "-f", "owner=o", "-F", "n=7"}
 	if len(s.calls) != 1 || !slices.Equal(s.calls[0], want) {
 		t.Errorf("argv = %q, want %q", s.calls, want)
 	}
@@ -250,9 +250,50 @@ func TestReadRefusesWrites(t *testing.T) {
 		{"--version"},
 	}
 	for _, args := range allowed {
-		s := newSpy(runner.Call{Argv: append([]string{"gh"}, args...), Stdout: "ok", Stderr: "", ExitCode: 0})
+		argv := []string{"gh"}
+		if args[0] == "api" {
+			argv = append(argv, "api", "--hostname", "github.com")
+			argv = append(argv, args[1:]...)
+		} else {
+			argv = append(argv, args...)
+		}
+		s := newSpy(runner.Call{Argv: argv, Stdout: "ok", Stderr: "", ExitCode: 0})
 		if _, err := gh.New(s, false).Read(t.Context(), args...); err != nil {
 			t.Errorf("Read(%q) error = %v, want nil", args, err)
+		}
+	}
+}
+
+// TestAPICallsArePinnedToGitHub keeps GH_HOST from redirecting a read or a write: every
+// gh api call names github.com, and a call naming another host is refused before gh runs.
+func TestAPICallsArePinnedToGitHub(t *testing.T) {
+	t.Parallel()
+
+	s := newSpy()
+	c := gh.New(s, false)
+	_, _ = c.Read(t.Context(), "api", "user")
+	var out struct{}
+	_ = c.GraphQL(t.Context(), query, nil, &out)
+	for _, call := range s.calls {
+		if !slices.Contains(call, "--hostname") || !slices.Contains(call, "github.com") {
+			t.Errorf("call %q is not pinned to github.com", call)
+		}
+	}
+
+	for _, args := range [][]string{
+		{"api", "--hostname", "ghe.example.com", "user"},
+		{"api", "--hostname=ghe.example.com", "user"},
+	} {
+		s := newSpy()
+		c := gh.New(s, false)
+		if _, err := c.Read(t.Context(), args...); exitcode.CodeOf(err) != exitcode.Refused {
+			t.Errorf("Read(%q) code = %d, want Refused", args, exitcode.CodeOf(err))
+		}
+		if _, err := c.Write(t.Context(), args...); exitcode.CodeOf(err) != exitcode.Refused {
+			t.Errorf("Write(%q) code = %d, want Refused", args, exitcode.CodeOf(err))
+		}
+		if len(s.calls) != 0 {
+			t.Errorf("%q: calls = %d, want none", args, len(s.calls))
 		}
 	}
 }
@@ -299,7 +340,7 @@ func TestWriteAfterCleanReads(t *testing.T) {
 	t.Parallel()
 
 	s := newSpy(
-		runner.Call{Argv: []string{"gh", "api", "user"}, Stdout: "{}", Stderr: "", ExitCode: 0},
+		runner.Call{Argv: []string{"gh", "api", "--hostname", "github.com", "user"}, Stdout: "{}", Stderr: "", ExitCode: 0},
 		runner.Call{Argv: []string{"gh", "issue", "comment", "1"}, Stdout: "done", Stderr: "", ExitCode: 0},
 	)
 	c := gh.New(s, false)
