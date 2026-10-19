@@ -31,7 +31,7 @@
 - max-parallel: <M>
 - fix-cycle cap: 2（Issue あたり。reviewer 指摘を受けた worker 再 dispatch と再 review は blocking 修正・nit のみの修正を問わず 1 cycle として数えるため、nit のみの修正も同じ上限で止まります）
 - 今回のワースト想定（予測ではなく上限）: <N 件 Issue> × 最大 5 回試行（初回 + 回答済みBLOCKEDの再送1回 + FAILED再試行1回 + reviewer修正2回 = blocking/nit いずれも1 cycle、を積み上げた最悪ケース）× 最大 4 回 reviewer 実行（初回 + fix cycle 2 回 + default branch 前進・HEAD 移動による staleness 再検証 1 回。FAILED再試行時は reviewer を呼ばない。cap 到達後は残指摘のまま park し、それ以上は dispatch しません。同じ round で再び stale になった Issue は再検証せず次回実行に回します）
-- Epic 全体の予算（セッションや再実行をまたいで累積。N = 未完了 Issue <N> 件）: worker dispatch <5N> 回、reviewer 実行 <4N> 回、fix cycle <2N> 回。Epic のコメントに記録し、spawn の前に毎回差し引きます。超える操作をしようとした時点で Epic を凍結し、`epic-release` が投稿されるまで dispatch・review・PR 作成・マージをすべて止めます。`epic-retry` で Issue 単位の cycle を戻しても、この予算は戻りません
+- Epic 全体の予算（セッションや再実行をまたいで累積。N = 未完了 Issue <N> 件）: worker dispatch <5N> 回、reviewer 実行 <4N> 回（他の PR のマージなどで承認が古くなった際の staleness 再検証は数えません）、fix cycle <2N> 回。Epic のコメントに記録し、spawn の前に毎回差し引きます。超える操作をしようとした時点で Epic を凍結し、`epic-release` が投稿されるまで dispatch・review・PR 作成・マージをすべて止めます。`epic-retry` で Issue 単位の cycle を戻しても、この予算は戻りません
 - [!] 予算は spawn の回数だけを数えます。wall-clock やトークン消費量による自動停止はありません
 
 ### 次のアクション

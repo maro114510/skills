@@ -683,6 +683,10 @@ Secret screen, run before step 2 above: the commit skill's Step 2 patterns again
 `<skill-dir>` is this skill's base directory, which the harness states on invocation. `PR` is the Issue's PR number from §1's call 3, and `N` its Issue number. Run it fresh right before each merge request, after §1.5's `merge_authorized` prints `granted`, in one call that also defines §1.5's `ME`, `OE_JQ`, and `marker_comment`:
 
 ```bash
+# Freeze check first, §1.7: a freeze posted mid-round, by this session or another, holds every merge
+FREEZE=$(bash "<skill-dir>/scripts/epic-freeze.sh" "$REPO" "$EPIC")
+[ $? -eq 0 ] && [ "$(sed -n 's/^status=//p' <<<"$FREEZE")" = CLEAR ] \
+  || { echo "Epic not CLEAR — do not merge: $FREEZE" >&2; exit 1; }
 STATE=$(marker_comment "$N" '<!-- orchestrate-epic-state -->') \
   || { echo "state comment lookup failed — do not merge" >&2; exit 1; }
 STATE_BODY=$(jq -r '.body // empty' <<<"$STATE")
@@ -702,7 +706,7 @@ PR_HEAD=$(sed -n 's/^head=//p' <<<"$READINESS")
   || { echo "not merge-ready: $READINESS" >&2; exit 1; }   # hold the merge
 ```
 
-The first half re-checks the whole bound verdict, SKILL.md Step 6, right before the merge: `reviewed_sha` and `review_evidence` present, and `verified_base` still the current `origin/$BASE`. Output is `status=`, `reason=`, `pr=`, and `head=` lines; `head=` is the PR head the snapshot was taken on, so a `READY` for a head other than the state comment's `reviewed_sha`, §2.5, classified a commit nobody reviewed and holds the merge too. Exit 1 means a required signal was unreadable — `gh` failed, a field was missing, or a connection held more than 100 nodes — and prints `status=BLOCKED`. Exit 2 is a usage error. `--snapshot <file|->` classifies a saved response of the same GraphQL query instead of calling `gh`, which is how `scripts/test-pr-readiness.bats` exercises every rule. Every check on the head counts, required or not, so a pending one waits and a failed one blocks; a repository with no PR checks at all stays `WAITING` and its PRs are merged by a human.
+The freeze check holds the merge on anything but exit 0 with `status=CLEAR`, `FROZEN`, `RELEASE`, and `UNREADABLE` alike. The next part re-checks the whole bound verdict, SKILL.md Step 6, right before the merge: `reviewed_sha` and `review_evidence` present, and `verified_base` still the current `origin/$BASE`. Output is `status=`, `reason=`, `pr=`, and `head=` lines; `head=` is the PR head the snapshot was taken on, so a `READY` for a head other than the state comment's `reviewed_sha`, §2.5, classified a commit nobody reviewed and holds the merge too. Exit 1 means a required signal was unreadable — `gh` failed, a field was missing, or a connection held more than 100 nodes — and prints `status=BLOCKED`. Exit 2 is a usage error. `--snapshot <file|->` classifies a saved response of the same GraphQL query instead of calling `gh`, which is how `scripts/test-pr-readiness.bats` exercises every rule. Every check on the head counts, required or not, so a pending one waits and a failed one blocks; a repository with no PR checks at all stays `WAITING` and its PRs are merged by a human.
 
 ## §4 Cleanup After Merge — Step 8 rescan
 
