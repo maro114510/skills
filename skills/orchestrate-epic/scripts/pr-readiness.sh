@@ -3,8 +3,10 @@
 # state, draft flag, conflicts, checks, reviews, review requests, review threads, and merge state.
 # Usage: pr-readiness.sh <owner/repo> <pr-number>   query GitHub, then classify
 #        pr-readiness.sh --snapshot <file|->          classify a saved response of the same query
-# Output: status=<READY|WAITING|BLOCKED|MERGED|CLOSED>, reason=<...>, pr=<n>, head=<sha>, one per line.
-# Exit: 0 classified, 1 a required signal could not be read (status=BLOCKED), 2 usage error.
+# Output: status=<READY|WAITING|BLOCKED|MERGED|CLOSED>, reason=<...>, pr=<n>, head=<sha>,
+#         next=<merge|wait|repair|human|none>, and repair=<checks,conflict,review subset> only when
+#         next=repair; one per line.
+# Exit: 0 classified, 1 a required signal could not be read (status=BLOCKED, next=human), 2 usage error.
 # Merge only on exit 0 with status=READY; every other result holds the merge.
 set -uo pipefail
 
@@ -15,7 +17,7 @@ usage() {
 }
 
 hold() {
-  printf 'status=BLOCKED\nreason=unreadable: %s\n' "$1"
+  printf 'status=BLOCKED\nreason=unreadable: %s\nnext=human\n' "$1"
   exit 1
 }
 
@@ -76,7 +78,11 @@ CLASSIFY='
   def latest_checks: to_entries | map(. as $e | $e.value | {key: check_key($e.key), value: .})
     | group_by(.key)
     | map(map(.value) | sort_by((.startedAt // .createdAt) as $t | [$t == null, $t // ""]) | last);
+  # $items are {r: reason, k: kind}. A blocked kind is checks, conflict, or review, which a worker
+  # can repair, or human; a waiting kind is wait, which time alone can lift, or human.
   def out($status; $reasons): {status: $status, reason: ($reasons | join("; ")), pr: .number, head: .headRefOid};
+  def out_kinds($status; $items): out($status; [$items[].r])
+    + {kinds: ([$items[].k] as $k | ["checks", "conflict", "review", "wait", "human"] | map(select(IN($k[]))))};
 
   if (.errors // null) != null then {status: "BLOCKED", unreadable: true, reason: "GraphQL errors: \([.errors[]?.message] | join(", "))"}
   elif (.data.repository.pullRequest | type) != "object" then {status: "BLOCKED", unreadable: true, reason: "pull request not found in response"}
@@ -102,34 +108,46 @@ CLASSIFY='
         ] as $unreadable
       | if ($unreadable | length) > 0 then out("BLOCKED"; $unreadable) + {unreadable: true}
         else
-          [ (if .isDraft then "draft" else empty end),
-            (if .mergeable == "CONFLICTING" or .mergeStateStatus == "DIRTY" then "conflict with base" else empty end),
-            (if .reviewDecision == "CHANGES_REQUESTED" then "changes requested by review decision" else empty end),
+          [ (if .isDraft then {r: "draft", k: "human"} else empty end),
+            (if .mergeable == "CONFLICTING" or .mergeStateStatus == "DIRTY" then {r: "conflict with base", k: "conflict"} else empty end),
+            (if .reviewDecision == "CHANGES_REQUESTED" then {r: "changes requested by review decision", k: "review"} else empty end),
             (.latestOpinionatedReviews.nodes[] | select(.state == "CHANGES_REQUESTED")
-              | "changes requested: \(.author.login // "unknown")"),
+              | {r: "changes requested: \(.author.login // "unknown")", k: "review"}),
             ([.reviewThreads.nodes[] | select(.isResolved == false)] | length
-              | if . > 0 then "\(.) unresolved review thread(s)" else empty end),
-            ($checks[] | select(.class == "failed") | "check failed: \(.name)"),
-            ($checks[] | select(.class == "action") | "human action required: \(.name)"),
-            (if .isMergeQueueEnabled then "merge queue required; this loop never bypasses it" else empty end)
+              | if . > 0 then {r: "\(.) unresolved review thread(s)", k: "review"} else empty end),
+            ($checks[] | select(.class == "failed") | {r: "check failed: \(.name)", k: "checks"}),
+            ($checks[] | select(.class == "action") | {r: "human action required: \(.name)", k: "human"}),
+            (if .isMergeQueueEnabled then {r: "merge queue required; this loop never bypasses it", k: "human"} else empty end)
           ] as $blocked
-        | [ (if .mergeable == "UNKNOWN" or .mergeStateStatus == "UNKNOWN" then "mergeability still being computed" else empty end),
-            (if $rollup == null or ($checks | length) == 0 then "no checks reported on head" else empty end),
-            ($checks[] | select(.class == "pending") | "check pending: \(.name)"),
-            (if .reviewDecision == "REVIEW_REQUIRED" then "review required" else empty end),
-            (.reviewRequests.nodes[] | "review requested: \(who)")
+        | [ (if .mergeable == "UNKNOWN" or .mergeStateStatus == "UNKNOWN" then {r: "mergeability still being computed", k: "wait"} else empty end),
+            (if $rollup == null or ($checks | length) == 0 then {r: "no checks reported on head", k: "wait"} else empty end),
+            ($checks[] | select(.class == "pending") | {r: "check pending: \(.name)", k: "wait"}),
+            (if .reviewDecision == "REVIEW_REQUIRED" then {r: "review required", k: "human"} else empty end),
+            (.reviewRequests.nodes[] | {r: "review requested: \(who)",
+              k: (if .requestedReviewer.__typename == "Bot" then "wait" else "human" end)})
           ] as $waiting
-        | if ($blocked | length) > 0 then out("BLOCKED"; $blocked)
-          elif ($waiting | length) > 0 then out("WAITING"; $waiting)
+        | if ($blocked | length) > 0 then out_kinds("BLOCKED"; $blocked)
+          elif ($waiting | length) > 0 then out_kinds("WAITING"; $waiting)
           elif .mergeStateStatus == "CLEAN" or .mergeStateStatus == "HAS_HOOKS" then out("READY"; ["checks and reviews complete, merge state \(.mergeStateStatus)"])
-          else out("BLOCKED"; ["merge state \(.mergeStateStatus): repository merge controls not satisfied"])
+          else out_kinds("BLOCKED"; [{r: "merge state \(.mergeStateStatus): repository merge controls not satisfied", k: "human"}])
           end
         end
     end
   end
+  # next: merge only on READY; none once terminal; human whenever any signal needs a person or
+  # could not be read, since no worker or wait can lift it; else repair for a block, wait for a wait.
+  | (.kinds // []) as $k
+  | (if .unreadable then "human"
+     elif .status == "READY" then "merge"
+     elif .status == "MERGED" or .status == "CLOSED" then "none"
+     elif ($k | index("human")) then "human"
+     elif .status == "BLOCKED" then "repair"
+     else "wait" end) as $next
   | "status=\(.status)", "reason=\(.reason)",
     (if .pr != null then "pr=\(.pr)" else empty end),
     (if .head != null then "head=\(.head)" else empty end),
+    "next=\($next)",
+    (if $next == "repair" then "repair=\($k | join(","))" else empty end),
     (if .unreadable then "unreadable=true" else empty end)'
 
 classify() {

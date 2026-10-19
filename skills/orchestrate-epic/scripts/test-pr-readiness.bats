@@ -26,6 +26,11 @@ has_line() {
   printf '%s\n' "${lines[@]}" | grep -qxF -- "$1"
 }
 
+# Succeeds when no output line starts with $1.
+no_line_prefix() {
+  ! printf '%s\n' "${lines[@]}" | grep -q "^$1"
+}
+
 reason() {
   printf '%s\n' "${lines[@]}" | sed -n 's/^reason=//p' | head -n1
 }
@@ -322,6 +327,107 @@ run_node() {
   run bash "${target}" --snapshot - </dev/null
   [ "${status}" -eq 1 ]
   has_line "status=BLOCKED"
+}
+
+@test "READY says merge and names nothing to repair" {
+  classify
+  has_line "next=merge"
+  no_line_prefix "repair="
+}
+
+@test "MERGED and CLOSED say none" {
+  classify '.state = "MERGED"'
+  has_line "next=none"
+  classify '.state = "CLOSED"'
+  has_line "next=none"
+}
+
+@test "pending checks, no checks, and unknown mergeability say wait" {
+  classify "$(checks '[{"__typename":"CheckRun","name":"test","status":"IN_PROGRESS","conclusion":null}]')"
+  has_line "next=wait"
+  classify '.commits.nodes[0].commit.statusCheckRollup = null'
+  has_line "next=wait"
+  classify '.mergeable = "UNKNOWN" | .mergeStateStatus = "UNKNOWN"'
+  has_line "next=wait"
+}
+
+@test "a review requested from a bot says wait" {
+  classify '.reviewRequests = {totalCount: 1, nodes: [{requestedReviewer: {__typename: "Bot", login: "coderabbitai"}}]}'
+  has_line "status=WAITING"
+  has_line "next=wait"
+}
+
+@test "a required review or a review requested from a person or team says human" {
+  classify '.reviewDecision = "REVIEW_REQUIRED"'
+  has_line "next=human"
+  classify '.reviewRequests = {totalCount: 1, nodes: [{requestedReviewer: {__typename: "User", login: "bob"}}]}'
+  has_line "next=human"
+  classify '.reviewRequests = {totalCount: 1, nodes: [{requestedReviewer: {__typename: "Team", slug: "core"}}]}'
+  has_line "next=human"
+}
+
+@test "a human wait outranks a pending check" {
+  classify "$(checks '[{"__typename":"CheckRun","name":"slow","status":"IN_PROGRESS","conclusion":null}]')"' | .reviewDecision = "REVIEW_REQUIRED"'
+  has_line "status=WAITING"
+  has_line "next=human"
+}
+
+@test "a repairable block is still repaired while a person's review is outstanding" {
+  classify "$(checks '[{"__typename":"CheckRun","name":"a","status":"COMPLETED","conclusion":"FAILURE"}]')"' | .reviewDecision = "REVIEW_REQUIRED"'
+  has_line "status=BLOCKED"
+  has_line "next=repair"
+  has_line "repair=checks"
+}
+
+@test "a failed check says repair checks" {
+  classify "$(checks '[{"__typename":"CheckRun","name":"a","status":"COMPLETED","conclusion":"FAILURE"}]')"
+  has_line "next=repair"
+  has_line "repair=checks"
+}
+
+@test "a conflict says repair conflict" {
+  classify '.mergeable = "CONFLICTING" | .mergeStateStatus = "DIRTY"'
+  has_line "next=repair"
+  has_line "repair=conflict"
+}
+
+@test "requested changes and unresolved threads say repair review once" {
+  classify '.reviewDecision = "CHANGES_REQUESTED" | .reviewThreads.nodes[0].isResolved = false
+    | .latestOpinionatedReviews.nodes[0].state = "CHANGES_REQUESTED"'
+  has_line "next=repair"
+  has_line "repair=review"
+}
+
+@test "every repairable kind is listed in a fixed order" {
+  classify "$(checks '[{"__typename":"CheckRun","name":"a","status":"COMPLETED","conclusion":"FAILURE"}]')"' | .reviewThreads.nodes[0].isResolved = false | .mergeable = "CONFLICTING"'
+  has_line "next=repair"
+  has_line "repair=checks,conflict,review"
+}
+
+@test "a repairable block outranks a pending check" {
+  classify "$(checks '[{"__typename":"CheckRun","name":"slow","status":"IN_PROGRESS","conclusion":null}]')"' | .mergeable = "CONFLICTING"'
+  has_line "next=repair"
+}
+
+@test "a block no worker can lift says human, even beside a repairable one" {
+  classify "$(checks '[{"__typename":"CheckRun","name":"a","status":"COMPLETED","conclusion":"FAILURE"}]')"' | .isDraft = true'
+  has_line "next=human"
+  no_line_prefix "repair="
+  classify "$(checks '[{"__typename":"CheckRun","name":"ai","status":"COMPLETED","conclusion":"ACTION_REQUIRED"}]')"
+  has_line "next=human"
+  classify '.isMergeQueueEnabled = true'
+  has_line "next=human"
+  classify '.mergeStateStatus = "BLOCKED"'
+  has_line "next=human"
+}
+
+@test "an unreadable signal says human" {
+  classify 'del(.isDraft)'
+  [ "${status}" -eq 1 ]
+  has_line "next=human"
+  run bash "${target}" --snapshot - <<<'not json'
+  [ "${status}" -eq 1 ]
+  has_line "next=human"
 }
 
 @test "live mode queries the named PR and classifies the response" {
