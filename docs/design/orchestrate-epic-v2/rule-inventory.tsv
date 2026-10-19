@@ -27,11 +27,11 @@ GL-22	skills/orchestrate-epic/SKILL.md	All user-facing output is Japanese	All us
 GL-23	skills/orchestrate-epic/SKILL.md	**No package-level model pins.**	Worker and reviewer definitions never pin a model	kept	#292	-	-
 GL-24	skills/orchestrate-epic/SKILL.md	Plugin agents register under their plugin-scoped name, `skills:<agent>`	Agents resolve by plugin-scoped name, then bare name, then a general agent	kept	#292	-	-
 GL-25	skills/orchestrate-epic/SKILL.md	read the section for the step you are on, not the whole file upfront	Read only the commands.md section for the current step	retired	#293	prose:docs/design/orchestrate-epic-v2/contract.md#| R13 |	commands.md bash procedures are removed at cutover; oe subcommands replace them
-IN-01	skills/orchestrate-epic/SKILL.md	else auto-detect from `git remote get-url origin`	repo defaults to the origin remote	kept	#280	-	-
-IN-02	skills/orchestrate-epic/SKILL.md	Do not guess.	The Epic number is never guessed	kept	#280	-	-
+IN-01	skills/orchestrate-epic/SKILL.md	else auto-detect from `git remote get-url origin`	repo defaults to the origin remote	kept	#280	test:oe/internal/inputs/inputs_test.go::TestRepoDefaultsToOrigin	-
+IN-02	skills/orchestrate-epic/SKILL.md	Do not guess.	The Epic number is never guessed	kept	#280	test:oe/internal/inputs/inputs_test.go::TestEpicIsNeverGuessed	-
 IN-03	skills/orchestrate-epic/SKILL.md	else look for an Epic number in the recent conversation	The model may take the Epic number from a create-github-issues report in the conversation	kept	#292	-	-
-IN-04	skills/orchestrate-epic/SKILL.md	Reject anything that isn't a positive integer	An invalid max-parallel falls back to 3 and says why	kept	#280	-	-
-IN-05	skills/orchestrate-epic/SKILL.md	Confirm `gh auth status` succeeds.	gh authentication is confirmed first	kept	#280	-	-
+IN-04	skills/orchestrate-epic/SKILL.md	Reject anything that isn't a positive integer	An invalid max-parallel falls back to 3 and says why	kept	#280	test:oe/internal/inputs/inputs_test.go::TestMaxParallelFallback	-
+IN-05	skills/orchestrate-epic/SKILL.md	Confirm `gh auth status` succeeds.	gh authentication is confirmed first	kept	#280	test:oe/internal/inputs/inputs_test.go::TestGHAuthIsConfirmed	-
 IN-06	skills/orchestrate-epic/SKILL.md	If the main checkout is dirty, stop and tell the user	A dirty main checkout stops the run	retired	#280	prose:docs/design/orchestrate-epic-v2/contract.md#| R4 |	YAGNI cut of Epic #277: the dirty-checkout entry gate; its reason (Step 4 updating main) is gone since #262
 BD-01	skills/orchestrate-epic/SKILL.md	Never fetch children one at a time	The board read is a fixed number of calls, never per child	kept	#282	-	-
 BD-02	skills/orchestrate-epic/SKILL.md	never pull the Epic or an Issue body into context at this step	Bodies never enter context during classification	kept	#282	-	-
@@ -249,7 +249,7 @@ CM-04	skills/orchestrate-epic/SKILL.md	CI-failure attribution now reads from `CH
 CM-05	skills/orchestrate-epic/SKILL.md	The loop never closes the Epic, or any container `Tn`	The loop never closes the Epic or a container	kept	#291	-	-
 CM-06	skills/orchestrate-epic/SKILL.md	sits in a state this loop cannot move on its own, `parked` with an `epic-drop` decision or `rejected` with an `epic-drop` decision	Complete only when every Issue is done or dropped	kept	#291	-	-
 EC-01	skills/orchestrate-epic/SKILL.md	- **Dirty main checkout** at Step 4 → stop and tell the user	A dirty main checkout at Step 4 stops	retired	#280	prose:docs/design/orchestrate-epic-v2/contract.md#| R4 |	YAGNI cut of Epic #277: the dirty-checkout entry gate
-EC-02	skills/orchestrate-epic/SKILL.md	- **`gh` failures**, rate limit, network, missing relation support	A gh failure is shown and stops the run	kept	#280	-	-
+EC-02	skills/orchestrate-epic/SKILL.md	- **`gh` failures**, rate limit, network, missing relation support	A gh failure is shown and stops the run	kept	#280	test:oe/internal/inputs/inputs_test.go::TestGHFailureStops	-
 EC-03	skills/orchestrate-epic/SKILL.md	- **A merge request with an uncertain outcome**	An uncertain merge is reconciled from the PR and never retried	kept	#290	-	-
 EC-04	skills/orchestrate-epic/SKILL.md	it is cheap and self-correcting to redispatch	An unanswered BLOCKED Issue is cheap to redispatch	kept	#287	-	-
 EC-05	skills/orchestrate-epic/SKILL.md	No timeout, absent reply, or later round turns an unanswered ship-class question into an answer.	Time never answers a ship-class question	kept	#287	-	-
@@ -266,7 +266,7 @@ CMD-03	skills/orchestrate-epic/references/commands.md	A non-zero exit prints no 
 CMD-04	skills/orchestrate-epic/references/commands.md	Call 4 is complete only when it returns exactly one line per number in `OPEN_ISSUES`	A partial comment read stops classification	kept	#282	-	-
 CMD-05	skills/orchestrate-epic/references/commands.md	An Issue whose `total` exceeds 100 has comments beyond the first page	Issues over one page of comments are read with pagination	kept	#282	-	-
 CMD-06	skills/orchestrate-epic/references/commands.md	if an open `Tn` or `Tn.m` is missing from call 2, the read is incomplete	A truncated issue listing stops classification	kept	#282	-	-
-CMD-07	skills/orchestrate-epic/references/commands.md	Any non-zero exit stops the run, like every other failed read here.	Every failed read stops the run	kept	#280	-	-
+CMD-07	skills/orchestrate-epic/references/commands.md	Any non-zero exit stops the run, like every other failed read here.	Every failed read stops the run	kept	#280	test:oe/internal/gh/gh_test.go::TestFailedLookupIsNeverNothingFound	-
 CMD-08	skills/orchestrate-epic/references/commands.md	Fallback when `subIssues`/`blockedBy` are unavailable	Parse the Epic body when relations are unavailable	retired	#280	prose:docs/design/orchestrate-epic-v2/contract.md#| R1 |	YAGNI cut of Epic #277: the Epic-body Mermaid fallback parser; oe refuses such a host
 CMD-09	skills/orchestrate-epic/references/commands.md	every marker lookup below trusts only a comment this identity	Marker lookups trust only the loop identity's comments	kept	#285	-	-
 CMD-10	skills/orchestrate-epic/references/commands.md	restoring the `[bot]` suffix REST puts on a bot login and	GraphQL and REST reads classify identically	kept	#282	-	-
@@ -304,10 +304,10 @@ SP-01	skills/orchestrate-epic/references/commands.md	push is repeat-safe, create
 SP-02	skills/orchestrate-epic/references/commands.md	succeeds only if the branch reached the remote before this step pushed it	A remote branch before the push is external	changed	#289	-	Defect: a resumed run misread its own push as external; the publish intent distinguishes them
 SP-03	skills/orchestrate-epic/references/commands.md	`.env*`, `*.pem`, `*.key`, `id_rsa*`	Secret-screen patterns for the diff	changed	#283	-	D5: the union of these and the commit skill's Step 2 patterns, over outgoing commits, messages, worktree, and published text
 SP-04	skills/orchestrate-epic/references/commands.md	This is a snapshot taken when the PR was created	The PR body evidence is a snapshot; the state is authoritative	kept	#289	-	-
-MC-01	skills/orchestrate-epic/references/commands.md	Only a moved base exits 3, so the caller can route it to re-verification	Exit 3 means stale, exit 4 means stop	kept	#280	-	-
+MC-01	skills/orchestrate-epic/references/commands.md	Only a moved base exits 3, so the caller can route it to re-verification	Exit 3 means stale, exit 4 means stop	kept	#280	test:oe/internal/exitcode/exitcode_test.go::TestContractExitCodes	-
 MC-02	skills/orchestrate-epic/references/commands.md	Every check on the head counts, required or not	Every check counts, required or not	kept	#282	-	-
 MC-03	skills/orchestrate-epic/references/commands.md	a connection held more than 100 nodes	A connection at its node limit is unreadable	kept	#282	-	-
-LC-01	skills/orchestrate-epic/references/commands.md	Every lookup that fails stops the action it guards; a failed read is never "nothing found".	A failed lookup is never nothing found	kept	#280	-	-
+LC-01	skills/orchestrate-epic/references/commands.md	Every lookup that fails stops the action it guards; a failed read is never "nothing found".	A failed lookup is never nothing found	kept	#280	test:oe/internal/gh/gh_test.go::TestFailedLookupIsNeverNothingFound	-
 LC-02	skills/orchestrate-epic/references/commands.md	the trailing space keeps PR 12 from matching 123	Repair markers match the exact PR number	changed	#290	-	Exact structured dedup keys replace prefix matching, contract 7
 LC-03	skills/orchestrate-epic/references/commands.md	Filtering on that, not the marker's own created_at	Repair feedback is filtered by the recorded since	kept	#290	-	-
 LC-04	skills/orchestrate-epic/references/commands.md	A failed marker post spawns nothing.	A failed repair note post spawns nothing	kept	#290	-	-

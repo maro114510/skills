@@ -271,3 +271,27 @@ Every `oe` subcommand prints one JSON payload or one verdict line.
 | R11 | `yq` fast path and reading workflows by eye | Epic defect. Go derives CHECKS_SET from an ordered YAML tree |
 | R12 | v1 compatibility paths | D2. No backward compatibility |
 | R13 | `commands.md` bash procedures | Removed at cutover; `oe` replaces them |
+
+## 12. Inputs and Snapshot Mode
+
+`oe` lives at `oe/`, built with `CGO_ENABLED=0`. Dependencies are not vendored: users run release binaries (#281) and never build, so `go.sum` and `go mod verify` guard dependency integrity, and CI checks `go.mod` and `go.sum` stay tidy. It runs only `gh` and `git`, always as an argv array, never through a shell. Global flags: `--epic <number|url>`, `--repo <owner/name>`, `--max-parallel <n>`, `--snapshot <file>`.
+
+Every subcommand that needs the run inputs resolves them one way, in this order, before any write:
+
+| Step | Rule | On failure |
+|---|---|---|
+| Arguments | Checked before any call. `--epic` is required and never guessed; an Epic URL names the repository, and a disagreeing `--repo` is an error | Exit 2 |
+| `max-parallel` | Anything but a positive integer falls back to 3, and the reason is printed | Never fails |
+| `gh --version` | At least 2.40.0 | Exit 8 |
+| `gh auth status --hostname github.com` | Must succeed | Exit 8 |
+| `gh api user` | Gives `ME` | Exit 1 |
+| Repository | `--repo`, else the Epic URL, else `git remote get-url origin` on github.com | Unreadable origin exit 1; another host exit 8 |
+| One GraphQL probe | The default branch, the Epic, and `subIssues` and `blockedBy` on the schema | Undefined `subIssues` or `blockedBy` exit 8; any other error, data beside errors included, exit 1 |
+
+- A rate limit is reported as `rate limited` and exits 1, with no backoff.
+- Any failed or partial read leaves the gh client unable to write: a later write exits 1 even if the caller ignored the read error.
+- Every `gh api` call carries `--hostname github.com`, and a call naming another host exits 8. Child processes never inherit `GH_HOST` or `GH_REPO`; `GH_HOST` is set to `github.com`.
+- A read cannot write: a `gh api` read that is not a GET, and a GraphQL read that is not a query, exit 8 before any call.
+- `--snapshot` with an empty value exits 2; it never falls back to real calls.
+- `--snapshot <file>` replays recorded `{argv, stdout, stderr, exit_code}` calls and never starts a process. A call missing from the file exits 1. Read-only subcommands give identical output on every run over one file.
+- `oe ship publish` and `oe land merge` are the only subcommands that may push, open a PR, or merge. Under `--snapshot` they exit 8 before any call. `.claude/hooks/require-user-approval.sh` blocks both without the approval marker, whether they are run directly, by path, or through `skills/orchestrate-epic/scripts/oe`. The marker approves only the line it ends.

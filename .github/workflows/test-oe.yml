@@ -1,0 +1,89 @@
+name: Test oe
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'oe/**'
+      - '.github/workflows/test-oe.yml'
+  pull_request:
+    paths:
+      - 'oe/**'
+      - '.github/workflows/test-oe.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: oe
+
+env:
+  CGO_ENABLED: '0'
+  GOFLAGS: -mod=readonly
+
+jobs:
+  test:
+    name: gofmt, vet, test, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: oe/go.mod
+          cache-dependency-path: oe/go.sum
+
+      - name: Check formatting
+        run: |
+          unformatted="$(gofmt -l main.go cmd internal)"
+          test -z "${unformatted}" || { printf '%s\n' "${unformatted}"; exit 1; }
+
+      - name: Verify module checksums
+        run: go mod verify
+
+      - name: Check that go.mod and go.sum are tidy
+        env:
+          GOFLAGS: ''
+        run: |
+          go mod tidy
+          drift="$(git status --porcelain -- go.mod go.sum)"
+          test -z "${drift}" || { printf '%s\n' "${drift}"; exit 1; }
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test ./...
+
+      - name: Build without cgo
+        run: go build -o /dev/null .
+
+  golangci-lint:
+    name: golangci-lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: oe/go.mod
+          cache-dependency-path: oe/go.sum
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.12.2
+          working-directory: oe
