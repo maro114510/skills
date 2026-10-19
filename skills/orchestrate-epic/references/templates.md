@@ -47,7 +47,7 @@
 ループに自動マージも任せる場合は、この Run Plan より後に `epic-auto-merge` とだけ書いたコメントを別に投稿してください。取り消すときは `epic-revoke-auto-merge` とだけ書いたコメントを投稿します。両者のうち最も新しいコメントが有効で、ループはマージの直前に毎回読み直します。取り消した後に始まるマージは行いません。
 自動マージを許可しても、必須レビュー・ruleset・人の確認を求めるリポジトリ側の制御は迂回しません。
 マージは 1 件ずつ、レビュー済みの HEAD を expected SHA として指定して行います。GitHub の auto-merge は使いません。
-マージのたびに default branch 上のマージコミットのチェックがすべて通るまで、次の PR はマージしません。失敗・キャンセルされた場合や、10 分経ってもチェックが 1 件も報告されない場合は Epic を凍結してお知らせします。自動で revert はしません。
+マージのたびに default branch 上のマージコミットのチェックがすべて通るまで、次の PR はマージしません。失敗・キャンセルされた場合や、10 分経ってもチェックが 1 件も報告されない場合、1 時間経っても終わらないチェックがある場合（承認待ちのデプロイジョブなど）は Epic を凍結してお知らせします。自動で revert はしません。
 CI 失敗・レビュー指摘・conflict の修復は `epic-approve` だけで行います。マージ権限が無い場合も PR を修復し、マージはあなたに任せます。
 ```
 
@@ -93,7 +93,7 @@ scope dispute に例外はありません。どの Issue でも park し、ル�
 
 ## Freeze Comment（Step 3–7、Epic コメント）
 
-先頭にマーカー `<!-- orchestrate-epic:freeze -->` を必ず付ける。凍結 1 回につき 1 度だけ投稿し、凍結中は再投稿しない。`- reason:` 行、`- merge:` 行、各カウンタ行は 1 行のまま書く。ループが再実行時に読み戻すため。`- merge:` 行はマージ後の default branch のチェックによる凍結（Step 8 "Post-merge Health"）のときだけ書き、値は `health_gate` が出力した `freeze_merge=` の SHA だけにする。注記などを同じ行に足すと、解除のたびに同じ失敗で再び凍結する。それ以外の凍結では `- merge:` 行ごと省く。
+先頭にマーカー `<!-- orchestrate-epic:freeze -->` を必ず付ける。凍結 1 回につき 1 度だけ投稿し、凍結中は再投稿しない。`- reason:` 行、`- merge:` 行、`- health:` 行、各カウンタ行は 1 行のまま書く。ループが再実行時に読み戻すため。`- merge:` 行と `- health:` 行はマージ後の default branch のチェックによる凍結（Step 8 "Post-merge Health"）のときだけ書き、値は `health_gate` が出力した `freeze_merge=` の SHA と `freeze_health=` の値だけにする。注記などを同じ行に足すと、解除のたびに同じ失敗で再び凍結する。それ以外の凍結では両方の行ごと省く。
 
 ```
 <!-- orchestrate-epic:freeze -->
@@ -101,6 +101,7 @@ orchestrate-epic: この Epic を凍結しました。解除されるまで、wo
 
 - reason: <freeze check の reason= の値、または health_gate の freeze_reason= の値。例: fix_cycles 8 + 1 > 8>
 - merge: <freeze_merge= の SHA>
+- health: <freeze_health= の値。FAIL または UNCONFIRMED>
 - worker_dispatches: <used> / <bound>
 - reviewer_passes: <used> / <bound>
 - fix_cycles: <used> / <bound>

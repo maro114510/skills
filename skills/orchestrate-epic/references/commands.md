@@ -373,7 +373,7 @@ gh issue comment "$EPIC" --repo "$REPO" --body "$FREEZE_BODY" \
   || { echo "freeze comment failed — stop and report; spawn, ship, and merge nothing" >&2; exit 1; }
 ```
 
-A freeze for unhealthy post-merge checks, §3.7, adds one `- merge: <merge commit>` line after `- reason:`; `base-health.sh` reads it to know this failure already notified the human. The script reads the freeze reason back from that `- reason:` line, so a re-invoked loop reports why the Epic is frozen without any session memory. Only the latest ledger and freeze comment posted by this run's identity count; the release is the earliest trusted `epic-release` created after the latest freeze, by the same trust rule as §1.5's `human_comments`.
+A freeze for unhealthy post-merge checks, §3.7, adds `- merge: <merge commit>` and `- health: <FAIL|UNCONFIRMED>` lines after `- reason:`; `base-health.sh` reads them to know this result already notified the human. The script reads the freeze reason back from that `- reason:` line, so a re-invoked loop reports why the Epic is frozen without any session memory. Only the latest ledger and freeze comment posted by this run's identity count; the release is the earliest trusted `epic-release` created after the latest freeze, by the same trust rule as §1.5's `human_comments`.
 
 ## §2 Dispatch Bookkeeping — Step 4
 
@@ -867,11 +867,12 @@ fi
 
 ```bash
 # Sets HEALTH; returns 0 proceed, 5 wait, 4 stop landing. On a freeze it also prints
-# `freeze_merge=` and `freeze_reason=` to stdout, since shell state ends with this call. Then, in
-# the next call, post §1.7's freeze comment — only when §1.7's check prints status=CLEAR, so it is
-# posted once — with `- reason: <freeze_reason>` and `- merge: <freeze_merge>`, both copied verbatim
-# from those lines; a `- merge:` line that is not exactly the SHA never matches, and every
-# epic-release would freeze the Epic again. Then stop landing. Never revert.
+# `freeze_merge=`, `freeze_health=`, and `freeze_reason=` to stdout, since shell state ends with
+# this call. Then, in the next call, post §1.7's freeze comment — only when §1.7's check prints
+# status=CLEAR, so it is posted once — with `- reason: <freeze_reason>`, `- merge: <freeze_merge>`,
+# and `- health: <freeze_health>`, each copied verbatim; a `- merge:` or `- health:` line that is
+# not exactly the value never matches, and every epic-release would freeze the Epic again. Then stop
+# landing. Never revert.
 health_gate() {
   local rc next status
   FREEZE_REASON="" FREEZE_MERGE=""
@@ -886,7 +887,7 @@ health_gate() {
   freeze)
     FREEZE_MERGE=$(sed -n 's/^merge=//p' <<<"$HEALTH")
     FREEZE_REASON="post-merge default-branch checks $status on $FREEZE_MERGE (PR #$(sed -n 's/^pr=//p' <<<"$HEALTH")): $(sed -n 's/^reason=//p' <<<"$HEALTH")"
-    printf 'freeze_merge=%s\nfreeze_reason=%s\n' "$FREEZE_MERGE" "$FREEZE_REASON"
+    printf 'freeze_merge=%s\nfreeze_health=%s\nfreeze_reason=%s\n' "$FREEZE_MERGE" "$status" "$FREEZE_REASON"
     echo "default branch unhealthy — freeze the Epic, merge nothing" >&2
     return 4 ;;
   *) echo "unexpected post-merge health: $HEALTH" >&2; return 4 ;;
@@ -898,15 +899,15 @@ health_gate() {
 |---|---|---|
 | `CLEAR` | `proceed` | No record, or the recorded PR did not merge |
 | `PASS` | `proceed` | Every check on the merge commit passed; the merged Issue counts as `done` |
-| `PENDING` | `wait` | A check is pending, or none reported yet within 10 minutes of the merge |
+| `PENDING` | `wait` | A check is pending, none is reported yet within 10 minutes of the merge, or every check passed but 2 minutes have not elapsed since the merge, so a slower workflow can still report |
 | `FAIL` | `freeze` | A check on the merge commit failed, timed out, went stale, or asks for human action |
-| `UNCONFIRMED` | `freeze` | A check was cancelled — usually superseded by a later push — or none was reported 10 minutes after the merge, so health cannot be confirmed |
-| `HANDLED` | `proceed` | `FAIL` or `UNCONFIRMED` already named by a freeze this loop posted; that freeze and its `epic-release` own it |
+| `UNCONFIRMED` | `freeze` | A check was cancelled — usually superseded by a later push — none was reported 10 minutes after the merge, or one is still pending an hour after it, such as a job awaiting environment approval, so health cannot be confirmed |
+| `HANDLED` | `proceed` | `FAIL` or `UNCONFIRMED` already named by a freeze this loop posted with the same merge commit and the same status; that freeze and its `epic-release` own it |
 | `UNREADABLE` | `hold` | Exit 1: the record, the PR, or a check could not be read |
 
 `health_gate`'s return 4 means two things: with `freeze_merge=` on stdout, freeze the Epic; without it, the health could not be read, so stop landing and report, posting nothing.
 
-Other lines: `reason=`, `record_id=` (`none` without a record), and, with a record, `pr=`, `issue=`, and, once merged, `merge=`. Every check counts, required or not, and only a pass confirms health. The classification is `pr-readiness.sh`'s, so a check reads the same before and after its merge, with one exception: `ACTION_REQUIRED`, a human hold on a PR, is a failure here, since a merge that already landed cannot wait for one. `HANDLED` matches only a freeze whose `- merge:` line names this merge commit, which is what lets `epic-release` resume the Epic without the same failure freezing it again. `--snapshot <file|-> --me <login>` classifies a saved `{comments, pull, now}` object instead of calling `gh`, which is how `scripts/test-base-health.bats` exercises every rule.
+Other lines: `reason=`, `record_id=` (`none` without a record), and, with a record, `pr=`, `issue=`, and, once merged, `merge=`. Every check counts, required or not, and only a pass confirms health. The classification is `pr-readiness.sh`'s, so a check reads the same before and after its merge, with one exception: `ACTION_REQUIRED`, a human hold on a PR, is a failure here, since a merge that already landed cannot wait for one. `HANDLED` matches only a freeze whose `- merge:` line names this merge commit and whose `- health:` line names this status, which is what lets `epic-release` resume the Epic without the same failure freezing it again, while a different result on the same merge — a cancelled run re-run into a real failure — still freezes it. `--snapshot <file|-> --me <login>` classifies a saved `{comments, pull, now}` object instead of calling `gh`, which is how `scripts/test-base-health.bats` exercises every rule.
 
 ## §4 Cleanup After Merge — Step 9 rescan
 

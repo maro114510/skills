@@ -27,11 +27,12 @@ record() {
     'orchestrate-epic post-merge:' "- pr: $2" "- issue: $3")"
 }
 
-# A freeze comment naming merge commit $2. $1 id, $3 author (default the loop identity).
+# A freeze comment naming merge commit $2 and health status $4 (default FAIL). $1 id, $3 author
+# (default the loop identity).
 freeze() {
   add "$1" 2026-10-19T00:10:00Z "${3:-loop}" "$(printf '%s\n' '<!-- orchestrate-epic:freeze -->' \
     'orchestrate-epic: この Epic を凍結しました。' '- reason: post-merge checks failed' "- merge: $2" \
-    '- worker_dispatches: 1 / 5' '- reviewer_passes: 1 / 4' '- fix_cycles: 0 / 2')"
+    "- health: ${4:-FAIL}" '- worker_dispatches: 1 / 5' '- reviewer_passes: 1 / 4' '- fix_cycles: 0 / 2')"
 }
 
 # Edits the pull-request snapshot with the jq expression $1 applied to .data.repository.pullRequest.
@@ -248,9 +249,47 @@ pending_run='{"__typename":"CheckRun","name":"install","status":"IN_PROGRESS","c
   reason_has "freeze 11"
 }
 
+@test "a merge checked too soon after it landed waits instead of passing" {
+  record 10 7 45
+  now='2026-10-19T00:01:00Z'
+  classify
+  [ "${status}" -eq 0 ]
+  has_line status=PENDING
+  has_line next=wait
+  reason_has "settling"
+}
+
+@test "a check still pending an hour after the merge is UNCONFIRMED and freezes" {
+  record 10 7 45
+  checks "[${pending_run}]"
+  now='2026-10-19T01:00:00Z'
+  classify
+  [ "${status}" -eq 0 ]
+  has_line status=UNCONFIRMED
+  has_line next=freeze
+  reason_has "still pending"
+}
+
+@test "a freeze for UNCONFIRMED does not handle a later FAIL on the same merge" {
+  record 10 7 45
+  freeze 11 m111 loop UNCONFIRMED
+  checks "[${failed_run}]"
+  classify
+  has_line status=FAIL
+  has_line next=freeze
+}
+
+@test "a freeze without a health line handles nothing" {
+  record 10 7 45
+  add 11 2026-10-19T00:10:00Z loop "$(printf '%s\n' '<!-- orchestrate-epic:freeze -->' '- reason: x' '- merge: m111')"
+  checks "[${failed_run}]"
+  classify
+  has_line status=FAIL
+}
+
 @test "an unconfirmed merge already frozen for the same commit is HANDLED" {
   record 10 7 45
-  freeze 11 m111
+  freeze 11 m111 loop UNCONFIRMED
   pr '.mergeCommit.statusCheckRollup = null'
   now='2026-10-19T02:00:00Z'
   classify

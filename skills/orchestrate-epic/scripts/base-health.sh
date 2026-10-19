@@ -11,18 +11,26 @@
 #   next=<proceed|wait|freeze|hold>.
 #   CLEAR       no record, or the recorded PR did not merge          next=proceed
 #   PASS        every check on the merge commit passed               next=proceed
-#   PENDING     a check is pending, or none reported yet             next=wait
+#   PENDING     a check is pending, none reported yet, or all passed next=wait
+#               but PASS_SETTLE seconds have not elapsed since merge
 #   FAIL        a check on the merge commit did not pass             next=freeze
-#   UNCONFIRMED a check was cancelled, or none reported               next=freeze
-#               NO_CHECKS_GRACE seconds after the merge
+#   UNCONFIRMED a check was cancelled, none reported NO_CHECKS_GRACE  next=freeze
+#               seconds after the merge, or one still pending
+#               PENDING_LIMIT seconds after it
 #   HANDLED     FAIL or UNCONFIRMED, already named by a freeze this  next=proceed
-#               loop posted, so the freeze and its epic-release own it
+#               loop posted with the same `- merge:` and `- health:`,
+#               so the freeze and its epic-release own it
 #   UNREADABLE  a signal could not be read                           next=hold
 # Exit: 0 classified, 1 a signal could not be read (status=UNREADABLE), 2 usage error.
 # Merge only on next=proceed; every other result holds every merge.
 set -uo pipefail
 
+# Seconds since mergedAt. PASS_SETTLE lets a slower workflow create its checks before an early,
+# all-passing set counts as healthy; PENDING_LIMIT turns a check that never finishes, such as a job
+# waiting for environment approval, into a freeze instead of an endless, silent wait.
+PASS_SETTLE=120
 NO_CHECKS_GRACE=600
+PENDING_LIMIT=3600
 
 usage() {
   echo "$1" >&2
@@ -128,19 +136,25 @@ CLASSIFY="${COMMON}"'
                   | (try (($now | fromdateiso8601) - (.mergedAt | fromdateiso8601)) catch null) as $age
                   | if ($bad | length) > 0 then $base + unreadable($bad | join("; "))
                     elif ($failed | length) > 0 then $base + {status: "FAIL", reason: ($failed | join("; "))}
+                    elif $age == null then $base + unreadable("merge time or current time unreadable")
+                    elif ($pending | length) > 0 and $age >= '"${PENDING_LIMIT}"' then $base + {status: "UNCONFIRMED",
+                      reason: "still pending \($age)s after merge, such as a job awaiting approval: \($pending | join("; "))"}
                     elif ($pending | length) > 0 then $base + {status: "PENDING", reason: ($pending | join("; "))}
                     elif ($cancelled | length) > 0 then $base + {status: "UNCONFIRMED", reason: ($cancelled | join("; "))}
+                    elif ($checks | length) > 0 and $age < '"${PASS_SETTLE}"' then $base + {status: "PENDING",
+                      reason: "checks on \($merge) passed so far; settling until every workflow has reported (\($age)s since merge)"}
                     elif ($checks | length) > 0 then $base + {status: "PASS", reason: "every check on \($merge) passed"}
-                    elif $age == null then $base + unreadable("merge time or current time unreadable")
                     elif $age < '"${NO_CHECKS_GRACE}"' then
                       $base + {status: "PENDING", reason: "no checks reported on \($merge) yet (\($age)s since merge)"}
                     else $base + {status: "UNCONFIRMED",
                       reason: "no checks reported on \($merge) \($age)s after merge; health cannot be confirmed"}
                     end
                   | if .status == "FAIL" or .status == "UNCONFIRMED" then
-                      ([$comments[] | select(.user.login == $me
+                      .status as $status
+                      | ([$comments[] | select(.user.login == $me
                           and ((.body // "") | startswith("<!-- orchestrate-epic:freeze -->"))
-                          and field("merge") == $merge)] | sort_by(.created_at, .id) | first) as $frozen
+                          and field("merge") == $merge and field("health") == $status)]
+                        | sort_by(.created_at, .id) | first) as $frozen
                       | if $frozen then . + {status: "HANDLED",
                           reason: "\(.status) on \($merge) already frozen by freeze \($frozen.id): \(.reason)"}
                         else . end
