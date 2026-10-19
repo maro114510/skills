@@ -134,7 +134,7 @@ orchestrate-epic: この Epic を凍結しました。解除されるまで、wo
 これらの Issue が close されると解放されるタスク: #17, #18
 
 続け方:
-- いま続ける: 上記 PR をマージしてから `/orchestrate-epic epic <EPIC>` を再実行してください。状態を再取得して次の round を計画します。
+- いま続ける: 上記 PR を 1 件だけマージしてから `/orchestrate-epic epic <EPIC>` を再実行してください。残りの PR は新しい default branch で再検証します。
 - あとで続ける: このまま終了して構いません。再実行すれば GitHub の状態から再開します。
 
 並列数上限で今回見送った ready Issue がある場合は、次の行を必ず添える:

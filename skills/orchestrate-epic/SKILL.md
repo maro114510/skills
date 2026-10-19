@@ -106,7 +106,7 @@ Sanity checks — none of these block on a question; each names a concrete non-i
 This is the loop's only up-front human gate. It runs on every invocation, before any worktree is created or any worker is spawned.
 
 1. **Look for the Run Plan comment** on the Epic, §1.5: a comment whose body starts with the marker `<!-- orchestrate-epic:run-plan -->`. If the lookup itself fails, stop and report it; never treat a failure as no Run Plan and post another.
-2. **If none exists**: gather the repository facts below, render the "Run Plan" template from Step 2's classification — state, blockers, planned base branch per dispatchable Issue; containers never appear here, only every non-container `Tn` and every `Tn.m`; base branch is always the repository's default branch, since a `ready` Issue's dependencies are by definition already merged there; there is no branch stacking yet, see #148 — post it as the marked comment on the Epic, §1.5, and **exit**. No worktree, no dispatch; nothing past this point runs this invocation.
+2. **If none exists**: gather the repository facts below, render the "Run Plan" template from Step 2's classification — state, blockers, planned base branch per dispatchable Issue; containers never appear here, only every non-container `Tn` and every `Tn.m`; base branch is always the repository's default branch, since a `ready` Issue's dependencies are by definition already merged there; branches are never stacked, see "Landing Order" below — post it as the marked comment on the Epic, §1.5, and **exit**. No worktree, no dispatch; nothing past this point runs this invocation.
 3. **If a Run Plan comment exists**, read the Epic's human signals created after the Run Plan comment's `created_at` with `human_comments`, §1.5. Approval is a returned comment whose `command` is `epic-approve` — a trusted author, `OWNER`, `MEMBER`, or `COLLABORATOR`, and a body whose every non-blank line is exactly `epic-approve`. An `epic-approve` posted before the Run Plan, by any other author association, or inside other text never approves, and the gate reads no label, whatever labels the Epic carries. If the read fails, stop and report it. If no approval exists, exit, telling the user in this session's own output to post a comment containing only `epic-approve` on the Epic before anything runs, and that no label counts as approval — an Epic approved under an earlier label-based gate needs a fresh `epic-approve` too.
 4. **If the approval exists, check the freeze**, commands §1.7, before anything else acts: `FROZEN` → render the "Frozen Epic" template in this session's own output and **exit**, posting nothing — the freeze comment already notified the human once; `RELEASE` → reset the ledger as "Freeze and Release" below says, then run the check again; `UNREADABLE` → stop and report it, posting nothing; `CLEAR` → if `ledger_id=none`, create the ledger and run the check again; then continue. Step 2 has already rebuilt every Issue's state from GitHub this invocation, so a released Epic acts only on freshly read state, never on anything decided before the freeze.
 5. **Then** run commands §1.5's `merge_authorized` once to report the current merge grant in this session's own output — a failed read is reported as unreadable and does not stop dispatch, since every merge re-checks it anyway — then proceed to Step 4. Approval alone never grants merging.
@@ -136,6 +136,15 @@ Whether the repository's own gates are satisfied is never judged by reading a PR
 | `MERGED` / `CLOSED` | Terminal | Nothing to merge |
 
 Merge only on exit 0 with `status=READY` and a `head=` line equal to the state comment's `reviewed_sha`; a `READY` for any other head classified a commit nobody reviewed. Exit 1 means a required signal could not be read; it always prints `status=BLOCKED`, and an unreadable signal is never permission. The reason line names every signal behind the status, for the Issue comment or this session's own output.
+
+### Landing Order
+
+Two PRs that each pass alone can break the default branch together. Overlap affects the order PRs land in, not whether the work happens:
+
+- **Implement concurrently.** Overlapping Issues are dispatched, reviewed, and shipped in parallel, each in its own worktree. Overlap is not checked, and it is never by itself a reason to hold, park, or discard work.
+- **Land one at a time.** A merge advances `origin/$BASE`, which makes every other PR's verdict stale. This applies to every PR, since an untested combination can break without sharing a file. Never merge a second PR on the verdict it held before the first merge.
+- **Sync, then re-verify.** Step 6 merges the new base into the later branch with a plain merge commit, never a rebase or `gh-stack` restack. A conflict becomes a fix cycle. A clean sync still gets a fresh review and `CHECKS_SET` run, and Step 7's push makes CI run again before "Merge Readiness" passes.
+- **Routing.** §3.5 exits 3 when the base moved since `verified_base`. Send the Issue to Step 6's staleness pass, or to Step 2's `reverify` on the next invocation, and never park it for this.
 
 ### Freeze and Release
 
@@ -327,7 +336,7 @@ Report PR URLs with the "Ship Report" template, in this session's own output. On
 
 ## Step 8: Round Boundary — Merges Unblock the Next Round
 
-Render the "Round Boundary" template, in this session's own output: PRs awaiting merge, Issues that unlock when they close, and the two ways to continue — merge now and re-run `/orchestrate-epic epic <number>` to rescan from Step 2, or end here and re-run later, since Step 2 rebuilds everything from GitHub.
+Render the "Round Boundary" template, in this session's own output: PRs awaiting merge, Issues that unlock when they close, and the two ways to continue — merge one PR now, per "Landing Order" under Step 3, and re-run `/orchestrate-epic epic <number>` to rescan from Step 2, or end here and re-run later, since Step 2 rebuilds everything from GitHub.
 If `ready` Issues were left out only because of `MAX_PARALLEL`, say so explicitly — the user can start the next batch immediately by re-running, no merge required.
 
 On every rescan, first clean up Issues that are closed with a merged PR, commands §4: remove the worktree, delete the local branch. `git worktree remove` refusing a dirty tree means stop and report it, don't force.
@@ -352,7 +361,7 @@ The loop never closes the Epic, or any container `Tn` that is now fully done but
 - **Dirty main checkout** at Step 4 → stop and tell the user; never stash or discard user work.
 - **Dependency cycle** → handled in Step 2's sanity checks: an Epic comment naming the cycle, no dispatch.
 - **`gh` failures**, rate limit, network, missing relation support, → show the error, retry once, then stop and report it.
-- **Same-file overlap inside one round** → allowed; no overlap warning exists in this loop yet, #148 owns it. The later PR may need a rebase after the first merges — say so in the Ship Report when it's visible from the diffs.
+- **Same-file overlap inside one round** → allowed; landing is serialized instead, see "Landing Order" under Step 3.
 - **Human rejects a shipped PR without merging** → Step 2 classifies it `rejected` and escalates per its sanity check; nothing auto-resumes it.
 - **A BLOCKED Issue without a documented answer**, Step 5, keeps its worktree, its branch, and its start comment, and stays classified `in-progress` — it is cheap and self-correcting to redispatch, since the fresh worker just reads the same comment and blocks again if nothing new was left there.
 - **A `parked` Issue** — one capped at 2 reviewer cycles (blocking or nit-only), holding a secret-screen hit or another open ship-class question, or FAILED twice, or dropped by `epic-drop` — keeps its worktree, its branch, and its comment explaining why, but is classified `parked` in Step 2 by its state comment's `unresolved_blockers` or recorded `epic-drop` and is never redispatched on its own; it needs a trusted `epic-retry`, `epic-redo`, or `epic-drop` comment to move again, per Step 2's un-parking check. No timeout, absent reply, or later round turns an unanswered ship-class question into an answer.
