@@ -85,6 +85,9 @@ check_codex() {
 
 check_opencode() {
   local project_dir="$1" home_dir="$2" log_file="$3" name key
+  # OpenCode V2 resolves a project's `.opencode/agents/` only inside a Git worktree, and the temp
+  # consumer project is a bare directory, so the agent-load probe below would see no project agents.
+  git init -q "${project_dir}"
   for name in "${AGENT_NAMES[@]}"; do
     local deployed="${project_dir}/.opencode/agents/${name}.md"
     if [[ ! -f "${deployed}" ]]; then
@@ -111,22 +114,58 @@ check_opencode() {
   fi
 
   local list_file="${project_dir}/../agent-list.log" missing_agent=0
-  if ! (cd "${project_dir}" && HOME="${home_dir}" "${OPENCODE_CLI}" agent list) >"${list_file}" 2>&1; then
+  # `agent list` is OpenCode V1; V2 rejects it before reading any config. V2's replacement,
+  # `debug agents`, lists a project's agents only once the shared service has indexed that project,
+  # and a freshly created project legitimately yields an empty list, so an empty V2 listing is
+  # inconclusive rather than a failure. V2 also starts its own managed service when HOME is
+  # overridden, which fails while another service holds the fixed port, so it keeps the caller's HOME.
+  local cli_version cli_major
+  cli_version="$("${OPENCODE_CLI}" --version 2>&1 || true)"
+  cli_major="$(printf '%s\n' "${cli_version}" | grep -oE '[0-9]+\.[0-9]+' | head -n1 | cut -d. -f1)"
+  if [[ "${cli_major:-0}" -ge 2 ]]; then
+    # The service reports built-in agents before it has indexed the project, so retry until the
+    # expected project agents appear rather than until the listing is merely non-empty.
+    local attempt missing
+    for attempt in 1 2 3 4 5; do
+      if ! (cd "${project_dir}" && "${OPENCODE_CLI}" debug agents) >"${list_file}" 2>&1; then
+        fail "[opencode] ${OPENCODE_CLI} failed to list agents:"
+        sed 's/^/  /' "${list_file}" >&2
+        return
+      fi
+      missing=0
+      for name in "${AGENT_NAMES[@]}"; do
+        if ! grep -q "${name}" "${list_file}"; then
+          missing=1
+        fi
+      done
+      if [[ "${missing}" -eq 0 ]]; then
+        break
+      fi
+      sleep 1
+    done
+    if ! grep -q '"id"' "${list_file}"; then
+      printf '[opencode] %s (%s) listed no agents after %s attempts; skipping the agent-load smoke test\n' \
+        "${OPENCODE_CLI}" "${cli_version}" "${attempt}"
+      return
+    fi
+  elif ! (cd "${project_dir}" && HOME="${home_dir}" "${OPENCODE_CLI}" agent list) >"${list_file}" 2>&1; then
     fail "[opencode] ${OPENCODE_CLI} failed to load the project agents:"
     sed 's/^/  /' "${list_file}" >&2
     return
   fi
   for name in "${AGENT_NAMES[@]}"; do
     if ! grep -q "${name}" "${list_file}"; then
-      fail "[opencode] ${OPENCODE_CLI} agent list does not include ${name}"
+      fail "[opencode] ${OPENCODE_CLI} does not list the agent ${name}"
       missing_agent=1
     fi
   done
   if [[ "${missing_agent}" -ne 0 ]]; then
     printf '[opencode] agent list output: %s bytes\n' "$(wc -c <"${list_file}" | tr -d '[:space:]')" >&2
-    printf '[opencode] Listed agent name lines:\n' >&2
-    # Agent headers are unindented; their permission details are indented.
-    if ! grep -E '^[^[:space:]]+ \(' "${list_file}" >&2; then
+    printf '[opencode] Listed agent names:\n' >&2
+    # V1 prints one unindented `name (permissions)` header per agent; V2 prints pretty JSON ids.
+    if grep -q '"id"' "${list_file}"; then
+      sed -n 's/.*"id": *"\([^"]*\)".*/  \1/p' "${list_file}" >&2
+    elif ! grep -E '^[^[:space:]]+ \(' "${list_file}" >&2; then
       printf '  (no agent name lines)\n' >&2
     fi
     printf '[opencode] Deployed .opencode/agents/ files:\n' >&2
