@@ -31,7 +31,8 @@
 - max-parallel: <M>
 - fix-cycle cap: 2（Issue あたり。reviewer 指摘を受けた worker 再 dispatch と再 review は blocking 修正・nit のみの修正を問わず 1 cycle として数えるため、nit のみの修正も同じ上限で止まります）
 - 今回のワースト想定（予測ではなく上限）: <N 件 Issue> × 最大 5 回試行（初回 + 回答済みBLOCKEDの再送1回 + FAILED再試行1回 + reviewer修正2回 = blocking/nit いずれも1 cycle、を積み上げた最悪ケース）× 最大 4 回 reviewer 実行（初回 + fix cycle 2 回 + default branch 前進・HEAD 移動による staleness 再検証 1 回。FAILED再試行時は reviewer を呼ばない。cap 到達後は残指摘のまま park し、それ以上は dispatch しません。同じ round で再び stale になった Issue は再検証せず次回実行に回します）
-- [!] wall-clock / 予算による自動停止はまだありません（#171 未実装）
+- Epic 全体の予算（セッションや再実行をまたいで累積。N = 未完了 Issue <N> 件）: worker dispatch <5N> 回、reviewer 実行 <4N> 回（他の PR のマージなどで承認が古くなった際の staleness 再検証は数えません）、fix cycle <2N> 回。Epic のコメントに記録し、spawn の前に毎回差し引きます。超える操作をしようとした時点で Epic を凍結し、`epic-release` が投稿されるまで dispatch・review・PR 作成・マージをすべて止めます。`epic-retry` で Issue 単位の cycle を戻しても、この予算は戻りません
+- [!] 予算は spawn の回数だけを数えます。wall-clock やトークン消費量による自動停止はありません
 
 ### 次のアクション
 このプランに問題がなければ、この Epic に `epic-approve` とだけ書いたコメントを投稿してください。この Run Plan より後に、OWNER・MEMBER・COLLABORATOR が投稿したものだけが承認になります。投稿されるまで dispatch は行われません。
@@ -83,6 +84,34 @@ orchestrate-epic: ship-class の判断が必要なため、この Issue を保�
 ```
 
 scope dispute に例外はありません。どの Issue でも park し、ループが解釈を選ぶことはありません。
+
+## Freeze Comment（Step 3–7、Epic コメント）
+
+先頭にマーカー `<!-- orchestrate-epic:freeze -->` を必ず付ける。凍結 1 回につき 1 度だけ投稿し、凍結中は再投稿しない。`- reason:` 行と各カウンタ行は 1 行のまま書く。ループが再実行時に読み戻すため。
+
+```
+<!-- orchestrate-epic:freeze -->
+orchestrate-epic: この Epic を凍結しました。解除されるまで、worker の dispatch、review、PR 作成、マージを一切行いません。
+
+- reason: <freeze check の reason= の値。例: fix_cycles 8 + 1 > 8>
+- worker_dispatches: <used> / <bound>
+- reviewer_passes: <used> / <bound>
+- fix_cycles: <used> / <bound>
+
+再実行やセッションの再起動では解除されません。
+理由を確認して続けてよければ、この Epic に `epic-release` とだけ書いたコメントを投稿してください。このコメントより後に OWNER・MEMBER・COLLABORATOR が投稿したものだけを読み取ります。コマンドを文中に含めただけのコメント（例: 「確認したら epic-release します」）は解除になりません。
+解除後の実行は、GitHub から状態をすべて読み直してから動きます。予算の使用量は 0 に戻り、上限は残りの Issue 数から計算し直します。parked の Issue、無効になった承認、マージ権限は解除によって変わりません。
+```
+
+## Frozen Epic（Step 3–7、本文出力）
+
+```
+[!] Epic #<EPIC> は凍結中のため、今回は何も実行しません。
+理由: <freeze comment の reason>
+凍結コメント: <freeze comment の URL または id>
+予算: worker dispatch <used>/<bound>、reviewer 実行 <used>/<bound>、fix cycle <used>/<bound>
+再開するには、Epic に `epic-release` とだけ書いたコメントを投稿してから再実行してください。Epic への通知は凍結時の 1 回だけで、このメッセージは GitHub には投稿しません。
+```
 
 ## Ship Report（Step 7）
 
