@@ -89,9 +89,19 @@ Determine the execution mode and task type from `$ARGUMENTS` and the conversatio
 
 Run this in normal mode when the request names a GitHub Issue `<N>`, before Phase 1, so a second session handed the same Issue stops before duplicating work. Autonomous mode skips it, because the orchestrator owns the Issue.
 
-The claim is the Git ref `refs/claims/issue-<N>` in this clone, shared by all its worktrees. It never enters history and is not pushed. `git for-each-ref refs/claims` lists claims, and `git cat-file -p refs/claims/issue-<N>` shows the owner.
+The claim is the Git ref `refs/claims/issue-<N>` in this clone, shared by all its worktrees. It never enters history and is not pushed. `git for-each-ref refs/claims` lists claims, and `claim.sh status <N>` shows the owner and its `state=` without changing the claim; it exits 20 whenever the claim is held, by this session too, so compare `owner_token=` with your own.
 
-1. Run the script from the repository, where `<skill-dir>` is the directory containing this SKILL.md. Pass `<token>` only when this session already holds one from an earlier run; otherwise the script prints a new one. Keep the printed `token=` in context, because it, not the process, identifies this session.
+Inside a [herdr](https://herdr.dev) pane, the claim records the pane, its agent session, and the herdr server, so `state=` tells whether the owner session still runs, for Claude Code, Codex, and opencode alike. `alive=` only says the owner's harness process exists, which stays true for a long-lived process that hosts many sessions. Rerunning `acquire` with this session's own token records the current process and pane again.
+
+| `state=` | Meaning |
+|---|---|
+| `working` | The owner session is running a turn |
+| `blocked` | It waits on an approval or a question |
+| `idle`, `done` | It finished its turn and waits for input; `done` means nobody has looked at it yet |
+| `gone` | herdr answered and no pane runs the owner session: its pane closed, or the pane switched to another session, as after `/clear`. Unless it was resumed outside herdr, that session no longer runs and will never release the claim |
+| `unknown` | Not determinable: the claim was taken outside herdr, by an older version of this script, or by a session herdr could not tie to a pane; the owner's pane shows no agent session for now; or the recording herdr server, herdr, or `jq` is unavailable now |
+
+1. Run the script from the repository, where `<skill-dir>` is the directory containing this SKILL.md. Pass `<token>` only when this session already holds one from an earlier run; otherwise the script prints a new one. Keep the printed `token=` in context, because it, not the process, identifies this session. Whenever this session resumes, as after `--resume`, a fork, or a restart, rerun `acquire` with that token before editing: a resumed session can run under a new session ID, and until it reruns, other sessions read its claim as `gone`.
 
    ```bash
    CLAIM_PID="$PPID" bash <skill-dir>/scripts/claim.sh acquire <N> [<token>]
@@ -103,7 +113,7 @@ The claim is the Git ref `refs/claims/issue-<N>` in this clone, shared by all it
    |---|---|---|
    | 0 | Claimed, no branch carries `issue-<N>` | Proceed |
    | 10 | Claimed, and the printed `branch=` lines carry `issue-<N>`, including unlinked ones such as orchestrate-epic's | Ask: resume one, start a separate branch, or abort. Show each line, plus the last commit time of each branch |
-   | 20 | Another session holds the claim | Show the printed owner. Ask: abort, recommended when `alive=yes`, or take over with `claim.sh takeover <N> <token>` using this session's printed `token=`, never `owner_token=`, then act on its exit code the same way. Taking over a live session makes both edit the same Issue |
+   | 20 | Another session holds the claim | Show the printed owner, including `state=`. Ask: abort, or take over with `claim.sh takeover <N> <token>` using this session's printed `token=`, never `owner_token=`, then act on its exit code the same way. Recommend taking over when `state=gone`, or when `state=unknown` and `alive=no`, and aborting otherwise, because a session that is idle or unknown can still resume, and taking it over makes both edit the same Issue |
    | 2 | Error, such as `origin` unreachable | Show the error and ask whether to proceed. If `token=` was printed, this session still holds the claim: release it on abort. Otherwise it proceeds without a claim. Never skip it silently |
 
 3. Release the claim with `claim.sh release <N> <token>` after the Phase 7 commit, when the user aborts, and before any stop that ends this run without a commit. A later session still finds the branch through exit 10.
