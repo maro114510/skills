@@ -617,6 +617,25 @@ fi
 
 Secret screen, run before step 2 above: the commit skill's Step 2 patterns against the status paths and diff — `.env*`, `*.pem`, `*.key`, `id_rsa*`, `*credentials*`, `*secret*`, `*.p12`, `service-account*.json`; `AKIA[0-9A-Z]{16}`, private-key headers, `gh[pousr]_[A-Za-z0-9]{20,}`, `\bsk-[A-Za-z0-9_-]{20,}`, `xox[baprs]-`, literal values assigned to `password`/`token`. Any hit stops this Issue before sub-step 2: run `git -C "$WT" reset` only to drop sub-step 1's intent-to-add entries from the index, stage and commit nothing, post the finding as a comment on the Issue, upsert the state comment's `unresolved_blockers`, and park it per SKILL.md Step 7 — no commit, no check run, no push, no PR for that Issue, and never ship the remaining files without the flagged one.
 
+## §3.5 Merge Readiness — before every merge
+
+`<skill-dir>` is this skill's base directory, which the harness states on invocation. `PR` is the Issue's PR number from §1's call 3, and `N` its Issue number. Run it fresh right before each merge request, after §1.5's `merge_authorized` prints `granted`, in one call that also defines §1.5's `ME`, `OE_JQ`, and `marker_comment`:
+
+```bash
+STATE=$(marker_comment "$N" '<!-- orchestrate-epic-state -->') \
+  || { echo "state comment lookup failed — do not merge" >&2; exit 1; }
+REVIEWED_SHA=$(jq -r '.body // empty' <<<"$STATE" | sed -nE 's/^- reviewed_sha:[[:space:]]*(.*)$/\1/p' | head -n1)
+[ -n "$REVIEWED_SHA" ] && [ "$REVIEWED_SHA" != none ] || { echo "no bound verdict — do not merge" >&2; exit 1; }
+READINESS=$(bash "<skill-dir>/scripts/pr-readiness.sh" "$REPO" "$PR")
+RC=$?
+STATUS=$(sed -n 's/^status=//p' <<<"$READINESS")
+HEAD=$(sed -n 's/^head=//p' <<<"$READINESS")
+[ "$RC" -eq 0 ] && [ "$STATUS" = READY ] && [ "$HEAD" = "$REVIEWED_SHA" ] \
+  || { echo "not merge-ready: $READINESS" >&2; exit 1; }   # hold the merge
+```
+
+Output is `status=`, `reason=`, `pr=`, and `head=` lines; `head=` is the PR head the snapshot was taken on, so a `READY` for a head other than the state comment's `reviewed_sha`, §2.5, classified a commit nobody reviewed and holds the merge too. Exit 1 means a required signal was unreadable — `gh` failed, a field was missing, or a connection held more than 100 nodes — and prints `status=BLOCKED`. Exit 2 is a usage error. `--snapshot <file|->` classifies a saved response of the same GraphQL query instead of calling `gh`, which is how `scripts/test-pr-readiness.bats` exercises every rule. Every check on the head counts, required or not, so a pending one waits and a failed one blocks; a repository with no PR checks at all stays `WAITING` and its PRs are merged by a human.
+
 ## §4 Cleanup After Merge — Step 8 rescan
 
 Only for an Issue that is **closed** with a **merged** PR:

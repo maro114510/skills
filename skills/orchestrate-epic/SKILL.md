@@ -120,7 +120,20 @@ Implementation and merging are separate permissions. `epic-approve` covers dispa
 
 Merging is authorized only when commands §1.5's `merge_authorized` prints `granted`: an `epic-approve` and an unrevoked `epic-auto-merge` both exist. Run it again immediately before **every** merge request, never reuse an earlier result from the round or from Step 3, so a revoke posted mid-round stops every merge not yet requested. `not-granted`, or a failed read, means do not merge: leave the PR open for the human and treat the Issue as `awaiting-merge`, exactly as if this loop had no merge path. An unreadable grant is never permission.
 
-The grant only removes this loop's own reason to wait for a human. It never overrides a repository control that requires human confirmation: required reviews, rulesets, CODEOWNERS approval, a merge queue, a repository AI review that requests human confirmation, or a merge request the repository rejects. While any of these is unresolved, or cannot be read, do not merge, and never bypass one with `--admin` or by changing repository settings. A merge also still needs every other gate in this skill, including Step 6's fresh `reviewed_sha`/`verified_base` pair and the `review_evidence` bound with it. The merge request itself, its readiness checks, and repair are #145's and #219's; this section is the authorization they must pass first.
+The grant only removes this loop's own reason to wait for a human. It never overrides a repository control that requires human confirmation: required reviews, rulesets, CODEOWNERS approval, a merge queue, a repository AI review that requests human confirmation, or a merge request the repository rejects. While any of these is unresolved, or cannot be read, do not merge, and never bypass one with `--admin` or by changing repository settings. A merge also still needs every other gate in this skill, including Step 6's fresh `reviewed_sha`/`verified_base` pair and the `review_evidence` bound with it. This section is the authorization a merge must pass first; the merge request itself and repair are #145's.
+
+### Merge Readiness
+
+Whether the repository's own gates are satisfied is never judged by reading a PR by eye. Run `scripts/pr-readiness.sh`, commands §3.5, immediately before every merge request, after `merge_authorized` prints `granted`, never reusing an earlier result. It reads the PR state, draft flag, conflicts, every check on the head, the review decision, the latest review per reviewer, outstanding review requests, unresolved review threads, the merge queue, and GitHub's merge state in one snapshot, and prints exactly one of:
+
+| Status | Meaning | Publisher action |
+|---|---|---|
+| `READY` | Checks and reviews complete, no rejection applies | May merge, if every other gate also holds |
+| `WAITING` | A check is pending or none reported yet, a required review or review request is outstanding, or mergeability is still being computed | Do not merge; re-evaluate on a later pass |
+| `BLOCKED` | A draft, a conflict, requested changes from any reviewer including an AI bot, an unresolved thread, a failed check, a check asking for human action, a merge queue, a merge state the repository rejects, or a signal that could not be read | Do not merge; leave it for repair or a human |
+| `MERGED` / `CLOSED` | Terminal | Nothing to merge |
+
+Merge only on exit 0 with `status=READY` and a `head=` line equal to the state comment's `reviewed_sha`; a `READY` for any other head classified a commit nobody reviewed. Exit 1 means a required signal could not be read; it always prints `status=BLOCKED`, and an unreadable signal is never permission. The reason line names every signal behind the status, for the Issue comment or this session's own output.
 
 ### Repository Facts and the Derived Check Set
 
