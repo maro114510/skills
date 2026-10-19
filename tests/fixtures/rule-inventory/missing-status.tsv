@@ -1,0 +1,2 @@
+id	source	quote	rule	disposition	issue	owner	reason
+GL-01	tests/fixtures/rule-inventory/source.md	never reads or writes a label	No label is read or written	kept	#282	test:tests/fixtures/rule-inventory/source.md::TestExpectedSHAMerge	-

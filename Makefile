@@ -7,7 +7,7 @@ MANIFESTS := $(PLUGIN_MANIFEST) $(MARKETPLACE_MANIFEST)
 GIT_CLIFF := git-cliff
 CLAUDE := claude
 
-.PHONY: help next-version check-version validate validate-plugin validate-agent-portability validate-apm release
+.PHONY: help next-version check-version validate validate-plugin validate-agent-portability validate-apm check-rule-inventory release
 
 help: ## Show available commands.
 	@awk 'BEGIN { FS = ":.*##"; printf "Usage:\n  make <command>\n\nCommands:\n" } /^[a-zA-Z0-9_-]+:.*##/ { printf "  %-20s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
@@ -53,6 +53,9 @@ validate-agent-portability: ## Validate portable agent frontmatter and harness-n
 
 validate-apm: ## Verify APM deploys the agents portably (APM_TARGET=claude|codex|opencode, default all).
 	@tests/validate-apm.sh $(APM_TARGET)
+
+check-rule-inventory: ## Check the orchestrate-epic v2 rule inventory structure and anchors.
+	@tests/check-rule-inventory.sh
 
 release: check-version ## Bump manifests, commit, tag, and push a release.
 	@test "$$(git branch --show-current)" = 'main' || { printf 'Release must run from main, not %s.\n' "$$(git branch --show-current)"; exit 1; }; \
