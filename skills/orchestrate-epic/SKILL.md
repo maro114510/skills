@@ -390,13 +390,14 @@ Persist the findings before spawning: reserve, upsert the state comment, then po
 
 ### Merge Request
 
-Commands §3.6 runs `merge_authorized`, then §3.5, then the merge request, in one call. It never reuses an earlier result. The request is the REST merge endpoint with `sha=<reviewed_sha>`, so GitHub merges only if the PR head is still the reviewed commit. The loop never uses `gh pr merge`, which turns on auto-merge or enqueues the PR when requirements are unmet, and never uses `--admin`.
+Commands §3.6 runs `merge_authorized`, then §3.5, then the merge request, in one call. It never reuses an earlier result. The request is the REST merge endpoint with `sha=<reviewed_sha>`, so GitHub merges only if the PR head is still the reviewed commit. `sha=` never checks the base, so the base is re-read from GitHub as the last read before the request. A base that still moves in between is atomically rejected only when the repository requires branches to be up to date or uses a merge queue; otherwise the merge commit's first parent reveals it after the fact, below. The loop never uses `gh pr merge`, which turns on auto-merge or enqueues the PR when requirements are unmet, and never uses `--admin`.
 
 The method comes from the repository's settings: a merge commit if allowed, else squash. A merge commit makes `reviewed_sha` itself an ancestor of the default branch. The loop never rebases, since that replaces the reviewed commits; a repository that allows only rebase is merged by a human. A ruleset that requires linear history rejects the merge commit even when the repository allows one; the loop records `rejected` and leaves it to a human rather than retrying another method.
 
 | Response | Result recorded | Then |
 |---|---|---|
-| Merged | `merged`, with the merge commit SHA | New pass |
+| Merged, merge commit's first parent is `verified_base` | `merged`, with the merge commit SHA | New pass |
+| Merged on a base that moved after the last read | `merged-unverified-base` | Freeze the Epic with that reason, "Freeze and Release" under Step 3, and stop landing. Never revert |
 | 409, head changed | `head-moved` | Step 2 classifies it `reverify` on the next read; no retry this pass |
 | Any other 4xx rejection | `rejected`, with GitHub's message | Treat as `next=human` for this invocation |
 | No response, or a 5xx that may still have merged | Re-read the PR. If it is merged, record `merged`; else record `unknown` | After `unknown`, stop landing; never retry blindly |

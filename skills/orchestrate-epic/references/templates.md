@@ -147,7 +147,7 @@ HEAD: <HEAD>
 マージを試みるたびに投稿する。先頭にマーカー `<!-- orchestrate-epic:merge-result <PR> <reviewed_sha> <result> -->` を付ける（commands §3.6 が付ける）。この記録が書けるまで、次の PR はマージしない。
 
 ```
-orchestrate-epic: PR #<PR> のマージ結果: <merged / head-moved / rejected / unknown>
+orchestrate-epic: PR #<PR> のマージ結果: <merged / merged-unverified-base / head-moved / rejected / unknown>
 
 - expected SHA (reviewed_sha): <reviewed_sha>
 - verified_base: <verified_base>
@@ -157,6 +157,7 @@ orchestrate-epic: PR #<PR> のマージ結果: <merged / head-moved / rejected /
 
 結果ごとの意味（コメントには該当する 1 行だけを書き足す）:
 - merged: マージされました。
+- merged-unverified-base: マージされましたが、直前に default branch が進んでいたため、検証していない base の上に入りました。Epic を凍結し、以降のマージを止めました。自動で revert はしません。default branch の状態を確認してください。
 - head-moved: レビュー後に HEAD が変わったため GitHub がマージを拒否しました。再検証してからやり直します。
 - rejected: リポジトリがマージを拒否しました。理由を確認してください。
 - unknown: マージ要求の応答を受け取れず、マージされたかも確認できませんでした。この実行ではこれ以上マージしません。

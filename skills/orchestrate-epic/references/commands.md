@@ -785,10 +785,7 @@ $HOLD_BODY" || echo "merge-hold post failed — report it; the next pass retries
 The merge request, in one call, with nothing between the last check and the request:
 
 ```bash
-AUTH=$(merge_authorized) || AUTH=unreadable
-[ "$AUTH" = granted ] || { echo "merge not authorized ($AUTH) — leave it for the human" >&2; exit 1; }
-# <§3.5's block here, unchanged: freeze CLEAR, bound verdict, base == verified_base (exit 3), READY on reviewed_sha>
-[ "$(sed -n 's/^next=//p' <<<"$READINESS")" = merge ] || { echo "not next=merge — do not merge" >&2; exit 1; }
+# Settings first, so nothing slow sits between the last base read and the request.
 # GraphQL, since REST omits the allow_* fields for a token without admin rights. null fails the read.
 # shellcheck disable=SC2016
 METHOD=$(gh api graphql -F owner="${REPO%/*}" -F repo="${REPO#*/}" \
@@ -797,8 +794,20 @@ METHOD=$(gh api graphql -F owner="${REPO%/*}" -F repo="${REPO#*/}" \
         elif .mergeCommitAllowed then "merge" elif .squashMergeAllowed then "squash" else "" end') \
   || { echo "merge settings unreadable — do not merge" >&2; exit 1; }
 [ -n "$METHOD" ] || { echo "only rebase merging is allowed — leave it for the human" >&2; exit 1; }
+AUTH=$(merge_authorized) || AUTH=unreadable
+[ "$AUTH" = granted ] || { echo "merge not authorized ($AUTH) — leave it for the human" >&2; exit 1; }
+# <§3.5's block here, unchanged: freeze CLEAR, bound verdict, base == verified_base (exit 3), READY on reviewed_sha>
+[ "$(sed -n 's/^next=//p' <<<"$READINESS")" = merge ] || { echo "not next=merge — do not merge" >&2; exit 1; }
+# Last read before the request: §3.5's base check ran before its readiness query, so read the
+# base ref from GitHub once more. A moved base exits 3, like §3.5.
+LIVE_BASE=$(gh api "repos/$REPO/git/ref/heads/$BASE" --jq .object.sha) \
+  || { echo "base ref unreadable — do not merge" >&2; exit 1; }
+[ "$LIVE_BASE" = "$VERIFIED_BASE" ] || { echo "base moved since verified_base — do not merge" >&2; exit 3; }
 # REST, never `gh pr merge`: it turns on auto-merge or enqueues the PR when requirements are unmet.
-# sha= makes GitHub refuse with 409 if the head is no longer the reviewed commit.
+# sha= makes GitHub refuse with 409 if the head is no longer the reviewed commit. It checks only the
+# head, never the base: a base advanced between the read above and this request is caught after the
+# merge, below, unless the repository requires branches to be up to date or uses a merge queue, in
+# which case GitHub itself rejects the request.
 RESP=$(gh api -i -X PUT "repos/$REPO/pulls/$PR/merge" -f sha="$REVIEWED_SHA" -f merge_method="$METHOD" 2>/dev/null)
 HTTP=$(sed -n '1s/^HTTP\/[0-9.]* \([0-9]*\).*/\1/p' <<<"$RESP")
 BODY=$(sed '1,/^\r*$/d' <<<"$RESP")
@@ -810,6 +819,13 @@ case "$HTTP" in
        if [ -n "$DETAIL" ]; then RESULT=merged; else RESULT=unknown; fi ;;
   *)   RESULT=rejected;   DETAIL="HTTP $HTTP: $(jq -r '.message // empty' <<<"$BODY")" ;;
 esac
+# Merged on the verified base? With either method the merge commit's first parent is the base it
+# landed on. Anything else means the base moved inside the window above: the merged combination was
+# never reviewed. A parent that cannot be read counts the same, since it is not proof.
+if [ "$RESULT" = merged ]; then
+  PARENT=$(gh api "repos/$REPO/commits/$DETAIL" --jq '.parents[0].sha') || PARENT=""
+  [ "$PARENT" = "$VERIFIED_BASE" ] || { RESULT=merged-unverified-base; DETAIL="$DETAIL (first parent ${PARENT:-unreadable}, verified_base $VERIFIED_BASE)"; }
+fi
 
 # Record before anything else merges — once per PR, reviewed_sha, and result. $RESULT_BODY is the "Merge Result"
 # template. A failed record stops landing: no further merge this invocation.
@@ -817,9 +833,18 @@ MARK="<!-- orchestrate-epic:merge-result $PR $REVIEWED_SHA $RESULT -->"
 DONE=$(marker_comment "$N" "$MARK") || { echo "merge-result lookup failed — stop landing" >&2; exit 1; }
 [ -n "$DONE" ] || gh issue comment "$N" --repo "$REPO" --body "$MARK
 $RESULT_BODY" || { echo "merge result not recorded — stop landing" >&2; exit 1; }
+
+# merged-unverified-base: freeze the Epic so no further merge lands on an unverified default branch.
+# Never revert. Post the freeze comment only from CLEAR, §1.7, with this reason on its `- reason:` line.
+if [ "$RESULT" = merged-unverified-base ]; then
+  FREEZE=$(bash "<skill-dir>/scripts/epic-freeze.sh" "$REPO" "$EPIC")
+  [ "$(sed -n 's/^status=//p' <<<"$FREEZE")" = CLEAR ] && FREEZE_REASON="PR #$PR merged on unverified base: $DETAIL"
+  # → §1.7's freeze comment with $FREEZE_REASON, then stop landing (exit 4 either way)
+  exit 4
+fi
 ```
 
-The result marker names `reviewed_sha` and the result, so an earlier `rejected` or `unknown` never suppresses the record of a later attempt that merged, on the same verdict or a renewed one. A merged PR closes its Issue through the PR body's `Closes` line; with `Related`, the Issue stays open and Step 2's merged-PR-but-Issue-open check handles it.
+`merged-unverified-base` closes the one gap the head-only `sha=` leaves: the default branch advancing between the last base read and the request. Prevention there is only atomic with the repository's up-to-date requirement or a merge queue, which this loop never requires, so the loop detects it on the merge commit instead and freezes before anything else lands. The result marker names `reviewed_sha` and the result, so an earlier `rejected` or `unknown` never suppresses the record of a later attempt that merged, on the same verdict or a renewed one. A merged PR closes its Issue through the PR body's `Closes` line; with `Related`, the Issue stays open and Step 2's merged-PR-but-Issue-open check handles it.
 
 ## §4 Cleanup After Merge — Step 9 rescan
 
