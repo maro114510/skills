@@ -42,13 +42,12 @@ gh api graphql \
        grandchildren:[.subIssues.nodes[]|{n:.number,s:.state,t:.title}]}]}'
 
 # 2. Dependency edges, open Tn AND open Tn.m grandchildren of any container Tn.
-#    CONTAINERS is the set of Tn numbers from call 1 that have a non-empty grandchildren list.
-EPIC="$EPIC" CONTAINERS="$CONTAINERS" gh issue list --repo "$REPO" --state open --limit 200 \
-  --json number,blockedBy,parent \
-  --jq --argjson containers "${CONTAINERS:-[]}" \
-  '[.[]|select(.parent.number == (env.EPIC|tonumber) or ([.parent.number] | inside($containers)))
-        |{n:.number,
-          b:[.blockedBy.nodes[]|select(.state=="OPEN")|.number]}]'
+#    CONTAINERS is the JSON array of Tn numbers from call 1 that have a non-empty grandchildren
+#    list, open or closed. The script runs jq outside gh, since `gh --jq` rejects jq flags such as
+#    --argjson. Prints [{n, b:[open blockers]}]. A non-zero exit prints no list, only an error on
+#    stderr, and is never read as "no dependencies": take the fallback below when that error is
+#    gh rejecting the blockedBy or parent field, and otherwise stop and report.
+bash "<skill-dir>/scripts/board-edges.sh" "$REPO" "$EPIC" "${CONTAINERS:-[]}"
 
 # 3. Every PR on a loop branch, keyed by Issue number. headRefOid is the PR's current head
 #    commit — compare it against the state comment's reviewed_sha to detect a verdict that
@@ -97,7 +96,7 @@ Call 4 is complete only when it returns exactly one line per number in `OPEN_ISS
 
 `--jq` filters client-side, so only the projection reaches the context. `tokens: true` is the leftover-`{{Tn}}`/`{{Tn.m}}` signal Step 2 escalates on — it costs nothing, unlike carrying the Epic body. `CONTAINERS` is derived from call 1's output before call 2 runs, via `[.children[]|select(.grandchildren|length>0)|.n]` — a `Tn` with a non-empty `grandchildren` array in call 1 is a container; every other `Tn` is a leaf and is never expected to have children of its own. Step 2's depth cap in create-github-issues means a `Tn.m` never has grandchildren of its own, so this single extra nesting level is always enough — no recursion needed.
 
-Calls 2 and 3 page the repository's issues and PRs before filtering, so `--limit` truncates silently on a busy repository. Cross-check call 2 against call 1's `Tn` and grandchild lists, flattened: if an open `Tn` or `Tn.m` is missing from call 2, the read is incomplete — raise the limit and re-run rather than classifying on a partial board. Do not apply the same reasoning to call 3: a local `feat/issue-<n>` branch with no row there is not itself evidence of a truncated page — an Issue can legitimately be `ready` or `in-progress` with a branch that has no PR yet, since Step 7 is what creates one.
+Calls 2 and 3 page the repository's issues and PRs before filtering, so `--limit` truncates silently on a busy repository. Cross-check call 2 against call 1's `Tn` and grandchild lists, flattened: if an open `Tn` or `Tn.m` is missing from call 2, the read is incomplete — raise the limit, `BOARD_EDGES_LIMIT=<n>` for call 2, and re-run rather than classifying on a partial board. Do not apply the same reasoning to call 3: a local `feat/issue-<n>` branch with no row there is not itself evidence of a truncated page — an Issue can legitimately be `ready` or `in-progress` with a branch that has no PR yet, since Step 7 is what creates one.
 
 Branch and worktree recovery stays local and free:
 
