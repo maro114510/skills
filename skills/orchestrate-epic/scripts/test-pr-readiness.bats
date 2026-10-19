@@ -185,6 +185,39 @@ checks() {
   done
 }
 
+@test "a failed check re-run to success on the same head is READY" {
+  classify "$(checks '[{"__typename":"CheckRun","name":"test","status":"COMPLETED","conclusion":"FAILURE",
+      "startedAt":"2026-10-19T01:00:00Z","checkSuite":{"app":{"slug":"github-actions"},"workflowRun":{"workflow":{"name":"CI"}}}},
+    {"__typename":"CheckRun","name":"test","status":"COMPLETED","conclusion":"SUCCESS",
+      "startedAt":"2026-10-19T02:00:00Z","checkSuite":{"app":{"slug":"github-actions"},"workflowRun":{"workflow":{"name":"CI"}}}}]')"
+  [ "${status}" -eq 0 ]
+  has_line "status=READY"
+}
+
+@test "a re-run that has not started yet supersedes the earlier result and is WAITING" {
+  classify "$(checks '[{"__typename":"CheckRun","name":"test","status":"QUEUED","conclusion":null,"startedAt":null,
+      "checkSuite":{"app":{"slug":"github-actions"},"workflowRun":{"workflow":{"name":"CI"}}}},
+    {"__typename":"CheckRun","name":"test","status":"COMPLETED","conclusion":"FAILURE",
+      "startedAt":"2026-10-19T01:00:00Z","checkSuite":{"app":{"slug":"github-actions"},"workflowRun":{"workflow":{"name":"CI"}}}}]')"
+  has_line "status=WAITING"
+  reason_has "check pending: test"
+}
+
+@test "same-named checks from different workflows are both kept" {
+  classify "$(checks '[{"__typename":"CheckRun","name":"build","status":"COMPLETED","conclusion":"FAILURE",
+      "startedAt":"2026-10-19T01:00:00Z","checkSuite":{"app":{"slug":"github-actions"},"workflowRun":{"workflow":{"name":"Lint"}}}},
+    {"__typename":"CheckRun","name":"build","status":"COMPLETED","conclusion":"SUCCESS",
+      "startedAt":"2026-10-19T02:00:00Z","checkSuite":{"app":{"slug":"github-actions"},"workflowRun":{"workflow":{"name":"Test"}}}}]')"
+  has_line "status=BLOCKED"
+  reason_has "check failed: build"
+}
+
+@test "a re-posted commit status supersedes the earlier one" {
+  classify "$(checks '[{"__typename":"StatusContext","context":"ci/a","state":"FAILURE","createdAt":"2026-10-19T01:00:00Z"},
+    {"__typename":"StatusContext","context":"ci/a","state":"SUCCESS","createdAt":"2026-10-19T02:00:00Z"}]')"
+  has_line "status=READY"
+}
+
 @test "a draft is BLOCKED" {
   classify '.isDraft = true | .mergeStateStatus = "DRAFT"'
   has_line "status=BLOCKED"
@@ -232,6 +265,12 @@ checks() {
   [ "${status}" -eq 1 ]
   classify "$(checks '[{"__typename":"SomethingElse"}]')"
   [ "${status}" -eq 1 ]
+}
+
+@test "each unreadable signal is named exactly once" {
+  classify '.reviewThreads.totalCount = 101 | .commits.nodes[0].commit.statusCheckRollup.contexts.nodes[0] = null'
+  [ "${status}" -eq 1 ]
+  [ "$(reason)" = "unreadable: reviewThreads truncated (101 > 1); check state missing: unnamed check" ]
 }
 
 @test "a truncated connection holds the merge" {

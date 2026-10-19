@@ -30,8 +30,9 @@ QUERY='query($owner: String!, $repo: String!, $num: Int!) {
       reviewThreads(first: 100) { totalCount nodes { isResolved } }
       commits(last: 1) { nodes { commit { oid statusCheckRollup { state
         contexts(first: 100) { totalCount nodes { __typename
-          ... on CheckRun { name status conclusion }
-          ... on StatusContext { context state } } } } } } }
+          ... on CheckRun { name status conclusion startedAt
+            checkSuite { app { slug } workflowRun { workflow { name } } } }
+          ... on StatusContext { context state createdAt } } } } } } }
     }
   }
 }'
@@ -63,6 +64,12 @@ CLASSIFY='
       elif (.state | type) == "string" then "failed"
       else "unreadable" end
     else "unreadable" end;
+  # A re-run leaves the superseded run in the rollup, so keep only the latest run per check:
+  # the same workflow (or app) and name for a check run, the same context for a status. A run not
+  # started yet has no timestamp and counts as the latest, since it is the pending re-run.
+  def check_key: [.__typename, (.checkSuite.workflowRun.workflow.name // .checkSuite.app.slug // ""), check_name];
+  def latest_checks: group_by(check_key)
+    | map(sort_by((.startedAt // .createdAt) as $t | [$t == null, $t // ""]) | last);
   def out($status; $reasons): {status: $status, reason: ($reasons | join("; ")), pr: .number, head: .headRefOid};
 
   if (.errors // null) != null then {status: "BLOCKED", unreadable: true, reason: "GraphQL errors: \([.errors[]?.message] | join(", "))"}
@@ -73,12 +80,13 @@ CLASSIFY='
     else
       ([.commits.nodes[0]?.commit?] | first) as $commit
       | ($commit.statusCheckRollup // null) as $rollup
-      | ($rollup.contexts.nodes // [] | map({name: check_name, class: check_class})) as $checks
+      | ($rollup.contexts.nodes // [] | latest_checks
+          | map({name: check_name, class: check_class})) as $checks
       | [ (if .state != "OPEN" then "state \(.state // "missing")" else empty end),
-          ("isDraft", "isMergeQueueEnabled") as $f
-            | (if (.[$f] | type) != "boolean" then "\($f) missing" else empty end),
-          ("mergeable", "mergeStateStatus") as $f
-            | (if (.[$f] | type) != "string" then "\($f) missing" else empty end),
+          (("isDraft", "isMergeQueueEnabled") as $f
+            | if (.[$f] | type) != "boolean" then "\($f) missing" else empty end),
+          (("mergeable", "mergeStateStatus") as $f
+            | if (.[$f] | type) != "string" then "\($f) missing" else empty end),
           conn("reviewRequests"), conn("latestOpinionatedReviews"), conn("reviewThreads"),
           (if ($commit | type) != "object" then "head commit missing" else empty end),
           (if $rollup != null then ($rollup | conn("contexts") | "checks: \(.)") else empty end),
