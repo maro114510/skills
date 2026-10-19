@@ -1,0 +1,139 @@
+version: "2"
+
+run:
+  go: "1.26"
+  timeout: 5m
+  tests: true
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  uniq-by-line: false # report every linter's finding, even when another linter flags the same line
+
+linters:
+  default: none
+  enable:
+    # --- base "standard" set ---
+    - errcheck # unchecked error return values
+    - govet # go vet's suspicious-construct checks
+    - ineffassign # assignments to variables that are never used
+    - staticcheck # staticcheck's bug/style/perf rule set
+    - unused # unused constants, variables, functions, types
+
+    # --- correctness / bugs ---
+    - bodyclose # HTTP response body must be closed
+    - durationcheck # two time.Duration values multiplied together
+    - errname # sentinel errors named Err*, error types named *Error
+    - errorlint # error wrapping issues (errors.Is/As, %w)
+    - exhaustive # switch over enum types must cover all values
+    - exhaustruct # struct literals must set every field
+    - fatcontext # context stored/nested incorrectly in loops or closures
+    - forcetypeassert # type assertions without the ", ok" check
+    - makezero # slices made with non-zero length before append
+    - mirror # wrong bytes/strings mirror pattern (e.g. strings.Contains vs bytes)
+    - nilerr # returning nil error after checking err != nil
+    - nilnesserr # returning wrong nil value after an error check
+    - noctx # HTTP/DB calls missing a context.Context
+    - reassign # package-level variables reassigned from elsewhere
+    - rowserrcheck # sql.Rows.Err() not checked
+    - sqlclosecheck # sql.Rows/Stmt not closed
+    - wastedassign # assignment whose value is never read
+
+    # --- style / readability ---
+    - asciicheck # non-ASCII characters in identifiers
+    - bidichk # dangerous unicode bidi control characters
+    - copyloopvar # unnecessary copying of loop variables (pre Go 1.22 idiom)
+    - cyclop # function/package cyclomatic complexity too high
+    - dogsled # too many blank identifiers in an assignment (x, _, _, _ := f())
+    - funcorder # inconsistent order of functions/methods/constructors
+    - goconst # repeated string literals that should be constants
+    - gocritic # broad style/perf/correctness diagnostics
+    - godot # comments must end in a period
+    - intrange # for-loops that could use Go 1.22 range-over-int
+    - misspell # commonly misspelled English words
+    - mnd # magic numbers that should be named constants
+    - modernize # suggests modern stdlib/language equivalents
+    - nakedret # naked returns in functions longer than allowed
+    - perfsprint # fmt.Sprintf calls replaceable with a faster alternative
+    - prealloc # slices that could be pre-allocated
+    - revive # configurable style linter (golint replacement)
+    - tagliatelle # struct tag naming convention
+    - unconvert # unnecessary type conversions
+    - unparam # unused function parameters
+    - usestdlibvars # literals that could use a stdlib constant/var
+    - whitespace # unneeded blank lines at start/end of blocks
+
+    # --- security ---
+    - gosec # common security issues (file perms, credentials, etc.)
+
+    # --- code hygiene ---
+    - gocheckcompilerdirectives # go:build / go:generate directives are well-formed
+    - gochecknoglobals # disallow package-level variables
+    - gochecknoinits # disallow init() functions
+    - nolintlint # //nolint directives must be specific and explained
+    - wrapcheck # errors from external packages must be wrapped
+
+    # --- test hygiene ---
+    - paralleltest # tests missing t.Parallel()
+    - testableexamples # examples must have an expected Output: comment
+    - testifylint # correct usage of testify assertions
+    - thelper # test helpers must call t.Helper()
+    - tparallel # t.Parallel() usage across parent/subtests is consistent
+    - usetesting # use testing package helpers instead of manual equivalents
+
+  settings:
+    errcheck:
+      check-type-assertions: true
+      exclude-functions:
+        - (io.Closer).Close # defer Close() — error is unactionable at the call site
+        - (*os.File).Close # same as above, for *os.File specifically
+
+    exhaustive:
+      default-signifies-exhaustive: true # a `default` case counts as covering the rest
+
+    gosec:
+      excludes:
+        - G104 # duplicate of errcheck; already enforced above
+
+    misspell:
+      locale: US
+
+    revive:
+      rules:
+        - name: exported
+          disabled: false # exported identifiers must have a doc comment
+        - name: unexported-return
+          disabled: true # allow exported funcs to return unexported types
+
+    wrapcheck:
+      ignore-package-globs:
+        - github.com/maro114510/skills/oe/* # oe's own packages already return exit-coded errors
+
+    tagliatelle:
+      case:
+        rules:
+          json: snake
+        use-field-name: true
+
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+    rules:
+      - path: "_test.go"
+        linters: [wrapcheck, goconst] # test helpers are exempt from error wrapping; fixture argv repeats by design
+      - path: "^cmd/"
+        linters: [exhaustruct]
+        # cobra.Command literals set only the fields each command needs.
+
+formatters:
+  enable:
+    - goimports # gofmt formatting + import grouping/ordering
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

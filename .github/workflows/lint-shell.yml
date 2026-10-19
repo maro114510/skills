@@ -37,6 +37,9 @@ jobs:
       - name: Run every skills/**/*.bats suite
         run: find skills -name '*.bats' -print0 | sort -z | xargs -0 bats
 
+      - name: Run the push-approval hook suite
+        run: bats tests/require-user-approval.bats
+
   shell-script-tests:
     name: Shell script tests
     runs-on: ubuntu-latest

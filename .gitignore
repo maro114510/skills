@@ -3,6 +3,9 @@
 # Environments
 .env
 
+# oe build output
+/oe/oe
+
 ### others ###
 # *.jpg
 # *.png
