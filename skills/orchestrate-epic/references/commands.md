@@ -696,8 +696,10 @@ VERIFIED_BASE=$(field verified_base)
 REVIEW_EVIDENCE=$(printf '%s\n' "$STATE_BODY" | sed -n '/^- review_evidence:[[:space:]]*$/,${/^  /p;}')
 git fetch origin "$BASE" || { echo "base fetch failed — do not merge" >&2; exit 1; }
 [ -n "$REVIEWED_SHA" ] && [ "$REVIEWED_SHA" != none ] && [ -n "$REVIEW_EVIDENCE" ] \
-  && [ "$(git rev-parse "origin/$BASE")" = "$VERIFIED_BASE" ] \
-  || { echo "no fresh bound verdict — do not merge" >&2; exit 1; }
+  || { echo "no bound verdict — do not merge" >&2; exit 1; }
+# Moved base, usually an earlier merge: re-verify, never park (SKILL.md Step 3 "Landing Order")
+[ "$(git rev-parse "origin/$BASE")" = "$VERIFIED_BASE" ] \
+  || { echo "base moved since verified_base — do not merge; re-verify against the new base" >&2; exit 3; }
 READINESS=$(bash "<skill-dir>/scripts/pr-readiness.sh" "$REPO" "$PR")
 RC=$?
 STATUS=$(sed -n 's/^status=//p' <<<"$READINESS")
@@ -706,7 +708,7 @@ PR_HEAD=$(sed -n 's/^head=//p' <<<"$READINESS")
   || { echo "not merge-ready: $READINESS" >&2; exit 1; }   # hold the merge
 ```
 
-The freeze check holds the merge on anything but exit 0 with `status=CLEAR`, `FROZEN`, `RELEASE`, and `UNREADABLE` alike. The next part re-checks the whole bound verdict, SKILL.md Step 6, right before the merge: `reviewed_sha` and `review_evidence` present, and `verified_base` still the current `origin/$BASE`. Output is `status=`, `reason=`, `pr=`, and `head=` lines; `head=` is the PR head the snapshot was taken on, so a `READY` for a head other than the state comment's `reviewed_sha`, §2.5, classified a commit nobody reviewed and holds the merge too. Exit 1 means a required signal was unreadable — `gh` failed, a field was missing, or a connection held more than 100 nodes — and prints `status=BLOCKED`. Exit 2 is a usage error. `--snapshot <file|->` classifies a saved response of the same GraphQL query instead of calling `gh`, which is how `scripts/test-pr-readiness.bats` exercises every rule. Every check on the head counts, required or not, so a pending one waits and a failed one blocks; a repository with no PR checks at all stays `WAITING` and its PRs are merged by a human.
+The freeze check holds the merge on anything but exit 0 with `status=CLEAR`, `FROZEN`, `RELEASE`, and `UNREADABLE` alike. The next part re-checks the whole bound verdict, SKILL.md Step 6, right before the merge: `reviewed_sha` and `review_evidence` present, and `verified_base` still the current `origin/$BASE`. Only a moved base exits 3, so the caller can route it to re-verification, SKILL.md Step 3 "Landing Order"; every other hold exits 1. Output is `status=`, `reason=`, `pr=`, and `head=` lines; `head=` is the PR head the snapshot was taken on, so a `READY` for a head other than the state comment's `reviewed_sha`, §2.5, classified a commit nobody reviewed and holds the merge too. Exit 1 means a required signal was unreadable — `gh` failed, a field was missing, or a connection held more than 100 nodes — and prints `status=BLOCKED`. Exit 2 is a usage error. `--snapshot <file|->` classifies a saved response of the same GraphQL query instead of calling `gh`, which is how `scripts/test-pr-readiness.bats` exercises every rule. Every check on the head counts, required or not, so a pending one waits and a failed one blocks; a repository with no PR checks at all stays `WAITING` and its PRs are merged by a human.
 
 ## §4 Cleanup After Merge — Step 8 rescan
 
