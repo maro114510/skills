@@ -85,10 +85,16 @@ assert_allowed() {
   assert_blocked 'f() { oe land merge}'
 }
 
-@test "the marker approves only when it ends the whole command" {
+@test "the marker approves only on the guarded command's own line" {
   assert_blocked $'echo hi # user-approved\noe ship publish'
   assert_blocked $'echo hi # user-approved\ngit push origin feat/x'
+  assert_blocked $'git push origin main\n# user-approved'
+  assert_blocked $'oe ship publish\n# user-approved'
+  assert_blocked $'oe ship publish # user-approved\ngit push origin main'
+  assert_blocked $'oe ship\npublish # user-approved'
   assert_allowed $'oe --epic 3 \\\n  ship publish # user-approved'
+  assert_allowed $'cd repo\ngit push origin feat/x # user-approved'
+  assert_allowed $'git push origin a # user-approved\ngit push origin b # user-approved'
 }
 
 @test "the irreversible subcommands with the marker are allowed" {

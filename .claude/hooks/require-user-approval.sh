@@ -15,15 +15,14 @@
 #   skills/orchestrate-epic/scripts/oe --epic 3 ship publish   -> blocked
 #   oe resolve --epic 3                                        -> allowed
 
-# The command is flattened to one line: backslash-newline continuations are joined and every
-# other newline becomes a space, so a guarded command split across lines is still seen, and
-# the approval marker counts only at the very end of the whole command.
+# Backslash-newline continuations are joined, because bash runs them as one command; every
+# other newline stays, because it separates commands.
 COMMAND=$(python3 -c "
 import sys, json
 try:
     data = json.load(sys.stdin)
     cmd = data.get('tool_input', {}).get('command', '')
-    print(cmd.replace('\\\\\n', ' ').replace('\r', ' ').replace('\n', ' '))
+    print(cmd.replace('\\\\\r\n', ' ').replace('\\\\\n', ' ').replace('\r', '\n'))
 except Exception:
     sys.exit(1)
 " 2>/dev/null) || {
@@ -39,21 +38,39 @@ OE_TOKEN="((^|[[:space:];&|(\`\"'/])oe[\"']?|\\$\\{?[A-Za-z_][A-Za-z0-9_]*\\}?[\
 OE_WORDS='([[:space:]]+[^[:space:]]+)*[[:space:]]+'
 OE_END="([[:space:]\"';&|)<>}]|$)"
 OE_MUTATION="${OE_TOKEN}${OE_WORDS}(ship${OE_WORDS}publish|land${OE_WORDS}merge)${OE_END}"
+MARKER='#[[:space:]]*user-approved[[:space:]]*$'
 
-guarded=''
-if printf '%s' "${COMMAND}" | grep -qE "${GIT_PUSH}"; then
-  guarded='git push'
-elif printf '%s' "${COMMAND}" | grep -qE "${OE_MUTATION}"; then
-  guarded='oe ship publish / oe land merge'
-fi
+# guarded_in <text> prints what <text> runs that needs approval, or nothing.
+guarded_in() {
+  if printf '%s' "$1" | grep -qE "${GIT_PUSH}"; then
+    printf 'git push'
+  elif printf '%s' "$1" | grep -qE "${OE_MUTATION}"; then
+    printf 'oe ship publish / oe land merge'
+  fi
+}
+
+# The whole command flattened to one line still catches a guarded command spread over lines.
+guarded="$(guarded_in "${COMMAND//$'\n'/ }")"
 
 # Allow commands that run nothing guarded
 if [[ -z "${guarded}" ]]; then
   exit 0
 fi
 
-# Allow if the approval marker appears at the end of the command
-if printf '%s' "${COMMAND}" | grep -qE '#[[:space:]]*user-approved[[:space:]]*$'; then
+# Allow only when every line that runs a guarded command ends with the approval marker itself.
+# A marker on another line, such as a lone `# user-approved` after `git push`, approves nothing,
+# and a guarded command visible only across lines cannot be approved at all.
+approved=0
+while IFS= read -r line; do
+  [[ -n "$(guarded_in "${line}")" ]] || continue
+  if ! printf '%s' "${line}" | grep -qE "${MARKER}"; then
+    approved=0
+    break
+  fi
+  approved=1
+done <<<"${COMMAND}"
+
+if [[ "${approved}" -eq 1 ]]; then
   exit 0
 fi
 
@@ -61,6 +78,6 @@ fi
 printf '⚠️  Explicit user approval is required before running %s.\n' "${guarded}" >&2
 printf '\nHow to proceed:\n' >&2
 printf '  1. Ask the user: "May I run %s?"\n' "${guarded}" >&2
-printf '  2. Once the user approves, re-run the command with "# user-approved" appended.\n' >&2
+printf '  2. Once the user approves, re-run the command with "# user-approved" appended to the same line.\n' >&2
 printf '\nExample: git push origin feat/my-feature # user-approved\n' >&2
 exit 2
