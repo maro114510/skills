@@ -16,6 +16,7 @@
   - 実行可能: <command のリスト、working directory 付き。無ければ「なし」>
   - ローカル検証不可: <`${{ }}` / sudo / グローバルインストール / `uses:` アクションを理由付きで列挙。無ければ「なし」>
 - [!] required checks も required reviewers も未設定です。このループの reviewer pass と CHECKS_SET の実行可能エントリが、マージ前の唯一のゲートです。   ← 該当する場合のみ
+- [!] default branch への push で動く workflow がありません。マージ後の default branch のチェックを確認できないため、このループがマージするたびに Epic を凍結します。マージは手動で行うことを検討してください。   ← 該当する場合のみ
 
 ### Issue 一覧
 | Issue | タイトル | 状態 | 依存 | base branch |
@@ -46,6 +47,7 @@
 ループに自動マージも任せる場合は、この Run Plan より後に `epic-auto-merge` とだけ書いたコメントを別に投稿してください。取り消すときは `epic-revoke-auto-merge` とだけ書いたコメントを投稿します。両者のうち最も新しいコメントが有効で、ループはマージの直前に毎回読み直します。取り消した後に始まるマージは行いません。
 自動マージを許可しても、必須レビュー・ruleset・人の確認を求めるリポジトリ側の制御は迂回しません。
 マージは 1 件ずつ、レビュー済みの HEAD を expected SHA として指定して行います。GitHub の auto-merge は使いません。
+マージのたびに default branch 上のマージコミットのチェックがすべて通るまで、次の PR はマージしません。失敗・キャンセルされた場合や、10 分経ってもチェックが 1 件も報告されない場合、1 時間経っても終わらないチェックがある場合（承認待ちのデプロイジョブなど）は Epic を凍結してお知らせします。自動で revert はしません。
 CI 失敗・レビュー指摘・conflict の修復は `epic-approve` だけで行います。マージ権限が無い場合も PR を修復し、マージはあなたに任せます。
 ```
 
@@ -91,18 +93,21 @@ scope dispute に例外はありません。どの Issue でも park し、ル�
 
 ## Freeze Comment（Step 3–7、Epic コメント）
 
-先頭にマーカー `<!-- orchestrate-epic:freeze -->` を必ず付ける。凍結 1 回につき 1 度だけ投稿し、凍結中は再投稿しない。`- reason:` 行と各カウンタ行は 1 行のまま書く。ループが再実行時に読み戻すため。
+先頭にマーカー `<!-- orchestrate-epic:freeze -->` を必ず付ける。凍結 1 回につき 1 度だけ投稿し、凍結中は再投稿しない。`- reason:` 行、`- merge:` 行、`- health:` 行、各カウンタ行は 1 行のまま書く。ループが再実行時に読み戻すため。`- merge:` 行と `- health:` 行はマージ後の default branch のチェックによる凍結（Step 8 "Post-merge Health"）のときだけ書き、値は `health_gate` が出力した `freeze_merge=` の SHA と `freeze_health=` の値だけにする。注記などを同じ行に足すと、解除のたびに同じ失敗で再び凍結する。それ以外の凍結では両方の行ごと省く。
 
 ```
 <!-- orchestrate-epic:freeze -->
 orchestrate-epic: この Epic を凍結しました。解除されるまで、worker の dispatch、review、PR 作成、マージを一切行いません。
 
-- reason: <freeze check の reason= の値。例: fix_cycles 8 + 1 > 8>
+- reason: <freeze check の reason= の値、または health_gate の freeze_reason= の値。例: fix_cycles 8 + 1 > 8>
+- merge: <freeze_merge= の SHA>
+- health: <freeze_health= の値。FAIL または UNCONFIRMED>
 - worker_dispatches: <used> / <bound>
 - reviewer_passes: <used> / <bound>
 - fix_cycles: <used> / <bound>
 
 再実行やセッションの再起動では解除されません。
+<マージ後のチェックによる凍結のときだけ次の 1 行を書く: マージコミット <SHA>（PR #<PR>、Issue #<N>）の default branch 上のチェックが通っていません。ループは revert も修正の push もしません。直すか revert するかを判断し、default branch が問題ない状態になってから解除してください。>
 理由を確認して続けてよければ、この Epic に `epic-release` とだけ書いたコメントを投稿してください。このコメントより後に OWNER・MEMBER・COLLABORATOR が投稿したものだけを読み取ります。コマンドを文中に含めただけのコメント（例: 「確認したら epic-release します」）は解除になりません。
 解除後の実行は、GitHub から状態をすべて読み直してから動きます。予算の使用量は 0 に戻り、上限は残りの Issue 数から計算し直します。parked の Issue、無効になった承認、マージ権限は解除によって変わりません。
 ```
@@ -171,8 +176,10 @@ orchestrate-epic: PR #<PR> のマージ結果: <merged / merged-unverified-base 
 マージ待ち PR:
 | PR | 理由 |
 |----|------|
-| <PR URL> | <マージ権限なし / リポジトリ側で人の確認待ち: <reason> / CI 待ちのポーリング上限 / 再検証待ち> |
+| <PR URL> | <マージ権限なし / リポジトリ側で人の確認待ち: <reason> / CI 待ちのポーリング上限 / 再検証待ち / 直前のマージの default branch チェック待ち> |
 これらの Issue が close されると解放されるタスク: #17, #18
+直前のマージの default branch チェックが未完了の場合は、次の行を添える:
+「PR #<PR>（Issue #<N>）のマージコミット <SHA> のチェックが終わるまで、次のマージも #<N> に依存するタスクの開始も行いません。再実行すると続きから確認します。」
 
 続け方:
 - いま続ける: マージ権限が無い場合は、上記 PR を 1 件だけマージしてから `/orchestrate-epic epic <EPIC>` を再実行してください。残りの PR は新しい default branch で再検証します。人の確認待ちの PR は、その確認が済んでから再実行してください。
