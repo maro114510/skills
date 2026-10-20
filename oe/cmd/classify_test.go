@@ -127,6 +127,18 @@ func TestBoardClassifiesAndProposes(t *testing.T) {
 	}
 }
 
+func TestBoardReportsMaxParallelFallbackReason(t *testing.T) {
+	t.Parallel()
+
+	r := run(world(), "board", "--epic", "277", "--max-parallel", "0")
+	if r.code != 0 {
+		t.Fatalf("exit %d, stdout %q, stderr %q", r.code, r.stdout, r.stderr)
+	}
+	if !strings.Contains(r.stderr, "using the default 3") {
+		t.Errorf("stderr = %q, want the max-parallel fallback reason", r.stderr)
+	}
+}
+
 func (b boardOut) dispatched() []int {
 	var out []int
 	for _, a := range b.Actions {

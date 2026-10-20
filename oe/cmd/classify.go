@@ -33,6 +33,9 @@ func newBoardCmd(env Env, g *globals) *cobra.Command {
 			if err != nil {
 				return coded(err)
 			}
+			if in.MaxParallelReason != "" {
+				_, _ = fmt.Fprintln(c.ErrOrStderr(), in.MaxParallelReason)
+			}
 			b, err := snapshot.ReadBoard(c.Context(), client, in)
 			if err != nil {
 				return coded(err)
