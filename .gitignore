@@ -5,6 +5,7 @@
 
 # oe build output
 /oe/oe
+/oe/dist/
 
 ### others ###
 # *.jpg
