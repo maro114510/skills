@@ -250,6 +250,16 @@ Recheck the relevant files after setup. If the fetched base changed a material p
 
 ## Phase 5: Implement
 
+Each artifact explains one thing.
+Do not repeat it in another.
+
+| Artifact | Explains |
+|---|---|
+| Code | How |
+| Tests | What |
+| Commit log | Why |
+| Code comments | Why not: a rejected alternative or a non-obvious constraint |
+
 Choose the test approach and record it in the plan.
 
 | Approach | Use when |
