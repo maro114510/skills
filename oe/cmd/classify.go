@@ -37,7 +37,7 @@ func newBoardCmd(env Env, g *globals) *cobra.Command {
 			if err != nil {
 				return coded(err)
 			}
-			res, err := board.Classify(b, board.Options{LeaseToken: leaseToken})
+			res, err := board.Classify(b, board.Options{LeaseToken: leaseToken, MaxParallel: in.MaxParallel})
 			if err != nil {
 				return coded(err)
 			}

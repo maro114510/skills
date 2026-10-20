@@ -34,7 +34,7 @@ func (w *world) actions(res Result) []Action {
 			out = append(out, a)
 		}
 	}
-	if res.Health.Next == health.NextFreeze {
+	if res.Health.Next == health.NextFreeze && !res.Frozen {
 		a := newAction(ActionFreeze)
 		a.Merge, a.Health, a.Reason = res.Health.Merge, string(res.Health.Status), res.Health.Reason
 		out = append(out, a)
@@ -61,6 +61,7 @@ func (w *world) workActions(res Result) []Action {
 			out = append(out, a)
 		}
 	}
+	workerStart := len(out)
 	for _, i := range byState(Reverify) {
 		a := newAction(ActionReverify)
 		a.Issue, a.PR, a.Branch = i.Number, i.PR, i.Branch
@@ -73,6 +74,9 @@ func (w *world) workActions(res Result) []Action {
 			a.Issue, a.Branch, a.Resume = i.Number, i.Branch, s == InProgress
 			out = append(out, a)
 		}
+	}
+	if w.maxParallel > 0 && len(out)-workerStart > w.maxParallel {
+		out = out[:workerStart+w.maxParallel]
 	}
 	return out
 }

@@ -33,6 +33,17 @@ func (p PageInfo) next(what string) (cursor string, more bool, err error) {
 	return *p.EndCursor, true, nil
 }
 
+func nextPage(after string, p PageInfo, what string) (string, bool, error) {
+	cursor, more, err := p.next(what)
+	if err != nil || !more {
+		return cursor, more, err
+	}
+	if cursor == after {
+		return "", false, exitcode.New(exitcode.Unreadable, what+" returned the same cursor twice")
+	}
+	return cursor, true, nil
+}
+
 // Conn is a GraphQL connection read once, without following pages, as readiness and health
 // read theirs: a connection that holds more than it returned is not a full read.
 type Conn[T any] struct {
@@ -70,7 +81,7 @@ func eachPage(what string, read func(after string) (info PageInfo, done bool, er
 		if err != nil || done {
 			return err
 		}
-		next, more, err := info.next(what)
+		next, more, err := nextPage(after, info, what)
 		if err != nil || !more {
 			return err
 		}

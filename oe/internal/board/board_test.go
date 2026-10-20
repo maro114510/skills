@@ -36,7 +36,9 @@ func newFx() *fx {
 	}}
 }
 
-func blocker(n int, st string) snapshot.Blocker { return snapshot.Blocker{Number: n, State: st} }
+func blocker(n int, st string) snapshot.Blocker {
+	return snapshot.Blocker{Number: n, State: st, Repo: "o/r"}
+}
 
 func leaf(n int, st string, blockers ...snapshot.Blocker) snapshot.Issue {
 	return snapshot.Issue{Number: n, State: st, Title: "T", Body: "", CreatedAt: "", Blockers: blockers, Children: nil}
@@ -110,7 +112,7 @@ func (f *fx) comment(id int64, association, body string) *fx {
 
 func classify(t *testing.T, f *fx) board.Result {
 	t.Helper()
-	res, err := board.Classify(f.b, board.Options{LeaseToken: ""})
+	res, err := board.Classify(f.b, board.Options{LeaseToken: "", MaxParallel: 0})
 	if err != nil {
 		t.Fatalf("Classify() error = %v", err)
 	}
@@ -565,7 +567,7 @@ func TestLease(t *testing.T) {
 	for name, tc := range tests {
 		f := newFx().with(leaf(1, "OPEN"))
 		f.b.Lease = tc.lease
-		_, err := board.Classify(f.b, board.Options{LeaseToken: tc.token})
+		_, err := board.Classify(f.b, board.Options{LeaseToken: tc.token, MaxParallel: 0})
 		if got := exitcode.CodeOf(err); got != tc.code {
 			t.Errorf("%s: exit %d, want %d (%v)", name, got, tc.code, err)
 		}
@@ -623,7 +625,7 @@ func TestUnreadableHealthStopsClassification(t *testing.T) {
 	f := newFx().with(leaf(1, "OPEN"))
 	f.b.PostMerge = recordFor(1, 7)
 	f.b.PostMergePull = nil
-	_, err := board.Classify(f.b, board.Options{LeaseToken: ""})
+	_, err := board.Classify(f.b, board.Options{LeaseToken: "", MaxParallel: 0})
 	if exitcode.CodeOf(err) != exitcode.Unreadable {
 		t.Errorf("exit = %d (%v), want %d", exitcode.CodeOf(err), err, exitcode.Unreadable)
 	}
@@ -637,7 +639,7 @@ func TestAFrozenEpicProposesNoWork(t *testing.T) {
 	f := newFx().with(leaf(1, "OPEN"), leaf(2, "OPEN")).state(2, approved(newState(2), baseSHA)).pr(9, "feat/issue-2", "OPEN", headSHA)
 	f.b.Ledger = &state.Ledger{
 		Envelope: env, N: 2, Counters: zeroCounters(), FreezeSeq: 1, ReleaseWatermark: 0,
-		Freeze: &state.Freeze{Seq: 1, Reason: "bound exceeded", MergeSHA: "", Health: ""},
+		Freeze: &state.Freeze{Seq: 1, Reason: "bound exceeded", MergeSHA: "", Health: "", Released: false},
 	}
 	res := classify(t, f)
 	if !res.Frozen || len(res.Actions) != 0 {
@@ -665,6 +667,45 @@ func TestDispatchesResumeBeforeStartAndEveryActionIsAProposal(t *testing.T) {
 	}
 	if !res.Actions[0].Resume || res.Actions[1].Resume {
 		t.Errorf("actions = %+v, want only #3 marked as a resume", res.Actions)
+	}
+}
+
+func TestMaxParallelCapsReverifyAndDispatchTogether(t *testing.T) {
+	t.Parallel()
+
+	f := newFx().with(leaf(1, "OPEN"), leaf(2, "OPEN"), leaf(3, "OPEN")).state(3, newState(3))
+	res, err := board.Classify(f.b, board.Options{LeaseToken: "", MaxParallel: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Actions) != 1 || res.Actions[0].Kind != board.ActionDispatch || res.Actions[0].Issue != 3 || !res.Actions[0].Resume {
+		t.Errorf("actions = %+v, want only the first prioritized reverify/dispatch action (resume #3)", res.Actions)
+	}
+}
+
+func TestReleasedFreezeIsHistoryNotAnActiveFreeze(t *testing.T) {
+	t.Parallel()
+
+	env := envelope("ledger")
+	env.Entity = state.EntityLedger
+	f := newFx().with(leaf(1, "OPEN"))
+	f.b.Ledger = &state.Ledger{Envelope: env, N: 1, Counters: zeroCounters(), FreezeSeq: 1, ReleaseWatermark: 0,
+		Freeze: &state.Freeze{Seq: 1, Reason: "health", MergeSHA: "merge1", Health: "FAIL", Released: true}}
+	res := classify(t, f)
+	if res.Frozen {
+		t.Fatal("released freeze still marks board frozen")
+	}
+	if got := actionsOf(res, board.ActionDispatch); !slices.Equal(got, []int{1}) {
+		t.Errorf("dispatch = %v, want #1 while retaining freeze for health history", got)
+	}
+}
+
+func TestExternalBlockerDoesNotResolveToSameNumberInEpic(t *testing.T) {
+	t.Parallel()
+
+	f := newFx().with(leaf(5, "CLOSED"), leaf(6, "OPEN", snapshot.Blocker{Number: 5, State: "OPEN", Repo: "other/repo"}))
+	if got := find(t, classify(t, f), 6); got.State != board.Waiting || !slices.Equal(got.WaitingOn, []int{5}) {
+		t.Errorf("external blocker classified as %+v, want waiting on outside #5", got)
 	}
 }
 

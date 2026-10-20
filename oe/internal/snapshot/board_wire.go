@@ -2,6 +2,7 @@ package snapshot
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"slices"
@@ -28,6 +29,26 @@ const BranchPrefix = "feat/issue-"
 type Blocker struct {
 	Number int    `json:"number"`
 	State  string `json:"state"`
+	Repo   string `json:"-"`
+}
+
+// UnmarshalJSON reads the repository identity nested in GitHub's blocker object.
+func (b *Blocker) UnmarshalJSON(data []byte) error {
+	var wire struct {
+		Number     int    `json:"number"`
+		State      string `json:"state"`
+		Repository *struct {
+			NameWithOwner string `json:"nameWithOwner"`
+		} `json:"repository"`
+	}
+	if err := json.Unmarshal(data, &wire); err != nil {
+		return fmt.Errorf("decode blocker: %w", err)
+	}
+	b.Number, b.State = wire.Number, wire.State
+	if wire.Repository != nil {
+		b.Repo = wire.Repository.NameWithOwner
+	}
+	return nil
 }
 
 // Issue is a child of the Epic, or a grandchild under a container. A container has Children.
@@ -76,12 +97,12 @@ const treeQuery = `query($owner: String!, $name: String!, $epic: Int!, $after: S
         totalCount pageInfo { hasNextPage endCursor }
         nodes {
           id number state title body createdAt
-          blockedBy(first: 20) { totalCount pageInfo { hasNextPage endCursor } nodes { number state } }
+          blockedBy(first: 20) { totalCount pageInfo { hasNextPage endCursor } nodes { number state repository { nameWithOwner } } }
           subIssues(first: 100) {
             totalCount pageInfo { hasNextPage endCursor }
             nodes {
               id number state title createdAt
-              blockedBy(first: 10) { totalCount pageInfo { hasNextPage endCursor } nodes { number state } }
+              blockedBy(first: 10) { totalCount pageInfo { hasNextPage endCursor } nodes { number state repository { nameWithOwner } } }
             }
           }
         }
@@ -92,7 +113,7 @@ const treeQuery = `query($owner: String!, $name: String!, $epic: Int!, $after: S
 
 const blockersQuery = `query($id: ID!, $after: String) {
   node(id: $id) { ... on Issue { blockedBy(first: 100, after: $after) {
-    pageInfo { hasNextPage endCursor } nodes { number state } } } }
+    pageInfo { hasNextPage endCursor } nodes { number state repository { nameWithOwner } } } } }
 }`
 
 type blockerConn struct {
@@ -239,8 +260,9 @@ func buildIssue(ctx context.Context, c *gh.Client, n issueNode, top bool) (Issue
 func allBlockers(ctx context.Context, c *gh.Client, n issueNode) ([]Blocker, error) {
 	blockers := slices.Clone(n.BlockedBy.Nodes)
 	page := n.BlockedBy.PageInfo
+	after := ""
 	for {
-		after, more, err := page.next(fmt.Sprintf("the blockedBy edges of #%d", n.Number))
+		next, more, err := nextPage(after, page, fmt.Sprintf("the blockedBy edges of #%d", n.Number))
 		if err != nil {
 			return nil, err
 		}
@@ -248,6 +270,7 @@ func allBlockers(ctx context.Context, c *gh.Client, n issueNode) ([]Blocker, err
 			break
 		}
 		var data blockersData
+		after = next
 		if err := c.GraphQL(ctx, blockersQuery, []gh.Var{gh.String("id", n.ID), gh.String("after", after)}, &data); err != nil {
 			return nil, err
 		}
@@ -260,6 +283,11 @@ func allBlockers(ctx context.Context, c *gh.Client, n issueNode) ([]Blocker, err
 	if len(blockers) != n.BlockedBy.TotalCount {
 		return nil, unreadable("#%d has %d blockedBy edges but %d were read", n.Number, n.BlockedBy.TotalCount, len(blockers))
 	}
+	for _, blocker := range blockers {
+		if blocker.Repo == "" {
+			return nil, unreadable("the repository of blocker #%d of #%d was not read", blocker.Number, n.Number)
+		}
+	}
 	return blockers, nil
 }
 
@@ -267,7 +295,7 @@ const pullsQuery = `query($owner: String!, $name: String!, $after: String) {
   repository(owner: $owner, name: $name) {
     pullRequests(first: 100, after: $after, orderBy: {field: CREATED_AT, direction: DESC}) {
       pageInfo { hasNextPage endCursor }
-      nodes { number state mergedAt createdAt headRefName headRefOid }
+      nodes { number state mergedAt createdAt headRefName headRefOid isCrossRepository }
     }
   }
 }`
@@ -275,17 +303,37 @@ const pullsQuery = `query($owner: String!, $name: String!, $after: String) {
 type pullsData struct {
 	Repository *struct {
 		PullRequests *struct {
-			PageInfo PageInfo `json:"pageInfo"`
-			Nodes    []struct {
-				Number      int     `json:"number"`
-				State       string  `json:"state"`
-				MergedAt    *string `json:"mergedAt"`
-				CreatedAt   string  `json:"createdAt"`
-				HeadRefName string  `json:"headRefName"`
-				HeadRefOid  string  `json:"headRefOid"`
-			} `json:"nodes"`
+			PageInfo PageInfo   `json:"pageInfo"`
+			Nodes    []pullNode `json:"nodes"`
 		} `json:"pullRequests"`
 	} `json:"repository"`
+}
+
+type pullNode struct {
+	Number            int     `json:"number"`
+	State             string  `json:"state"`
+	MergedAt          *string `json:"mergedAt"`
+	CreatedAt         string  `json:"createdAt"`
+	HeadRefName       string  `json:"headRefName"`
+	HeadRefOid        string  `json:"headRefOid"`
+	IsCrossRepository *bool   `json:"isCrossRepository"`
+}
+
+func loopPR(n pullNode) (PR, bool, error) {
+	if n.IsCrossRepository == nil {
+		return PR{}, false, unreadable("PR #%d has no cross-repository marker", n.Number)
+	}
+	if *n.IsCrossRepository {
+		return PR{Number: 0, State: "", Branch: "", HeadSHA: "", CreatedAt: ""}, false, nil
+	}
+	if _, ok := IssueOfBranch(n.HeadRefName); !ok {
+		return PR{Number: 0, State: "", Branch: "", HeadSHA: "", CreatedAt: ""}, false, nil
+	}
+	state := n.State
+	if n.MergedAt != nil {
+		state = StateMerged
+	}
+	return PR{Number: n.Number, State: state, Branch: n.HeadRefName, HeadSHA: n.HeadRefOid, CreatedAt: n.CreatedAt}, true, nil
 }
 
 // readPRs reads every pull request on a loop branch. Pull requests come newest first and are
@@ -304,14 +352,13 @@ func readPRs(ctx context.Context, c *gh.Client, repo, since string) ([]PR, error
 		}
 		list := data.Repository.PullRequests
 		for _, n := range list.Nodes {
-			if _, ok := IssueOfBranch(n.HeadRefName); !ok {
-				continue
+			pr, include, err := loopPR(n)
+			if err != nil {
+				return PageInfo{}, false, err
 			}
-			state := n.State
-			if n.MergedAt != nil {
-				state = StateMerged
+			if include {
+				out = append(out, pr)
 			}
-			out = append(out, PR{Number: n.Number, State: state, Branch: n.HeadRefName, HeadSHA: n.HeadRefOid, CreatedAt: n.CreatedAt})
 		}
 		oldest := len(list.Nodes) - 1
 		older := since != "" && oldest >= 0 && list.Nodes[oldest].CreatedAt < since

@@ -45,6 +45,7 @@ func TestReadBoard(t *testing.T) {
 	r.On(ghfake.Pulls, func(map[string]string) string {
 		return ghfake.PullPage("["+ghfake.PullNode(20, "OPEN", "feat/issue-7", "2026-10-05T00:00:00Z", false)+","+
 			ghfake.PullNode(19, "CLOSED", "feat/issue-51-2", "2026-10-04T00:00:00Z", true)+","+
+			ghfake.ForkPullNode(21, "OPEN", "feat/issue-7", "2026-10-06T00:00:00Z", false)+","+
 			ghfake.PullNode(18, "OPEN", "dependabot/npm", "2026-10-03T00:00:00Z", false)+"]", false, "")
 	})
 	r.On(ghfake.Refs, func(map[string]string) string {
@@ -81,7 +82,7 @@ func checkBoardFacts(t *testing.T, b *snapshot.Board) {
 
 func checkBoardEdges(t *testing.T, b *snapshot.Board) {
 	t.Helper()
-	if got := b.Children[1].Blockers; len(got) != 1 || got[0].Number != 1 || got[0].State != "CLOSED" {
+	if got := b.Children[1].Blockers; len(got) != 1 || got[0].Number != 1 || got[0].State != "CLOSED" || got[0].Repo != "o/r" {
 		t.Errorf("blockers of #5 = %+v", got)
 	}
 	if len(b.Comments) != 3 || len(b.Comments[277]) != 1 {
@@ -238,7 +239,7 @@ func TestBlockersPastTheFirstPageAreReadOn(t *testing.T) {
 	t.Parallel()
 
 	r := ghfake.New()
-	first := `{"totalCount":3,"pageInfo":{"hasNextPage":true,"endCursor":"b1"},"nodes":[{"number":8,"state":"OPEN"}]}`
+	first := `{"totalCount":3,"pageInfo":{"hasNextPage":true,"endCursor":"b1"},"nodes":[{"number":8,"state":"OPEN","repository":{"nameWithOwner":"o/r"}}]}`
 	r.On(ghfake.Tree, func(map[string]string) string {
 		return ghfake.EpicTree("", "["+ghfake.IssueNode(1, "OPEN", first, "")+"]", 1, false, "")
 	})
@@ -246,7 +247,7 @@ func TestBlockersPastTheFirstPageAreReadOn(t *testing.T) {
 		if v["id"] != "ID1" || v["after"] != "b1" {
 			t.Errorf("vars = %v, want the id and cursor", v)
 		}
-		return `{"data":{"node":{"blockedBy":{"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[{"number":9,"state":"OPEN"},{"number":10,"state":"CLOSED"}]}}}}`
+		return `{"data":{"node":{"blockedBy":{"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[{"number":9,"state":"OPEN","repository":{"nameWithOwner":"o/r"}},{"number":10,"state":"CLOSED","repository":{"nameWithOwner":"o/r"}}]}}}}`
 	})
 	r.Comments(nil)
 	b, err := read(t, r)

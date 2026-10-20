@@ -57,6 +57,8 @@ type Freeze struct {
 	Reason   string `json:"reason"`
 	MergeSHA string `json:"merge_sha"`
 	Health   string `json:"health"`
+	// Released preserves the freeze as health history without keeping the Epic frozen.
+	Released bool `json:"released,omitempty"`
 }
 
 // Ledger is the Epic-wide budget and freeze, contract §4.2.

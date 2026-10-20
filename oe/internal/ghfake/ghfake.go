@@ -254,6 +254,9 @@ func IssueNode(n int, state, blockers, sub string) string {
 
 // BlockerConn is a blockedBy connection that read total edges and returned nodes.
 func BlockerConn(total int, nodes ...string) string {
+	for i, node := range nodes {
+		nodes[i] = strings.Replace(node, `"state":`, `"repository":{"nameWithOwner":"o/r"},"state":`, 1)
+	}
 	return fmt.Sprintf(`{"totalCount":%d,"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[%s]}`, total, strings.Join(nodes, ","))
 }
 
@@ -273,8 +276,13 @@ func PullNode(n int, state, branch, created string, merged bool) string {
 	if merged {
 		mergedAt = `"2026-10-10T00:00:00Z"`
 	}
-	return fmt.Sprintf(`{"number":%d,"state":%q,"mergedAt":%s,"createdAt":%q,"headRefName":%q,"headRefOid":"sha%d"}`,
+	return fmt.Sprintf(`{"number":%d,"state":%q,"mergedAt":%s,"createdAt":%q,"headRefName":%q,"headRefOid":"sha%d","isCrossRepository":false}`,
 		n, state, mergedAt, created, branch, n)
+}
+
+// ForkPullNode is a pull request whose head branch is in another repository.
+func ForkPullNode(n int, state, branch, created string, merged bool) string {
+	return strings.Replace(PullNode(n, state, branch, created, merged), `"isCrossRepository":false`, `"isCrossRepository":true`, 1)
 }
 
 // RefPage answers the branch listing.

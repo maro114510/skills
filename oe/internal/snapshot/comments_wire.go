@@ -114,17 +114,19 @@ func readComments(ctx context.Context, c *gh.Client, repo string, numbers []int)
 func allComments(ctx context.Context, c *gh.Client, owner, name string, number int, first *commentConn) ([]Comment, error) {
 	var all []Comment
 	conn := first
+	after := ""
 	for {
 		for _, n := range conn.Nodes {
 			all = append(all, n.comment())
 		}
-		after, more, err := conn.PageInfo.next(fmt.Sprintf("the comments of #%d", number))
+		next, more, err := nextPage(after, conn.PageInfo, fmt.Sprintf("the comments of #%d", number))
 		if err != nil {
 			return nil, err
 		}
 		if !more {
 			break
 		}
+		after = next
 		var data struct {
 			Repository *struct {
 				Issue *commentIssue `json:"issue"`

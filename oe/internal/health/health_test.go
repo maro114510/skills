@@ -42,7 +42,7 @@ type scenario struct {
 func recorded() *health.Record { return &health.Record{ID: 10, PR: 7, Issue: 45} }
 
 func freeze(seq int, merge, status string) state.Freeze {
-	return state.Freeze{Seq: seq, Reason: "post-merge checks failed", MergeSHA: merge, Health: status}
+	return state.Freeze{Seq: seq, Reason: "post-merge checks failed", MergeSHA: merge, Health: status, Released: false}
 }
 
 func checks(nodes string) testfx.Edit {

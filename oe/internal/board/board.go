@@ -130,6 +130,8 @@ type Result struct {
 type Options struct {
 	// LeaseToken is the caller's lease token, or empty when it holds none.
 	LeaseToken string
+	// MaxParallel caps the combined reverify and dispatch proposals. Zero means no cap.
+	MaxParallel int
 }
 
 // Classify classifies the board. It stops, writing and proposing nothing, when the Epic's lease
@@ -143,9 +145,10 @@ func Classify(b *snapshot.Board, opts Options) (Result, error) {
 		return Result{}, exitcode.New(exitcode.Unreadable, "post-merge health is unreadable: "+h.Reason)
 	}
 	w := newWorld(b, h)
+	w.maxParallel = opts.MaxParallel
 	res := Result{
 		Repo: b.Repo, Epic: b.Epic, DefaultBranch: b.DefaultBranch, BaseSHA: b.BaseSHA,
-		Frozen: b.Ledger != nil && b.Ledger.Freeze != nil, Health: h,
+		Frozen: b.Ledger != nil && b.Ledger.Freeze != nil && !b.Ledger.Freeze.Released, Health: h,
 		Issues: nil, Containers: nil, Actions: nil, Notifications: nil,
 	}
 	cycles := w.cycles()

@@ -20,12 +20,13 @@ type world struct {
 	leaves     map[int]snapshot.Issue
 	containers map[int]snapshot.Issue
 	// parent maps a leaf to the container it sits under.
-	parent map[int]int
+	parent      map[int]int
+	maxParallel int
 }
 
 func newWorld(b *snapshot.Board, h health.Result) *world {
 	w := &world{
-		b: b, h: h, verifying: 0,
+		b: b, h: h, verifying: 0, maxParallel: 0,
 		leaves: map[int]snapshot.Issue{}, containers: map[int]snapshot.Issue{}, parent: map[int]int{},
 	}
 	for _, ch := range b.Children {
@@ -64,13 +65,19 @@ func (w *world) containerDone(c snapshot.Issue) bool {
 // blockerDone reports whether a dependency is done. A blocker the Epic knows is judged like any
 // other Issue of it; a blocker outside the Epic is done once it is closed.
 func (w *world) blockerDone(bl snapshot.Blocker) bool {
-	if leaf, ok := w.leaves[bl.Number]; ok {
-		return w.leafDone(leaf)
-	}
-	if c, ok := w.containers[bl.Number]; ok {
-		return w.containerDone(c)
+	if sameRepo(bl.Repo, w.b.Repo) {
+		if leaf, ok := w.leaves[bl.Number]; ok {
+			return w.leafDone(leaf)
+		}
+		if c, ok := w.containers[bl.Number]; ok {
+			return w.containerDone(c)
+		}
 	}
 	return bl.State == snapshot.StateClosed
+}
+
+func sameRepo(a, b string) bool {
+	return a != "" && strings.EqualFold(a, b)
 }
 
 // blockersOf are the dependencies of a dispatchable Issue: its own, and those of the container

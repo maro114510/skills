@@ -129,19 +129,23 @@ func (w *world) cycles() [][]int {
 			continue
 		}
 		for _, bl := range w.blockersOf(leaf) {
-			edges[n] = append(edges[n], w.openLeavesOf(bl.Number)...)
+			edges[n] = append(edges[n], w.openLeavesOf(bl)...)
 		}
 	}
 	return stronglyConnected(edges)
 }
 
 // openLeavesOf resolves a dependency to the open dispatchable Issues it stands for.
-func (w *world) openLeavesOf(n int) []int {
-	if leaf, ok := w.leaves[n]; ok && leaf.State == snapshot.StateOpen {
-		return []int{n}
+
+func (w *world) openLeavesOf(bl snapshot.Blocker) []int {
+	if !sameRepo(bl.Repo, w.b.Repo) {
+		return nil
+	}
+	if leaf, ok := w.leaves[bl.Number]; ok && leaf.State == snapshot.StateOpen {
+		return []int{bl.Number}
 	}
 	var out []int
-	if c, ok := w.containers[n]; ok {
+	if c, ok := w.containers[bl.Number]; ok {
 		for _, g := range c.Children {
 			if g.State == snapshot.StateOpen {
 				out = append(out, g.Number)

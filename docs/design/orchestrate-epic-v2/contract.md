@@ -80,7 +80,7 @@ Fields: `n`, `counters`, `freeze`, `freeze_seq`, `release_watermark`.
 
 - `counters` holds `used` and `bound` for `worker_dispatches`, `reviewer_passes`, and `fix_cycles`, bounded 5n, 4n, and 2n.
 - `n` counts dispatchable Issues not done at creation or release, at least 1. Bounds change only on release.
-- `freeze` is null or `{seq, reason, merge_sha, health}`.
+- `freeze` is null or `{seq, reason, merge_sha, health, released?}`. A missing `released` means false for existing ledgers. `epic-release` marks the retained freeze `released: true`; health still uses its merge and status as history, while board and mutation gates treat only an unreleased freeze as active. A later freeze replaces it with a new unreleased record.
 - The freeze write comes first, then the note `freeze:<seq>`. Any read of a frozen ledger posts a missing note before reading a release.
 
 ### 4.3 Post-merge Record
