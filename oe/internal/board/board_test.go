@@ -250,14 +250,19 @@ func TestParked(t *testing.T) {
 func TestAMergedPRWithTheIssueStillOpenIsNeverRedispatched(t *testing.T) {
 	t.Parallel()
 
-	f := newFx().with(leaf(1, "OPEN")).pr(9, "feat/issue-1", "MERGED", headSHA).branch("feat/issue-1")
+	f := newFx().with(leaf(1, "OPEN")).
+		pr(9, "feat/issue-1", "MERGED", headSHA).
+		pr(10, "feat/issue-1", "OPEN", headSHA).
+		branch("feat/issue-1")
 	res := classify(t, f)
 	i := find(t, res, 1)
 	if i.State != board.Parked || i.MergedPR != 9 {
 		t.Errorf("Issue = %+v, want parked with merged PR 9", i)
 	}
-	if got := actionsOf(res, board.ActionDispatch); len(got) != 0 {
-		t.Errorf("dispatch proposed for %v, want none", got)
+	for _, kind := range []string{board.ActionDispatch, board.ActionReverify, board.ActionLand} {
+		if got := actionsOf(res, kind); len(got) != 0 {
+			t.Errorf("%s proposed for %v, want none", kind, got)
+		}
 	}
 	if keys := noteKeys(res); !slices.Equal(keys, []string{"merged-open:1:9"}) {
 		t.Errorf("notes = %v, want merged-open:1:9", keys)

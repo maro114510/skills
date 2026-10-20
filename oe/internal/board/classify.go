@@ -27,7 +27,7 @@ func (w *world) classify(leaf snapshot.Issue, cycles [][]int) Issue {
 	v := w.view(leaf)
 	out.Branch = v.branch
 	out.State, out.Reason, out.PR = w.classifyOpen(v)
-	if len(v.open) == 0 && len(v.merged) > 0 {
+	if len(v.merged) > 0 {
 		out.MergedPR = highest(v.merged)
 	}
 	if _, decision := w.pending(leaf.Number, v.st); decision != signals.None {
@@ -51,13 +51,13 @@ func (w *world) closed(leaf snapshot.Issue) (State, string) {
 
 func (w *world) classifyOpen(v view) (State, string, int) {
 	switch {
+	case len(v.merged) > 0:
+		pr := highest(v.merged)
+		return Parked, fmt.Sprintf("PR #%d merged but the Issue is still open", pr), pr
 	case len(v.open) > 1:
 		return Parked, "several open PRs on " + v.branch, 0
 	case len(v.open) == 1:
 		return w.openPR(v)
-	case len(v.merged) > 0:
-		pr := highest(v.merged)
-		return Parked, fmt.Sprintf("PR #%d merged but the Issue is still open", pr), pr
 	case len(v.closed) > 0:
 		pr := highest(v.closed)
 		return Rejected, fmt.Sprintf("every PR on %s was closed without merging", v.branch), pr
