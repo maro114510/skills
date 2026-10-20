@@ -445,7 +445,10 @@ func TestADependencyCycleProposesNoDispatchAndOneNotification(t *testing.T) {
 		leaf(3, "OPEN", blocker(1, "OPEN")),
 		leaf(4, "OPEN"),
 		leaf(5, "OPEN", blocker(1, "OPEN")),
-	).state(2, newState(2)).branch("feat/issue-3")
+	).state(2, approved(newState(2), baseSHA)).
+		pr(8, "feat/issue-1", "OPEN", headSHA).
+		pr(9, "feat/issue-2", "OPEN", headSHA).
+		branch("feat/issue-3")
 	res := classify(t, f)
 	for _, n := range []int{1, 2, 3} {
 		if i := find(t, res, n); i.State != board.Waiting || !strings.Contains(i.Reason, "dependency cycle") {
@@ -454,6 +457,12 @@ func TestADependencyCycleProposesNoDispatchAndOneNotification(t *testing.T) {
 	}
 	if got := actionsOf(res, board.ActionDispatch); !slices.Equal(got, []int{4}) {
 		t.Errorf("dispatch = %v, want only #4", got)
+	}
+	if got := actionsOf(res, board.ActionReverify); len(got) != 0 {
+		t.Errorf("reverify = %v, want no work for cycle members", got)
+	}
+	if got := actionsOf(res, board.ActionLand); len(got) != 0 {
+		t.Errorf("land = %v, want no work for cycle members", got)
 	}
 	if keys := noteKeys(res); !slices.Equal(keys, []string{"dep-cycle:1,2,3"}) {
 		t.Errorf("notes = %v, want one dep-cycle:1,2,3", keys)

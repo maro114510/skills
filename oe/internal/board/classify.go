@@ -16,8 +16,8 @@ func newIssue(leaf snapshot.Issue, container int) Issue {
 	}
 }
 
-// classify classifies one dispatchable Issue. A member of a dependency cycle is never ready or
-// in progress, so no dispatch is proposed for it.
+// classify classifies one dispatchable Issue. Every open member of a dependency cycle waits,
+// regardless of its PR or in-flight state, so no work or landing is proposed for it.
 func (w *world) classify(leaf snapshot.Issue, cycles [][]int) Issue {
 	out := newIssue(leaf, w.parent[leaf.Number])
 	if leaf.State != snapshot.StateOpen {
@@ -33,7 +33,7 @@ func (w *world) classify(leaf snapshot.Issue, cycles [][]int) Issue {
 	if _, decision := w.pending(leaf.Number, v.st); decision != signals.None {
 		out.PendingDecision = string(decision)
 	}
-	if group := cycleOf(cycles, leaf.Number); group != nil && slices.Contains([]State{Ready, InProgress, Waiting}, out.State) {
+	if group := cycleOf(cycles, leaf.Number); group != nil {
 		out.State, out.Reason = Waiting, "in a dependency cycle with "+numbers(group)
 	}
 	if out.State == Waiting {
