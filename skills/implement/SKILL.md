@@ -4,7 +4,8 @@ description: >
   A skill for executing implementation tasks with quality as the top priority. Grounds the request
   in the codebase, resolves requirements and acceptance criteria, decides autonomously from the Issue and
   repository, and asks only when acceptance, a premise, or the sources are in doubt, or a critical decision
-  is unsettled. Applies TDD as needed.
+  is unsettled. Applies TDD as needed, and proves every bug fix with a reproduction test that fails,
+  passes, and fails again with the fix reverted.
   Trigger on requests like
   「これを実装して」「機能を追加して」「バグを修正して」「変更して」「これを作って」
   「リファクタリングして」「対応して」 and similar implementation requests.
@@ -255,6 +256,16 @@ Choose the test approach and record it in the plan.
 |---|---|
 | TDD | All hold: the change involves business logic, API handlers, or data transformation; a test framework already exists without disproportionate setup cost; inputs and expected outputs follow from the acceptance criteria |
 | Without TDD | Any holds: the change is limited to UI styling, a migration, configuration, or a one-shot operation; no suitable test framework exists and adding one is outside the planned scope; another verification method maps more directly to the acceptance criteria |
+
+### Bug Fixes
+
+Whichever approach the table selects, prove every bug fix with fail, pass, fail:
+
+1. Reproduce: before changing production code, write a test that reproduces the bug, and confirm it fails at its assertion with the reported symptom, not from a build, import, or setup error.
+2. Fix: change only production code until the suite passes. Do not edit the test.
+3. Mutate: remove only the fix, keeping the test and any other uncommitted work, and confirm the same test fails again. Then restore the fix.
+
+If the test passes in step 1, the bug does not reproduce: Phase 2 trigger 2. If it passes in step 3, it does not guard the bug: remove the fix, rewrite the test, and restart. Record each run's command, exit code, and failure excerpt for Phase 6.9. When no test can reproduce the bug, follow the same sequence with a script or manual steps and log why.
 
 ### With TDD
 
