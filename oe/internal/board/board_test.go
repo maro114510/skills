@@ -692,6 +692,20 @@ func TestMaxParallelCapsReverifyAndDispatchTogether(t *testing.T) {
 	}
 }
 
+func TestMaxParallelResumesInProgressWorkBeforeReverification(t *testing.T) {
+	t.Parallel()
+
+	f := newFx().with(leaf(1, "OPEN"), leaf(2, "OPEN")).state(2, newState(2)).
+		pr(8, "feat/issue-1", "OPEN", headSHA)
+	res, err := board.Classify(f.b, board.Options{LeaseToken: "", MaxParallel: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Actions) != 1 || res.Actions[0].Kind != board.ActionDispatch || res.Actions[0].Issue != 2 || !res.Actions[0].Resume {
+		t.Errorf("actions = %+v, want the in-progress #2 resumed before reverify #1", res.Actions)
+	}
+}
+
 func TestReleasedFreezeIsHistoryNotAnActiveFreeze(t *testing.T) {
 	t.Parallel()
 
