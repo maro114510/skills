@@ -648,7 +648,7 @@ func TestAFrozenEpicProposesNoWork(t *testing.T) {
 	f := newFx().with(leaf(1, "OPEN"), leaf(2, "OPEN")).state(2, approved(newState(2), baseSHA)).pr(9, "feat/issue-2", "OPEN", headSHA)
 	f.b.Ledger = &state.Ledger{
 		Envelope: env, N: 2, Counters: zeroCounters(), FreezeSeq: 1, ReleaseWatermark: 0,
-		Freeze: &state.Freeze{Seq: 1, Reason: "bound exceeded", MergeSHA: "", Health: "", Released: false},
+		Freeze: &state.Freeze{Seq: 1, Reason: "bound exceeded", MergeSHA: "", Health: ""},
 	}
 	res := classify(t, f)
 	if !res.Frozen || len(res.Actions) != 0 {
@@ -712,14 +712,33 @@ func TestReleasedFreezeIsHistoryNotAnActiveFreeze(t *testing.T) {
 	env := envelope("ledger")
 	env.Entity = state.EntityLedger
 	f := newFx().with(leaf(1, "OPEN"))
-	f.b.Ledger = &state.Ledger{Envelope: env, N: 1, Counters: zeroCounters(), FreezeSeq: 1, ReleaseWatermark: 0,
-		Freeze: &state.Freeze{Seq: 1, Reason: "health", MergeSHA: "merge1", Health: "FAIL", Released: true}}
+	f.b.Ledger = &state.Ledger{Envelope: env, N: 1, Counters: zeroCounters(), FreezeSeq: 1, ReleaseWatermark: 100,
+		Freeze: &state.Freeze{Seq: 1, Reason: "health", MergeSHA: "merge1", Health: "FAIL"}}
+	f.b.Comments[epic] = append(f.b.Comments[epic], snapshot.Comment{
+		ID: 99, CreatedAt: "", Author: "loop", Association: "NONE", Body: "<!-- oe:v2 note freeze:1 -->\n",
+	})
 	res := classify(t, f)
 	if res.Frozen {
 		t.Fatal("released freeze still marks board frozen")
 	}
 	if got := actionsOf(res, board.ActionDispatch); !slices.Equal(got, []int{1}) {
 		t.Errorf("dispatch = %v, want #1 while retaining freeze for health history", got)
+	}
+}
+
+func TestFreezeAfterReleaseWatermarkIsActiveAgain(t *testing.T) {
+	t.Parallel()
+
+	env := envelope("ledger")
+	env.Entity = state.EntityLedger
+	f := newFx().with(leaf(1, "OPEN"))
+	f.b.Ledger = &state.Ledger{Envelope: env, N: 1, Counters: zeroCounters(), FreezeSeq: 2, ReleaseWatermark: 100,
+		Freeze: &state.Freeze{Seq: 2, Reason: "new failure", MergeSHA: "merge2", Health: "FAIL"}}
+	f.b.Comments[epic] = append(f.b.Comments[epic], snapshot.Comment{
+		ID: 101, CreatedAt: "", Author: "loop", Association: "NONE", Body: "<!-- oe:v2 note freeze:2 -->\n",
+	})
+	if res := classify(t, f); !res.Frozen {
+		t.Fatal("new freeze note above release watermark was not active")
 	}
 }
 

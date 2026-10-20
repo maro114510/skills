@@ -10,6 +10,7 @@ import (
 
 	"github.com/maro114510/skills/oe/internal/exitcode"
 	"github.com/maro114510/skills/oe/internal/health"
+	"github.com/maro114510/skills/oe/internal/protocol"
 	"github.com/maro114510/skills/oe/internal/snapshot"
 	"github.com/maro114510/skills/oe/internal/state"
 )
@@ -148,7 +149,7 @@ func Classify(b *snapshot.Board, opts Options) (Result, error) {
 	w.maxParallel = opts.MaxParallel
 	res := Result{
 		Repo: b.Repo, Epic: b.Epic, DefaultBranch: b.DefaultBranch, BaseSHA: b.BaseSHA,
-		Frozen: b.Ledger != nil && b.Ledger.Freeze != nil && !b.Ledger.Freeze.Released, Health: h,
+		Frozen: freezeIsActive(b), Health: h,
 		Issues: nil, Containers: nil, Actions: nil, Notifications: nil,
 	}
 	cycles := w.cycles()
@@ -163,6 +164,33 @@ func Classify(b *snapshot.Board, opts Options) (Result, error) {
 	res.Issues, res.Actions, res.Notifications = nonNil(res.Issues), nonNil(res.Actions), nonNil(res.Notifications)
 	res.Containers = nonNil(res.Containers)
 	return res, nil
+}
+
+func freezeIsActive(b *snapshot.Board) bool {
+	if b.Ledger == nil || b.Ledger.Freeze == nil {
+		return false
+	}
+	key := fmt.Sprintf("freeze:%d", b.Ledger.Freeze.Seq)
+	noteID := freezeNoteID(b, key)
+	// Missing freeze notes are still active: the writer must post the note before release.
+	return noteID == 0 || noteID > b.Ledger.ReleaseWatermark
+}
+
+func freezeNoteID(b *snapshot.Board, key string) int64 {
+	var noteID int64
+	for _, comment := range b.Comments[b.Epic] {
+		if comment.Author != b.Me {
+			continue
+		}
+		marker, ok, err := protocol.ParseMarker(comment.Body)
+		if err != nil || !ok || marker.Kind != protocol.KindNote || marker.Key != key {
+			continue
+		}
+		if noteID == 0 || comment.ID < noteID {
+			noteID = comment.ID
+		}
+	}
+	return noteID
 }
 
 // checkLease refuses a board read while another session holds the Epic's lease. A lease whose
