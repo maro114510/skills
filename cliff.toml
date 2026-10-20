@@ -26,7 +26,9 @@ initial_tag = "v0.27.0"
 [git]
 conventional_commits = true
 filter_unconventional = true
-tag_pattern = "v[0-9]*"
+# tag_pattern is an unanchored regex.
+# Without the anchor, v[0-9]* also matches oe-v1.0.0.
+tag_pattern = "^v[0-9]"
 commit_parsers = [
     { message = "^feat", group = "Features" },
     { message = "^fix", group = "Fixes" },

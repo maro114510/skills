@@ -23,6 +23,11 @@ Repository instructions for coding agents.
 | `.github/workflows/test-plugin-install.yml` | CI: `validate` then `test-install`, on push to `main` and every PR |
 | `.github/workflows/release.yml` | Creates a GitHub Release on a `v*` tag push after checking the tag matches both manifests |
 | `cliff.toml` | `git-cliff` config used by `make release` |
+| `oe/` | Go source of the `oe` CLI used by orchestrate-epic |
+| `.github/workflows/oe-release.yml` | Builds and publishes the `oe` binaries on an `oe-v*` tag push |
+| `skills/orchestrate-epic/scripts/oe` | Wrapper that downloads, verifies, caches, and runs the pinned `oe` binary |
+| `skills/orchestrate-epic/scripts/oe-manifest.tsv` | Pins the `oe` release by tag, source revision, and the sha256 of each asset |
+| `bin/oe-manifest.sh` | Rewrites the manifest from a published `oe` release for `make oe-manifest` |
 
 ## Versions and Releases
 
@@ -45,6 +50,34 @@ Baseline tag, required once before the first automated release:
 git tag -a v0.27.0 -m v0.27.0
 git push origin v0.27.0
 ```
+
+## oe Releases
+
+`oe` ships as a prebuilt binary and no binary is committed.
+`oe-v*` tags are separate from `v*` tags and never affect plugin releases or `make next-version`.
+
+| Step | Actor | Action |
+|---|---|---|
+| 1 | Maintainer | Push an annotated `oe-vX.Y.Z` tag on `main` |
+| 2 | `oe-release.yml` | Test, build the four binaries and `SHA256SUMS`, check `oe --version` equals the tag, publish the release |
+| 3 | Maintainer | Run `make oe-manifest TAG=oe-vX.Y.Z` to rewrite the manifest locally. It never commits or pushes |
+| 4 | Maintainer | Commit the manifest on a branch and open a PR |
+| 5 | Reviewer | Merge the PR. Until then users keep the previous pin |
+
+The wrapper `skills/orchestrate-epic/scripts/oe` checks the sha256 of the binary before every run.
+
+| Case | Result |
+|---|---|
+| Cached binary matches the manifest | Runs, with no network |
+| Cached binary does not match | Replaced from the release, or exit 1 when the download fails |
+| Downloaded binary does not match | Refused with exit 8, never cached |
+| Nothing pinned, or the manifest is unreadable | Refused with exit 8 |
+| `gh` missing or the download fails | Exit 1 |
+
+- The first run needs `gh` signed in, network access, and a writable `${XDG_CACHE_HOME:-$HOME/.cache}/oe`
+- A sandboxed harness may need that first run approved
+- A byte-identical rebuild check and build attestations are not done yet
+- `cliff.toml` anchors `tag_pattern` as `^v[0-9]`, because the unanchored pattern also matched `oe-v1.0.0`
 
 ## Skill Format
 
