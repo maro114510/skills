@@ -97,6 +97,10 @@ linters:
 
     misspell:
       locale: US
+      ignore-rules:
+        - cancelled # GitHub spells the check conclusion CANCELLED
+        - Cancelled
+        - CANCELLED
 
     revive:
       rules:
@@ -127,6 +131,9 @@ linters:
       - path: "^cmd/"
         linters: [exhaustruct]
         # cobra.Command literals set only the fields each command needs.
+      - path: "_wire\\.go$"
+        linters: [tagliatelle]
+        # Wire structs name GitHub's camelCase GraphQL fields; the JSON tag must match them.
 
 formatters:
   enable:

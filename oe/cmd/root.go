@@ -76,6 +76,9 @@ func newRoot(env Env) *cobra.Command {
 	root.AddCommand(
 		newVersionCmd(env),
 		newResolveCmd(env, g),
+		newBoardCmd(env, g),
+		newHealthCmd(env, g),
+		newReadinessCmd(env, g),
 		newGroup("ship", "Ship approved work", newMutatingCmd(env, g, "publish", "Push the approved head and open its PR", "#289")),
 		newGroup("land", "Land shipped PRs", newMutatingCmd(env, g, "merge", "Merge one PR at its reviewed head", "#290")),
 	)

@@ -80,7 +80,7 @@ Fields: `n`, `counters`, `freeze`, `freeze_seq`, `release_watermark`.
 
 - `counters` holds `used` and `bound` for `worker_dispatches`, `reviewer_passes`, and `fix_cycles`, bounded 5n, 4n, and 2n.
 - `n` counts dispatchable Issues not done at creation or release, at least 1. Bounds change only on release.
-- `freeze` is null or `{seq, reason, merge_sha, health}`.
+- `freeze` is null or `{seq, reason, merge_sha, health, released}`, and `released` is required. A freeze holds the Epic while `released` is false. `epic-release` sets it true and keeps the record: health reads the retained `merge_sha` and `health` as history, so the same result reads `HANDLED`, whereas clearing `freeze` would freeze the Epic again on the result it was released from. A later freeze replaces the record with a new `seq` and `released` false. Nothing is inferred from `release_watermark` or the notes, which only decide which `epic-release` comment is consumed.
 - The freeze write comes first, then the note `freeze:<seq>`. Any read of a frozen ledger posts a missing note before reading a release.
 
 ### 4.3 Post-merge Record
@@ -295,3 +295,27 @@ Every subcommand that needs the run inputs resolves them one way, in this order,
 - `--snapshot` with an empty value exits 2; it never falls back to real calls.
 - `--snapshot <file>` replays recorded `{argv, stdout, stderr, exit_code}` calls and never starts a process. A call missing from the file exits 1. Read-only subcommands give identical output on every run over one file.
 - `oe ship publish` and `oe land merge` are the only subcommands that may push, open a PR, or merge. Under `--snapshot` they exit 8 before any call. `.claude/hooks/require-user-approval.sh` blocks both without the approval marker, whether they are run directly, by path, or through `skills/orchestrate-epic/scripts/oe`. The marker approves only the line it ends.
+
+## 13. Classifiers
+
+`oe board`, `oe readiness --pr <n>`, and `oe health` classify from one complete read and never write: every call is a GraphQL query, a GET, or a read-only git command. Each resolves the inputs as §12 does, then prints one JSON payload and exits 0, or prints one verdict line.
+
+- A read is complete or it fails with exit 1. A connection cut off at its node limit, a next page with no cursor or that cannot be read, a count that does not add up, and a response with errors, data beside them included, all stop classification before anything is classified.
+- Pull requests are read newest first back to the oldest creation time among the Epic and its Issues, because a pull request cannot be older than its Issue. A listing that stops short of that is truncated.
+- The clock is GitHub's `Date` header, not the machine's, so a recorded snapshot replays to the same output.
+- No query asks for a label. Local `feat/issue-*` branches are read only from a checkout whose origin is the repository read; a checkout that cannot be read is exit 1.
+
+| Subcommand | Payload | Exit |
+|---|---|---|
+| `board` | Per Issue: state, reason, branch, PR. Per container: done and children. `frozen`, `health`, `actions`, `notifications`, and `lease` under `--observe` | 0 classified; 1 unreadable; 6 protocol; 7 a lease held by another token (`--lease-token` names this session's) |
+| `readiness` | `status`, `reason`, `pr`, `head`, `next`, `repair` | 0 classified, whatever the status; 1 a signal could not be read, which is always BLOCKED with next `human` |
+| `health` | `status`, `reason`, `record_id`, `pr`, `issue`, `merge`, `next` | 0 classified; 1 a signal could not be read, so every merge is held |
+
+- A container is derived from its sub-issues and never classified or dispatched. A dependency on it is done only when every sub-issue is done, and a dependency of the container itself is a dependency of each of its sub-issues.
+- An open Issue in a dependency cycle is `waiting` unless it is `parked` or `rejected`, which wait on a person and keep their state and note. No dispatch, re-verification, or landing is proposed for it, and one `dep-cycle:<sorted issues>` note is proposed per cycle.
+- A merged PR on the current branch of a still-open Issue is `parked` and proposes `merged-open:<n>:<pr>`, even when a newer PR is open; closed PRs only are `rejected`. PRs are matched to the branch the Issue state records, so an applied redo leaves the old branch behind. With no branch recorded, any `feat/issue-<n>` or `feat/issue-<n>-<slug>` branch or PR is the Issue's work, so work a person started by hand is never dispatched again.
+- An Issue with no state proposes no `apply_signals`: only `start` creates state, §5, so a decision comment on a `rejected` or `parked` Issue that a person started by hand is not applied. Whether a decision may create state is #285's to settle; until then a person resolves such an Issue by closing it.
+- A decision not applied to the state yet is `pending_decision` and proposes `apply_signals`. It takes effect only once the state records it, so a parked Issue stays parked until then.
+- Proposed actions are `apply_signals`, `freeze`, `land`, `reverify`, and `dispatch`, with in-progress dispatched before ready. The worker cap `--max-parallel` is applied where work is dispatched (#291), not here. A frozen Epic, or a post-merge result that needs a freeze, proposes no work; a pending post-merge result proposes no `land`.
+- `board --observe` is for a person reading the board while another session holds the lease. It skips the exit 7, names the holder in `lease`, and proposes no action and no note, so it cannot drive a second Publisher. Without a foreign lease it changes nothing.
+- `health` takes `HANDLED` from the ledger's `freeze`: the same merge commit and the same status. A release keeps that freeze recorded with `released` true, see §4.2; #285 writes it.
