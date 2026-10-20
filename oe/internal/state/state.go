@@ -51,12 +51,17 @@ type Counters struct {
 	FixCycles        Counter `json:"fix_cycles"`
 }
 
-// Freeze is the freeze recorded on the ledger.
+// Freeze is the freeze recorded on the ledger. An epic-release does not remove it: the merge
+// commit and status it names are what lets health read the same result as HANDLED afterwards,
+// and a record that were cleared would freeze the Epic again on the very result it was released
+// from. Released says the freeze no longer holds the Epic. It is required, never defaulted, so
+// a freeze whose state is unknown is refused rather than read as active or released.
 type Freeze struct {
 	Seq      int    `json:"seq"`
 	Reason   string `json:"reason"`
 	MergeSHA string `json:"merge_sha"`
 	Health   string `json:"health"`
+	Released bool   `json:"released"`
 }
 
 // Ledger is the Epic-wide budget and freeze, contract §4.2.

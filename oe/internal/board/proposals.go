@@ -61,25 +61,18 @@ func (w *world) workActions(res Result) []Action {
 			out = append(out, a)
 		}
 	}
-	workerStart := len(out)
-	// Work already in flight resumes before re-verification or new dispatches.
-	for _, i := range byState(InProgress) {
-		a := newAction(ActionDispatch)
-		a.Issue, a.Branch, a.Resume = i.Number, i.Branch, true
-		out = append(out, a)
-	}
 	for _, i := range byState(Reverify) {
 		a := newAction(ActionReverify)
 		a.Issue, a.PR, a.Branch = i.Number, i.PR, i.Branch
 		out = append(out, a)
 	}
-	for _, i := range byState(Ready) {
-		a := newAction(ActionDispatch)
-		a.Issue, a.Branch, a.Resume = i.Number, i.Branch, false
-		out = append(out, a)
-	}
-	if w.maxParallel > 0 && len(out)-workerStart > w.maxParallel {
-		out = out[:workerStart+w.maxParallel]
+	// Work already in flight resumes before new work starts.
+	for _, s := range []State{InProgress, Ready} {
+		for _, i := range byState(s) {
+			a := newAction(ActionDispatch)
+			a.Issue, a.Branch, a.Resume = i.Number, i.Branch, s == InProgress
+			out = append(out, a)
+		}
 	}
 	return out
 }

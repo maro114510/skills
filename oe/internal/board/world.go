@@ -20,13 +20,12 @@ type world struct {
 	leaves     map[int]snapshot.Issue
 	containers map[int]snapshot.Issue
 	// parent maps a leaf to the container it sits under.
-	parent      map[int]int
-	maxParallel int
+	parent map[int]int
 }
 
 func newWorld(b *snapshot.Board, h health.Result) *world {
 	w := &world{
-		b: b, h: h, verifying: 0, maxParallel: 0,
+		b: b, h: h, verifying: 0,
 		leaves: map[int]snapshot.Issue{}, containers: map[int]snapshot.Issue{}, parent: map[int]int{},
 	}
 	for _, ch := range b.Children {
@@ -118,28 +117,45 @@ func (w *world) containerResults() []Container {
 
 // view is everything one open Issue is classified from.
 type view struct {
-	leaf   snapshot.Issue
-	st     *state.Issue
+	leaf snapshot.Issue
+	st   *state.Issue
+	// branch is the branch the Issue's work is on, see ownsBranch.
 	branch string
-	open   []snapshot.PR
-	merged []snapshot.PR
-	closed []snapshot.PR
+	// hasBranch says that branch exists on origin or in the local checkout.
+	hasBranch bool
+	open      []snapshot.PR
+	merged    []snapshot.PR
+	closed    []snapshot.PR
 }
 
 // branchOf is the branch an Issue works on: the one its state records, which an applied redo
 // moves to a fresh name, else feat/issue-<n>.
 func branchOf(n int, st *state.Issue) string {
-	if st != nil && st.Branch != "" {
+	if recorded(st) {
 		return st.Branch
 	}
 	return fmt.Sprintf("%s%d", snapshot.BranchPrefix, n)
 }
 
+func recorded(st *state.Issue) bool { return st != nil && st.Branch != "" }
+
+// ownsBranch reports whether a branch is the Issue's work. A recorded branch is matched exactly,
+// so an applied redo leaves the old one behind. With none recorded, any branch named for the
+// Issue is its work: a person who started it by hand names it feat/issue-<n>-<slug>, and a
+// worker dispatched beside that work would put two writers on one Issue.
+func ownsBranch(n int, st *state.Issue, name string) bool {
+	if recorded(st) {
+		return name == st.Branch
+	}
+	m, ok := snapshot.IssueOfBranch(name)
+	return ok && m == n
+}
+
 func (w *world) view(leaf snapshot.Issue) view {
 	st := w.b.IssueStates[leaf.Number]
-	v := view{leaf: leaf, st: st, branch: branchOf(leaf.Number, st), open: nil, merged: nil, closed: nil}
+	v := view{leaf: leaf, st: st, branch: branchOf(leaf.Number, st), hasBranch: false, open: nil, merged: nil, closed: nil}
 	for _, pr := range w.b.PRs {
-		if pr.Branch != v.branch {
+		if !ownsBranch(leaf.Number, st, pr.Branch) {
 			continue
 		}
 		switch pr.State {
@@ -151,7 +167,47 @@ func (w *world) view(leaf snapshot.Issue) view {
 			v.closed = append(v.closed, pr)
 		}
 	}
+	if !recorded(st) {
+		v.branch = w.chosenBranch(v)
+	}
+	v.hasBranch = slices.Contains(w.b.Branches, v.branch)
 	return v
+}
+
+// chosenBranch picks, for an Issue whose state records no branch, the branch its work is on: the
+// newest PR's, in the order the PRs decide the Issue, else an existing branch, else the loop's own
+// name. The loop's own name wins whenever it is among the candidates.
+func (w *world) chosenBranch(v view) string {
+	own := branchOf(v.leaf.Number, v.st)
+	for _, prs := range [][]snapshot.PR{v.merged, v.open, v.closed} {
+		if len(prs) == 0 {
+			continue
+		}
+		return prBranch(prs)
+	}
+	var found []string
+	for _, name := range w.b.Branches {
+		if ownsBranch(v.leaf.Number, v.st, name) {
+			found = append(found, name)
+		}
+	}
+	switch {
+	case len(found) == 0 || slices.Contains(found, own):
+		return own
+	default:
+		return found[0]
+	}
+}
+
+// prBranch is the branch of the newest of prs.
+func prBranch(prs []snapshot.PR) string {
+	top := prs[0]
+	for _, p := range prs[1:] {
+		if p.Number > top.Number {
+			top = p
+		}
+	}
+	return top.Branch
 }
 
 // highest returns the highest PR number.

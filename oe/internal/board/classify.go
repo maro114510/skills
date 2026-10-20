@@ -16,8 +16,10 @@ func newIssue(leaf snapshot.Issue, container int) Issue {
 	}
 }
 
-// classify classifies one dispatchable Issue. Every open member of a dependency cycle waits,
-// regardless of its PR or in-flight state, so no work or landing is proposed for it.
+// classify classifies one dispatchable Issue. An open member of a dependency cycle waits, so no
+// work or landing is proposed for it, whether it is ready, in flight, or has a PR to re-verify
+// or land. A parked or rejected Issue waits on a person, not on the cycle: it keeps its state and
+// its note.
 func (w *world) classify(leaf snapshot.Issue, cycles [][]int) Issue {
 	out := newIssue(leaf, w.parent[leaf.Number])
 	if leaf.State != snapshot.StateOpen {
@@ -33,13 +35,19 @@ func (w *world) classify(leaf snapshot.Issue, cycles [][]int) Issue {
 	if _, decision := w.pending(leaf.Number, v.st); decision != signals.None {
 		out.PendingDecision = string(decision)
 	}
-	if group := cycleOf(cycles, leaf.Number); group != nil {
+	if group := cycleOf(cycles, leaf.Number); group != nil && heldByCycle(out.State) {
 		out.State, out.Reason = Waiting, "in a dependency cycle with "+numbers(group)
 	}
 	if out.State == Waiting {
 		out.WaitingOn = w.waitingOn(leaf)
 	}
 	return out
+}
+
+// heldByCycle says which states a dependency cycle turns into waiting: those that would
+// otherwise propose work or a landing.
+func heldByCycle(s State) bool {
+	return slices.Contains([]State{Ready, InProgress, Waiting, Reverify, AwaitingMerge}, s)
 }
 
 func (w *world) closed(leaf snapshot.Issue) (State, string) {
@@ -65,7 +73,7 @@ func (w *world) classifyOpen(v view) (State, string, int) {
 	if reason := parkReason(v.st); reason != "" {
 		return Parked, reason, 0
 	}
-	if v.st != nil || slices.Contains(w.b.Branches, v.branch) {
+	if v.st != nil || v.hasBranch {
 		return InProgress, "work was started: a state comment or a branch exists", 0
 	}
 	if len(w.waitingOn(v.leaf)) > 0 {
@@ -136,7 +144,6 @@ func (w *world) cycles() [][]int {
 }
 
 // openLeavesOf resolves a dependency to the open dispatchable Issues it stands for.
-
 func (w *world) openLeavesOf(bl snapshot.Blocker) []int {
 	if !sameRepo(bl.Repo, w.b.Repo) {
 		return nil

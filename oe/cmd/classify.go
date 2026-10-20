@@ -20,6 +20,7 @@ import (
 
 func newBoardCmd(env Env, g *globals) *cobra.Command {
 	var leaseToken string
+	var observe bool
 	c := &cobra.Command{
 		Use:   "board",
 		Short: "Classify every dispatchable Issue and propose actions and notes (read-only)",
@@ -33,14 +34,11 @@ func newBoardCmd(env Env, g *globals) *cobra.Command {
 			if err != nil {
 				return coded(err)
 			}
-			if in.MaxParallelReason != "" {
-				_, _ = fmt.Fprintln(c.ErrOrStderr(), in.MaxParallelReason)
-			}
 			b, err := snapshot.ReadBoard(c.Context(), client, in)
 			if err != nil {
 				return coded(err)
 			}
-			res, err := board.Classify(b, board.Options{LeaseToken: leaseToken, MaxParallel: in.MaxParallel})
+			res, err := board.Classify(b, board.Options{LeaseToken: leaseToken, Observe: observe})
 			if err != nil {
 				return coded(err)
 			}
@@ -48,6 +46,7 @@ func newBoardCmd(env Env, g *globals) *cobra.Command {
 		},
 	}
 	c.Flags().StringVar(&leaseToken, "lease-token", "", "this session's lease `token`; a lease held by any other token stops the read with exit 7")
+	c.Flags().BoolVar(&observe, "observe", false, "read the board beside another session's lease: it names the holder and proposes nothing")
 	return c
 }
 

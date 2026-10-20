@@ -127,18 +127,6 @@ func TestBoardClassifiesAndProposes(t *testing.T) {
 	}
 }
 
-func TestBoardReportsMaxParallelFallbackReason(t *testing.T) {
-	t.Parallel()
-
-	r := run(world(), "board", "--epic", "277", "--max-parallel", "0")
-	if r.code != 0 {
-		t.Fatalf("exit %d, stdout %q, stderr %q", r.code, r.stdout, r.stderr)
-	}
-	if !strings.Contains(r.stderr, "using the default 3") {
-		t.Errorf("stderr = %q, want the max-parallel fallback reason", r.stderr)
-	}
-}
-
 func (b boardOut) dispatched() []int {
 	var out []int
 	for _, a := range b.Actions {
@@ -267,6 +255,31 @@ func TestBoardStopsOnAForeignLeaseAndOnV1Markers(t *testing.T) {
 	v1 := world()
 	v1.Comments(map[string]string{"277": ghfake.CommentConn(1, false, "", ghfake.CommentNode(1, "loop", "User", "OWNER", "<!-- orchestrate-epic:ledger -->"))})
 	wantOneLine(t, run(v1, "board", "--epic", "277"), 6, "protocol:")
+}
+
+// TestBoardObserveShowsTheBoardBesideAForeignLease: --observe is for a person reading the board.
+// It names the lease holder and proposes nothing, so it cannot drive a second Publisher.
+func TestBoardObserveShowsTheBoardBesideAForeignLease(t *testing.T) {
+	t.Parallel()
+
+	lease := ghfake.StateBody("lease", "lease", `,"token":"other","host":"h","pid":42,"started_at":"a","renewed_at":"b"`)
+	r := world()
+	r.Comments(map[string]string{"277": ghfake.CommentConn(1, false, "", ghfake.CommentNode(1, "loop", "User", "OWNER", lease))})
+	res := run(r, "board", "--epic", "277", "--observe")
+	if res.code != 0 {
+		t.Fatalf("exit %d, stdout %q", res.code, res.stdout)
+	}
+	var out struct {
+		Lease   *struct{ Host string } `json:"lease"`
+		Actions []json.RawMessage      `json:"actions"`
+		Issues  []json.RawMessage      `json:"issues"`
+	}
+	if err := json.Unmarshal([]byte(res.stdout), &out); err != nil {
+		t.Fatalf("stdout %q: %v", res.stdout, err)
+	}
+	if out.Lease == nil || out.Lease.Host != "h" || len(out.Actions) != 0 || len(out.Issues) == 0 {
+		t.Errorf("lease = %+v, actions = %d, issues = %d; want the holder named, no actions, the board shown", out.Lease, len(out.Actions), len(out.Issues))
+	}
 }
 
 func TestBoardNeedsAnEpic(t *testing.T) {

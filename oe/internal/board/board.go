@@ -10,7 +10,6 @@ import (
 
 	"github.com/maro114510/skills/oe/internal/exitcode"
 	"github.com/maro114510/skills/oe/internal/health"
-	"github.com/maro114510/skills/oe/internal/protocol"
 	"github.com/maro114510/skills/oe/internal/snapshot"
 	"github.com/maro114510/skills/oe/internal/state"
 )
@@ -115,11 +114,14 @@ type Notification struct {
 
 // Result is the classification of the Epic.
 type Result struct {
-	Repo          string         `json:"repo"`
-	Epic          int            `json:"epic"`
-	DefaultBranch string         `json:"default_branch"`
-	BaseSHA       string         `json:"base_sha"`
-	Frozen        bool           `json:"frozen"`
+	Repo          string `json:"repo"`
+	Epic          int    `json:"epic"`
+	DefaultBranch string `json:"default_branch"`
+	BaseSHA       string `json:"base_sha"`
+	Frozen        bool   `json:"frozen"`
+	// Lease names the session holding the Epic's lease, reported only to an observer, who reads
+	// the board beside it.
+	Lease         *LeaseInfo     `json:"lease,omitempty"`
 	Health        health.Result  `json:"health"`
 	Issues        []Issue        `json:"issues"`
 	Containers    []Container    `json:"containers"`
@@ -127,29 +129,39 @@ type Result struct {
 	Notifications []Notification `json:"notifications"`
 }
 
+// LeaseInfo is who holds the Epic's lease.
+type LeaseInfo struct {
+	Host      string `json:"host"`
+	PID       int    `json:"pid"`
+	RenewedAt string `json:"renewed_at"`
+}
+
 // Options are what the caller brings to a classification.
 type Options struct {
 	// LeaseToken is the caller's lease token, or empty when it holds none.
 	LeaseToken string
-	// MaxParallel caps the combined reverify and dispatch proposals. Zero means no cap.
-	MaxParallel int
+	// Observe lets a person read the board while another session holds the lease. The board then
+	// proposes nothing, so an observer cannot drive a second Publisher.
+	Observe bool
 }
 
 // Classify classifies the board. It stops, writing and proposing nothing, when the Epic's lease
-// is held by another session (exit 7) or the post-merge health cannot be read (exit 1).
+// is held by another session (exit 7), unless the caller only observes, or the post-merge health
+// cannot be read (exit 1).
 func Classify(b *snapshot.Board, opts Options) (Result, error) {
-	if err := checkLease(b.Lease, opts.LeaseToken); err != nil {
-		return Result{}, err
+	foreign := heldByAnother(b.Lease, opts.LeaseToken)
+	if foreign && !opts.Observe {
+		return Result{}, leaseError(b.Lease)
 	}
 	h := health.FromBoard(b)
 	if h.Status == health.Unreadable {
 		return Result{}, exitcode.New(exitcode.Unreadable, "post-merge health is unreadable: "+h.Reason)
 	}
 	w := newWorld(b, h)
-	w.maxParallel = opts.MaxParallel
 	res := Result{
 		Repo: b.Repo, Epic: b.Epic, DefaultBranch: b.DefaultBranch, BaseSHA: b.BaseSHA,
-		Frozen: freezeIsActive(b), Health: h,
+		Frozen: b.Ledger != nil && b.Ledger.Freeze != nil && !b.Ledger.Freeze.Released,
+		Lease:  nil, Health: h,
 		Issues: nil, Containers: nil, Actions: nil, Notifications: nil,
 	}
 	cycles := w.cycles()
@@ -160,46 +172,24 @@ func Classify(b *snapshot.Board, opts Options) (Result, error) {
 	res.Containers = w.containerResults()
 	res.Actions = w.actions(res)
 	res.Notifications = w.notifications(res, cycles)
+	if foreign {
+		res.Lease = &LeaseInfo{Host: b.Lease.Host, PID: b.Lease.PID, RenewedAt: b.Lease.RenewedAt}
+		res.Actions, res.Notifications = nil, nil
+	}
 	// An empty list is [] in the payload, never null.
 	res.Issues, res.Actions, res.Notifications = nonNil(res.Issues), nonNil(res.Actions), nonNil(res.Notifications)
 	res.Containers = nonNil(res.Containers)
 	return res, nil
 }
 
-func freezeIsActive(b *snapshot.Board) bool {
-	if b.Ledger == nil || b.Ledger.Freeze == nil {
-		return false
-	}
-	key := fmt.Sprintf("freeze:%d", b.Ledger.Freeze.Seq)
-	noteID := freezeNoteID(b, key)
-	// Missing freeze notes are still active: the writer must post the note before release.
-	return noteID == 0 || noteID > b.Ledger.ReleaseWatermark
+// heldByAnother reports whether another session holds the Epic's lease. A lease whose pid is 0
+// ended cleanly. Detection only: reclaiming a dead holder is an explicit step of its own, never
+// something a read does.
+func heldByAnother(l *state.Lease, token string) bool {
+	return l != nil && l.PID != 0 && (token == "" || l.Token != token)
 }
 
-func freezeNoteID(b *snapshot.Board, key string) int64 {
-	var noteID int64
-	for _, comment := range b.Comments[b.Epic] {
-		if comment.Author != b.Me {
-			continue
-		}
-		marker, ok, err := protocol.ParseMarker(comment.Body)
-		if err != nil || !ok || marker.Kind != protocol.KindNote || marker.Key != key {
-			continue
-		}
-		if noteID == 0 || comment.ID < noteID {
-			noteID = comment.ID
-		}
-	}
-	return noteID
-}
-
-// checkLease refuses a board read while another session holds the Epic's lease. A lease whose
-// pid is 0 ended cleanly. Detection only: reclaiming a dead holder is an explicit step of its
-// own, never something a read does.
-func checkLease(l *state.Lease, token string) error {
-	if l == nil || l.PID == 0 || (token != "" && l.Token == token) {
-		return nil
-	}
+func leaseError(l *state.Lease) error {
 	return exitcode.New(exitcode.Coordination, fmt.Sprintf(
 		"the Epic's lease is held by another session (host %s, pid %d, renewed %s); this oe does not take it over",
 		l.Host, l.PID, l.RenewedAt))

@@ -80,7 +80,7 @@ Fields: `n`, `counters`, `freeze`, `freeze_seq`, `release_watermark`.
 
 - `counters` holds `used` and `bound` for `worker_dispatches`, `reviewer_passes`, and `fix_cycles`, bounded 5n, 4n, and 2n.
 - `n` counts dispatchable Issues not done at creation or release, at least 1. Bounds change only on release.
-- `freeze` is null or `{seq, reason, merge_sha, health}`. The freeze is active while its `freeze:<seq>` note is missing or its comment ID is above `release_watermark`. `epic-release` consumes that note and advances the watermark past it; health continues to use the retained merge and status as history. A later freeze has a new sequence and note above the watermark, so it is active again without changing the ledger schema.
+- `freeze` is null or `{seq, reason, merge_sha, health, released}`, and `released` is required. A freeze holds the Epic while `released` is false. `epic-release` sets it true and keeps the record: health reads the retained `merge_sha` and `health` as history, so the same result reads `HANDLED`, whereas clearing `freeze` would freeze the Epic again on the result it was released from. A later freeze replaces the record with a new `seq` and `released` false. Nothing is inferred from `release_watermark` or the notes, which only decide which `epic-release` comment is consumed.
 - The freeze write comes first, then the note `freeze:<seq>`. Any read of a frozen ledger posts a missing note before reading a release.
 
 ### 4.3 Post-merge Record
@@ -307,13 +307,14 @@ Every subcommand that needs the run inputs resolves them one way, in this order,
 
 | Subcommand | Payload | Exit |
 |---|---|---|
-| `board` | Per Issue: state, reason, branch, PR. Per container: done and children. `frozen`, `health`, `actions`, `notifications` | 0 classified; 1 unreadable; 6 protocol; 7 a lease held by another token (`--lease-token` names this session's) |
+| `board` | Per Issue: state, reason, branch, PR. Per container: done and children. `frozen`, `health`, `actions`, `notifications`, and `lease` under `--observe` | 0 classified; 1 unreadable; 6 protocol; 7 a lease held by another token (`--lease-token` names this session's) |
 | `readiness` | `status`, `reason`, `pr`, `head`, `next`, `repair` | 0 classified, whatever the status; 1 a signal could not be read, which is always BLOCKED with next `human` |
 | `health` | `status`, `reason`, `record_id`, `pr`, `issue`, `merge`, `next` | 0 classified; 1 a signal could not be read, so every merge is held |
 
 - A container is derived from its sub-issues and never classified or dispatched. A dependency on it is done only when every sub-issue is done, and a dependency of the container itself is a dependency of each of its sub-issues.
-- An Issue in a dependency cycle is `waiting`, so no dispatch is proposed for it, and one `dep-cycle:<sorted issues>` note is proposed per cycle.
-- A merged PR on the current branch of a still-open Issue is `parked` and proposes `merged-open:<n>:<pr>`; closed PRs only are `rejected`. PRs are matched to the branch the Issue state records, so an applied redo leaves the old branch behind.
+- An open Issue in a dependency cycle is `waiting` unless it is `parked` or `rejected`, which wait on a person and keep their state and note. No dispatch, re-verification, or landing is proposed for it, and one `dep-cycle:<sorted issues>` note is proposed per cycle.
+- A merged PR on the current branch of a still-open Issue is `parked` and proposes `merged-open:<n>:<pr>`, even when a newer PR is open; closed PRs only are `rejected`. PRs are matched to the branch the Issue state records, so an applied redo leaves the old branch behind. With no branch recorded, any `feat/issue-<n>` or `feat/issue-<n>-<slug>` branch or PR is the Issue's work, so work a person started by hand is never dispatched again.
 - A decision not applied to the state yet is `pending_decision` and proposes `apply_signals`. It takes effect only once the state records it, so a parked Issue stays parked until then.
-- Proposed actions are `apply_signals`, `freeze`, `land`, `reverify`, and `dispatch`, with in-progress resumes before reverify and ready work. `--max-parallel` caps the combined reverify and dispatch proposals. A frozen Epic, or a post-merge result that needs a freeze, proposes no work; a pending post-merge result proposes no `land`.
-- `health` takes `HANDLED` from the ledger's `freeze`: the same merge commit and the same status. A released Epic must keep that freeze recorded, or it freezes again on the result it was released from; #285 owns that.
+- Proposed actions are `apply_signals`, `freeze`, `land`, `reverify`, and `dispatch`, with in-progress dispatched before ready. The worker cap `--max-parallel` is applied where work is dispatched (#291), not here. A frozen Epic, or a post-merge result that needs a freeze, proposes no work; a pending post-merge result proposes no `land`.
+- `board --observe` is for a person reading the board while another session holds the lease. It skips the exit 7, names the holder in `lease`, and proposes no action and no note, so it cannot drive a second Publisher. Without a foreign lease it changes nothing.
+- `health` takes `HANDLED` from the ledger's `freeze`: the same merge commit and the same status. A release keeps that freeze recorded with `released` true, see §4.2; #285 writes it.

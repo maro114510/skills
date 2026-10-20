@@ -87,8 +87,9 @@ type item struct {
 
 // Classify classifies a pull request. Precedence: MERGED or CLOSED, then any unreadable
 // signal, then BLOCKED, then WAITING, then READY. Every check counts, required or not, so a
-// check that is not configured as required still holds the merge. An unknown enum value fails
-// closed.
+// check that is not configured as required still holds the merge. READY needs a merge state of
+// CLEAN or HAS_HOOKS, so an unknown merge state fails closed; mergeable and reviewDecision are
+// read as pr-readiness.sh read them, and GitHub folds both into that merge state.
 func Classify(pr *snapshot.PullRequest) Result {
 	if pr == nil {
 		return unreadable(0, "", []string{"pull request not found in response"})

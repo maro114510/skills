@@ -112,7 +112,7 @@ func (f *fx) comment(id int64, association, body string) *fx {
 
 func classify(t *testing.T, f *fx) board.Result {
 	t.Helper()
-	res, err := board.Classify(f.b, board.Options{LeaseToken: "", MaxParallel: 0})
+	res, err := board.Classify(f.b, board.Options{LeaseToken: "", Observe: false})
 	if err != nil {
 		t.Fatalf("Classify() error = %v", err)
 	}
@@ -581,7 +581,7 @@ func TestLease(t *testing.T) {
 	for name, tc := range tests {
 		f := newFx().with(leaf(1, "OPEN"))
 		f.b.Lease = tc.lease
-		_, err := board.Classify(f.b, board.Options{LeaseToken: tc.token, MaxParallel: 0})
+		_, err := board.Classify(f.b, board.Options{LeaseToken: tc.token, Observe: false})
 		if got := exitcode.CodeOf(err); got != tc.code {
 			t.Errorf("%s: exit %d, want %d (%v)", name, got, tc.code, err)
 		}
@@ -639,7 +639,7 @@ func TestUnreadableHealthStopsClassification(t *testing.T) {
 	f := newFx().with(leaf(1, "OPEN"))
 	f.b.PostMerge = recordFor(1, 7)
 	f.b.PostMergePull = nil
-	_, err := board.Classify(f.b, board.Options{LeaseToken: "", MaxParallel: 0})
+	_, err := board.Classify(f.b, board.Options{LeaseToken: "", Observe: false})
 	if exitcode.CodeOf(err) != exitcode.Unreadable {
 		t.Errorf("exit = %d (%v), want %d", exitcode.CodeOf(err), err, exitcode.Unreadable)
 	}
@@ -653,7 +653,7 @@ func TestAFrozenEpicProposesNoWork(t *testing.T) {
 	f := newFx().with(leaf(1, "OPEN"), leaf(2, "OPEN")).state(2, approved(newState(2), baseSHA)).pr(9, "feat/issue-2", "OPEN", headSHA)
 	f.b.Ledger = &state.Ledger{
 		Envelope: env, N: 2, Counters: zeroCounters(), FreezeSeq: 1, ReleaseWatermark: 0,
-		Freeze: &state.Freeze{Seq: 1, Reason: "bound exceeded", MergeSHA: "", Health: ""},
+		Freeze: &state.Freeze{Seq: 1, Reason: "bound exceeded", MergeSHA: "", Health: "", Released: false},
 	}
 	res := classify(t, f)
 	if !res.Frozen || len(res.Actions) != 0 {
@@ -684,66 +684,41 @@ func TestDispatchesResumeBeforeStartAndEveryActionIsAProposal(t *testing.T) {
 	}
 }
 
-func TestMaxParallelCapsReverifyAndDispatchTogether(t *testing.T) {
-	t.Parallel()
-
-	f := newFx().with(leaf(1, "OPEN"), leaf(2, "OPEN"), leaf(3, "OPEN")).state(3, newState(3))
-	res, err := board.Classify(f.b, board.Options{LeaseToken: "", MaxParallel: 1})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(res.Actions) != 1 || res.Actions[0].Kind != board.ActionDispatch || res.Actions[0].Issue != 3 || !res.Actions[0].Resume {
-		t.Errorf("actions = %+v, want only the first prioritized reverify/dispatch action (resume #3)", res.Actions)
-	}
-}
-
-func TestMaxParallelResumesInProgressWorkBeforeReverification(t *testing.T) {
-	t.Parallel()
-
-	f := newFx().with(leaf(1, "OPEN"), leaf(2, "OPEN")).state(2, newState(2)).
-		pr(8, "feat/issue-1", "OPEN", headSHA)
-	res, err := board.Classify(f.b, board.Options{LeaseToken: "", MaxParallel: 1})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(res.Actions) != 1 || res.Actions[0].Kind != board.ActionDispatch || res.Actions[0].Issue != 2 || !res.Actions[0].Resume {
-		t.Errorf("actions = %+v, want the in-progress #2 resumed before reverify #1", res.Actions)
-	}
-}
-
-func TestReleasedFreezeIsHistoryNotAnActiveFreeze(t *testing.T) {
-	t.Parallel()
-
+func ledgerWith(freeze *state.Freeze) *state.Ledger {
 	env := envelope("ledger")
 	env.Entity = state.EntityLedger
+	return &state.Ledger{Envelope: env, N: 1, Counters: zeroCounters(), Freeze: freeze, FreezeSeq: 1, ReleaseWatermark: 0}
+}
+
+// TestAReleasedFreezeIsHistoryNotAnActiveFreeze: a release keeps the freeze recorded so health
+// still reads the same result as HANDLED, but the Epic is no longer frozen.
+func TestAReleasedFreezeIsHistoryNotAnActiveFreeze(t *testing.T) {
+	t.Parallel()
+
 	f := newFx().with(leaf(1, "OPEN"))
-	f.b.Ledger = &state.Ledger{Envelope: env, N: 1, Counters: zeroCounters(), FreezeSeq: 1, ReleaseWatermark: 100,
-		Freeze: &state.Freeze{Seq: 1, Reason: "health", MergeSHA: "merge1", Health: "FAIL"}}
-	f.b.Comments[epic] = append(f.b.Comments[epic], snapshot.Comment{
-		ID: 99, CreatedAt: "", Author: "loop", Association: "NONE", Body: "<!-- oe:v2 note freeze:1 -->\n",
-	})
+	f.b.Ledger = ledgerWith(&state.Freeze{Seq: 1, Reason: "health", MergeSHA: "merge1", Health: "FAIL", Released: true})
 	res := classify(t, f)
 	if res.Frozen {
-		t.Fatal("released freeze still marks board frozen")
+		t.Fatal("a released freeze still marks the board frozen")
 	}
 	if got := actionsOf(res, board.ActionDispatch); !slices.Equal(got, []int{1}) {
-		t.Errorf("dispatch = %v, want #1 while retaining freeze for health history", got)
+		t.Errorf("dispatch = %v, want #1 once the freeze is released", got)
 	}
 }
 
-func TestFreezeAfterReleaseWatermarkIsActiveAgain(t *testing.T) {
+// TestAnUnreleasedFreezeFreezesTheEpic: only released=false is active, whatever the watermark
+// and the notes say, so a freeze never lifts by inference.
+func TestAnUnreleasedFreezeFreezesTheEpic(t *testing.T) {
 	t.Parallel()
 
-	env := envelope("ledger")
-	env.Entity = state.EntityLedger
 	f := newFx().with(leaf(1, "OPEN"))
-	f.b.Ledger = &state.Ledger{Envelope: env, N: 1, Counters: zeroCounters(), FreezeSeq: 2, ReleaseWatermark: 100,
-		Freeze: &state.Freeze{Seq: 2, Reason: "new failure", MergeSHA: "merge2", Health: "FAIL"}}
+	f.b.Ledger = ledgerWith(&state.Freeze{Seq: 2, Reason: "new failure", MergeSHA: "merge2", Health: "FAIL", Released: false})
+	f.b.Ledger.ReleaseWatermark = 1 << 40
 	f.b.Comments[epic] = append(f.b.Comments[epic], snapshot.Comment{
-		ID: 101, CreatedAt: "", Author: "loop", Association: "NONE", Body: "<!-- oe:v2 note freeze:2 -->\n",
+		ID: 7, CreatedAt: "", Author: "loop", Association: "NONE", Body: "<!-- oe:v2 note freeze:2 -->\n",
 	})
-	if res := classify(t, f); !res.Frozen {
-		t.Fatal("new freeze note above release watermark was not active")
+	if res := classify(t, f); !res.Frozen || len(res.Actions) != 0 {
+		t.Fatalf("frozen = %v, actions = %+v, want a frozen Epic with no actions", res.Frozen, res.Actions)
 	}
 }
 

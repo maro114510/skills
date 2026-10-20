@@ -42,7 +42,7 @@ type scenario struct {
 func recorded() *health.Record { return &health.Record{ID: 10, PR: 7, Issue: 45} }
 
 func freeze(seq int, merge, status string) state.Freeze {
-	return state.Freeze{Seq: seq, Reason: "post-merge checks failed", MergeSHA: merge, Health: status}
+	return state.Freeze{Seq: seq, Reason: "post-merge checks failed", MergeSHA: merge, Health: status, Released: false}
 }
 
 func checks(nodes string) testfx.Edit {
@@ -255,6 +255,7 @@ func TestAReleasedFreezeStillHandlesItsResult(t *testing.T) {
 	t.Parallel()
 
 	released := freeze(3, "m111", "FAIL")
+	released.Released = true
 	want(t, with(checks("["+failedRun+"]")).frozen(released).classify(t), health.Handled, health.NextProceed)
 	want(t, with(set(rollupPath, `null`)).at("2026-10-19T02:00:00Z").frozen(released).classify(t), health.Unconfirmed, health.NextFreeze)
 }
