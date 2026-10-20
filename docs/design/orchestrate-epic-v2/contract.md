@@ -274,7 +274,7 @@ Every `oe` subcommand prints one JSON payload or one verdict line.
 
 ## 12. Inputs and Snapshot Mode
 
-`oe` lives at `oe/`, built with `CGO_ENABLED=0`. Dependencies are not vendored: users run release binaries (#281) and never build, so `go.sum` and `go mod verify` guard dependency integrity, and CI checks `go.mod` and `go.sum` stay tidy. It runs only `gh` and `git`, always as an argv array, never through a shell. Global flags: `--epic <number|url>`, `--repo <owner/name>`, `--max-parallel <n>`, `--snapshot <file>`.
+`oe` lives at `oe/`, built with `CGO_ENABLED=0`. Dependencies are not vendored: users run release binaries (#281) and never build, so `go.sum` and `go mod verify` guard dependency integrity, and CI checks `go.mod` and `go.sum` stay tidy. It runs only `gh` and `git`, always as an argv array, never through a shell; `oe checks run` is the sole exception and is described below. Global flags: `--epic <number|url>`, `--repo <owner/name>`, `--max-parallel <n>`, `--snapshot <file>`.
 
 Every subcommand that needs the run inputs resolves them one way, in this order, before any write:
 
@@ -294,4 +294,5 @@ Every subcommand that needs the run inputs resolves them one way, in this order,
 - A read cannot write: a `gh api` read that is not a GET, and a GraphQL read that is not a query, exit 8 before any call.
 - `--snapshot` with an empty value exits 2; it never falls back to real calls.
 - `--snapshot <file>` replays recorded `{argv, stdout, stderr, exit_code}` calls and never starts a process. A call missing from the file exits 1. Read-only subcommands give identical output on every run over one file.
+- `oe checks derive` reads workflow files at the base and ref through `git`, and emits CHECKS_SET: every runnable and requires-runner entry in file, job, and step order. `oe checks run` executes each runnable entry with the captured shell, working directory, and env in its own process, and never executes a requires-runner entry; it reports the exit status and any worktree or index change. A set whose revision no longer matches the ref is refused as stale rather than run. Under `--snapshot`, `oe checks run` exits 8 before any call, because replaying a captured process is not possible.
 - `oe ship publish` and `oe land merge` are the only subcommands that may push, open a PR, or merge. Under `--snapshot` they exit 8 before any call. `.claude/hooks/require-user-approval.sh` blocks both without the approval marker, whether they are run directly, by path, or through `skills/orchestrate-epic/scripts/oe`. The marker approves only the line it ends.

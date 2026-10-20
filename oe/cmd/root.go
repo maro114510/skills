@@ -32,6 +32,16 @@ type globals struct {
 	maxParallel string
 }
 
+// payloadError marks a failure whose JSON payload is already printed, so Main returns its exit
+// code without a second verdict line. The wrapped error carries the code.
+type payloadError struct {
+	err error
+}
+
+func (e *payloadError) Error() string { return e.err.Error() }
+
+func (e *payloadError) Unwrap() error { return e.err }
+
 // Main runs oe with args and returns the process exit code.
 func Main(args []string, env Env) int {
 	root := newRoot(env)
@@ -41,6 +51,11 @@ func Main(args []string, env Env) int {
 	err := root.Execute()
 	if err == nil {
 		return int(exitcode.OK)
+	}
+	// A command that already printed its JSON payload as output suppresses the verdict line, so
+	// stdout stays either one payload or one verdict, never both.
+	if _, ok := errors.AsType[*payloadError](err); ok {
+		return int(exitcode.CodeOf(err))
 	}
 	if _, ok := errors.AsType[*exitcode.Error](err); !ok {
 		// Only cobra's own argument parsing returns an uncoded error.
@@ -76,6 +91,7 @@ func newRoot(env Env) *cobra.Command {
 	root.AddCommand(
 		newVersionCmd(env),
 		newResolveCmd(env, g),
+		newChecksCmd(env, g),
 		newGroup("ship", "Ship approved work", newMutatingCmd(env, g, "publish", "Push the approved head and open its PR", "#289")),
 		newGroup("land", "Land shipped PRs", newMutatingCmd(env, g, "merge", "Merge one PR at its reviewed head", "#290")),
 	)
