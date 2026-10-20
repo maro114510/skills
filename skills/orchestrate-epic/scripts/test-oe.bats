@@ -103,6 +103,16 @@ write_manifest() {
 
 # Stands in for a swapped binary and records "ran <label>" if it ever runs.
 tampered() { printf '#!/bin/sh\necho "ran %s" >>"%s"\n' "$1" "${RAN_LOG}"; }
+# Fails the test unless the last run's output contains the text.
+# A function is used because a failing mid-test [[ ]] does not stop a test under bash before 4.1.
+has() {
+  case "${output}" in
+  *"$1"*) return 0 ;;
+  esac
+  printf 'expected output to contain: %s\nactual output: %s\n' "$1" "${output}" >&2
+  return 1
+}
+
 cached() { printf '%s/oe/%s/%s' "${XDG_CACHE_HOME}" "${tag}" "$1"; }
 gh_calls() { wc -l <"${GH_LOG}" | tr -d ' '; }
 ran_count() { if [ -f "${RAN_LOG}" ]; then wc -l <"${RAN_LOG}" | tr -d ' '; else echo 0; fi; }
@@ -143,17 +153,17 @@ ran_count() { if [ -f "${RAN_LOG}" ]; then wc -l <"${RAN_LOG}" | tr -d ' '; else
   [ "${status}" -eq 7 ]
   run "${skill}/oe" resolve --epic 3
   [ "${status}" -eq 0 ]
-  [[ ${output} == *"arg=resolve"* ]]
-  [[ ${output} == *"arg=--epic"* ]]
-  [[ ${output} == *"arg=3"* ]]
+  has "arg=resolve"
+  has "arg=--epic"
+  has "arg=3"
 }
 
 @test "a tampered Release asset is refused, never executed, and never cached" {
   tampered tampered >"${release}/oe_linux_amd64"
   run "${skill}/oe" --version
   [ "${status}" -eq 8 ]
-  [[ ${output} == *"refused: oe wrapper: "* ]]
-  [[ ${output} == *"does not match the manifest sha256"* ]]
+  has "refused: oe wrapper: "
+  has "does not match the manifest sha256"
   [ "$(ran_count)" -eq 0 ]
   [ ! -e "$(cached oe_linux_amd64)" ]
   [ -z "$(find "${XDG_CACHE_HOME}" -name '.download.*' 2>/dev/null)" ]
@@ -163,7 +173,7 @@ ran_count() { if [ -f "${RAN_LOG}" ]; then wc -l <"${RAN_LOG}" | tr -d ' '; else
   sed -i.bak "s/^\(asset.oe_linux_amd64.\).*/\1$(printf '0%.0s' $(seq 64))/" "${skill}/oe-manifest.tsv"
   run "${skill}/oe" --version
   [ "${status}" -eq 8 ]
-  [[ ${output} == *"does not match the manifest sha256"* ]]
+  has "does not match the manifest sha256"
   [ "$(ran_count)" -eq 0 ]
   [ ! -e "$(cached oe_linux_amd64)" ]
 }
@@ -189,8 +199,8 @@ ran_count() { if [ -f "${RAN_LOG}" ]; then wc -l <"${RAN_LOG}" | tr -d ' '; else
   chmod 755 "$(cached oe_linux_amd64)"
   run "${skill}/oe" --version
   [ "${status}" -eq 0 ]
-  [[ ${output} == *"replacing it"* ]]
-  [[ ${output} == *"${tag}" ]]
+  has "replacing it"
+  has "${tag}"
   if grep -q tampered "${RAN_LOG}"; then false; fi
   [ "$(sha_of "$(cached oe_linux_amd64)")" = "$(sha_of "${release}/oe_linux_amd64")" ]
 }
@@ -236,7 +246,7 @@ ran_count() { if [ -f "${RAN_LOG}" ]; then wc -l <"${RAN_LOG}" | tr -d ' '; else
   export FAKE_GH_FAIL=1
   run "${skill}/oe" --version
   [ "${status}" -eq 1 ]
-  [[ ${output} == *"unreadable: oe wrapper: "* ]]
+  has "unreadable: oe wrapper: "
   [ "$(ran_count)" -eq 0 ]
 }
 
@@ -252,7 +262,7 @@ ran_count() { if [ -f "${RAN_LOG}" ]; then wc -l <"${RAN_LOG}" | tr -d ' '; else
     rm -rf "${XDG_CACHE_HOME}"
     FAKE_UNAME_S="${uname_s}" FAKE_UNAME_M="${uname_m}" run "${skill}/oe" noop
     [ "${status}" -eq 0 ]
-    [[ ${output} == *"asset=${want}"* ]]
+    has "asset=${want}"
   done <<'EOF'
 Darwin arm64 oe_darwin_arm64
 Darwin x86_64 oe_darwin_amd64
@@ -266,10 +276,10 @@ EOF
 @test "an unsupported OS or CPU is refused without calling gh" {
   FAKE_UNAME_S=FreeBSD run "${skill}/oe" --version
   [ "${status}" -eq 8 ]
-  [[ ${output} == *"unsupported OS"* ]]
+  has "unsupported OS"
   FAKE_UNAME_M=riscv64 run "${skill}/oe" --version
   [ "${status}" -eq 8 ]
-  [[ ${output} == *"unsupported CPU"* ]]
+  has "unsupported CPU"
   [ "$(gh_calls)" -eq 0 ]
 }
 
@@ -277,8 +287,8 @@ EOF
   printf '# nothing yet\nrepo\tmaro114510/skills\n' >"${skill}/oe-manifest.tsv"
   run "${skill}/oe" --version
   [ "${status}" -eq 8 ]
-  [[ ${output} == *"no oe release is pinned yet"* ]]
-  [[ ${output} == *"make oe-manifest"* ]]
+  has "no oe release is pinned yet"
+  has "make oe-manifest"
   [ "$(gh_calls)" -eq 0 ]
   [ "$(ran_count)" -eq 0 ]
 }
@@ -392,7 +402,7 @@ expect_refused() {
   cp "${real_manifest}" "${skill}/oe-manifest.tsv"
   export FAKE_GH_FAIL=1
   run "${skill}/oe" --version
-  [ "${status}" -eq 1 ] || [[ ${output} == *"no oe release is pinned yet"* ]]
+  [ "${status}" -eq 1 ] || has "no oe release is pinned yet"
   [ "$(ran_count)" -eq 0 ]
   if [[ ${output} == *"malformed"* || ${output} == *"unknown"* || ${output} == *"does not pin"* || ${output} == *"missing"* ]]; then false; fi
 }

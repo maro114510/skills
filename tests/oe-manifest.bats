@@ -72,6 +72,16 @@ EOF
   chmod 755 "${fakebin}/gh"
 }
 
+# Fails the test unless the last run's output contains the text.
+# A function is used because a failing mid-test [[ ]] does not stop a test under bash before 4.1.
+has() {
+  case "${output}" in
+  *"$1"*) return 0 ;;
+  esac
+  printf 'expected output to contain: %s\nactual output: %s\n' "$1" "${output}" >&2
+  return 1
+}
+
 sha_of() { shasum -a 256 "$1" | cut -d' ' -f1; }
 
 # Publishes four fake binaries and the SHA256SUMS the workflow would write.
@@ -127,7 +137,8 @@ manifest_untouched() {
   printf '#!/bin/sh\necho swapped\n' >"${release}/oe_linux_arm64"
   run "${generator}" "${tag}" --manifest "${manifest}"
   [ "${status}" -eq 1 ]
-  [[ ${output} == *"oe_linux_arm64"*"differs from SHA256SUMS"* ]]
+  has "oe_linux_arm64"
+  has "differs from the SHA256SUMS entry"
   manifest_untouched
 }
 
@@ -135,7 +146,7 @@ manifest_untouched() {
   rm "${release}/oe_darwin_amd64"
   run "${generator}" "${tag}" --manifest "${manifest}"
   [ "${status}" -eq 1 ]
-  [[ ${output} == *"no asset oe_darwin_amd64"* ]]
+  has "no asset oe_darwin_amd64"
   manifest_untouched
 }
 
@@ -143,7 +154,7 @@ manifest_untouched() {
   rm "${release}/SHA256SUMS"
   run "${generator}" "${tag}" --manifest "${manifest}"
   [ "${status}" -eq 1 ]
-  [[ ${output} == *"no asset SHA256SUMS"* ]]
+  has "no asset SHA256SUMS"
   manifest_untouched
 }
 
@@ -151,7 +162,7 @@ manifest_untouched() {
   export FAKE_DRAFT=true
   run "${generator}" "${tag}" --manifest "${manifest}"
   [ "${status}" -eq 1 ]
-  [[ ${output} == *"draft"* ]]
+  has "draft"
   manifest_untouched
 }
 
@@ -237,14 +248,15 @@ EOF
   printf '#!/bin/sh\necho swapped\n' >"${release}/${want}"
   run "${skill}/oe"
   [ "${status}" -eq 8 ]
-  [[ ${output} == *"does not match the manifest sha256"* ]]
+  has "does not match the manifest sha256"
 }
 
 @test "make oe-manifest runs the generator for TAG and requires one" {
   run make -C "${repo_root}" -n oe-manifest TAG=oe-v0.1.0
   [ "${status}" -eq 0 ]
-  [[ ${output} == *"bin/oe-manifest.sh"*"oe-v0.1.0"* ]]
+  has "bin/oe-manifest.sh"
+  has "oe-v0.1.0"
   run make -C "${repo_root}" oe-manifest
   [ "${status}" -ne 0 ]
-  [[ ${output} == *"TAG"* ]]
+  has "TAG"
 }
