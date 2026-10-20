@@ -152,7 +152,7 @@ ran_count() { if [ -f "${RAN_LOG}" ]; then wc -l <"${RAN_LOG}" | tr -d ' '; else
   tampered tampered >"${release}/oe_linux_amd64"
   run "${skill}/oe" --version
   [ "${status}" -eq 8 ]
-  [[ ${output} == refused:* ]]
+  [[ ${output} == *"refused: oe wrapper: "* ]]
   [[ ${output} == *"does not match the manifest sha256"* ]]
   [ "$(ran_count)" -eq 0 ]
   [ ! -e "$(cached oe_linux_amd64)" ]
@@ -236,7 +236,7 @@ ran_count() { if [ -f "${RAN_LOG}" ]; then wc -l <"${RAN_LOG}" | tr -d ' '; else
   export FAKE_GH_FAIL=1
   run "${skill}/oe" --version
   [ "${status}" -eq 1 ]
-  [[ ${output} == unreadable:* ]]
+  [[ ${output} == *"unreadable: oe wrapper: "* ]]
   [ "$(ran_count)" -eq 0 ]
 }
 
