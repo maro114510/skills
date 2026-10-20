@@ -83,33 +83,31 @@ Omit the scope rather than inventing one when nothing naturally fits.
 
 **Subject**: imperative mood, under 70 characters, specific rather than vague — `fix(auth): handle expired JWT on refresh`, not `fix: bug`.
 
-**Body**: up to 4 bullets, one why fact each — problem, root cause, evidence, or a tradeoff that matters. Never what/how; no lead sentence.
+**Body**: up to 4 bullets, one why fact each — problem, root cause, evidence, or a tradeoff that matters.
+Never what/how; no lead sentence.
+The code carries how, the tests carry what, and code comments carry why not, so the body carries only why.
 
 | Item | Rule |
 |---|---|
 | Per bullet | One fact. A "because/since/so/which" chain hides a second — split or trim |
-| Lines | 2 max, wrapped at ~72 columns, two-space hanging indent — intentional, unlike create-pr's Line Breaks rule |
+| Lines | One sentence per line; never wrap by character count |
 | Overflow | Split into multiple commits, or keep the most load-bearing fact and defer the rest to the PR description |
 | Trivial | Omit the body |
 
 Good (why facts, one per bullet):
 ```
-- Case 09 was a false positive: its integrity_concern
-  justification restated "overextended" and "not_established."
-- decision-rubric.md already treats both conditions as
-  insufficient on their own.
+- Case 09 was a false positive: its integrity_concern justification restated "overextended" and "not_established."
+- decision-rubric.md already treats both conditions as insufficient on their own.
 ```
 
 Bad (what/how — cut this, the diff already shows it):
 ```
-- Add a restatement check to integrity_concern: strip the
-  judgment-name words from the stated reason before setting true.
+- Add a restatement check to integrity_concern: strip the judgment-name words from the stated reason before setting true.
 ```
 
 Bad (verification narration — belongs in the PR's Test Plan, not here):
 ```
-- Re-verified all 12 eval cases against the fixed SKILL.md; the
-  9/9 overextension detection rate is preserved.
+- Re-verified all 12 eval cases against the fixed SKILL.md; the 9/9 overextension detection rate is preserved.
 ```
 
 Bad (file enumeration — "what" wearing structure, not why):
@@ -138,7 +136,7 @@ Before moving to Step 6, re-read the bullets:
 
 - What/how, verification results, or file enumeration? Cut.
 - "Because/since/so/which" chaining a second fact? Split or trim.
-- Over 4 bullets or 2 lines per bullet? Shorten, defer to the PR description, or split the change.
+- Over 4 bullets, or a bullet wrapped by character count? Shorten, defer to the PR description, or split the change.
 
 Otherwise keep as written.
 
