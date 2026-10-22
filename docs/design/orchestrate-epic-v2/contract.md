@@ -111,6 +111,7 @@ Fields: `pr`, `issue`, `reviewed_sha`, `verified_base`, `phase`, `merge_sha`, `r
 | `context` | Retained human comments: ID, author, time, digest, kind |
 | `publish` | Null, or `sha`, `prev_sha`, `base`, `branch`, `pr`, `phase`; `prev_sha` is the remote head when the intent was recorded |
 | `repair` | Null, or `pr`, `head`, `since` of the last repair |
+| `stale_pass` | Empty, or the lease-token digest of the session that ran the latest staleness pass |
 
 ## 5. Transitions
 
@@ -119,11 +120,12 @@ Each transition writes the whole object after a full read. The writer exits 7 if
 | Transition | Requires | Effect |
 |---|---|---|
 | `start` | No state | Creates it: `cycle` 0, no head, no approval, watermark at the highest comment ID read |
-| `record_worker_result` | A report whose Issue, branch, and worktree match | DONE sets `head_sha`, resets failures, clears approval. BLOCKED needs its question note first. FAILED adds a failure; a second parks. A BLOCKED or FAILED worker's commits, read from its worktree, set `head_sha` and clear approval |
+| `record_worker_result` | A report whose Issue, branch, and worktree match | DONE sets `head_sha`, resets failures, clears approval, and empties `pending_findings`, which ends the fix cycle in flight. BLOCKED needs its question note first. FAILED adds a failure; a second parks. A BLOCKED or FAILED worker's commits, read from its worktree, set `head_sha` and clear approval |
 | `record_head` | `oe`'s own integration merge, or a sync to the PR head | Sets `head_sha`, clears approval |
 | `begin_fix` | `cycle` below 2, a confirmed ledger reservation, findings | Sets pending findings, `cycle` plus 1, clears approval; a repair also sets `repair` |
 | `bind_approval` | Pins unchanged, evidence validated and scanned, no open finding | Sets approval; `head_sha` equals `reviewed_sha`; empties both lists |
 | `invalidate_approval` | Approval set | Clears approval |
+| `mark_stale` | A staleness pass | Clears approval and records this session in `stale_pass` |
 | `park` | Blockers | Sets blockers, empties pending findings, clears approval. A head the worker committed before it stopped sets `head_sha` |
 | `apply_signals` | A full read of the window, §6 | Advances the watermark, appends context, applies the decision |
 | `record_publish_intent` | Approval bound; `sha` and `base` equal the pair; any earlier publish is `linked` or null | New intent with `prev_sha`, keeping an earlier `pr`. A repaired head re-publishes this way |
@@ -225,7 +227,7 @@ Duplicate notes are harmless and never deleted. Duplicate states exit 6.
 | Merge result | Request answered or reconciled | Result note, then `record_result`; either failing stops every further merge | Merge again before both | #290 |
 | Freeze | Ledger `CLEAR` | Ledger write, then note `freeze:<seq>`; a missing note is posted on the next read | Notify twice | #285 |
 
-Local steps follow the same rule. The integration merge runs without hooks, signing, or editor, and a leftover `MERGE_HEAD` is aborted and redone, in #288. Worktrees come from a pinned ref without touching the shared checkout, in #287.
+Local steps follow the same rule. The integration merge runs without hooks, signing, or editor, and a leftover `MERGE_HEAD` is aborted and redone, §17. Worktrees come from a pinned ref without touching the shared checkout, in #287.
 
 ## 9. Exit Codes
 
@@ -301,7 +303,7 @@ Every subcommand that needs the run inputs resolves them one way, in this order,
 - `--snapshot` with an empty value exits 2; it never falls back to real calls.
 - `--snapshot <file>` replays recorded `{argv, stdout, stderr, exit_code}` calls and never starts a process. A call missing from the file exits 1. Read-only subcommands give identical output on every run over one file.
 - `oe checks derive` reads workflow files at the base and ref through `git`, and emits CHECKS_SET: every runnable and requires-runner entry in file, job, and step order. `oe checks run` executes each runnable entry with the captured shell, working directory, and env in its own process, and never executes a requires-runner entry; it reports the exit status and any worktree or index change. A set whose revision no longer matches the ref is refused as stale rather than run. Under `--snapshot`, `oe checks run` exits 8 before any call, because replaying a captured process is not possible.
-- `oe lease`, `oe note post`, `oe ledger`, `oe state`, `oe gate`, and `oe worker report` are the only subcommands that write loop comments, each through the single writer of §5 and §7. `oe worker worktree` and `oe worker brief` write no comment but are coordination subcommands too, so only the lease holder dispatches. Under `--snapshot` they all exit 8 before any call. Each takes the lock of §4.1, and all but `lease acquire` confirm the lease first.
+- `oe lease`, `oe note post`, `oe ledger`, `oe state`, `oe gate`, `oe worker report`, `oe review pin`, and `oe review verdict` are the only subcommands that write loop comments, each through the single writer of §5 and §7. `oe worker worktree` and `oe worker brief` write no comment but are coordination subcommands too, so only the lease holder dispatches. `oe review pin` also makes the integration merge, the only commit the loop makes. Under `--snapshot` they all exit 8 before any call. Each takes the lock of §4.1, and all but `lease acquire` confirm the lease first.
 - `oe ship publish` and `oe land merge` are the only subcommands that may push, open a PR, or merge. Under `--snapshot` they exit 8 before any call. `.claude/hooks/require-user-approval.sh` blocks both without the approval marker, whether they are run directly, by path, or through `skills/orchestrate-epic/scripts/oe`. The marker approves only the line it ends.
 
 ## 13. Classifiers
@@ -455,3 +457,127 @@ The rules cover at least the commit skill's patterns and the earlier secret scre
 - An auto-answer is `--answer-file`, an answer from written sources. It is posted as `qa:<n>:<digest>` after the question, at most once per Issue per lease session; a second BLOCKED in the session waits for a person. A ship-class or `--commit-approval` question is never auto-answered, and no timeout answers one.
 - A suspected secret in a question, a DONE record, or an answer is never posted. Questions or a DONE record park the Issue as ship-class secret. A FAILED error is withheld from its record. An answer is dropped, and the question waits for a person.
 - Retries are bounded by the state: a second FAILED parks, and every spawn still reserves `worker_dispatches` first, §4.2.
+
+## 17. Integration and Review Binding
+
+`oe review pin` and `oe review verdict` take an Issue from a DONE head to a bound approval.
+
+- Both take `--issue`, `--worktree`, `--checks-set`, `--lease-token`, and `--repo-dir`.
+- Both refuse an Issue with no state, a parked Issue, and an Issue with no recorded head.
+- Both read `origin/<default branch>` once and never fetch it, since the Publisher fetches it once per round.
+- Both exit 3 and write nothing when CHECKS_SET was derived at another commit than `origin/<default branch>`.
+- The integration merge is the only commit the loop makes, so the model and the reviewer never commit.
+
+```mermaid
+flowchart LR
+  done[DONE head] --> pin[oe review pin]
+  pin -->|PINNED| reviewer[fresh reviewer]
+  pin -->|conflict or dirty tree| findings
+  reviewer --> verdict[oe review verdict]
+  verdict -->|BOUND| ship[ship]
+  verdict -->|STALE| stale[staleness pass]
+  verdict -->|any finding| findings[findings]
+  stale -->|first in session| pin
+  stale -->|second in session| defer[next invocation]
+  findings -->|below cap| fix[fix cycle]
+  findings -->|cap or ship-class| parked[parked]
+  fix --> done
+```
+
+### 17.1 Pin
+
+| Case | Result |
+|---|---|
+| An approval on the recorded head and the current base | `BOUND` with next `ship`, and nothing else runs |
+| An approval on another pair | A staleness pass, then the rows below unless it defers |
+| A merge in progress | Aborted and redone |
+| A head other than the recorded head | Adopted only when it is oe's merge commit on the recorded head, else exit 8 |
+| Uncommitted changes or untracked files | Nothing merged, and a blocking finding |
+| The base is already an ancestor of the head | Nothing merged |
+| Otherwise | `merge --no-ff` of the base commit with hooks, signing, editor, rerere, and autostash disabled |
+| A conflict | Aborted and checked clean at the head, else exit 1, and the conflicting paths become a blocking finding |
+| A failure without a conflict | Restored as above, then exit 1 |
+| A new head | `record_head` before anything else reads the state |
+| Success | `PINNED` with next `review`, `head`, `base`, and `prompt` |
+
+oe's merge commit has two parents, the recorded head first and a commit the base contains second, and the subject `Merge <base> into <branch>`.
+
+The prompt is the reviewer's whole brief.
+
+- It carries the repository, the Issue, the Epic as context, the branch, the worktree, and the default branch by name.
+- It pins `REVIEW_BASE` and `REVIEW_HEAD` as SHAs and diffs exactly those commits.
+- It carries CHECKS_SET's runnable entries and revision, and the report format below.
+- It never carries the worker's report.
+
+### 17.2 Verdict
+
+`oe review verdict --file <report>` reads the report below. `--ship-class <kind>` passes the Publisher's judgment on its findings.
+
+```
+VERDICT: APPROVE | REQUEST_CHANGES
+REPO: <owner/name>
+ISSUE: #<n>
+BRANCH: <branch>
+REVIEWED_HEAD: <git rev-parse HEAD as the reviewer observed it>
+REVIEWED_BASE: <REVIEW_BASE>
+CHECKS_REVISION: <CHECKS_SET revision>
+BEHAVIOR_CHANGE: yes | no — <basis>
+CRITERIA:
+1. <criterion verbatim, or prefixed (derived)> -> verified [behavior|static] — <evidence>
+2. <criterion> -> unverified — missing: <evidence that would verify it>
+CHECKS:
+1. <command> -> exit <code>
+FINDINGS:
+1. [blocking|nit] <file:line> — <defect>; <failure scenario>; <fix direction>
+```
+
+| Parsing rule | Effect |
+|---|---|
+| Not starting with `VERDICT`, a repeated field, an unknown verdict, or `REQUEST_CHANGES` without a blocking finding | Malformed, exit 8, nothing written, and a fresh reviewer is spawned |
+| `none` under CHECKS or FINDINGS | An empty list |
+| The first ` -> ` followed by `verified [` or `unverified` | Where a criterion's result starts, so an arrow in the criterion or the evidence is kept |
+| A finding starting with `[nit]` or the word `nit` | A nit, and every other finding is blocking |
+
+The first matching row decides.
+
+| Case | Route | `next` |
+|---|---|---|
+| The worktree HEAD is not the recorded head | Exit 8 and nothing written | a person |
+| REPO, ISSUE, or BRANCH names another dispatch | `STALE` | `reverify` or `defer` |
+| REVIEWED_HEAD is missing or not the head | `STALE` | `reverify` or `defer` |
+| REVIEWED_BASE is not the current base or not merged into the head | `STALE` | `reverify` or `defer` |
+| CHECKS_REVISION is not the set's revision | `STALE` | `reverify` or `defer` |
+| Any finding below, or a `--ship-class` judgment | `FIX` or `PARKED` | `redispatch` or `parked` |
+| Otherwise | `BOUND` with the head, the base, and the reviewer's own lines verbatim | `ship` |
+
+These are findings, in this order.
+
+1. Any path changed in the worktree or index, untracked files included, which closes `UncommittedDiffApprovalDrift`.
+2. A missing `BEHAVIOR_CHANGE` or `CRITERIA`, or no criterion.
+3. A criterion that is `unverified`, lacks evidence after its tag, or has no readable result.
+4. `BEHAVIOR_CHANGE: yes` with no `[behavior]` criterion, since passing checks alone never approve behavior-changing work.
+5. No CHECKS line while CHECKS_SET has runnable entries, an unreadable line, or a red entry.
+6. Every reviewer finding, a nit included.
+
+oe checks the form of evidence only, and whether it proves its criterion stays the reviewer's judgment. Evidence is secret-scanned before it is stored, and a finding parks the Issue as ship-class secret without posting the text.
+
+### 17.3 Staleness
+
+A staleness pass runs `mark_stale`, which clears the approval and records the session. It is uncharged.
+
+- An Issue with a publish record first gets `stale:<n>:<head>:<base>`, once per pair.
+- When the scan refuses the reason, which quotes the report, the note goes without it.
+- The first pass in a session goes on to a fresh pin and reviewer with next `reverify`.
+- A second pass in the same session, whatever the pair, defers the Issue to the next invocation with next `defer`, and the Issue stays in progress.
+
+The limit is per lease session rather than per round, as for the auto-answer of §16.3.
+
+### 17.4 Findings
+
+| Case | Notes, then state | `next` |
+|---|---|---|
+| A `--ship-class` kind | `ship-class:<n>:<kind>:<digest>` per kind, then `park`, never quoting a secret's findings | `parked` |
+| Findings that hold a suspected secret | `ship-class:<n>:secret:<digest>` without the text, then `park` | `parked` |
+| `pending_findings` already equals the findings on the same head | Nothing, since no worker has reported since `begin_fix` and a replay is never charged twice | `redispatch` |
+| `cycle` at 2 | `parked:<n>:cap:<digest>`, then `park` with the findings as blockers and nothing reserved | `parked` |
+| Otherwise | One `fix_cycles` reserved, where a freeze exits 4 and writes nothing, then `begin_fix` | `redispatch` |
