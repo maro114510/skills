@@ -68,6 +68,7 @@ Lock rules follow.
 - Another session refuses to start while the heartbeat is under 70 minutes old and takes over once it is older.
 - `wait` and the gate exit 3 when the token is no longer theirs, and the skill then stops without touching the lock.
 - Every other stop clears the lock.
+- The skill rechecks the token right before `git push`, and Git rejects any non-fast-forward push, so a former owner that pushes after a takeover can land at most one fast-forward, which the new owner sees as a foreign head change.
 
 | Item | Key | Raised again when |
 |---|---|---|
