@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/maro114510/skills/oe/internal/exitcode"
 )
@@ -326,12 +327,21 @@ func short(sha string) string {
 	return sha[:shortSHA]
 }
 
+// pipeWait is how long RunCheck waits for a check's output after its shell has exited. A check
+// that starts a background process, as `server &` does, leaves that process holding the output
+// pipes, and the shell's exit would otherwise not end the wait.
+const pipeWait = 10 * time.Second
+
 // Exec runs each check as a real process through bash or sh.
 type Exec struct{}
 
 // RunCheck writes the script to a private temporary file and runs it with the captured shell. The
 // command is never interpolated into a shell string.
 func (Exec) RunCheck(ctx context.Context, cmd Command) (CommandResult, error) {
+	return runCheck(ctx, cmd, pipeWait)
+}
+
+func runCheck(ctx context.Context, cmd Command, wait time.Duration) (CommandResult, error) {
 	file, err := os.CreateTemp("", "oe-check-*.sh")
 	if err != nil {
 		return CommandResult{}, exitcode.Wrap(exitcode.Unreadable, err, "create the check script")
@@ -352,6 +362,7 @@ func (Exec) RunCheck(ctx context.Context, cmd Command) (CommandResult, error) {
 	var stdout, stderr bytes.Buffer
 	proc.Stdout = &stdout
 	proc.Stderr = &stderr
+	proc.WaitDelay = wait
 	err = proc.Run()
 	result := CommandResult{ExitCode: 0, Stdout: stdout.String(), Stderr: stderr.String(), StartError: ""}
 	if err != nil {
@@ -359,11 +370,20 @@ func (Exec) RunCheck(ctx context.Context, cmd Command) (CommandResult, error) {
 			result.ExitCode = exitErr.ExitCode()
 			return result, nil
 		}
+		if errors.Is(err, exec.ErrWaitDelay) {
+			// Run reports this only when the shell itself exited 0, so the check passed. What a
+			// background process printed afterwards is not part of the result.
+			result.Stderr += backgroundNote
+			return result, nil
+		}
 		result.ExitCode = notRun
 		result.StartError = err.Error()
 	}
 	return result, nil
 }
+
+// backgroundNote tells a reader that a check's output was cut short.
+const backgroundNote = "oe: a background process still held the check's output after its shell exited; later output is not shown\n"
 
 // shellArgv maps a captured shell to the argv GitHub Actions would use. Only bash, sh, and an
 // unset shell are runnable; every other shell is a requires-runner entry that never reaches here.
