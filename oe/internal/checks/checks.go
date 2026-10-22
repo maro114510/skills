@@ -1,6 +1,7 @@
 // Package checks is the one classification of the checks on a commit, shared by the merge
 // readiness and the default-branch health classifiers. It decides what a single check run or
-// commit status means, and keeps only the latest run of each check.
+// commit status means, and keeps only the latest run of each check. It also derives CHECKS_SET
+// from a repository's workflow files and runs its entries, see checkset.go.
 package checks
 
 import (

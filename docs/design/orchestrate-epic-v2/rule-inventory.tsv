@@ -110,8 +110,8 @@ FZ-14	skills/orchestrate-epic/SKILL.md	A release grants nothing else	A release r
 FZ-15	skills/orchestrate-epic/SKILL.md	Act as if frozen — no spawn, ship, or merge — but never post a freeze comment	An unreadable freeze state acts as frozen and posts nothing	kept	#285	-	-
 FZ-16	skills/orchestrate-epic/SKILL.md	deleting it is a budget reset, the human's call alone	Only the human resets the budget by deleting the ledger	kept	#285	-	-
 RF-01	skills/orchestrate-epic/SKILL.md	a 404 means no protection configured	Only a confirmed 404 means no branch protection	kept	#286	-	-
-RF-02	skills/orchestrate-epic/SKILL.md	never inferred from `package.json`/`Makefile` script names	CHECKS_SET comes from .github/workflows, never from script names	kept	#284	-	-
-RF-03	skills/orchestrate-epic/SKILL.md	Derive it fresh this round	CHECKS_SET is derived fresh every round and reused within it	kept	#284	-	-
+RF-02	skills/orchestrate-epic/SKILL.md	never inferred from `package.json`/`Makefile` script names	CHECKS_SET comes from .github/workflows, never from script names	kept	#284	test:oe/internal/checks/derive_test.go::TestDeriveReadsOnlyWorkflowFiles	-
+RF-03	skills/orchestrate-epic/SKILL.md	Derive it fresh this round	CHECKS_SET is derived fresh every round and reused within it	kept	#284	test:oe/internal/checks/derive_test.go::TestDeriveIsFreshEachCall	-
 RF-04	skills/orchestrate-epic/SKILL.md	When none does, state that Step 8's post-merge health can never confirm a merge	The Run Plan warns when no workflow runs on default-branch pushes	kept	#286	-	-
 RF-05	skills/orchestrate-epic/SKILL.md	state explicitly that this loop's own reviewer pass in Step 6	The Run Plan warns when the loop's review is the only merge gate	kept	#286	-	-
 BN-01	skills/orchestrate-epic/SKILL.md	`N` ready/in-progress children each get up to 5 worker attempts	The Run Plan states the per-Issue worst case	kept	#286	-	-
@@ -234,7 +234,7 @@ RD-02	skills/orchestrate-epic/SKILL.md	1. **This round's Step 2 reading is outda
 RD-03	skills/orchestrate-epic/SKILL.md	Running out of polls does not by itself stop the session	Poll exhaustion alone does not stop the session	kept	#291	-	-
 RD-04	skills/orchestrate-epic/SKILL.md	4. The freeze check, commands §1.7, without a reservation, prints `status=CLEAR`.	Continue only while the freeze check is CLEAR	kept	#291	-	-
 RD-05	skills/orchestrate-epic/SKILL.md	it never posts a second Run Plan, since one already exists	A new round never posts a second Run Plan	kept	#286	-	-
-RD-06	skills/orchestrate-epic/SKILL.md	`CHECKS_SET` is derived again, since the merge may have changed a workflow.	Each round re-derives CHECKS_SET	kept	#284	-	-
+RD-06	skills/orchestrate-epic/SKILL.md	`CHECKS_SET` is derived again, since the merge may have changed a workflow.	Each round re-derives CHECKS_SET	kept	#284	test:oe/internal/checks/derive_test.go::TestDeriveIsFreshEachCall	-
 RD-07	skills/orchestrate-epic/SKILL.md	The round-scoped allowances	Round-scoped allowances reset each round	kept	#291	-	-
 RD-08	skills/orchestrate-epic/SKILL.md	- **Issues this invocation deferred to the next invocation** stay out of every later round of it	Deferred Issues stay out of later rounds of the invocation	kept	#291	-	-
 RD-09	skills/orchestrate-epic/SKILL.md	- **Start comments this session posted** are its own, so Step 2's 30-minute check does not skip them.	A session's own start comments are exempt from the 30-minute check	retired	#285	prose:docs/design/orchestrate-epic-v2/contract.md#| R3 |	YAGNI cut of Epic #277: the 30-minute foreign start-comment check
@@ -277,15 +277,16 @@ CMD-14	skills/orchestrate-epic/references/commands.md	must stop and be reported,
 CK-01	skills/orchestrate-epic/references/commands.md	read each one's content from that same ref — never the local worktree copy	Workflows are read from the default-branch ref	kept	#284	-	-
 CK-02	skills/orchestrate-epic/references/commands.md	Keep a workflow only if its `on:` triggers include `pull_request` (any form)	Only PR or default-branch push workflows are kept	kept	#284	-	-
 CK-03	skills/orchestrate-epic/references/commands.md	capture the run block **verbatim, one entry per step**	One verbatim entry per run step, never merged or deduplicated	kept	#284	-	-
-CK-04	skills/orchestrate-epic/references/commands.md	Also note the step's effective `env:`	Each entry carries its working directory, env, and shell	kept	#284	-	-
-CK-05	skills/orchestrate-epic/references/commands.md	**except** `actions/checkout`, `actions/setup-*`, and `actions/cache`	Only checkout, setup, and cache actions are dropped	kept	#284	-	-
-CK-06	skills/orchestrate-epic/references/commands.md	Classify every captured entry: **requires-runner**	requires-runner covers expressions, sudo, global installs, other shells, actions	kept	#284	-	-
-CK-07	skills/orchestrate-epic/references/commands.md	**requires-runner** entries are still reported	requires-runner entries are reported, never executed	kept	#284	-	-
-CK-08	skills/orchestrate-epic/references/commands.md	This rule classifies **per entry**, not per dependency chain	Classification is per entry	kept	#284	-	-
+CK-04	skills/orchestrate-epic/references/commands.md	Also note the step's effective `env:`	Each entry carries its working directory, env, and shell	kept	#284	test:oe/internal/checks/derive_test.go::TestDerivePreservesOrderDuplicatesAndContext	-
+CK-05	skills/orchestrate-epic/references/commands.md	**except** `actions/checkout`, `actions/setup-*`, and `actions/cache`	Only checkout, setup, and cache actions are dropped	kept	#284	test:oe/internal/checks/derive_test.go::TestDeriveDropsOnlyCheckoutSetupAndCache	-
+CK-06	skills/orchestrate-epic/references/commands.md	Classify every captured entry: **requires-runner**	requires-runner covers expressions, sudo, global installs, other shells, actions	kept	#284	test:oe/internal/checks/derive_test.go::TestDeriveClassifiesRequiresRunner	-
+CK-07	skills/orchestrate-epic/references/commands.md	**requires-runner** entries are still reported	requires-runner entries are reported, never executed	kept	#284	test:oe/internal/checks/run_test.go::TestRunSetNeverExecutesRequiresRunner	-
+CK-08	skills/orchestrate-epic/references/commands.md	This rule classifies **per entry**, not per dependency chain	Classification is per entry	kept	#284	test:oe/internal/checks/derive_test.go::TestDeriveClassifiesRequiresRunner	-
 CK-09	skills/orchestrate-epic/references/commands.md	Fast path with `yq` (mikefarah, v4+) and `jq`	Derive CHECKS_SET with yq and jq	retired	#284	prose:docs/design/orchestrate-epic-v2/contract.md#| R11 |	Epic defect: yq is often missing; #284 parses an ordered YAML node tree in Go
 CK-10	skills/orchestrate-epic/references/commands.md	If `yq` is unavailable, read the workflow files directly	Without yq, read workflows by hand	retired	#284	prose:docs/design/orchestrate-epic-v2/contract.md#| R11 |	Epic defect: reading YAML by eye is exactly what #284 removes
-CK-11	skills/orchestrate-epic/references/commands.md	treat it as trusted input if a later step needs to execute it	Default-branch run blocks are trusted input	kept	#284	-	-
-CK-12	skills/orchestrate-epic/references/commands.md	**Worked example — this repository's own four workflows**	The worked example's classification is the expected result	kept	#284	-	-
+CK-11	skills/orchestrate-epic/references/commands.md	treat it as trusted input if a later step needs to execute it	Default-branch run blocks are trusted input	kept	#284	test:oe/internal/checks/derive_test.go::TestDeriveTriggerFilters	-
+CK-12	skills/orchestrate-epic/references/commands.md	**Worked example — this repository's own four workflows**	The worked example's classification is the expected result	kept	#284	test:oe/internal/checks/derive_test.go::TestWorkedExampleClassification	-
+CK-13	skills/orchestrate-epic/references/commands.md	A job that carries a `uses:` key itself calls a reusable workflow and has no steps	A reusable workflow call is reported as a requires-runner action entry	kept	#284	test:oe/internal/checks/derive_test.go::TestDeriveReportsReusableWorkflowCalls	-
 FC-01	skills/orchestrate-epic/references/commands.md	reads every page of the Epic's comments; it never posts or edits	The freeze check is read-only and reads every page	kept	#285	-	-
 FC-02	skills/orchestrate-epic/references/commands.md	A failed write stops the run — never spawn after one.	A failed ledger write stops the run	kept	#285	-	-
 FC-03	skills/orchestrate-epic/references/commands.md	Only the latest ledger and freeze comment posted by this run's identity count	Only the loop identity's ledger and freeze count	kept	#285	-	-
