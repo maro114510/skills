@@ -201,3 +201,16 @@ func TestDirtyWorktreeIsNeverMerged(t *testing.T) {
 		t.Errorf("HEAD moved to %s", got)
 	}
 }
+
+// TestBranchMergeOptionsCannotSkipTheCommit shows that a branch configured to merge with --no-commit still gets oe's merge commit and never reports a merge that did not happen.
+func TestBranchMergeOptionsCannotSkipTheCommit(t *testing.T) {
+	t.Parallel()
+
+	r := newRepo(t, [2]string{"w.txt", "worker\n"}, [2]string{"b.txt", "upstream\n"})
+	git(t, r.main, "config", "branch."+branch+".mergeOptions", "--no-commit")
+	res, err := integrate.Integrate(t.Context(), client(), r.req())
+	if err != nil || !res.Merged {
+		t.Fatalf("result %+v, %v", res, err)
+	}
+	wantMergedOnTop(t, r, res)
+}

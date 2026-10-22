@@ -112,12 +112,11 @@ func noHooks(dir string, args ...string) []string {
 }
 
 func merge(ctx context.Context, g Git, req Request, res Result) (Result, error) {
-	_, mergeErr := g.GitWrite(ctx, noHooks(req.Worktree, "merge", "--no-ff", "--no-edit", "--no-verify", "--no-gpg-sign",
+	// --commit and --no-squash override branch.<name>.mergeOptions, which could otherwise leave the merge uncommitted.
+	_, mergeErr := g.GitWrite(ctx, noHooks(req.Worktree, "merge", "--no-ff", "--commit", "--no-squash", "--no-edit", "--no-verify", "--no-gpg-sign",
 		"--no-verify-signatures", "--no-rerere-autoupdate", "--no-autostash", "-m", Message(req.Base, req.Branch), req.Base)...)
 	if mergeErr == nil {
-		head, err := Rev(ctx, g, req.Worktree, "HEAD")
-		res.Head, res.Merged = head, err == nil
-		return res, err
+		return made(ctx, g, req, res)
 	}
 	conflicts, err := unmerged(ctx, g, req.Worktree)
 	if err != nil {
@@ -131,6 +130,27 @@ func merge(ctx context.Context, g Git, req Request, res Result) (Result, error) 
 	}
 	res.Conflicts = conflicts
 	return res, nil
+}
+
+// made checks that the merge left exactly oe's merge commit, the old head then the base as parents, and nothing in progress.
+// A merge that exited 0 without that commit is restored and exits 1, so it is never reported as merged.
+func made(ctx context.Context, g Git, req Request, res Result) (Result, error) {
+	out, err := g.Git(ctx, "-C", req.Worktree, "log", "-1", "--format=%H %P")
+	if err != nil {
+		return res, err
+	}
+	fields := strings.Fields(string(out))
+	if len(fields) == 3 && fields[1] == res.Head && fields[2] == req.Base {
+		if aborted, err := abortLeftover(ctx, g, req.Worktree); err != nil || aborted {
+			return res, errors.Join(err, exitcode.New(exitcode.Unreadable, "a merge was still in progress after oe's merge commit"))
+		}
+		res.Head, res.Merged = fields[0], true
+		return res, nil
+	}
+	if err := restore(ctx, g, req.Worktree, res.Head); err != nil {
+		return res, err
+	}
+	return res, exitcode.New(exitcode.Unreadable, "git merge exited 0 without making oe's merge commit; the worktree was restored")
 }
 
 // restore aborts a merge left in progress and checks the worktree is exactly as it was.
