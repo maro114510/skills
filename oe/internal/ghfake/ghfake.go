@@ -188,7 +188,12 @@ func restResult(store *Store, prog runner.Program, args []string) (runner.Result
 		return runner.Result{Stdout: nil, Stderr: nil, ExitCode: 0}, false
 	}
 	out, code, ok := store.rest(args)
-	return runner.Result{Stdout: []byte(out), Stderr: nil, ExitCode: code}, ok
+	var stderr []byte
+	if out == notFound {
+		// gh's own line for a 404, which is what tells a deleted comment from a failed read.
+		stderr = []byte("gh: Not Found (HTTP 404)")
+	}
+	return runner.Result{Stdout: []byte(out), Stderr: stderr, ExitCode: code}, ok
 }
 
 // basic answers the calls that resolve the run's inputs, and the clock.

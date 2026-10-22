@@ -98,8 +98,9 @@ type Report struct {
 }
 
 // WorkerResult records a worker report whose Issue, branch, and worktree match. DONE records
-// the head, resets failures, and clears approval. BLOCKED changes nothing, but only after its
-// question note exists. FAILED counts a failure; a second in a row parks the Issue.
+// the head, resets failures, and clears approval. BLOCKED is recorded only after its question
+// note exists. FAILED counts a failure; a second in a row parks the Issue. A BLOCKED or FAILED
+// report that carries a head the worker committed records it too.
 type WorkerResult struct {
 	Report Report
 	// Worktree is the worktree the worker was dispatched to.
@@ -136,7 +137,9 @@ func (t WorkerResult) record(st *state.Issue, r comments) error {
 		if t.QuestionKey == "" || r.noteID(t.QuestionKey) == 0 {
 			return refused("a BLOCKED report is recorded only after its question note %q is posted", t.QuestionKey)
 		}
+		movedHead(st, rep.HeadSHA)
 	case StatusFailed:
+		movedHead(st, rep.HeadSHA)
 		st.ConsecutiveFailures++
 		if st.ConsecutiveFailures > 1 {
 			park(st, []string{"two FAILED reports in a row: " + rep.Error})
@@ -145,6 +148,16 @@ func (t WorkerResult) record(st *state.Issue, r comments) error {
 		return refused("report status %q is not DONE, BLOCKED, or FAILED", rep.Status)
 	}
 	return nil
+}
+
+// movedHead records a head a BLOCKED or FAILED worker committed before it stopped, read by oe
+// from the worktree, so the next dispatch starts from it instead of stopping on a divergence.
+// An empty head, or the recorded one, changes nothing.
+func movedHead(st *state.Issue, head string) {
+	if head == "" || (st.HeadSHA != nil && *st.HeadSHA == head) {
+		return
+	}
+	st.HeadSHA, st.Approval = &head, nil
 }
 
 // RecordHead records a head oe made itself or synced to, and clears approval.
@@ -266,9 +279,10 @@ func (t InvalidateApproval) apply(in applyInput) (*state.Issue, error) {
 }
 
 // Park records what parks the Issue for a person, empties pending findings, and clears
-// approval.
+// approval. Head, when set, is a head the worker committed before it stopped.
 type Park struct {
 	Blockers []string
+	Head     string
 }
 
 // Name implements Transition.
@@ -282,6 +296,7 @@ func (t Park) apply(in applyInput) (*state.Issue, error) {
 		return nil, refused("park needs the blockers that park the Issue")
 	}
 	st := cloneIssue(in.cur)
+	movedHead(st, t.Head)
 	park(st, t.Blockers)
 	return st, nil
 }
