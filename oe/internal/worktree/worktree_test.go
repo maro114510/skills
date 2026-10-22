@@ -223,7 +223,7 @@ func TestSharedCheckoutBranchAndBadNamesAreRefused(t *testing.T) {
 	git(t, r.shared, "switch", "-q", "-c", "feat/issue-7")
 	_, err := worktree.Ensure(t.Context(), client(), r.req("feat/issue-7", nil))
 	wantRefused(t, err)
-	for _, b := range []string{"main", "feat/issue-x", "feat/issue-7/../../x", "feat/issue-7 x"} {
+	for _, b := range []string{"main", "feat/issue-x", "feat/issue-7/../../x", "feat/issue-7-../../x", "feat/issue-7 x", "feat/issue-7-a..b", "feat/issue-7-x.lock"} {
 		_, err := worktree.Ensure(t.Context(), client(), r.req(b, nil))
 		wantRefused(t, err)
 	}
@@ -335,5 +335,34 @@ func TestLinkedSharedCheckoutIsNeverHandedOut(t *testing.T) {
 	_, err := worktree.Ensure(t.Context(), client(), req)
 	wantRefused(t, err)
 	_, err = worktree.Verify(t.Context(), client(), linked, linked, "feat/issue-7")
+	wantRefused(t, err)
+}
+
+// TestHandMadeBranchNamesTheBoardAcceptsAreHandedOff: a branch the board classifies as the
+// Issue's work, such as feat/issue-7-fix.v2, gets its worktree like any loop branch.
+func TestHandMadeBranchNamesTheBoardAcceptsAreHandedOff(t *testing.T) {
+	t.Parallel()
+
+	r := newRepo(t)
+	res, err := worktree.Ensure(t.Context(), client(), r.req("feat/issue-7-fix.v2", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, err := worktree.Ensure(t.Context(), client(), r.req("feat/issue-7-fix.v2", &res.Head))
+	if err != nil || again.Source != worktree.Reused {
+		t.Errorf("second Ensure = %+v, %v; want it reused", again, err)
+	}
+}
+
+// TestBaseIsMatchedExactly: with origin/main missing and origin/main/legacy present, nothing is
+// created from the unrelated ref.
+func TestBaseIsMatchedExactly(t *testing.T) {
+	t.Parallel()
+
+	r := newRepo(t)
+	other := r.commit(r.shared, "o.txt", "unrelated")
+	git(t, r.shared, "update-ref", "-d", "refs/remotes/origin/main")
+	git(t, r.shared, "update-ref", "refs/remotes/origin/main/legacy", other)
+	_, err := worktree.Ensure(t.Context(), client(), r.req("feat/issue-7", nil))
 	wantRefused(t, err)
 }

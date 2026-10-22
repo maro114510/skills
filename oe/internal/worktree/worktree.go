@@ -12,9 +12,9 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
+	"unicode"
 
 	"github.com/maro114510/skills/oe/internal/exitcode"
 	"github.com/maro114510/skills/oe/internal/snapshot"
@@ -70,10 +70,6 @@ type Result struct {
 	Source Source `json:"source"`
 }
 
-// branchRe is every branch the loop records: feat/issue-<n>, its redo branches, and the slugged
-// form a person may have started by hand.
-var branchRe = regexp.MustCompile(`^` + regexp.QuoteMeta(snapshot.BranchPrefix) + `[1-9][0-9]*(-[A-Za-z0-9_]+)*$`)
-
 // rootSuffix names the directory beside the shared checkout that holds every worktree, the
 // layout git-wt uses, so a worktree made either way is found by its branch.
 const rootSuffix = "-wt"
@@ -92,8 +88,8 @@ func noHooks(dir string, args ...string) []string {
 // or starts a new branch at the pinned commit of origin/<default>. A worktree or branch whose
 // head is not the recorded head stops it, since the worktree is never the source of truth.
 func Ensure(ctx context.Context, g Git, req Request) (Result, error) {
-	if !branchRe.MatchString(req.Branch) {
-		return Result{}, refused("branch %q is not a loop branch", req.Branch)
+	if err := validBranch(ctx, g, req.Dir, req.Branch); err != nil {
+		return Result{}, err
 	}
 	list, err := List(ctx, g, req.Dir)
 	if err != nil {
@@ -198,13 +194,37 @@ func sameHead(req Request, head, where string) error {
 	return nil
 }
 
-// ref returns the commit a ref names, or "" when there is no such ref.
+// validBranch accepts exactly the branch names the board classifies as an Issue's work, so a
+// branch a person started by hand is handed off as the board proposes it, and only those git
+// itself accepts as a branch name, so no name can step outside the worktree root.
+func validBranch(ctx context.Context, g Git, dir, branch string) error {
+	if _, ok := snapshot.IssueOfBranch(branch); !ok {
+		return refused("branch %q is not a loop branch", branch)
+	}
+	if strings.ContainsFunc(branch, unicode.IsSpace) {
+		return refused("branch %q is not a valid branch name", branch)
+	}
+	out, err := g.Git(ctx, "-C", dir, "check-ref-format", "--branch", branch)
+	if err != nil || strings.TrimSpace(string(out)) != branch {
+		return refused("branch %q is not a valid branch name", branch)
+	}
+	return nil
+}
+
+// ref returns the commit a ref names, or "" when there is no such ref. for-each-ref also matches
+// refs below a name, such as refs/remotes/origin/main/legacy for refs/remotes/origin/main, so
+// only an exact name counts.
 func ref(ctx context.Context, g Git, dir, name string) (string, error) {
-	out, err := g.Git(ctx, "-C", dir, "for-each-ref", "--format=%(objectname)", name)
+	out, err := g.Git(ctx, "-C", dir, "for-each-ref", "--format=%(refname) %(objectname)", name)
 	if err != nil {
 		return "", err
 	}
-	return strings.TrimSpace(string(out)), nil
+	for line := range strings.SplitSeq(strings.TrimSpace(string(out)), "\n") {
+		if got, sha, ok := strings.Cut(line, " "); ok && got == name {
+			return sha, nil
+		}
+	}
+	return "", nil
 }
 
 // remoteHead asks origin for the branch's commit, or "" when origin has no such branch.
