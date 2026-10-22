@@ -219,6 +219,10 @@ func fileFindings(files []fileDiff, at Finding, wherePath, whereContent string) 
 			u := at
 			u.Rule = RuleUnscannable
 			out = append(out, u)
+		} else if line := firstNULLine(f.added); line > 0 {
+			u := at
+			u.Rule, u.Line = RuleUnscannable, line
+			out = append(out, u)
 		}
 		for _, l := range f.added {
 			for _, rule := range matchLine([]byte(l.text)) {
@@ -229,6 +233,17 @@ func fileFindings(files []fileDiff, at Finding, wherePath, whereContent string) 
 		}
 	}
 	return out
+}
+
+// firstNULLine returns the line of the first added line with a NUL byte, or 0 when there is none.
+// Git diffs a file as text when its NUL sits past the prefix it probes for binary content.
+func firstNULLine(added []addedLine) int {
+	for _, l := range added {
+		if strings.IndexByte(l.text, 0) >= 0 {
+			return l.line
+		}
+	}
+	return 0
 }
 
 func pathFindings(p string, at Finding, where string) []Finding {

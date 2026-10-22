@@ -311,6 +311,21 @@ func TestOutgoingBinaryIsUnscannable(t *testing.T) {
 	}
 }
 
+// TestOutgoingLateNULIsUnscannable places a NUL past the prefix git probes for binary content, so git diffs the file as text.
+func TestOutgoingLateNULIsUnscannable(t *testing.T) {
+	t.Parallel()
+
+	dir := newBranch(t)
+	write(t, dir, "late.dat", strings.Repeat("a", 9000)+"\nx\x00y\n")
+	sha := commitAll(t, dir, "late nul")
+
+	r := outgoing(t, dir)
+	want := []scan.Finding{{Rule: scan.RuleUnscannable, Where: scan.WhereCommitContent, Commit: sha, Path: "late.dat", Line: 2}}
+	if r.Clean || !slices.Equal(r.Findings, want) {
+		t.Errorf("Outgoing() = %+v; want %+v", r.Findings, want)
+	}
+}
+
 func TestOutgoingScansTheWorktree(t *testing.T) {
 	t.Parallel()
 
