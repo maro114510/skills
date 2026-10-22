@@ -174,4 +174,7 @@ type Issue struct {
 	Context             []Context `json:"context"`
 	Publish             *Publish  `json:"publish"`
 	Repair              *Repair   `json:"repair"`
+	// StalePass is the lease-token digest of the session that ran the latest staleness pass, and is empty before the first.
+	// A second staleness in that session defers the Issue.
+	StalePass string `json:"stale_pass"`
 }

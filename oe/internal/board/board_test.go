@@ -75,7 +75,7 @@ func newState(n int) *state.Issue {
 	return &state.Issue{
 		Envelope: envelope(state.IssueKey(n)), Branch: "feat/issue-" + itoa(n), Cycle: 0, ConsecutiveFailures: 0,
 		HeadSHA: &head, Approval: nil, PendingFindings: nil, UnresolvedBlockers: nil, Decision: nil,
-		SignalWatermark: 0, Context: nil, Publish: nil, Repair: nil,
+		SignalWatermark: 0, Context: nil, Publish: nil, Repair: nil, StalePass: "",
 	}
 }
 
