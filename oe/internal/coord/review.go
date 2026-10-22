@@ -56,6 +56,9 @@ func (s *Session) postReview(ctx context.Context, n int, key, text string, res *
 	return nil
 }
 
+// withheld stands in for findings that may hold a secret.
+const withheld = "withheld because the findings may hold a suspected secret"
+
 // MarkStale records a staleness pass.
 //   - It clears the approval, since a renewed verdict never inherits the old one.
 //   - It records the session, so a second staleness in that session defers the Issue to the next invocation.
@@ -118,13 +121,18 @@ func (s *Session) Stale(ctx context.Context, n int, head, base, reason string, r
 //   - At the cap the findings park the Issue.
 //   - Otherwise a fix cycle is reserved on the ledger first, so a frozen or exhausted Epic starts none, and begin_fix hands the findings to a fresh worker.
 func (s *Session) RouteFindings(ctx context.Context, n int, findings []string, kinds []handoff.ShipClass, head string, res *ReviewResult) error {
-	res.Findings = slices.Clone(findings)
 	if len(findings) == 0 && len(kinds) == 0 {
 		return exitcode.New(exitcode.Refused, "no finding to route")
 	}
 	text := strings.Join(findings, "\n")
-	if report := scan.Text("review-findings", []byte(text)); !report.Clean {
-		return s.parkReviewSecret(ctx, n, "the review findings", head, res)
+	// The printed result is withheld like the note and the state, since a caller may log it.
+	if report := scan.Text("review-findings", []byte(text)); !report.Clean || slices.Contains(kinds, handoff.ShipSecret) {
+		res.Findings = []string{withheld}
+		if !report.Clean {
+			return s.parkReviewSecret(ctx, n, "the review findings", head, res)
+		}
+	} else {
+		res.Findings = slices.Clone(findings)
 	}
 	if len(kinds) > 0 {
 		return s.parkShipClass(ctx, n, kinds, text, head, res)

@@ -1,6 +1,7 @@
 package coord_test
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -398,5 +399,21 @@ func TestSameFindingsAfterAWorkerResultCountAgainstTheCap(t *testing.T) {
 	}
 	if st := w.current(t); st.Cycle != coord.MaxCycle || len(st.UnresolvedBlockers) == 0 {
 		t.Errorf("state = %+v", st)
+	}
+}
+
+// TestSecretFindingsNeverReachThePayload shows that findings holding a suspected secret are withheld from the result the command prints, as from the note and the state.
+func TestSecretFindingsNeverReachThePayload(t *testing.T) {
+	t.Parallel()
+
+	w, token := reviewWorld(t, 0)
+	secret := "AKIA" + strings.Repeat("E", 16)
+	res, err := w.session(token).Verdict(ctx(), child, verdictOn(t, reviewText("REQUEST_CHANGES", "no — x", goodCriterion, "1. [blocking] key "+secret)))
+	ok(t, err)
+	wantReview(t, "secret finding", res, coord.RouteParked, coord.NextParked)
+	raw, err := json.Marshal(res)
+	ok(t, err)
+	if strings.Contains(string(raw), secret) {
+		t.Errorf("payload holds the secret: %s", raw)
 	}
 }
