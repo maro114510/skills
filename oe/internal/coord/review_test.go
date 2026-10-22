@@ -417,3 +417,21 @@ func TestSecretFindingsNeverReachThePayload(t *testing.T) {
 		t.Errorf("payload holds the secret: %s", raw)
 	}
 }
+
+// TestStaleReasonNeverPrintsASecret shows that a stale reason quoting a secret from the report is withheld from the printed result even before the Issue is published.
+func TestStaleReasonNeverPrintsASecret(t *testing.T) {
+	t.Parallel()
+
+	w, token := reviewWorld(t, 0)
+	secret := "AKIA" + strings.Repeat("F", 16)
+	v := verdictOn(t, cleanApprove())
+	v.Report.Branch = secret
+	res, err := w.session(token).Verdict(ctx(), child, v)
+	ok(t, err)
+	wantReview(t, "secret branch", res, coord.RouteStale, coord.NextReverify)
+	raw, err := json.Marshal(res)
+	ok(t, err)
+	if strings.Contains(string(raw), secret) {
+		t.Errorf("payload holds the secret: %s", raw)
+	}
+}

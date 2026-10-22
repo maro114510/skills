@@ -87,6 +87,12 @@ func (t MarkStale) apply(in applyInput) (*state.Issue, error) {
 //   - The first staleness in a session goes on to an uncharged re-verification.
 //   - A second one in the same session defers the Issue to the next invocation, and it stays in progress.
 func (s *Session) Stale(ctx context.Context, n int, head, base, reason string, res *ReviewResult) error {
+	noteReason := reason
+	// The reason quotes the report, so a suspected secret in it is withheld from the printed result and the note alike.
+	if report := scan.Text("stale-reason", []byte(reason)); !report.Clean {
+		reason = "the report describes another review; its fields hold a suspected secret and are withheld"
+		noteReason = "報告の内容は秘密情報を含むおそれがあるため掲載しません。"
+	}
 	res.Route, res.Reason, res.Head, res.Base = RouteStale, reason, head, base
 	st, err := s.DispatchState(ctx, n)
 	if err != nil {
@@ -94,13 +100,7 @@ func (s *Session) Stale(ctx context.Context, n int, head, base, reason string, r
 	}
 	if st.Publish != nil {
 		key := fmt.Sprintf("stale:%d:%s:%s", n, head, base)
-		err := s.postReview(ctx, n, key, review.StaleNote(head, base, reason), res)
-		if isScan(err) {
-			// The reason quotes the report and the scan refused it, so the note goes without it.
-			res.Reason = "the report describes another review; its fields hold a suspected secret and are withheld"
-			err = s.postReview(ctx, n, key, review.StaleNote(head, base, "報告の内容は秘密情報を含むおそれがあるため掲載しません。"), res)
-		}
-		if err != nil {
+		if err := s.postReview(ctx, n, key, review.StaleNote(head, base, noteReason), res); err != nil {
 			return err
 		}
 	}
