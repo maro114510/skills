@@ -245,3 +245,20 @@ func TestVerdictWithAnOldChecksSetWritesNothing(t *testing.T) {
 		t.Errorf("exit %d, stdout %q, mutations %d", r.code, r.stdout, f.w.r.Mutations()-before)
 	}
 }
+
+// TestBoundPairOnAMovedWorktreeIsRefused shows that a worktree whose HEAD moved past the approved head is a divergence for a person and never ships the old approval.
+func TestBoundPairOnAMovedWorktreeIsRefused(t *testing.T) {
+	t.Parallel()
+
+	f := newReviewFlow(t, "w.txt", "b.txt")
+	p := f.pin(t)
+	if v := f.verdict(t, p.Head); v.Route != "BOUND" {
+		t.Fatalf("verdict = %+v", v)
+	}
+	commitIn(t, f.wt, "late.txt", "unreviewed\n")
+	before := f.w.r.Mutations()
+	r := f.w.runIn(f.tr, "", append([]string{"review", "pin", "--issue", "7", "--worktree", f.wt, "--checks-set", f.set}, f.tok...)...)
+	if r.code != 8 || f.w.r.Mutations() != before {
+		t.Errorf("exit %d, stdout %q", r.code, r.stdout)
+	}
+}

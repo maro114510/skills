@@ -44,10 +44,11 @@ func Render(b Brief) string {
 	p("- REVIEW_HEAD: %s, the exact commit under review\n\n", b.Head)
 	p("## What you review\n\n")
 	p("Review the committed content between the pinned pair only, never a branch name that can move:\n\n")
-	p("```bash\ngit -C %s diff %s %s\ngit -C %s log --oneline %s..%s\n```\n\n", b.Worktree, b.Base, b.Head, b.Worktree, b.Base, b.Head)
+	wt := shellQuote(b.Worktree)
+	p("```bash\ngit -C %s diff %s %s\ngit -C %s log --oneline %s..%s\n```\n\n", wt, b.Base, b.Head, wt, b.Base, b.Head)
 	p("Confirm `git -C %s rev-parse HEAD` is %s before you start and again before you report. "+
 		"Uncommitted or untracked files are not under review and never count as evidence; the worktree and index must stay exactly clean.\n\n",
-		b.Worktree, b.Head)
+		wt, b.Head)
 	renderChecks(&w, b.ChecksRevision, b.Checks)
 	p("## Rules\n\n")
 	p("- Never edit, stage, commit, stash, reset, clean, push, or publish anything. If a check changes a tracked or untracked file, " +
@@ -74,7 +75,7 @@ func renderChecks(w *strings.Builder, revision string, entries []checks.Entry) {
 		w.WriteString("CHECKS_SET has no runnable entry for this repository. Write `none` under CHECKS.\n\n")
 		return
 	}
-	w.WriteString("Run every runnable entry yourself in the worktree, verbatim, and report each exit status under CHECKS. This is mandatory. " +
+	w.WriteString("Run every runnable entry yourself in the worktree, verbatim, and report each exit status under CHECKS with the entry's number below. This is mandatory. " +
 		"A red entry is a blocking finding.\n\n")
 	for i, e := range entries {
 		dir := e.WorkingDirectory
@@ -91,4 +92,15 @@ func renderChecks(w *strings.Builder, revision string, entries []checks.Entry) {
 		}
 		fmt.Fprintf(w, "```\n%s\n```\n\n", e.Command)
 	}
+}
+
+// shellQuote keeps a path one shell argument, quoting it only when it holds anything beyond safe characters.
+func shellQuote(s string) string {
+	safe := func(r rune) bool {
+		return r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("/._-+:@", r)
+	}
+	if s != "" && !strings.ContainsFunc(s, func(r rune) bool { return !safe(r) }) {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }

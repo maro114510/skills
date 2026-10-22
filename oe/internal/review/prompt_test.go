@@ -35,3 +35,14 @@ func TestReviewerPromptPinsThePairAndTheDefaultBranch(t *testing.T) {
 		}
 	}
 }
+
+// TestPromptQuotesTheWorktreePath shows that a worktree path with spaces stays one argument in every command the reviewer runs.
+func TestPromptQuotesTheWorktreePath(t *testing.T) {
+	t.Parallel()
+
+	p := review.Render(review.Brief{Repo: "o/r", Epic: 1, Issue: 7, Branch: "b", Worktree: "/My Repo-wt/b", DefaultBranch: "main",
+		Base: "b1", Head: "h1", ChecksRevision: "b1", Checks: nil})
+	if !strings.Contains(p, "git -C '/My Repo-wt/b' diff b1 h1") || strings.Contains(p, "git -C /My Repo") {
+		t.Errorf("prompt = %s", p)
+	}
+}

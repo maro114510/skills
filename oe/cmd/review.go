@@ -137,7 +137,7 @@ func pin(ctx context.Context, ss session, a *reviewArgs, set checks.Set) (pinOut
 	}
 	out.Branch, out.Worktree = rs.st.Branch, rs.e.Path
 	// A stale CHECKS_SET is refused before anything is written.
-	runnable, err := currentRunnable(ctx, ss, rs.shared, set)
+	runnable, err := runnableAt(ss, set, rs.base)
 	if err != nil {
 		return out, err
 	}
@@ -166,6 +166,21 @@ func pin(ctx context.Context, ss session, a *reviewArgs, set checks.Set) (pinOut
 	return out, nil
 }
 
+// runnableAt returns CHECKS_SET's runnable entries when the set was derived at base, the default branch this pass read once.
+// A second read of the ref could see a fetch that the rest of the pass never saw.
+func runnableAt(ss session, set checks.Set, base string) ([]checks.Entry, error) {
+	if set.Revision != base {
+		return nil, exitcode.New(exitcode.Stale, "CHECKS_SET was derived at "+set.Revision+", not origin/"+ss.in.DefaultBranch+" "+base+"; derive it again")
+	}
+	runnable := []checks.Entry{}
+	for _, e := range set.Entries {
+		if e.Runnable {
+			runnable = append(runnable, e)
+		}
+	}
+	return runnable, nil
+}
+
 // boundOrStale handles an Issue that already holds an approval and reports whether the pass ends here.
 //   - On the same pair it stays bound and goes to shipping.
 //   - On a moved pair it is stale, and a second staleness in the session defers it.
@@ -174,6 +189,9 @@ func boundOrStale(ctx context.Context, ss session, n int, rs reviewSite, out *pi
 	switch {
 	case ap == nil:
 		return false, nil
+	case rs.e.Head != head:
+		// Integration would adopt or refuse this head, but an approval must never ship or go stale on a commit nobody recorded.
+		return true, exitcode.New(exitcode.Refused, fmt.Sprintf("the worktree's HEAD %s is not the recorded head %s; a person must decide which is right", rs.e.Head, head))
 	case ap.ReviewedSHA == head && ap.VerifiedBase == rs.base:
 		out.Route, out.Next, out.Head, out.Base, out.State = coord.RouteBound, coord.NextShip, head, rs.base, rs.st
 		out.Reason = "the approval is bound to this head and base"
@@ -255,7 +273,7 @@ func verdict(ctx context.Context, ss session, a *reviewArgs, set checks.Set, rep
 		return coord.NewReviewResult(a.n), err
 	}
 	// A CHECKS_SET from another base exits 3 for the caller to derive again, so only the report itself can start a staleness pass.
-	if _, err := currentRunnable(ctx, ss, rs.shared, set); err != nil {
+	if _, err := runnableAt(ss, set, rs.base); err != nil {
 		return coord.NewReviewResult(a.n), err
 	}
 	integrated, err := integrate.Ancestor(ctx, ss.client, rs.e.Path, rs.base, rs.e.Head)
