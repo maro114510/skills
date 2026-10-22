@@ -399,9 +399,23 @@ func jobEntriesFor(file, jobName string, job *yaml.Node, workflowWD, workflowShe
 		steps = steps.Alias
 	}
 	if steps == nil || steps.Kind != yaml.SequenceNode {
+		if uses := scalarValue(job, "uses"); uses != "" {
+			return []Entry{reusableWorkflowCall(file, jobName, uses, jobWD, jobShell, baseEnv)}, nil
+		}
 		return nil, nil
 	}
 	return stepEntries(file, jobName, steps, jobWD, jobShell, baseEnv)
+}
+
+// reusableWorkflowCall is the entry for a job that calls a reusable workflow. The job has no
+// steps, and the called file usually triggers only on workflow_call and so is not derived on its
+// own, so this entry is what keeps the checks it runs in CHECKS_SET. Like a uses-only step, it is
+// part of what CI runs but not something a shell can replay.
+func reusableWorkflowCall(file, jobName, uses, wd, shell string, env map[string]string) Entry {
+	return Entry{
+		File: file, Job: jobName, Step: "", StepIndex: 0, Kind: kindAction, Command: "", Action: uses,
+		WorkingDirectory: wd, Env: env, Shell: shell, Runnable: false, RequiresRunnerReason: "reusable workflow call",
+	}
 }
 
 // jobRunDefaults resolves a job's shell and working directory, inheriting the workflow's.
@@ -543,7 +557,10 @@ func hasExpression(text string) bool {
 	return strings.Contains(text, "${{") && strings.Contains(text, "}}")
 }
 
-var runnerEnvPattern = regexp.MustCompile(`\$\{?(RUNNER_|GITHUB_PATH\b|GITHUB_ENV\b|GITHUB_OUTPUT\b|GITHUB_STEP_SUMMARY\b|GITHUB_ACTIONS\b|ACTIONS_)`)
+// runnerEnvPattern matches every variable a hosted runner provides under the RUNNER_, GITHUB_, or
+// ACTIONS_ prefix. Listing names would miss the rest, and a missed one expands to nothing locally:
+// rm -rf $GITHUB_WORKSPACE/* becomes rm -rf /*.
+var runnerEnvPattern = regexp.MustCompile(`\$\{?(RUNNER_|GITHUB_|ACTIONS_)`)
 
 // hasRunnerEnv reports a command that reads a variable only a hosted runner provides. Its value
 // is empty or meaningless locally, and writes to GITHUB_PATH/GITHUB_ENV cannot affect later

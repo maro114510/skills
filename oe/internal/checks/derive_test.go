@@ -312,6 +312,14 @@ func TestDeriveClassifiesRequiresRunner(t *testing.T) {
 		{"user scope install", "      - run: claude plugin install x --scope user"},
 		{"runner temp", "      - run: echo ${RUNNER_TEMP}/artifact"},
 		{"github path", "      - run: echo \"$GITHUB_PATH\""},
+		{"github workspace", "      - run: cd \"$GITHUB_WORKSPACE\" && go test ./..."},
+		{"unquoted github workspace glob", "      - run: rm -rf $GITHUB_WORKSPACE/*"},
+		{"github sha", "      - run: echo ${GITHUB_SHA}"},
+		{"github ref name", "      - run: echo $GITHUB_REF_NAME"},
+		{"github base ref", "      - run: echo ${GITHUB_BASE_REF:-main}"},
+		{"github repository", "      - run: echo \"$GITHUB_REPOSITORY\""},
+		{"github event path", "      - run: cat \"$GITHUB_EVENT_PATH\""},
+		{"actions runtime token", "      - run: echo $ACTIONS_RUNTIME_TOKEN"},
 		{"line-continued global flag", "      - run: |\n          npm install \\\n            -g pkg\n"},
 		{"brew install", "      - run: brew install jq"},
 		{"absolute sudo", "      - run: /usr/bin/sudo apt-get update"},
@@ -342,6 +350,8 @@ func TestDeriveClassifiesRequiresRunner(t *testing.T) {
 		{"sh shell", "      - run: echo hi\n        shell: sh"},
 		{"multiline block", "      - run: |\n          set -eu\n          go vet ./..."},
 		{"pipeline", "      - run: claude plugin list | grep skills"},
+		{"github name only as text", "      - run: echo GITHUB_WORKSPACE is just text"},
+		{"variable that merely contains the prefix", "      - run: echo $MY_GITHUB_THING ${NOT_RUNNER_TEMP}"},
 		{"pip that does not install", "      - run: pip list --format=json"},
 		{"pip version", "      - run: pip --version"},
 		{"install is another command", "      - run: pip list && make install"},
@@ -428,6 +438,84 @@ func TestDeriveDropsActionsOnlyAtTheirOwnBoundary(t *testing.T) {
 				t.Errorf("%s = %+v, want a kept requires-runner action entry", uses, entry)
 			}
 		})
+	}
+}
+
+// TestDeriveReportsReusableWorkflowCalls: a job that calls a reusable workflow has no steps, and
+// the called file usually triggers only on workflow_call, so without an entry of its own the
+// checks it runs would vanish from CHECKS_SET without a word.
+func TestDeriveReportsReusableWorkflowCalls(t *testing.T) {
+	t.Parallel()
+
+	const callee = "on: workflow_call\njobs:\n  test:\n    steps:\n      - run: go test ./...\n"
+	tests := map[string]struct {
+		files map[string]string
+		want  []string
+	}{
+		"a local call": {
+			files: map[string]string{
+				".github/workflows/caller.yml": "on: pull_request\njobs:\n  ci:\n    uses: ./.github/workflows/ci.yml\n    with:\n      x: 1\n",
+				".github/workflows/ci.yml":     callee,
+			},
+			want: []string{"ci ./.github/workflows/ci.yml"},
+		},
+		"a call to another repository": {
+			files: map[string]string{
+				".github/workflows/caller.yml": "on: pull_request\njobs:\n  ci:\n    uses: org/repo/.github/workflows/ci.yml@v1\n    secrets: inherit\n",
+			},
+			want: []string{"ci org/repo/.github/workflows/ci.yml@v1"},
+		},
+		"calls and steps keep the file order of the jobs": {
+			files: map[string]string{
+				".github/workflows/caller.yml": "on: pull_request\njobs:\n  lint:\n    steps:\n      - run: make lint\n" +
+					"  ci:\n    uses: ./.github/workflows/ci.yml\n  test:\n    steps:\n      - run: make test\n",
+				".github/workflows/ci.yml": callee,
+			},
+			want: []string{"lint make lint", "ci ./.github/workflows/ci.yml", "test make test"},
+		},
+		"a job with neither steps nor a call stays empty": {
+			files: map[string]string{
+				".github/workflows/caller.yml": "on: pull_request\njobs:\n  empty:\n    runs-on: ubuntu-latest\n",
+			},
+			want: nil,
+		},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			set := deriveFiles(t, tc.files)
+			var got []string
+			for _, e := range set.Entries {
+				switch e.Kind {
+				case "action":
+					got = append(got, e.Job+" "+e.Action)
+					if e.Runnable || e.RequiresRunnerReason == "" || e.Command != "" {
+						t.Errorf("call entry = %+v, want a requires-runner entry with a reason and no command", e)
+					}
+				default:
+					got = append(got, e.Job+" "+e.Command)
+				}
+			}
+			if !slices.Equal(got, tc.want) {
+				t.Errorf("entries = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestDeriveKeepsTheContextOfAReusableWorkflowCall: the call carries the env and shell the job
+// would have, so a report can say where it came from.
+func TestDeriveKeepsTheContextOfAReusableWorkflowCall(t *testing.T) {
+	t.Parallel()
+
+	body := "on: pull_request\nenv:\n  A: workflow\njobs:\n  ci:\n    env:\n      B: job\n    uses: ./.github/workflows/ci.yml\n"
+	set := deriveFiles(t, map[string]string{".github/workflows/caller.yml": body})
+	if len(set.Entries) != 1 {
+		t.Fatalf("entries = %+v, want one", set.Entries)
+	}
+	e := set.Entries[0]
+	if e.File != ".github/workflows/caller.yml" || e.Job != "ci" || e.Env["A"] != "workflow" || e.Env["B"] != "job" {
+		t.Errorf("entry = %+v, want the file, the job, and both env levels", e)
 	}
 }
 
