@@ -166,9 +166,12 @@ func pin(ctx context.Context, ss session, a *reviewArgs, set checks.Set) (pinOut
 	return out, nil
 }
 
-// runnableAt returns CHECKS_SET's runnable entries when the set was derived at base, the default branch this pass read once.
+// runnableAt returns CHECKS_SET's runnable entries when the set was derived for the default branch at base, the commit this pass read once.
 // A second read of the ref could see a fetch that the rest of the pass never saw.
 func runnableAt(ss session, set checks.Set, base string) ([]checks.Entry, error) {
+	if set.Base != ss.in.DefaultBranch {
+		return nil, exitcode.New(exitcode.Stale, "CHECKS_SET was derived for the default branch "+set.Base+", not "+ss.in.DefaultBranch+"; derive it again")
+	}
 	if set.Revision != base {
 		return nil, exitcode.New(exitcode.Stale, "CHECKS_SET was derived at "+set.Revision+", not origin/"+ss.in.DefaultBranch+" "+base+"; derive it again")
 	}

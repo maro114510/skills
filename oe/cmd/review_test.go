@@ -262,3 +262,16 @@ func TestBoundPairOnAMovedWorktreeIsRefused(t *testing.T) {
 		t.Errorf("exit %d, stdout %q", r.code, r.stdout)
 	}
 }
+
+// TestChecksSetForAnotherBaseBranchIsRefused shows that a CHECKS_SET derived for another default branch at the same commit is refused before anything is written, since its push-triggered checks were filtered for that branch.
+func TestChecksSetForAnotherBaseBranchIsRefused(t *testing.T) {
+	t.Parallel()
+
+	f := newReviewFlow(t, "w.txt", "b.txt")
+	f.set = checksSetFor(t, "release", f.base)
+	before := f.w.r.Mutations()
+	r := f.w.runIn(f.tr, "", append([]string{"review", "pin", "--issue", "7", "--worktree", f.wt, "--checks-set", f.set}, f.tok...)...)
+	if r.code != 3 || f.w.r.Mutations() != before || gitIn(t, f.wt, "rev-parse", "HEAD") != f.head {
+		t.Errorf("exit %d, stdout %q", r.code, r.stdout)
+	}
+}

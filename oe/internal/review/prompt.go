@@ -39,7 +39,7 @@ func Render(b Brief) string {
 	p("- Epic: #%d, context only. Do not read it for scope.\n", b.Epic)
 	p("- Branch: %s\n", b.Branch)
 	p("- Worktree: %s\n", b.Worktree)
-	p("- Default branch: %s. Never assume it is main.\n", b.DefaultBranch)
+	p("- Default branch: %s. Use this name and never assume main.\n", b.DefaultBranch)
 	p("- REVIEW_BASE: %s, the commit of origin/%s already merged into the branch\n", b.Base, b.DefaultBranch)
 	p("- REVIEW_HEAD: %s, the exact commit under review\n\n", b.Head)
 	p("## What you review\n\n")
