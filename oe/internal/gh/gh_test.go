@@ -355,6 +355,32 @@ func TestWriteAfterCleanReads(t *testing.T) {
 	}
 }
 
+// TestGitWriteIsGatedLikeWrite: a local git change refuses under --snapshot and after a failed
+// read, before any call, and its own failure leaves the client untainted.
+func TestGitWriteIsGatedLikeWrite(t *testing.T) {
+	t.Parallel()
+
+	add := []string{"worktree", "add", "/tmp/x", "b"}
+	s := newSpy(runner.Call{Argv: append([]string{"git"}, add...), Stdout: "", Stderr: "", ExitCode: 0})
+	if _, err := gh.New(s, true).GitWrite(t.Context(), add...); exitcode.CodeOf(err) != exitcode.Refused || len(s.calls) != 0 {
+		t.Errorf("snapshot GitWrite: code %d, calls %q", exitcode.CodeOf(err), s.calls)
+	}
+	s = newSpy(
+		runner.Call{Argv: []string{"git", "remote", "get-url", "origin"}, Stdout: "", Stderr: "no remote", ExitCode: 2},
+		runner.Call{Argv: append([]string{"git"}, add...), Stdout: "", Stderr: "", ExitCode: 0},
+	)
+	c := gh.New(s, false)
+	_, _ = c.Git(t.Context(), "remote", "get-url", "origin")
+	if _, err := c.GitWrite(t.Context(), add...); exitcode.CodeOf(err) != exitcode.Unreadable || len(s.calls) != 1 {
+		t.Errorf("GitWrite after a failed read: code %d, calls %q", exitcode.CodeOf(err), s.calls)
+	}
+	s = newSpy(runner.Call{Argv: append([]string{"git"}, add...), Stdout: "", Stderr: "fatal: exists", ExitCode: 128})
+	c = gh.New(s, false)
+	if _, err := c.GitWrite(t.Context(), add...); exitcode.CodeOf(err) != exitcode.Unreadable || c.Err() != nil {
+		t.Errorf("failed GitWrite: code %d, taint %v", exitcode.CodeOf(err), c.Err())
+	}
+}
+
 func TestGitReadFailureTaints(t *testing.T) {
 	t.Parallel()
 
