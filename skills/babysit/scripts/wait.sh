@@ -11,7 +11,7 @@
 set -uo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=skills/babysit/scripts/common.sh
+# shellcheck source-path=SCRIPTDIR disable=SC1091 # CI runs shellcheck without -x, so it cannot follow this.
 source "${script_dir}/common.sh"
 
 POLL_SECONDS="${BABYSIT_POLL_SECONDS:-60}"

@@ -10,8 +10,9 @@
 # Exit: 0 done, 2 usage error or unwritable ledger, 3 the lock belongs to another session.
 set -uo pipefail
 
-# shellcheck source=skills/babysit/scripts/common.sh
-source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source-path=SCRIPTDIR disable=SC1091 # CI runs shellcheck without -x, so it cannot follow this.
+source "${script_dir}/common.sh"
 
 # A heartbeat this old means its session died, so another session may take the PR over.
 STALE_SECONDS=4200
