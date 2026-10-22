@@ -367,3 +367,55 @@ func TestGitReadFailureTaints(t *testing.T) {
 		t.Error("Err() = nil after a failed read, want the failure")
 	}
 }
+
+// TestReadMissingConfirmsOnlyTheNamedAbsence: a 404 whose message is the one named is a
+// confirmed absence that leaves the client able to write; any other failure, a 404 included,
+// taints it as Read does.
+func TestReadMissingConfirmsOnlyTheNamedAbsence(t *testing.T) {
+	t.Parallel()
+
+	argv := []string{"gh", "api", "--hostname", "github.com", "repos/o/r/branches/main/protection"}
+	const missing = "Branch not protected"
+	tests := map[string]struct {
+		call    runner.Call
+		found   bool
+		wantErr bool
+	}{
+		"found":          {runner.Call{Argv: argv, Stdout: `{"url":"x"}`, Stderr: "", ExitCode: 0}, true, false},
+		"named 404":      {runner.Call{Argv: argv, Stdout: `{"message":"Branch not protected","status":"404"}`, Stderr: "gh: Branch not protected (HTTP 404)", ExitCode: 1}, false, false},
+		"other 404":      {runner.Call{Argv: argv, Stdout: `{"message":"Not Found","status":"404"}`, Stderr: "gh: Not Found (HTTP 404)", ExitCode: 1}, false, true},
+		"403":            {runner.Call{Argv: argv, Stdout: `{"message":"Branch not protected"}`, Stderr: "gh: Must have admin rights (HTTP 403)", ExitCode: 1}, false, true},
+		"404 no body":    {runner.Call{Argv: argv, Stdout: "", Stderr: "gh: Branch not protected (HTTP 404)", ExitCode: 1}, false, true},
+		"404 no stderr":  {runner.Call{Argv: argv, Stdout: `{"message":"Branch not protected"}`, Stderr: "", ExitCode: 1}, false, true},
+		"not answerable": {runner.Call{Argv: []string{"gh", "other"}, Stdout: "", Stderr: "", ExitCode: 0}, false, true},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			c := gh.New(newSpy(tc.call), false)
+			out, found, err := c.ReadMissing(t.Context(), missing, "api", "repos/o/r/branches/main/protection")
+			if tc.wantErr {
+				if exitcode.CodeOf(err) != exitcode.Unreadable || c.Err() == nil {
+					t.Errorf("ReadMissing() err = %v, Err() = %v; want Unreadable and a tainted client", err, c.Err())
+				}
+				return
+			}
+			if err != nil || found != tc.found || c.Err() != nil {
+				t.Errorf("ReadMissing() = %q, %v, %v; Err() = %v", out, found, err, c.Err())
+			}
+			if found && string(out) != `{"url":"x"}` {
+				t.Errorf("ReadMissing() out = %q", out)
+			}
+		})
+	}
+}
+
+func TestReadMissingRefusesWrites(t *testing.T) {
+	t.Parallel()
+
+	s := newSpy()
+	_, _, err := gh.New(s, false).ReadMissing(t.Context(), "x", "api", "-X", "DELETE", "repos/o/r/branches/main/protection")
+	if exitcode.CodeOf(err) != exitcode.Refused || len(s.calls) != 0 {
+		t.Errorf("err = %v, calls = %q", err, s.calls)
+	}
+}

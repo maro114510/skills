@@ -201,13 +201,7 @@ func notDone(ctx context.Context, ss session) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	n := 0
-	for _, i := range res.Issues {
-		if i.State != board.Done {
-			n++
-		}
-	}
-	return n, nil
+	return countNotDone(res), nil
 }
 
 func classifyBoard(ctx context.Context, ss session) (board.Result, *snapshot.Board, error) {

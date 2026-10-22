@@ -45,9 +45,9 @@ const (
 
 // DefaultBranchPush values: whether any kept workflow runs on a push to the default branch.
 const (
-	pushRuns     = "runs"          // at least one kept workflow runs on an unfiltered default-branch push
-	pushFiltered = "path_filtered" // every default-branch push workflow is path-filtered
-	pushNone     = "none"          // no kept workflow triggers on a default-branch push
+	PushRuns     = "runs"          // at least one kept workflow runs on an unfiltered default-branch push
+	PushFiltered = "path_filtered" // every default-branch push workflow is path-filtered
+	PushNone     = "none"          // no kept workflow triggers on a default-branch push
 )
 
 // Set is CHECKS_SET: the ordered entries a revision would run, plus the revision it came from.
