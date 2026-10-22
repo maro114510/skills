@@ -109,6 +109,26 @@ func (c *Client) Git(ctx context.Context, args ...string) ([]byte, error) {
 	return c.read(ctx, runner.Git, args)
 }
 
+// GitWrite runs a git command that changes local repository state, such as adding a worktree.
+// Like Write, it refuses in snapshot mode and after any failed read, and it never taints the
+// client: a failed change is the caller's to report, not a partial read.
+func (c *Client) GitWrite(ctx context.Context, args ...string) ([]byte, error) {
+	if c.snapshot {
+		return nil, exitcode.New(exitcode.Refused, "--snapshot disables every mutation: "+describe(runner.Git, args))
+	}
+	if err := c.Err(); err != nil {
+		return nil, exitcode.Wrap(exitcode.Unreadable, err, "an earlier read failed or was partial, so no write is authorized")
+	}
+	res, err := c.r.Run(ctx, runner.Git, args)
+	if err != nil {
+		return nil, exitcode.Wrap(exitcode.Unreadable, err, describe(runner.Git, args)+" failed")
+	}
+	if res.ExitCode != 0 {
+		return nil, failure(runner.Git, args, res)
+	}
+	return res.Stdout, nil
+}
+
 // Write runs a mutating gh command. It refuses in snapshot mode and after any failed read.
 func (c *Client) Write(ctx context.Context, args ...string) ([]byte, error) {
 	if c.snapshot {
