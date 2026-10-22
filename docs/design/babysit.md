@@ -54,10 +54,12 @@ Path is `$(git rev-parse --path-format=absolute --git-common-dir)/babysit/<owner
 |---|---|---|---|
 | `started_at`, `rounds` | skill | Limits | Yes |
 | `repairs.<check key>` | skill | Repair pushes per check across heads | Yes |
-| `replies.<thread id>` | skill | Agent replies per thread | Yes |
+| `replies.<thread id>` | skill | Agent replies per review thread | Yes |
+| `replies.conversation` | skill | Agent replies to issue comments and review bodies, which share one top-level conversation | Yes |
 | `api_failures` | `wait` | Consecutive API failures across re-arms | Yes |
 | `lock` | skill, `wait` | Session token and heartbeat | Replaced |
 | `heads.<sha>.first_seen` | `wait` | Start of the no-CI clock | No |
+| `head.sha`, `head.gen` | `wait` | Last observed head and a counter raised on every observed head change | No |
 | `own.pushes` | skill | SHA of each push, written before pushing | No |
 | `own.replies` | skill | Body hash written before posting, then the comment id | No |
 | `items.<key>` | skill | Disposition, re-run id and attempt, and handled body hash | No |
@@ -68,13 +70,15 @@ Lock rules follow.
 - Another session refuses to start while the heartbeat is under 70 minutes old and takes over once it is older.
 - `wait` and the gate exit 3 when the token is no longer theirs, and the skill then stops without touching the lock.
 - Every other stop clears the lock.
-- The skill rechecks the token right before `git push`, and Git rejects any non-fast-forward push, so a former owner that pushes after a takeover can land at most one fast-forward, which the new owner sees as a foreign head change.
+- The skill rechecks the token right before `git push`, and the push leases the start SHA, so a former owner that pushes after a takeover lands only while the remote head still equals its start, which the new owner sees as a foreign head change.
 
 | Item | Key | Raised again when |
 |---|---|---|
 | Comment, review body, or thread reply | `c:<node id>` | Its body hash differs from the stored one |
-| Check | `k:<check key>@<head>` | The head changes |
-| Conflict | `x:<head>` | The head changes |
+| Check | `k:<check key>@<head>#<gen>` | The head changes, including back to an earlier SHA |
+| Conflict | `x:<head>#<gen>` | The head changes, including back to an earlier SHA |
+
+Check and conflict keys carry `head.gen`, so a head that moves A to B and back to A gets fresh keys instead of reusing the dispositions from its first visit.
 
 Comments are not keyed by head. Keying them by head would re-raise every handled comment after each of the agent's own pushes and loop.
 
@@ -100,7 +104,7 @@ The first matching row wins.
 |---|---|
 | Repair | Reset the worktree to the PR head, fix, verify locally, pass the gate, push, reply if a comment asked, record, and count one round and one repair for a check |
 | Merge base | Reset the worktree to the PR head, merge the fetched base, fold any needed fix into that merge commit, verify locally, pass the gate, push, record, and count one round, or park when the conflict cannot be resolved |
-| Triage | Confirm the claim against the code, then pick one outcome among Repair, reply only, and park, and park once the thread already holds 2 agent replies |
+| Triage | Confirm the claim against the code, then pick one outcome among Repair, reply only, and park, and park instead of replying once its thread already holds 2 agent replies, where every issue comment and review body belongs to the one `conversation` thread |
 | Park | Record the item as parked, notify, and continue |
 
 Event rules follow.
@@ -113,7 +117,7 @@ Event rules follow.
 - Only drive parks items, so `stalled` fires only in drive.
 - Every stop report lists all parked, reported, and unresolved items in every mode.
 - A bot that rewrites one comment on each push costs one triage per push, bounded by the round limit.
-- A bot that answers each reply is bounded by the 2-reply cap per thread.
+- A bot that answers each reply is bounded by the 2-reply cap per thread, including a bot that answers with fresh top-level comments, since they all share the `conversation` thread.
 - `wait` exits nonzero when the API keeps failing, and the skill then stops and reports.
 
 ### Never an event
@@ -123,7 +127,7 @@ Event rules follow.
 - A check that is queued or pending, or moves from pending to pass
 - An item already parked whose text is unchanged
 - An item already reported, re-run, or handled under the same key
-- A head change by itself, which only resets the check and conflict keys
+- A head change by itself, which only raises `head.gen` and so resets the check and conflict keys
 - A requested reviewer who has not reviewed yet
 - Converting the PR to draft, which only blocks READY while other events still fire
 - An approval without a body
@@ -163,7 +167,9 @@ Allow conditions follow.
 2. `isCrossRepository` is false.
 3. The PR is open.
 4. The remote head equals the worktree's start SHA, and `HEAD` descends from it.
-5. The push is exactly `git push origin HEAD:refs/heads/<branch>` without force, and `origin` resolves to the PR's repository.
+5. The push is exactly `git push --force-with-lease=refs/heads/<branch>:<start> origin HEAD:refs/heads/<branch>`, and `origin` resolves to the PR's repository.
+
+The lease makes the push a compare-and-swap on `<start>`, so a branch deleted or reset after condition 4 was read rejects the push instead of being recreated or advanced. Condition 4 keeps it a fast-forward. The gate refuses `--force`, `+` refspecs, and a lease without an explicit expected SHA.
 6. No hard stop matches.
 
 | Hard stop | Inspects |
@@ -186,7 +192,7 @@ Diff range rules follow.
 
 | Topic | Decision |
 |---|---|
-| Autonomous push | Drive only, for CI failures, review feedback, and conflicts, always a gated fast-forward, never a force push or merge |
+| Autonomous push | Drive only, for CI failures, review feedback, and conflicts, always a gated fast-forward leased on the start SHA, never a force push or merge |
 | Eligible PRs | Drive takes PRs the viewer authored from a branch in the same repository, and check and watch take any readable PR |
 | Comment input | Comments from anyone are accepted and checked against the code before acting |
 | Accepted risk | On a public repository a third party can steer a fix outside every hard stop, and its local verification runs on the user's machine |
