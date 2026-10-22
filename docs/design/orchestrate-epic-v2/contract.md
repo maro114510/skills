@@ -416,7 +416,7 @@ The rules cover at least the commit skill's patterns and the earlier secret scre
 
 ### 16.1 Worktree
 
-`oe worker worktree` gives the branch the Issue state records, so an applied `epic-redo` branch is honored, one worktree under `<main checkout>-wt/<branch>`, beside the repository's main checkout. Neither the main checkout nor the shared checkout, when that is itself a linked worktree, is ever handed to a worker.
+`oe worker worktree` gives the branch the Issue state records, so an applied `epic-redo` branch is honored, and accepts every name the board classifies as the Issue's work that git accepts as a branch name, one worktree under `<main checkout>-wt/<branch>`, beside the repository's main checkout. Neither the main checkout nor the shared checkout, when that is itself a linked worktree, is ever handed to a worker.
 
 | Case | Result |
 |---|---|
@@ -435,7 +435,7 @@ The rules cover at least the commit skill's patterns and the earlier secret scre
 
 - A missing `--issue`, `--worktree`, `--implement`, or `--checks-set` exits 8 before any call. So does an implement path that is not an absolute, existing `SKILL.md`, or an unreadable set. No worker is spawned without a brief.
 - After the read, exit 8 when the worktree is not a registered worktree on the recorded branch, when its HEAD is not the recorded `head_sha`, or when a trusted comment above the watermark is not consumed yet; run `oe state apply-signals` first. A set derived at another commit than `origin/<default branch>` exits 3.
-- The prompt passes identifiers, not the Issue body: the repository, the Issue, the Epic as one line of context, the branch, and the worktree. It carries in full the implement skill path, CHECKS_SET's runnable entries verbatim, the pending findings, the decision, every retained context comment, the loop's `blocked:` and `qa:` notes, and, after a FAILED, that failure's record. Context bodies are re-fetched by ID per §6, labeled as human data that never widens scope; a body whose author is no longer trusted is withheld.
+- The prompt passes identifiers, not the Issue body: the repository, the Issue, the Epic as one line of context, the branch, and the worktree. It carries in full the implement skill path, CHECKS_SET's runnable entries verbatim with their captured env, the pending findings, the decision, every retained context comment, the loop's `blocked:` and `qa:` notes, and, after a FAILED, that failure's record. Context bodies are re-fetched by ID per §6, labeled as human data that never widens scope; a body whose author is no longer trusted is withheld.
 
 ### 16.3 Report Triage
 
@@ -446,7 +446,7 @@ The rules cover at least the commit skill's patterns and the earlier secret scre
 | Malformed, empty, for another Issue, branch, or worktree, DONE whose `HEAD_SHA` is not the worktree's HEAD, or DONE with uncommitted work. `UNKNOWN` for the branch or worktree is no mismatch, since `oe` checks the dispatch itself | FAILED, never DONE | as FAILED | as FAILED |
 | DONE | DONE | `report:<n>:<head>:<digest>` with the skips, decisions, and findings, then `head_sha` | `review` |
 | BLOCKED with `--ship-class secret`, `split`, or `scope` | Ship-class | `ship-class:<n>:<kind>:<digest>`, then `park` | `parked` |
-| BLOCKED | BLOCKED | `blocked:<n>:<head>:<digest>`, then the state | `await-human`, or `redispatch` after an auto-answer |
+| BLOCKED | BLOCKED | `blocked:<n>:<head>:<digest>`, then any auto-answer, then the state | `await-human`, or `redispatch` after an auto-answer |
 | FAILED, first | FAILED | `report:<n>:<head>:<digest>`; the retry's brief carries it | `redispatch` |
 | FAILED, second in a row | FAILED | the report note and `parked:<n>:failed:<digest>`, then the park | `parked` |
 
