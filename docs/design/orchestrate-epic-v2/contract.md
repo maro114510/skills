@@ -465,7 +465,7 @@ The rules cover at least the commit skill's patterns and the earlier secret scre
 - Both take `--issue`, `--worktree`, `--checks-set`, `--lease-token`, and `--repo-dir`.
 - Both refuse an Issue with no state, a parked Issue, and an Issue with no recorded head.
 - Both read `origin/<default branch>` once and use that one SHA for every check in the pass, and never fetch it, since the Publisher fetches it once per round.
-- Both exit 3 and write nothing when CHECKS_SET was derived at another commit than `origin/<default branch>`.
+- Both exit 3 and write nothing when CHECKS_SET was derived for another default branch or at another commit than `origin/<default branch>`.
 - The integration merge is the only commit the loop makes, so the model and the reviewer never commit.
 
 ```mermaid
@@ -495,7 +495,7 @@ flowchart LR
 | A head other than the recorded head | Adopted only when it is oe's merge commit on the recorded head, else exit 8 |
 | Uncommitted changes or untracked files | Nothing merged, and a blocking finding |
 | The base is already an ancestor of the head | Nothing merged |
-| Otherwise | `merge --no-ff --commit --no-squash` of the base commit with hooks, signing, editor, rerere, and autostash disabled, so branch merge options cannot skip the commit |
+| Otherwise | `merge --strategy=ort --no-ff --commit --no-squash` of the base commit with the branch's `mergeOptions` blanked and hooks, signing, editor, rerere, and autostash disabled, so no configured option can skip the commit, drop the base, or resolve a conflict |
 | A merge that exits 0 without oe's merge commit | Restored, then exit 1 |
 | A conflict | Aborted and checked clean at the head, else exit 1, and the conflicting paths become a blocking finding |
 | A failure without a conflict | Restored as above, then exit 1 |
@@ -568,7 +568,7 @@ oe checks the form of evidence only, and whether it proves its criterion stays t
 A staleness pass runs `mark_stale`, which clears the approval and records the session. It is uncharged.
 
 - An Issue with a publish record first gets `stale:<n>:<head>:<base>`, once per pair.
-- When the scan refuses the reason, which quotes the report, the note goes without it.
+- The reason quotes the report, so a suspected secret in it is withheld from the printed result and the note.
 - The first pass in a session goes on to a fresh pin and reviewer with next `reverify`.
 - A second pass in the same session, whatever the pair, defers the Issue to the next invocation with next `defer`, and the Issue stays in progress.
 
