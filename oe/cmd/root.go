@@ -24,6 +24,9 @@ type Env struct {
 	Stderr  io.Writer
 	Exec    runner.Runner
 	Version string
+	// Getenv and Hostname default to the process's own; tests replace them.
+	Getenv   func(string) string
+	Hostname func() (string, error)
 }
 
 type globals struct {
@@ -100,6 +103,10 @@ func newRoot(env Env) *cobra.Command {
 		newHealthCmd(env, g),
 		newReadinessCmd(env, g),
 		newScanCmd(env, g),
+		newLeaseCmd(env, g),
+		newNoteCmd(env, g),
+		newLedgerCmd(env, g),
+		newStateCmd(env, g),
 		newGroup("ship", "Ship approved work", newMutatingCmd(env, g, "publish", "Push the approved head and open its PR", "#289")),
 		newGroup("land", "Land shipped PRs", newMutatingCmd(env, g, "merge", "Merge one PR at its reviewed head", "#290")),
 	)
