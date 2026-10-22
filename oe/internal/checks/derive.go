@@ -32,8 +32,8 @@ func Derive(ctx context.Context, git GitReader, base, ref string) (Set, error) {
 	if err != nil {
 		return Set{}, err
 	}
-	set := Set{Ref: ref, Base: base, Revision: revision, DefaultBranchPush: pushNone, Entries: []Entry{}}
-	push := pushNone
+	set := Set{Ref: ref, Base: base, Revision: revision, DefaultBranchPush: PushNone, Entries: []Entry{}}
+	push := PushNone
 	for file := range strings.SplitSeq(string(list), "\n") {
 		if !isWorkflowFile(file) {
 			continue
@@ -80,13 +80,13 @@ type wfInfo struct {
 }
 
 func strongerPush(a, b string) string {
-	if a == pushRuns || b == pushRuns {
-		return pushRuns
+	if a == PushRuns || b == PushRuns {
+		return PushRuns
 	}
-	if a == pushFiltered || b == pushFiltered {
-		return pushFiltered
+	if a == PushFiltered || b == PushFiltered {
+		return PushFiltered
 	}
-	return pushNone
+	return PushNone
 }
 
 // parseWorkflow walks one workflow's ordered YAML tree. It keeps the workflow only when a trigger
@@ -97,7 +97,7 @@ func parseWorkflow(file string, body []byte, base string) ([]Entry, wfInfo, erro
 		return nil, wfInfo{}, exitcode.Wrap(exitcode.Unreadable, err, file+": unparseable YAML")
 	}
 	if doc.Kind != yaml.DocumentNode || len(doc.Content) == 0 {
-		return nil, wfInfo{keep: false, push: pushNone}, nil // An empty document triggers nothing.
+		return nil, wfInfo{keep: false, push: PushNone}, nil // An empty document triggers nothing.
 	}
 	root := doc.Content[0]
 	if root.Kind != yaml.MappingNode {
@@ -109,7 +109,7 @@ func parseWorkflow(file string, body []byte, base string) ([]Entry, wfInfo, erro
 		return nil, wfInfo{}, exitcode.Wrap(exitcode.Unreadable, err, file)
 	}
 	if !keep {
-		return nil, wfInfo{keep: false, push: pushNone}, nil
+		return nil, wfInfo{keep: false, push: PushNone}, nil
 	}
 	return keptWorkflow(file, root, push)
 }
@@ -228,10 +228,10 @@ func mappingTriggers(on *yaml.Node) ([]trigger, error) {
 func triggersKeep(on *yaml.Node, base string) (bool, string, error) {
 	trs, err := triggers(on)
 	if err != nil {
-		return false, pushNone, err
+		return false, PushNone, err
 	}
 	keep := false
-	push := pushNone
+	push := PushNone
 	for _, t := range trs {
 		switch t.name {
 		case "pull_request":
@@ -239,14 +239,14 @@ func triggersKeep(on *yaml.Node, base string) (bool, string, error) {
 		case "push":
 			fires, filtered, err := pushFires(t.config, base)
 			if err != nil {
-				return false, pushNone, err
+				return false, PushNone, err
 			}
 			if fires {
 				keep = true
 				if filtered {
-					push = strongerPush(push, pushFiltered)
+					push = strongerPush(push, PushFiltered)
 				} else {
-					push = strongerPush(push, pushRuns)
+					push = strongerPush(push, PushRuns)
 				}
 			}
 		}

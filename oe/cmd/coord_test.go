@@ -85,6 +85,7 @@ func coordCommands(token string) map[string][]string {
 		"state apply-signals": append([]string{"state", "apply-signals", "--issue", "7"}, tok...),
 		"state park":          append([]string{"state", "park", "--issue", "7", "--blocker", "x"}, tok...),
 		"state invalidate":    append([]string{"state", "invalidate-approval", "--issue", "7"}, tok...),
+		"gate":                append([]string{"gate"}, tok...),
 	}
 }
 

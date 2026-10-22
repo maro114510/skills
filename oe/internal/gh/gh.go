@@ -66,6 +66,44 @@ func (c *Client) Read(ctx context.Context, args ...string) ([]byte, error) {
 	return c.read(ctx, runner.GH, pinned)
 }
 
+// notFoundStatus is the suffix gh writes to stderr when the API answered 404.
+const notFoundStatus = "(HTTP 404)"
+
+// ReadMissing is Read for a resource whose absence is an answer. It reports found=false, without
+// tainting the client, only for a confirmed absence: gh's 404 line on stderr and GitHub's error
+// body on stdout carrying exactly message. Any other failure, another 404 included, taints the
+// client as Read does, so a resource that could not be seen is never read as absent.
+func (c *Client) ReadMissing(ctx context.Context, message string, args ...string) ([]byte, bool, error) {
+	if err := readOnlyAPI(args); err != nil {
+		return nil, false, err
+	}
+	pinned, err := pinHost(args)
+	if err != nil {
+		return nil, false, err
+	}
+	res, err := c.r.Run(ctx, runner.GH, pinned)
+	if err != nil {
+		return nil, false, c.taint(exitcode.Wrap(exitcode.Unreadable, err, describe(runner.GH, pinned)+" failed"))
+	}
+	if res.ExitCode == 0 {
+		return res.Stdout, true, nil
+	}
+	if confirmedMissing(res, message) {
+		return nil, false, nil
+	}
+	return nil, false, c.taint(failure(runner.GH, pinned, res))
+}
+
+func confirmedMissing(res runner.Result, message string) bool {
+	if !strings.Contains(string(res.Stderr), notFoundStatus) {
+		return false
+	}
+	var body struct {
+		Message string `json:"message"`
+	}
+	return json.Unmarshal(res.Stdout, &body) == nil && body.Message == message
+}
+
 // Git runs a read-only git command and returns its stdout.
 func (c *Client) Git(ctx context.Context, args ...string) ([]byte, error) {
 	return c.read(ctx, runner.Git, args)

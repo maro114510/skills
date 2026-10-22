@@ -14,7 +14,7 @@ import (
 )
 
 // Handler returns the response body of a query, given its variables. The raw query is under the
-// key "query".
+// key "query"; a git call's arguments, joined by spaces, are under the key "args".
 type Handler func(vars map[string]string) string
 
 // Router implements runner.Runner.
@@ -22,6 +22,7 @@ type Router struct {
 	mu       sync.Mutex
 	handlers map[string]Handler
 	exits    map[string]int
+	stderrs  map[string]string
 	calls    [][]string
 	origin   string
 	store    *Store
@@ -38,44 +39,43 @@ const (
 	MergePull    = "mergePull"
 	Readiness    = "readiness"
 	Git          = "git"
+	// Protection is the REST read of the default branch's protection.
+	Protection = "protection"
 )
 
-// phrase is the text only one query holds. The comments query is the only one with the first
-// form, and the page query for more comments the only one with the second.
-func phrase(name string) string {
-	switch name {
-	case Tree:
-		return "defaultBranchRef { name target"
-	case Blockers:
-		return "node(id: $id)"
-	case Pulls:
-		return "pullRequests(first: 100"
-	case Refs:
-		return "refs(refPrefix"
-	case CommentsName:
-		return "comments(first: 100) { totalCount"
-	case MoreComments:
-		return "comments(first: 100, after: $after)"
-	case MergePull:
-		return "mergeCommit { oid"
-	case Readiness:
-		return "reviewRequests(first: 100)"
-	default:
-		return ""
-	}
+// phrases are the texts only one query holds. The comments query is the only one with the
+// first comments form, and the page query for more comments the only one with the second.
+var phrases = map[string]string{ //nolint:gochecknoglobals // A fixed table of the queries told apart.
+	Tree:         "defaultBranchRef { name target",
+	Blockers:     "node(id: $id)",
+	Pulls:        "pullRequests(first: 100",
+	Refs:         "refs(refPrefix",
+	CommentsName: "comments(first: 100) { totalCount",
+	MoreComments: "comments(first: 100, after: $after)",
+	MergePull:    "mergeCommit { oid",
+	Readiness:    "reviewRequests(first: 100)",
+	Protection:   "/protection",
 }
+
+func phrase(name string) string { return phrases[name] }
 
 // queryOrder is the order queries are told apart in: a query is the first whose phrase it holds.
 func queryOrder() []string {
-	return []string{CommentsName, MoreComments, Blockers, MergePull, Readiness, Tree, Pulls, Refs}
+	return []string{CommentsName, MoreComments, Blockers, MergePull, Readiness, Tree, Pulls, Refs, Protection}
 }
 
 const probePhrase = "subIssues(first:0)"
 
 // New returns a Router for a healthy world with an empty Epic: gh 2.102 signed in as "loop",
-// origin o/r, and empty answers for every query.
+// origin o/r, empty answers for every query, and a default branch without protection.
 func New() *Router {
-	r := &Router{mu: sync.Mutex{}, handlers: map[string]Handler{}, exits: map[string]int{}, calls: nil, origin: "https://github.com/o/r.git\n", store: nil}
+	r := &Router{
+		mu: sync.Mutex{}, handlers: map[string]Handler{}, exits: map[string]int{}, stderrs: map[string]string{},
+		calls: nil, origin: "https://github.com/o/r.git\n", store: nil,
+	}
+	r.On(Protection, func(map[string]string) string { return `{"message":"Branch not protected","status":"404"}` })
+	r.Exit(Protection, 1)
+	r.Stderr(Protection, "gh: Branch not protected (HTTP 404)")
 	r.On(Tree, func(map[string]string) string { return EpicTree("", "[]", 0, false, "") })
 	r.On(Pulls, func(map[string]string) string { return PullPage("[]", false, "") })
 	r.On(Refs, func(map[string]string) string { return RefPage(false, "") })
@@ -88,6 +88,13 @@ func (r *Router) On(name string, h Handler) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.handlers[name] = h
+}
+
+// Stderr sets the stderr a query or call returns with its body.
+func (r *Router) Stderr(name, text string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.stderrs[name] = text
 }
 
 // SetOrigin sets the URL `git remote get-url origin` prints.
@@ -149,7 +156,7 @@ func Vars(args []string) map[string]string {
 func (r *Router) Run(_ context.Context, prog runner.Program, args []string) (runner.Result, error) {
 	r.mu.Lock()
 	r.calls = append(r.calls, append([]string{string(prog)}, args...))
-	handlers, exits, origin, store := r.handlers, r.exits, r.origin, r.store
+	handlers, exits, stderrs, origin, store := r.handlers, r.exits, r.stderrs, r.origin, r.store
 	r.mu.Unlock()
 	if out, ok := basic(prog, args, origin); ok {
 		return runner.Result{Stdout: []byte(out), Stderr: nil, ExitCode: 0}, nil
@@ -158,7 +165,8 @@ func (r *Router) Run(_ context.Context, prog runner.Program, args []string) (run
 		return res, nil
 	}
 	if prog == runner.Git {
-		return runner.Result{Stdout: []byte(handlers[Git](nil)), Stderr: nil, ExitCode: exits[Git]}, nil
+		out := handlers[Git](map[string]string{"args": strings.Join(args, " ")})
+		return runner.Result{Stdout: []byte(out), Stderr: []byte(stderrs[Git]), ExitCode: exits[Git]}, nil
 	}
 	joined := strings.Join(args, "\n")
 	for _, name := range queryOrder() {
@@ -169,7 +177,7 @@ func (r *Router) Run(_ context.Context, prog runner.Program, args []string) (run
 		if !found {
 			return runner.Result{}, fmt.Errorf("no handler for %s: %w", name, runner.ErrNotRecorded)
 		}
-		return runner.Result{Stdout: []byte(h(Vars(args))), Stderr: nil, ExitCode: exits[name]}, nil
+		return runner.Result{Stdout: []byte(h(Vars(args))), Stderr: []byte(stderrs[name]), ExitCode: exits[name]}, nil
 	}
 	return runner.Result{}, fmt.Errorf("unexpected call %q: %w", args, runner.ErrNotRecorded)
 }

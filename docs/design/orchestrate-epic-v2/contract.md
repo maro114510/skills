@@ -241,7 +241,7 @@ Every `oe` subcommand prints one JSON payload or one verdict line.
 | 5 | Wait: checks or health pending | None |
 | 6 | Protocol: v1 marker, unknown version, bad JSON, key mismatch, duplicate state | None |
 | 7 | Coordination: lock held, foreign or lost lease, moved revision | None |
-| 8 | Refused: no approval or grant, scan finding, incomplete brief, failed precondition, oversized write, old gh, host without sub-issues or blocked-by | None |
+| 8 | Refused: no approval or grant, scan finding, incomplete brief, failed precondition, oversized write, old gh, host without sub-issues or blocked-by | None, except the Run Plan `oe gate` posts, §15 |
 
 ## 10. Critical Rules
 
@@ -301,7 +301,7 @@ Every subcommand that needs the run inputs resolves them one way, in this order,
 - `--snapshot` with an empty value exits 2; it never falls back to real calls.
 - `--snapshot <file>` replays recorded `{argv, stdout, stderr, exit_code}` calls and never starts a process. A call missing from the file exits 1. Read-only subcommands give identical output on every run over one file.
 - `oe checks derive` reads workflow files at the base and ref through `git`, and emits CHECKS_SET: every runnable and requires-runner entry in file, job, and step order. `oe checks run` executes each runnable entry with the captured shell, working directory, and env in its own process, and never executes a requires-runner entry; it reports the exit status and any worktree or index change. A set whose revision no longer matches the ref is refused as stale rather than run. Under `--snapshot`, `oe checks run` exits 8 before any call, because replaying a captured process is not possible.
-- `oe lease`, `oe note post`, `oe ledger`, and `oe state` are the only subcommands that write loop comments, each through the single writer of §5 and §7. Under `--snapshot` they exit 8 before any call. Each takes the lock of §4.1, and all but `lease acquire` confirm the lease first.
+- `oe lease`, `oe note post`, `oe ledger`, `oe state`, and `oe gate` are the only subcommands that write loop comments, each through the single writer of §5 and §7. Under `--snapshot` they exit 8 before any call. Each takes the lock of §4.1, and all but `lease acquire` confirm the lease first.
 - `oe ship publish` and `oe land merge` are the only subcommands that may push, open a PR, or merge. Under `--snapshot` they exit 8 before any call. `.claude/hooks/require-user-approval.sh` blocks both without the approval marker, whether they are run directly, by path, or through `skills/orchestrate-epic/scripts/oe`. The marker approves only the line it ends.
 
 ## 13. Classifiers
@@ -389,3 +389,23 @@ The rules cover at least the commit skill's patterns and the earlier secret scre
 | A shallow boundary inside the range | Exit 1, because it can hide an outgoing commit |
 | Replace objects and the index | Ignored and never written, so the scan reads what a push sends |
 | An error message | Never carries git's output |
+
+## 15. Entry Gate
+
+`oe gate --lease-token <token>` decides, from one full board read, whether and how far the loop may act. It runs on every invocation, before any worktree, dispatch, review, ship, or merge, and is a coordination subcommand of §12. A read that fails exits 1 and writes nothing, so a failed Run Plan lookup never posts a Run Plan. It reads no label.
+
+| Step | Condition | Result |
+|---|---|---|
+| 1 | No `run-plan` note by `ME` on the Epic | Post the Run Plan through the comment writer, then exit 8 with `run-plan-posted` |
+| 2 | No trusted strict `epic-approve` with an ID above the Run Plan's | Exit 8 with `awaiting-approval`; nothing is written |
+| 3 | No ledger | Create it for the dispatchable Issues not done |
+| 4 | A frozen ledger | Apply an `epic-release` as §6 says; with none, exit 4 with `frozen` |
+| 5 | Health `next` is `freeze` | Freeze the Epic with the merge commit and status, then exit 4 with `frozen` |
+| 6 | Otherwise | Exit 0 with `approved` and `dispatch` true |
+
+- The window opens at the lowest ID among the loop's `run-plan` notes, so a duplicate never narrows it. A Run Plan is never edited or posted twice.
+- `merge_authorized` is true only with `dispatch`, when the latest by ID of the trusted strict `epic-auto-merge` and `epic-revoke-auto-merge` above the Run Plan is a grant. Approval alone never authorizes a merge. The grant comes from the same full read, so it is never unreadable on its own; every merge reads it again, #290.
+- The Run Plan's prose is `oe`'s own template; every number and fact in it comes from `oe`: branch protection, CHECKS_SET at `origin/<default branch>` split into runnable and requires-runner entries, a warning when no default-branch push can confirm a merge or when the repository requires neither a check nor a review, the Issues with their state, what they wait on, and the default branch as every base, `max-parallel`, the fix-cycle cap, the per-Issue worst case, the Epic-wide budget, and that nothing limits time or tokens.
+- Only GitHub's `Branch not protected` 404 means no protection. Any other failure of that read exits 1. Rulesets are not read, and the Run Plan says so; GitHub still enforces them at merge.
+- Only exit 4 reports `frozen`. A ledger write that fails or races exits with its own code and no payload, since an `epic-release` would lift nothing.
+- CHECKS_SET is derived only from a checkout whose origin is the repository; another origin exits 8. An `origin/<default branch>` other than the default branch head GitHub reports exits 3 and posts nothing, since the Run Plan is never posted again.
