@@ -427,3 +427,62 @@ func TestStoppedWorkerCommitsAreRecorded(t *testing.T) {
 		t.Fatalf("FAILED state = %+v", res.State)
 	}
 }
+
+// TestAutoAnswerIsPostedBeforeTheStateRecordsTheQuestion: when the state write fails after the
+// answer, the answer is already on the Issue, and a re-run records the report without a second
+// answer and still reports it as answered.
+func TestAutoAnswerIsPostedBeforeTheStateRecordsTheQuestion(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld(t)
+	token := w.acquire(t)
+	w.put(t, child, newIssue())
+	w.store.OnWrite(func(_ *ghfake.Store, wr ghfake.Write) (int, bool) {
+		if wr.Method == http.MethodPatch && strings.Contains(wr.Body, "state issue:7") {
+			return 1, false
+		}
+		return 0, true
+	})
+	tr := blocked("1. A か B か")
+	tr.Answer = "B。Issue の仕様 2 にあります。"
+	_, err := w.session(token).Triage(ctx(), child, tr)
+	wantCode(t, err, exitcode.Unreadable)
+	if len(w.prefixed("qa:7:")) != 1 {
+		t.Fatal("the answer was not posted before the state write")
+	}
+	w.store.OnWrite(nil)
+	res, err := w.session(token).Triage(ctx(), child, tr)
+	ok(t, err)
+	wantResult(t, "re-run", res, coord.RouteBlocked, coord.NextRedispatch, coord.AnswerPosted)
+	if len(w.prefixed("qa:7:")) != 1 || len(w.prefixed("blocked:7:")) != 1 {
+		t.Error("the re-run posted a second question or answer")
+	}
+}
+
+// TestParkedWorkerCommitsAreRecorded: a worker that committed and then raised a ship-class
+// question, or one holding a suspected secret, leaves its head recorded when the Issue parks.
+func TestParkedWorkerCommitsAreRecorded(t *testing.T) {
+	t.Parallel()
+
+	for name, tr := range map[string]coord.Triage{
+		"ship-class": func() coord.Triage {
+			tr := blocked("1. この変更は範囲内か")
+			tr.ShipClass = []handoff.ShipClass{handoff.ShipScope}
+			return tr
+		}(),
+		"secret": blocked("1. Is AKIA" + strings.Repeat("Q", 16) + " safe?"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			w := newWorld(t)
+			token := w.acquire(t)
+			w.put(t, child, newIssue())
+			tr.Head = strings.Repeat("e", 40)
+			res, err := w.session(token).Triage(ctx(), child, tr)
+			ok(t, err)
+			if res.Next != coord.NextParked || res.State.HeadSHA == nil || *res.State.HeadSHA != tr.Head {
+				t.Errorf("%+v, want parked at %s", res.State, tr.Head)
+			}
+		})
+	}
+}

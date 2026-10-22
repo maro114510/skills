@@ -279,9 +279,10 @@ func (t InvalidateApproval) apply(in applyInput) (*state.Issue, error) {
 }
 
 // Park records what parks the Issue for a person, empties pending findings, and clears
-// approval.
+// approval. Head, when set, is a head the worker committed before it stopped.
 type Park struct {
 	Blockers []string
+	Head     string
 }
 
 // Name implements Transition.
@@ -295,6 +296,7 @@ func (t Park) apply(in applyInput) (*state.Issue, error) {
 		return nil, refused("park needs the blockers that park the Issue")
 	}
 	st := cloneIssue(in.cur)
+	movedHead(st, t.Head)
 	park(st, t.Blockers)
 	return st, nil
 }

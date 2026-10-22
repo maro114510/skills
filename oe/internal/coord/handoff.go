@@ -14,6 +14,7 @@ import (
 	"github.com/maro114510/skills/oe/internal/exitcode"
 	"github.com/maro114510/skills/oe/internal/handoff"
 	"github.com/maro114510/skills/oe/internal/protocol"
+	"github.com/maro114510/skills/oe/internal/scan"
 	"github.com/maro114510/skills/oe/internal/signals"
 	"github.com/maro114510/skills/oe/internal/state"
 )
@@ -338,17 +339,19 @@ func (s *Session) post(ctx context.Context, n int, key, text string, res *Triage
 
 // parkOnSecret parks the Issue on a suspected secret in what the worker gave, posting a note
 // that withholds the text.
-func (s *Session) parkOnSecret(ctx context.Context, n int, what string, res *TriageResult) error {
+func (s *Session) parkOnSecret(ctx context.Context, n int, what, head string, res *TriageResult) error {
 	text := handoff.ShipClassNote(n, handoff.ShipSecret, "")
 	key := fmt.Sprintf("ship-class:%d:%s:%s", n, handoff.ShipSecret, DigestPlaceholder)
 	if err := s.post(ctx, n, key, text, res); err != nil {
 		return err
 	}
-	return s.parkWith(ctx, n, []string{"ship-class secret: " + what + " holds a suspected secret"}, res)
+	return s.parkWith(ctx, n, []string{"ship-class secret: " + what + " holds a suspected secret"}, head, res)
 }
 
-func (s *Session) parkWith(ctx context.Context, n int, blockers []string, res *TriageResult) error {
-	st, err := s.Update(ctx, n, Park{Blockers: blockers})
+// parkWith parks the Issue, recording the head the worker left, so a later epic-retry resumes
+// from the worktree as it is instead of stopping on a divergence.
+func (s *Session) parkWith(ctx context.Context, n int, blockers []string, head string, res *TriageResult) error {
+	st, err := s.Update(ctx, n, Park{Blockers: blockers, Head: head})
 	res.State, res.Route, res.Next = st, RouteShipClass, NextParked
 	return err
 }
@@ -363,7 +366,7 @@ func headKey(h string) string { return cmp.Or(h, "none") }
 func (s *Session) triageDone(ctx context.Context, n int, rep handoff.Report, res *TriageResult) error {
 	key := fmt.Sprintf("report:%d:%s:%s", n, rep.HeadSHA, DigestPlaceholder)
 	if err := s.post(ctx, n, key, handoff.DoneReportNote(rep.HeadSHA, rep), res); isScan(err) {
-		return s.parkOnSecret(ctx, n, "the DONE report", res)
+		return s.parkOnSecret(ctx, n, "the DONE report", rep.HeadSHA, res)
 	} else if err != nil {
 		return err
 	}
@@ -384,31 +387,35 @@ func (s *Session) triageShipClass(ctx context.Context, n int, t Triage, res *Tri
 		key := fmt.Sprintf("ship-class:%d:%s:%s", n, kind, DigestPlaceholder)
 		err := s.post(ctx, n, key, handoff.ShipClassNote(n, kind, questions), res)
 		if isScan(err) {
-			return s.parkOnSecret(ctx, n, "the worker's questions", res)
+			return s.parkOnSecret(ctx, n, "the worker's questions", t.Head, res)
 		}
 		if err != nil {
 			return err
 		}
 		blockers = append(blockers, fmt.Sprintf("ship-class %s: %s", kind, res.Notes[len(res.Notes)-1].Key))
 	}
-	return s.parkWith(ctx, n, blockers, res)
+	return s.parkWith(ctx, n, blockers, t.Head, res)
 }
 
 func (s *Session) triageBlocked(ctx context.Context, n int, rep handoff.Report, t Triage, res *TriageResult) error {
 	key := fmt.Sprintf("blocked:%d:%s:%s", n, headKey(t.Head), DigestPlaceholder)
 	err := s.post(ctx, n, key, handoff.BlockedNote(n, t.Report.Questions), res)
 	if isScan(err) {
-		return s.parkOnSecret(ctx, n, "the worker's questions", res)
+		return s.parkOnSecret(ctx, n, "the worker's questions", t.Head, res)
 	}
 	if err != nil {
 		return err
 	}
-	next, err := s.Update(ctx, n, WorkerResult{Report: asReport(rep), Worktree: rep.Worktree, QuestionKey: res.Notes[len(res.Notes)-1].Key})
-	res.State, res.Next = next, NextAwaitHuman
-	if err != nil {
+	question := res.Notes[len(res.Notes)-1].Key
+	// The answer is posted before the state records the report, so no dispatch can read an
+	// in-progress state whose question has an answer the brief would miss.
+	res.Next = NextAwaitHuman
+	if err := s.autoAnswer(ctx, n, t, res); err != nil {
 		return err
 	}
-	return s.autoAnswer(ctx, n, t, res)
+	next, err := s.Update(ctx, n, WorkerResult{Report: asReport(rep), Worktree: rep.Worktree, QuestionKey: question})
+	res.State = next
+	return err
 }
 
 // autoAnswer posts the Publisher's answer once per Issue per session. A commit-approval
@@ -428,19 +435,19 @@ func (s *Session) autoAnswer(ctx context.Context, n int, t Triage, res *TriageRe
 		return err
 	}
 	session := Digest(s.token)
-	for key, cs := range r.idx.Notes {
-		if !strings.HasPrefix(key, fmt.Sprintf("qa:%d:", n)) {
-			continue
-		}
-		for _, c := range cs {
-			if handoff.AnsweredIn(c.Body, session) {
-				res.Reason = "this session already auto-answered #" + strconv.Itoa(n) + "; a second BLOCKED waits for a person"
-				return nil
-			}
-		}
+	text := handoff.AnswerNote(t.Report.Questions, t.Answer, session)
+	key := fmt.Sprintf("qa:%d:%s", n, Digest(text))
+	if id := r.noteID(key); id != 0 {
+		// This very answer is already on the Issue: a re-run after a failed state write.
+		res.Notes = append(res.Notes, NoteResult{On: n, Key: key, Posted: false, CommentID: id, Findings: []scan.Finding{}})
+		res.AutoAnswer, res.Next = AnswerPosted, NextRedispatch
+		return nil
 	}
-	key := fmt.Sprintf("qa:%d:%s", n, DigestPlaceholder)
-	err = s.post(ctx, n, key, handoff.AnswerNote(t.Report.Questions, t.Answer, session), res)
+	if answeredIn(r, n, session) {
+		res.Reason = "this session already auto-answered #" + strconv.Itoa(n) + "; a second BLOCKED waits for a person"
+		return nil
+	}
+	err = s.post(ctx, n, key, text, res)
 	if isScan(err) {
 		res.Reason = "the answer holds a suspected secret; it was not posted"
 		return nil
@@ -450,6 +457,21 @@ func (s *Session) autoAnswer(ctx context.Context, n int, t Triage, res *TriageRe
 	}
 	res.AutoAnswer, res.Next = AnswerPosted, NextRedispatch
 	return nil
+}
+
+// answeredIn reports whether the session with this digest already auto-answered Issue n.
+func answeredIn(r comments, n int, session string) bool {
+	for key, cs := range r.idx.Notes {
+		if !strings.HasPrefix(key, fmt.Sprintf("qa:%d:", n)) {
+			continue
+		}
+		for _, c := range cs {
+			if handoff.AnsweredIn(c.Body, session) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (s *Session) triageFailed(ctx context.Context, n int, st *state.Issue, rep handoff.Report, head string, res *TriageResult) error {

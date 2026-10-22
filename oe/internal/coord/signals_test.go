@@ -202,7 +202,7 @@ func TestDecisionThatDoesNotApplyIsConsumed(t *testing.T) {
 	w.human(child, "epic-retry")
 	_, err := w.session(token).Update(ctx(), child, applyAs(coord.StandingOther))
 	ok(t, err)
-	_, err = w.session(token).Update(ctx(), child, coord.Park{Blockers: []string{"x"}})
+	_, err = w.session(token).Update(ctx(), child, coord.Park{Blockers: []string{"x"}, Head: ""})
 	ok(t, err)
 	got, err := w.session(token).Update(ctx(), child, applyAs(coord.StandingParked))
 	ok(t, err)
@@ -255,7 +255,7 @@ func TestAnswerToAnOpenQuestionIsAnAnswer(t *testing.T) {
 		t.Errorf("kinds = %v", kinds)
 	}
 	w.human(child, "epic-retry")
-	_, err = w.session(token).Update(ctx(), child, coord.Park{Blockers: []string{"x"}})
+	_, err = w.session(token).Update(ctx(), child, coord.Park{Blockers: []string{"x"}, Head: ""})
 	ok(t, err)
 	got, err = w.session(token).Update(ctx(), child, applyAs(coord.StandingParked))
 	ok(t, err)

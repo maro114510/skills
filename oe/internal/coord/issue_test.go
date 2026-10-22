@@ -149,7 +149,7 @@ func TestTransitionsNeedAState(t *testing.T) {
 	before := w.writes()
 	for _, tr := range []coord.Transition{
 		coord.ApplySignals{Standing: coord.StandingParked, Taken: nil},
-		coord.Park{Blockers: []string{"x"}},
+		coord.Park{Blockers: []string{"x"}, Head: ""},
 		coord.RecordHead{SHA: "h1"},
 		coord.InvalidateApproval{},
 	} {
@@ -292,7 +292,7 @@ func TestStateWithASuspectedSecretIsNeverWritten(t *testing.T) {
 	token := w.acquire(t)
 	w.put(t, child, newIssue())
 	before := w.writes()
-	_, err := w.session(token).Update(ctx(), child, coord.Park{Blockers: []string{"CI log: AKIA" + strings.Repeat("B", 16)}})
+	_, err := w.session(token).Update(ctx(), child, coord.Park{Blockers: []string{"CI log: AKIA" + strings.Repeat("B", 16)}, Head: ""})
 	wantCode(t, err, exitcode.Refused)
 	if w.writes() != before || strings.Contains(err.Error(), "AKIA") {
 		t.Errorf("writes %d, err %v", w.writes()-before, err)
@@ -310,12 +310,12 @@ func TestParkAndRecordHead(t *testing.T) {
 	if *got.HeadSHA != "h2" || got.Approval != nil {
 		t.Errorf("record_head = %+v", got)
 	}
-	got, err = w.session(token).Update(ctx(), child, coord.Park{Blockers: []string{"ship-class question"}})
+	got, err = w.session(token).Update(ctx(), child, coord.Park{Blockers: []string{"ship-class question"}, Head: ""})
 	ok(t, err)
 	if len(got.UnresolvedBlockers) != 1 || len(got.PendingFindings) != 0 {
 		t.Errorf("park = %+v", got)
 	}
-	_, err = w.session(token).Update(ctx(), child, coord.Park{Blockers: nil})
+	_, err = w.session(token).Update(ctx(), child, coord.Park{Blockers: nil, Head: ""})
 	wantCode(t, err, exitcode.Refused)
 }
 
@@ -342,7 +342,7 @@ func TestStateEditStopsWhenTheRevisionMoved(t *testing.T) {
 		return out
 	})
 	before := w.writes()
-	_, err := w.session(token).Update(ctx(), child, coord.Park{Blockers: []string{"x"}})
+	_, err := w.session(token).Update(ctx(), child, coord.Park{Blockers: []string{"x"}, Head: ""})
 	wantCode(t, err, exitcode.Coordination)
 	if w.writes() != before {
 		t.Error("a write ran over a moved revision")
@@ -363,7 +363,7 @@ func TestStateEditWhoseResponseWasLostCountsAsDone(t *testing.T) {
 		}
 		return 0, true
 	})
-	_, err := w.session(token).Update(ctx(), child, coord.Park{Blockers: []string{"x"}})
+	_, err := w.session(token).Update(ctx(), child, coord.Park{Blockers: []string{"x"}, Head: ""})
 	ok(t, err)
 	if got := w.issue(t, child); len(got.UnresolvedBlockers) != 1 || got.Revision != 2 {
 		t.Errorf("state = %+v", got)
@@ -382,7 +382,7 @@ func TestStateEditThatDidNotLandFails(t *testing.T) {
 		}
 		return 0, true
 	})
-	_, err := w.session(token).Update(ctx(), child, coord.Park{Blockers: []string{"x"}})
+	_, err := w.session(token).Update(ctx(), child, coord.Park{Blockers: []string{"x"}, Head: ""})
 	wantCode(t, err, exitcode.Unreadable)
 	if got := w.issue(t, child); len(got.UnresolvedBlockers) != 0 {
 		t.Error("the failed write is visible")
@@ -397,7 +397,7 @@ func TestDuplicateStateStops(t *testing.T) {
 	token := w.acquire(t)
 	w.put(t, child, newIssue())
 	w.put(t, child, newIssue())
-	_, err := w.session(token).Update(ctx(), child, coord.Park{Blockers: []string{"x"}})
+	_, err := w.session(token).Update(ctx(), child, coord.Park{Blockers: []string{"x"}, Head: ""})
 	wantCode(t, err, exitcode.Protocol)
 }
 

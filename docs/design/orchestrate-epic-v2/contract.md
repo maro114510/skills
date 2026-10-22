@@ -124,7 +124,7 @@ Each transition writes the whole object after a full read. The writer exits 7 if
 | `begin_fix` | `cycle` below 2, a confirmed ledger reservation, findings | Sets pending findings, `cycle` plus 1, clears approval; a repair also sets `repair` |
 | `bind_approval` | Pins unchanged, evidence validated and scanned, no open finding | Sets approval; `head_sha` equals `reviewed_sha`; empties both lists |
 | `invalidate_approval` | Approval set | Clears approval |
-| `park` | Blockers | Sets blockers, empties pending findings, clears approval |
+| `park` | Blockers | Sets blockers, empties pending findings, clears approval. A head the worker committed before it stopped sets `head_sha` |
 | `apply_signals` | A full read of the window, §6 | Advances the watermark, appends context, applies the decision |
 | `record_publish_intent` | Approval bound; `sha` and `base` equal the pair; any earlier publish is `linked` or null | New intent with `prev_sha`, keeping an earlier `pr`. A repaired head re-publishes this way |
 | `record_published` | Publish `intent` or `pushed` | Moves to `pushed`, then `linked` with `pr` |
