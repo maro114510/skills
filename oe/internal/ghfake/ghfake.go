@@ -24,6 +24,7 @@ type Router struct {
 	exits    map[string]int
 	calls    [][]string
 	origin   string
+	store    *Store
 }
 
 // The names of the queries and calls a Router answers.
@@ -74,7 +75,7 @@ const probePhrase = "subIssues(first:0)"
 // New returns a Router for a healthy world with an empty Epic: gh 2.102 signed in as "loop",
 // origin o/r, and empty answers for every query.
 func New() *Router {
-	r := &Router{mu: sync.Mutex{}, handlers: map[string]Handler{}, exits: map[string]int{}, calls: nil, origin: "https://github.com/o/r.git\n"}
+	r := &Router{mu: sync.Mutex{}, handlers: map[string]Handler{}, exits: map[string]int{}, calls: nil, origin: "https://github.com/o/r.git\n", store: nil}
 	r.On(Tree, func(map[string]string) string { return EpicTree("", "[]", 0, false, "") })
 	r.On(Pulls, func(map[string]string) string { return PullPage("[]", false, "") })
 	r.On(Refs, func(map[string]string) string { return RefPage(false, "") })
@@ -148,10 +149,13 @@ func Vars(args []string) map[string]string {
 func (r *Router) Run(_ context.Context, prog runner.Program, args []string) (runner.Result, error) {
 	r.mu.Lock()
 	r.calls = append(r.calls, append([]string{string(prog)}, args...))
-	handlers, exits, origin := r.handlers, r.exits, r.origin
+	handlers, exits, origin, store := r.handlers, r.exits, r.origin, r.store
 	r.mu.Unlock()
 	if out, ok := basic(prog, args, origin); ok {
 		return runner.Result{Stdout: []byte(out), Stderr: nil, ExitCode: 0}, nil
+	}
+	if res, ok := restResult(store, prog, args); ok {
+		return res, nil
 	}
 	if prog == runner.Git {
 		return runner.Result{Stdout: []byte(handlers[Git](nil)), Stderr: nil, ExitCode: exits[Git]}, nil
@@ -168,6 +172,15 @@ func (r *Router) Run(_ context.Context, prog runner.Program, args []string) (run
 		return runner.Result{Stdout: []byte(h(Vars(args))), Stderr: nil, ExitCode: exits[name]}, nil
 	}
 	return runner.Result{}, fmt.Errorf("unexpected call %q: %w", args, runner.ErrNotRecorded)
+}
+
+// restResult answers a REST comment call from the store, when one serves the Router.
+func restResult(store *Store, prog runner.Program, args []string) (runner.Result, bool) {
+	if store == nil || prog != runner.GH || len(args) == 0 || args[0] != "api" {
+		return runner.Result{Stdout: nil, Stderr: nil, ExitCode: 0}, false
+	}
+	out, code, ok := store.rest(args)
+	return runner.Result{Stdout: []byte(out), Stderr: nil, ExitCode: code}, ok
 }
 
 // basic answers the calls that resolve the run's inputs, and the clock.

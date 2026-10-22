@@ -83,6 +83,12 @@ func commentsQuery(numbers []int) string {
 	return b.String()
 }
 
+// ReadComments reads every comment of the listed Issues, by number, with the board's own full
+// read: a partial or failed read returns an error and taints the client.
+func ReadComments(ctx context.Context, c *gh.Client, repo string, numbers []int) (map[int][]Comment, error) {
+	return readComments(ctx, c, repo, numbers)
+}
+
 // readComments reads every comment of the listed Issues. An Issue with more comments than one
 // page is read on page by page; a count that does not add up is a partial read.
 func readComments(ctx context.Context, c *gh.Client, repo string, numbers []int) (map[int][]Comment, error) {

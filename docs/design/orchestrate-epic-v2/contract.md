@@ -74,6 +74,10 @@ Fields: `token`, `host`, `pid`, `started_at`, `renewed_at`.
 
 Renew `renewed_at` at most once a minute. This detects a second Publisher; it is not a distributed lock.
 
+- The lock is a `flock` held by one `oe` process for one command; the lease names the session across its commands.
+- `oe lease acquire --pid <pid>` records the session's process, such as the agent harness, and prints the token. With `--lease-token` it resumes only a lease that still carries that token.
+- Every other coordination command takes `--lease-token` and re-reads the lease before each write.
+
 ### 4.2 Ledger
 
 Fields: `n`, `counters`, `freeze`, `freeze_seq`, `release_watermark`.
@@ -82,6 +86,7 @@ Fields: `n`, `counters`, `freeze`, `freeze_seq`, `release_watermark`.
 - `n` counts dispatchable Issues not done at creation or release, at least 1. Bounds change only on release.
 - `freeze` is null or `{seq, reason, merge_sha, health, released}`, and `released` is required. A freeze holds the Epic while `released` is false. `epic-release` sets it true and keeps the record: health reads the retained `merge_sha` and `health` as history, so the same result reads `HANDLED`, whereas clearing `freeze` would freeze the Epic again on the result it was released from. A later freeze replaces the record with a new `seq` and `released` false. Nothing is inferred from `release_watermark` or the notes, which only decide which `epic-release` comment is consumed.
 - The freeze write comes first, then the note `freeze:<seq>`. Any read of a frozen ledger posts a missing note before reading a release.
+- A reservation that would take any counter above its bound reserves nothing and freezes the Epic instead, with the reason `<counter> <used> + <n> > <bound>` for each such counter. A reservation without a ledger exits 8.
 
 ### 4.3 Post-merge Record
 
@@ -126,7 +131,7 @@ Each transition writes the whole object after a full read. The writer exits 7 if
 
 | Decision | Applies to | Effect |
 |---|---|---|
-| `epic-retry` | Parked | `cycle` 0, both lists emptied, approval cleared |
+| `epic-retry` | Parked by its own state: blockers, or an `epic-drop` | `cycle` 0, both lists emptied, approval cleared |
 | `epic-redo` | Parked or rejected | As retry, plus the next free `feat/issue-<n>-<k>`, and head, publish, and repair cleared |
 | `epic-drop` | Parked or rejected | Recorded; blockers kept |
 | Anything else | — | Consumed as context or ignored, never applied later |
@@ -162,7 +167,8 @@ The Go types make these unrepresentable, or the writer rejects them before any r
 - The watermark moves to the highest ID read, trusted or not, in the same write that applies the window. A comment posted after the read stays in the next window, and a failed write consumes nothing. This closes `SignalWindowRace`.
 - A comment counts with the body it has when its window is read. Later edits change nothing and never re-enter a window.
 - A comment deleted before its window is read never existed. A later deletion undoes nothing.
-- Every trusted non-command comment joins `context` with a sha256 digest. It is an `answer` when a BLOCKED question is open, else `context`.
+- Every trusted non-command comment joins `context` with a sha256 digest. It is an `answer` when a BLOCKED question is open, else `context`. A question is open from its `blocked:` note until a later `qa:` note.
+- Among the decisions in a window, the highest ID that applies to the Issue wins, so a `rejected` Issue never takes an `epic-retry`. A decision that does not apply is consumed. Epic-level commands on a child Issue are neither decisions nor context.
 - `context` is never pruned, even across retry and redo, so a brief carries it after the watermark passes. This closes `HumanAnswerDelivery`.
 - A brief re-fetches each body by ID. A changed digest is passed as edited after reading; a deleted body is listed as deleted.
 - An append that would exceed GitHub's comment size limit exits 8 and consumes nothing.
@@ -295,6 +301,7 @@ Every subcommand that needs the run inputs resolves them one way, in this order,
 - `--snapshot` with an empty value exits 2; it never falls back to real calls.
 - `--snapshot <file>` replays recorded `{argv, stdout, stderr, exit_code}` calls and never starts a process. A call missing from the file exits 1. Read-only subcommands give identical output on every run over one file.
 - `oe checks derive` reads workflow files at the base and ref through `git`, and emits CHECKS_SET: every runnable and requires-runner entry in file, job, and step order. `oe checks run` executes each runnable entry with the captured shell, working directory, and env in its own process, and never executes a requires-runner entry; it reports the exit status and any worktree or index change. A set whose revision no longer matches the ref is refused as stale rather than run. Under `--snapshot`, `oe checks run` exits 8 before any call, because replaying a captured process is not possible.
+- `oe lease`, `oe note post`, `oe ledger`, and `oe state` are the only subcommands that write loop comments, each through the single writer of §5 and §7. Under `--snapshot` they exit 8 before any call. Each takes the lock of §4.1, and all but `lease acquire` confirm the lease first.
 - `oe ship publish` and `oe land merge` are the only subcommands that may push, open a PR, or merge. Under `--snapshot` they exit 8 before any call. `.claude/hooks/require-user-approval.sh` blocks both without the approval marker, whether they are run directly, by path, or through `skills/orchestrate-epic/scripts/oe`. The marker approves only the line it ends.
 
 ## 13. Classifiers
@@ -315,7 +322,7 @@ Every subcommand that needs the run inputs resolves them one way, in this order,
 - A container is derived from its sub-issues and never classified or dispatched. A dependency on it is done only when every sub-issue is done, and a dependency of the container itself is a dependency of each of its sub-issues.
 - An open Issue in a dependency cycle is `waiting` unless it is `parked` or `rejected`, which wait on a person and keep their state and note. No dispatch, re-verification, or landing is proposed for it, and one `dep-cycle:<sorted issues>` note is proposed per cycle.
 - A merged PR on the current branch of a still-open Issue is `parked` and proposes `merged-open:<n>:<pr>`, even when a newer PR is open; closed PRs only are `rejected`. PRs are matched to the branch the Issue state records, so an applied redo leaves the old branch behind. With no branch recorded, any `feat/issue-<n>` or `feat/issue-<n>-<slug>` branch or PR is the Issue's work, so work a person started by hand is never dispatched again.
-- An Issue with no state proposes no `apply_signals`: only `start` creates state, §5, so a decision comment on a `rejected` or `parked` Issue that a person started by hand is not applied. Whether a decision may create state is #285's to settle; until then a person resolves such an Issue by closing it.
+- An Issue with no state proposes no `apply_signals`: only `start` creates state, §5, so a decision comment on a `rejected` or `parked` Issue that a person started by hand is not applied. A decision never creates state, and `apply_signals` on an Issue without one exits 8; a person resolves such an Issue by closing it.
 - A decision not applied to the state yet is `pending_decision` and proposes `apply_signals`. It takes effect only once the state records it, so a parked Issue stays parked until then.
 - Proposed actions are `apply_signals`, `freeze`, `land`, `reverify`, and `dispatch`, with in-progress dispatched before ready. The worker cap `--max-parallel` is applied where work is dispatched (#291), not here. A frozen Epic, or a post-merge result that needs a freeze, proposes no work; a pending post-merge result proposes no `land`.
 - `board --observe` is for a person reading the board while another session holds the lease. It skips the exit 7, names the holder in `lease`, and proposes no action and no note, so it cannot drive a second Publisher. Without a foreign lease it changes nothing.
@@ -323,7 +330,7 @@ Every subcommand that needs the run inputs resolves them one way, in this order,
 
 ## 14. Secret Scan
 
-Everything the loop publishes passes `oe scan` first. Only a clean report lets it publish.
+Everything the loop publishes passes `oe scan` first. Only a clean report lets it publish. The comment writer of §7 scans every note and every state body except the lease's, whose fields are all `oe`'s own, and refuses a body over 65536 characters or 127 KiB, so it never exceeds GitHub's limit or a single argument to `gh`.
 
 | Subcommand | Scans | Run before |
 |---|---|---|
