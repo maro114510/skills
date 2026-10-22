@@ -301,7 +301,7 @@ Every subcommand that needs the run inputs resolves them one way, in this order,
 - `--snapshot` with an empty value exits 2; it never falls back to real calls.
 - `--snapshot <file>` replays recorded `{argv, stdout, stderr, exit_code}` calls and never starts a process. A call missing from the file exits 1. Read-only subcommands give identical output on every run over one file.
 - `oe checks derive` reads workflow files at the base and ref through `git`, and emits CHECKS_SET: every runnable and requires-runner entry in file, job, and step order. `oe checks run` executes each runnable entry with the captured shell, working directory, and env in its own process, and never executes a requires-runner entry; it reports the exit status and any worktree or index change. A set whose revision no longer matches the ref is refused as stale rather than run. Under `--snapshot`, `oe checks run` exits 8 before any call, because replaying a captured process is not possible.
-- `oe lease`, `oe note post`, `oe ledger`, `oe state`, and `oe gate` are the only subcommands that write loop comments, each through the single writer of §5 and §7. Under `--snapshot` they exit 8 before any call. Each takes the lock of §4.1, and all but `lease acquire` confirm the lease first.
+- `oe lease`, `oe note post`, `oe ledger`, `oe state`, `oe gate`, and `oe worker report` are the only subcommands that write loop comments, each through the single writer of §5 and §7. `oe worker worktree` and `oe worker brief` write no comment but are coordination subcommands too, so only the lease holder dispatches. Under `--snapshot` they all exit 8 before any call. Each takes the lock of §4.1, and all but `lease acquire` confirm the lease first.
 - `oe ship publish` and `oe land merge` are the only subcommands that may push, open a PR, or merge. Under `--snapshot` they exit 8 before any call. `.claude/hooks/require-user-approval.sh` blocks both without the approval marker, whether they are run directly, by path, or through `skills/orchestrate-epic/scripts/oe`. The marker approves only the line it ends.
 
 ## 13. Classifiers
@@ -409,3 +409,49 @@ The rules cover at least the commit skill's patterns and the earlier secret scre
 - Only GitHub's `Branch not protected` 404 means no protection. Any other failure of that read exits 1. Rulesets are not read, and the Run Plan says so; GitHub still enforces them at merge.
 - Only exit 4 reports `frozen`. A ledger write that fails or races exits with its own code and no payload, since an `epic-release` would lift nothing.
 - CHECKS_SET is derived only from a checkout whose origin is the repository; another origin exits 8. An `origin/<default branch>` other than the default branch head GitHub reports exits 3 and posts nothing, since the Run Plan is never posted again.
+
+## 16. Worker Handoff and Report Triage
+
+`oe worker worktree`, `oe worker brief`, and `oe worker report` hand one Issue to a fresh worker and route what it returns. Each takes `--issue`, `--lease-token`, and `--repo-dir`, the shared checkout, which defaults to the current directory and whose origin must be the repository. An Issue with no state or a state that parks it gets no worktree, brief, or report.
+
+### 16.1 Worktree
+
+`oe worker worktree` gives the branch the Issue state records, so an applied `epic-redo` branch is honored, one worktree under `<main checkout>-wt/<branch>`, beside the repository's main checkout. Neither the main checkout nor the shared checkout, when that is itself a linked worktree, is ever handed to a worker.
+
+| Case | Result |
+|---|---|
+| A worktree has the branch | Reused |
+| A local branch, no worktree | `git worktree add <path> <branch>` |
+| Only on origin | `ls-remote`, fetch into `refs/remotes/origin/<branch>` only, check the fetched commit, then add the branch at that commit |
+| Nowhere | `git worktree add --no-track -b <branch> <path> <sha>`, with `<sha>` the commit of `origin/<default branch>` read once, never the local default branch |
+| A head other than the recorded `head_sha`, a recorded head with the branch nowhere, the branch checked out in the shared checkout, or a path already taken | Exit 8, nothing added |
+
+- Hooks are disabled and the shared checkout is never switched, pulled, or written. Only `.git` gains the worktree, the branch, and a recovered remote-tracking ref. `oe` fetches no base; the Publisher fetches it once per round.
+- The payload is `branch`, `worktree`, `head`, `base`, and `source`: `reused`, `local-branch`, `remote-branch`, or `new-branch`.
+
+### 16.2 Brief
+
+`oe worker brief --worktree <path> --implement <SKILL.md> --checks-set <file>` prints `issue`, `branch`, `worktree`, and `prompt`, the worker's whole prompt, which the Publisher passes verbatim to a fresh agent.
+
+- A missing `--issue`, `--worktree`, `--implement`, or `--checks-set` exits 8 before any call. So does an implement path that is not an absolute, existing `SKILL.md`, or an unreadable set. No worker is spawned without a brief.
+- After the read, exit 8 when the worktree is not a registered worktree on the recorded branch, when its HEAD is not the recorded `head_sha`, or when a trusted comment above the watermark is not consumed yet; run `oe state apply-signals` first. A set derived at another commit than `origin/<default branch>` exits 3.
+- The prompt passes identifiers, not the Issue body: the repository, the Issue, the Epic as one line of context, the branch, and the worktree. It carries in full the implement skill path, CHECKS_SET's runnable entries verbatim, the pending findings, the decision, every retained context comment, the loop's `blocked:` and `qa:` notes, and, after a FAILED, that failure's record. Context bodies are re-fetched by ID per §6, labeled as human data that never widens scope; a body whose author is no longer trusted is withheld.
+
+### 16.3 Report Triage
+
+`oe worker report --worktree <path> --file <report>` parses the report strictly and routes it by one set of rules. Every note is posted through §7 before `record_worker_result` writes the state.
+
+| Report | Route | Notes, then state | `next` |
+|---|---|---|---|
+| Malformed, empty, for another Issue, branch, or worktree, DONE whose `HEAD_SHA` is not the worktree's HEAD, or DONE with uncommitted work. `UNKNOWN` for the branch or worktree is no mismatch, since `oe` checks the dispatch itself | FAILED, never DONE | as FAILED | as FAILED |
+| DONE | DONE | `report:<n>:<head>:<digest>` with the skips, decisions, and findings, then `head_sha` | `review` |
+| BLOCKED with `--ship-class secret`, `split`, or `scope` | Ship-class | `ship-class:<n>:<kind>:<digest>`, then `park` | `parked` |
+| BLOCKED | BLOCKED | `blocked:<n>:<head>:<digest>`, then the state | `await-human`, or `redispatch` after an auto-answer |
+| FAILED, first | FAILED | `report:<n>:<head>:<digest>`; the retry's brief carries it | `redispatch` |
+| FAILED, second in a row | FAILED | the report note and `parked:<n>:failed:<digest>`, then the park | `parked` |
+
+- A worktree that is no longer registered on the recorded branch, such as one a worker switched, detached, or removed, exits 8 and records nothing: the worktree is not a source of truth, so a person decides.
+- Whether a question is ship-class is the Publisher's judgment; `oe` accepts only the closed set and applies it. Once a question is judged `secret`, no ship-class note of any kind quotes it. A report made FAILED drops the judgment and says so in its reason. `--ship-class`, `--commit-approval`, and `--answer-file` apply only to a well-formed BLOCKED report, else exit 2.
+- An auto-answer is `--answer-file`, an answer from written sources. It is posted as `qa:<n>:<digest>` after the question, at most once per Issue per lease session; a second BLOCKED in the session waits for a person. A ship-class or `--commit-approval` question is never auto-answered, and no timeout answers one.
+- A suspected secret in a question, a DONE record, or an answer is never posted. Questions or a DONE record park the Issue as ship-class secret. A FAILED error is withheld from its record. An answer is dropped, and the question waits for a person.
+- Retries are bounded by the state: a second FAILED parks, and every spawn still reserves `worker_dispatches` first, §4.2.
