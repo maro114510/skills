@@ -506,10 +506,18 @@ func stepEntry(file, job string, index int, step *yaml.Node, jobWD, jobShell str
 	return none, false, nil
 }
 
+// isDroppedAction reports the closed exclusion list of commands.md §1.6 step 4: actions/checkout,
+// actions/setup-*, and actions/cache. The name ends at the action boundary, so an action that
+// merely starts like one of them, such as actions/checkout-lint, is a different action and is kept.
 func isDroppedAction(uses string) bool {
-	return strings.HasPrefix(uses, "actions/checkout") ||
-		strings.HasPrefix(uses, "actions/setup-") ||
-		strings.HasPrefix(uses, "actions/cache")
+	name, _, _ := strings.Cut(uses, "@")
+	return isAction(name, "actions/checkout") || isAction(name, "actions/cache") ||
+		strings.HasPrefix(name, "actions/setup-")
+}
+
+// isAction reports whether name is the action base or a path inside it, as actions/cache/restore.
+func isAction(name, base string) bool {
+	return name == base || strings.HasPrefix(name, base+"/")
 }
 
 // classifyRun decides whether an entry is safe to replay unattended in a worktree. It never
@@ -566,8 +574,9 @@ func globalMutation(command string) string {
 		{regexp.MustCompile(`\bgh\s+release\s+create\b`), "gh release create"},
 		{regexp.MustCompile(`\bgit\s+config\s+--global\b`), "git config --global"},
 		{regexp.MustCompile(`--scope(\s+|=)user\b`), "user-scope install"},
-		{regexp.MustCompile(`\bpip[0-9.]*\s+install\b`), "pip install mutates the ambient Python environment"},
-		{regexp.MustCompile(`\bpython[0-9.]*\s+-m\s+pip\s+install\b`), "pip install mutates the ambient Python environment"},
+		// pip accepts general options before the subcommand, with or without a value, so install
+		// is any later word of the same command, and python -m pip is the same pip.
+		{regexp.MustCompile(`(\bpip[0-9.]*|\s-mpip)\b[^\n;&|]*\binstall\b`), "pip install mutates the ambient Python environment"},
 		{regexp.MustCompile(`\b(npm|yarn|pnpm|bun|gem|pip[0-9.]*)\b[^\n;&|]*(\s|=)(-g|--global)(\s|$)`), "global-scope package flag"},
 		{regexp.MustCompile(`\b(brew|cargo|gem|go)\s+install\b`), "global-scope install"},
 	}

@@ -298,6 +298,15 @@ func TestDeriveClassifiesRequiresRunner(t *testing.T) {
 		{"global npm flag", "      - run: npm install -g @anthropic-ai/claude-code"},
 		{"long global flag", "      - run: npm install --global @anthropic-ai/claude-code"},
 		{"pip install", "      - run: pip install semgrep"},
+		{"pip long option before install", "      - run: pip --disable-pip-version-check install semgrep"},
+		{"pip short option before install", "      - run: pip -q install semgrep"},
+		{"pip option with a value before install", "      - run: pip --python /usr/bin/python3 install semgrep"},
+		{"versioned pip option before install", "      - run: pip3 -v install semgrep"},
+		{"python -m pip option before install", "      - run: python -m pip --quiet install semgrep"},
+		{"python -m pip short option before install", "      - run: python -m pip -q install semgrep"},
+		{"python -m with no space", "      - run: python -mpip install semgrep"},
+		{"pip after another command", "      - run: echo start && pip -q install semgrep"},
+		{"pip install on a continued line", "      - run: |\n          pip -q \\\n            install semgrep\n"},
 		{"gh release", "      - run: gh release create v1.0.0"},
 		{"git global config", "      - run: git config --global user.name x"},
 		{"user scope install", "      - run: claude plugin install x --scope user"},
@@ -333,6 +342,11 @@ func TestDeriveClassifiesRequiresRunner(t *testing.T) {
 		{"sh shell", "      - run: echo hi\n        shell: sh"},
 		{"multiline block", "      - run: |\n          set -eu\n          go vet ./..."},
 		{"pipeline", "      - run: claude plugin list | grep skills"},
+		{"pip that does not install", "      - run: pip list --format=json"},
+		{"pip version", "      - run: pip --version"},
+		{"install is another command", "      - run: pip list && make install"},
+		{"install is a later pipeline stage", "      - run: pip list | grep install"},
+		{"python module that is not pip", "      - run: python -m pytest -q install_test.py"},
 	}
 	for _, tc := range runnable {
 		t.Run(tc.name, func(t *testing.T) {
@@ -381,6 +395,39 @@ jobs:
 	entry := set.Entries[0]
 	if entry.Action != "actions/upload-artifact@v4" || entry.Runnable || entry.RequiresRunnerReason == "" {
 		t.Errorf("kept action = %+v, want a requires-runner upload-artifact entry", entry)
+	}
+}
+
+// TestDeriveDropsActionsOnlyAtTheirOwnBoundary: the exclusion list is closed, so an action whose
+// name merely starts like checkout or cache is a different action and stays in CHECKS_SET.
+func TestDeriveDropsActionsOnlyAtTheirOwnBoundary(t *testing.T) {
+	t.Parallel()
+
+	dropped := []string{
+		"actions/checkout", "actions/checkout@v4", "actions/setup-go@v7", "actions/setup-python",
+		"actions/cache", "actions/cache@v4", "actions/cache/restore@v4", "actions/cache/save@v4",
+	}
+	kept := []string{
+		"actions/checkout-lint@v1", "actions/checkoutx@v1", "actions/cache-validator@v1",
+		"actions/cachex@v1", "actions/setup@v1", "actions/upload-artifact@v4", "rhysd/actionlint@v1",
+	}
+	for _, uses := range dropped {
+		t.Run("drops "+uses, func(t *testing.T) {
+			t.Parallel()
+			body := "on: pull_request\njobs:\n  test:\n    steps:\n      - uses: " + uses + "\n"
+			if set := deriveFiles(t, map[string]string{".github/workflows/test.yml": body}); len(set.Entries) != 0 {
+				t.Errorf("%s was kept, want it dropped: %+v", uses, set.Entries)
+			}
+		})
+	}
+	for _, uses := range kept {
+		t.Run("keeps "+uses, func(t *testing.T) {
+			t.Parallel()
+			entry := singleStep(t, "      - uses: "+uses+"\n")
+			if entry.Action != uses || entry.Runnable || entry.RequiresRunnerReason == "" {
+				t.Errorf("%s = %+v, want a kept requires-runner action entry", uses, entry)
+			}
+		})
 	}
 }
 
