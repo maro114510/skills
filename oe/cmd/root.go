@@ -16,9 +16,10 @@ import (
 	"github.com/maro114510/skills/oe/internal/runner"
 )
 
-// Env is what the process gives oe: output streams, the runner for real calls, and the
-// build version.
+// Env is what the process gives oe: streams, the runner for real calls, and the build version.
+// A nil Stdin reads the process's stdin.
 type Env struct {
+	Stdin   io.Reader
 	Stdout  io.Writer
 	Stderr  io.Writer
 	Exec    runner.Runner
@@ -46,6 +47,9 @@ func (e *payloadError) Unwrap() error { return e.err }
 func Main(args []string, env Env) int {
 	root := newRoot(env)
 	root.SetArgs(args)
+	if env.Stdin != nil {
+		root.SetIn(env.Stdin)
+	}
 	root.SetOut(env.Stdout)
 	root.SetErr(env.Stderr)
 	err := root.Execute()
@@ -95,6 +99,7 @@ func newRoot(env Env) *cobra.Command {
 		newBoardCmd(env, g),
 		newHealthCmd(env, g),
 		newReadinessCmd(env, g),
+		newScanCmd(env, g),
 		newGroup("ship", "Ship approved work", newMutatingCmd(env, g, "publish", "Push the approved head and open its PR", "#289")),
 		newGroup("land", "Land shipped PRs", newMutatingCmd(env, g, "merge", "Merge one PR at its reviewed head", "#290")),
 	)

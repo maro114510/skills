@@ -320,3 +320,65 @@ Every subcommand that needs the run inputs resolves them one way, in this order,
 - Proposed actions are `apply_signals`, `freeze`, `land`, `reverify`, and `dispatch`, with in-progress dispatched before ready. The worker cap `--max-parallel` is applied where work is dispatched (#291), not here. A frozen Epic, or a post-merge result that needs a freeze, proposes no work; a pending post-merge result proposes no `land`.
 - `board --observe` is for a person reading the board while another session holds the lease. It skips the exit 7, names the holder in `lease`, and proposes no action and no note, so it cannot drive a second Publisher. Without a foreign lease it changes nothing.
 - `health` takes `HANDLED` from the ledger's `freeze`: the same merge commit and the same status. A release keeps that freeze recorded with `released` true, see §4.2; #285 writes it.
+
+## 14. Secret Scan
+
+Everything the loop publishes passes `oe scan` first. Only a clean report lets it publish.
+
+| Subcommand | Scans | Run before |
+|---|---|---|
+| `scan outgoing` | Each commit on HEAD that the base lacks, then uncommitted changes and untracked files that are not ignored | A push or a pull request |
+| `scan text` | One text, such as a note, review evidence, a pull request title or body, a question, the Run Plan, or the completion comment | A post |
+
+| Flag | Subcommand | Default |
+|---|---|---|
+| `--base` | `scan outgoing` | `origin/HEAD` |
+| `--worktree` | `scan outgoing` | The current directory, widened to its top level |
+| `--file` | `scan text` | stdin |
+| `--source` | `scan text` | `stdin`, the label of the text in the report |
+
+| Exit | Case | Output |
+|---|---|---|
+| 0 | Clean | JSON report |
+| 8 | A finding | JSON report |
+| 8 | `scan outgoing` under `--snapshot` | Verdict |
+| 1 | The scan cannot finish | Verdict |
+| 2 | A base that looks like an option | Verdict |
+
+A finding names its location and never the matched value or line.
+
+| Field | Content |
+|---|---|
+| `rule` | The rule that matched |
+| `where` | `commit-content`, `commit-message`, `commit-path`, `worktree-content`, `worktree-path`, or `text` |
+| `commit` | The commit, when it applies |
+| `path` | The path, or `(withheld)` when the path matches a content rule |
+| `line` | The line, when it applies |
+
+The rules cover at least the commit skill's patterns and the earlier secret screen.
+
+| Rule | Matches |
+|---|---|
+| `aws-access-key` | AKIA followed by 16 upper-case letters or digits |
+| `private-key-header` | A PEM header that ends in PRIVATE KEY |
+| `github-token` | A GitHub token prefix followed by 20 or more letters or digits |
+| `sk-api-key` | `sk-` followed by 20 or more letters, digits, dashes, or underscores |
+| `slack-token` | A Slack token prefix followed by a token character |
+| `password-or-token-literal` | A literal assigned to a key ending in password, passwd, or token |
+| `unscannable` | Binary content or a NUL byte |
+| Path rules | A base name, in any case, that starts with `.env` or `id_rsa` or another SSH key name, contains `credentials` or `secret`, ends in `.pem`, `.key`, `.p12`, or `.pfx`, or is a service account JSON file |
+
+| Assigned value | Literal when |
+|---|---|
+| Quoted | 8 or more characters that mix two classes among lower case, upper case, digits, and symbols |
+| Bare | 16 or more characters with letters and digits |
+| Placeholder, reference, or template | Never |
+
+| Case | Result |
+|---|---|
+| A secret one commit adds and a later commit deletes | A finding, because each commit is scanned on its own |
+| A merge | Only lines new against every parent |
+| A failed git call, an unreadable object, or a patch that cannot be parsed | Exit 1 |
+| A shallow boundary inside the range | Exit 1, because it can hide an outgoing commit |
+| Replace objects and the index | Ignored and never written, so the scan reads what a push sends |
+| An error message | Never carries git's output |

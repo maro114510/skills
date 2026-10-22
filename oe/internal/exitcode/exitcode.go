@@ -20,7 +20,7 @@ const (
 	Wait         Code = 5 // Checks or health pending. Writes none.
 	Protocol     Code = 6 // v1 marker, unknown version, bad JSON, key mismatch, duplicate state.
 	Coordination Code = 7 // Lock held, foreign or lost lease, moved revision.
-	Refused      Code = 8 // No approval, failed precondition, old gh, unsupported host.
+	Refused      Code = 8 // No approval, scan finding, failed precondition, old gh, unsupported host.
 )
 
 // Word is the verdict prefix for a code.
