@@ -3,6 +3,7 @@ package cmd_test
 import (
 	"bytes"
 	"encoding/json"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -73,6 +74,7 @@ func (w *coordWorld) put(t *testing.T, issue int, s protocol.State) {
 
 func coordCommands(token string) map[string][]string {
 	tok := []string{"--lease-token", token}
+	implement, _ := filepath.Abs("../../skills/implement/SKILL.md")
 	return map[string][]string{
 		"lease end":           append([]string{"lease", "end"}, tok...),
 		"note post":           append([]string{"note", "post", "--on", "7", "--key", "start:7:feat/issue-7"}, tok...),
@@ -86,6 +88,10 @@ func coordCommands(token string) map[string][]string {
 		"state park":          append([]string{"state", "park", "--issue", "7", "--blocker", "x"}, tok...),
 		"state invalidate":    append([]string{"state", "invalidate-approval", "--issue", "7"}, tok...),
 		"gate":                append([]string{"gate"}, tok...),
+		"worker worktree":     append([]string{"worker", "worktree", "--issue", "7"}, tok...),
+		"worker brief": append([]string{"worker", "brief", "--issue", "7", "--worktree", "/w",
+			"--implement", implement, "--checks-set", "testdata/checks-set.json"}, tok...),
+		"worker report": append([]string{"worker", "report", "--issue", "7", "--worktree", "/w"}, tok...),
 	}
 }
 
