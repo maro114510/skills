@@ -214,3 +214,32 @@ func TestBranchMergeOptionsCannotSkipTheCommit(t *testing.T) {
 	}
 	wantMergedOnTop(t, r, res)
 }
+
+// TestBranchMergeStrategyCannotDropTheBase shows that a branch configured to keep its own side still gets the base's content merged in.
+func TestBranchMergeStrategyCannotDropTheBase(t *testing.T) {
+	t.Parallel()
+
+	for _, opts := range []string{"-s ours", "-X ours"} {
+		r := newRepo(t, [2]string{"w.txt", "worker\n"}, [2]string{"b.txt", "upstream\n"})
+		git(t, r.main, "config", "branch."+branch+".mergeOptions", opts)
+		res, err := integrate.Integrate(t.Context(), client(), r.req())
+		if err != nil || !res.Merged {
+			t.Fatalf("%s: result %+v, %v", opts, res, err)
+		}
+		if got := git(t, r.wt, "show", res.Head+":b.txt"); got != "upstream" {
+			t.Errorf("%s: b.txt = %q; the base's content was dropped", opts, got)
+		}
+	}
+}
+
+// TestBranchStrategyOptionCannotResolveAConflict shows that a configured -X ours never resolves a conflict silently; the conflict still goes to a worker.
+func TestBranchStrategyOptionCannotResolveAConflict(t *testing.T) {
+	t.Parallel()
+
+	r := newRepo(t, [2]string{"a.txt", "worker\n"}, [2]string{"a.txt", "upstream\n"})
+	git(t, r.main, "config", "branch."+branch+".mergeOptions", "-X ours")
+	res, err := integrate.Integrate(t.Context(), client(), r.req())
+	if err != nil || res.Merged || !slices.Equal(res.Conflicts, []string{"a.txt"}) {
+		t.Errorf("result %+v, %v", res, err)
+	}
+}

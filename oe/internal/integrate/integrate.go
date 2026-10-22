@@ -112,9 +112,11 @@ func noHooks(dir string, args ...string) []string {
 }
 
 func merge(ctx context.Context, g Git, req Request, res Result) (Result, error) {
-	// --commit and --no-squash override branch.<name>.mergeOptions, which could otherwise leave the merge uncommitted.
-	_, mergeErr := g.GitWrite(ctx, noHooks(req.Worktree, "merge", "--no-ff", "--commit", "--no-squash", "--no-edit", "--no-verify", "--no-gpg-sign",
-		"--no-verify-signatures", "--no-rerere-autoupdate", "--no-autostash", "-m", Message(req.Base, req.Branch), req.Base)...)
+	// The branch's own merge options are blanked, since a configured --no-commit, -s ours, or -X ours could skip the commit, drop the base, or resolve a conflict silently.
+	args := append([]string{"-c", "branch." + req.Branch + ".mergeOptions=", "-c", "pull.twohead=ort"},
+		noHooks(req.Worktree, "merge", "--strategy=ort", "--no-ff", "--commit", "--no-squash", "--no-edit", "--no-verify", "--no-gpg-sign",
+			"--no-verify-signatures", "--no-rerere-autoupdate", "--no-autostash", "-m", Message(req.Base, req.Branch), req.Base)...)
+	_, mergeErr := g.GitWrite(ctx, args...)
 	if mergeErr == nil {
 		return made(ctx, g, req, res)
 	}
