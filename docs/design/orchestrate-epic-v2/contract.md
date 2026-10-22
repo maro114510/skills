@@ -464,7 +464,7 @@ The rules cover at least the commit skill's patterns and the earlier secret scre
 
 - Both take `--issue`, `--worktree`, `--checks-set`, `--lease-token`, and `--repo-dir`.
 - Both refuse an Issue with no state, a parked Issue, and an Issue with no recorded head.
-- Both read `origin/<default branch>` once and never fetch it, since the Publisher fetches it once per round.
+- Both read `origin/<default branch>` once and use that one SHA for every check in the pass, and never fetch it, since the Publisher fetches it once per round.
 - Both exit 3 and write nothing when CHECKS_SET was derived at another commit than `origin/<default branch>`.
 - The integration merge is the only commit the loop makes, so the model and the reviewer never commit.
 
@@ -488,13 +488,15 @@ flowchart LR
 
 | Case | Result |
 |---|---|
+| An approval while the worktree HEAD is not the recorded head | Exit 8 and nothing written |
 | An approval on the recorded head and the current base | `BOUND` with next `ship`, and nothing else runs |
 | An approval on another pair | A staleness pass, then the rows below unless it defers |
 | A merge in progress | Aborted and redone |
 | A head other than the recorded head | Adopted only when it is oe's merge commit on the recorded head, else exit 8 |
 | Uncommitted changes or untracked files | Nothing merged, and a blocking finding |
 | The base is already an ancestor of the head | Nothing merged |
-| Otherwise | `merge --no-ff` of the base commit with hooks, signing, editor, rerere, and autostash disabled |
+| Otherwise | `merge --no-ff --commit --no-squash` of the base commit with hooks, signing, editor, rerere, and autostash disabled, so branch merge options cannot skip the commit |
+| A merge that exits 0 without oe's merge commit | Restored, then exit 1 |
 | A conflict | Aborted and checked clean at the head, else exit 1, and the conflicting paths become a blocking finding |
 | A failure without a conflict | Restored as above, then exit 1 |
 | A new head | `record_head` before anything else reads the state |
@@ -556,10 +558,10 @@ These are findings, in this order.
 2. A missing `BEHAVIOR_CHANGE` or `CRITERIA`, or no criterion.
 3. A criterion that is `unverified`, lacks evidence after its tag, or has no readable result.
 4. `BEHAVIOR_CHANGE: yes` with no `[behavior]` criterion, since passing checks alone never approve behavior-changing work.
-5. No CHECKS line while CHECKS_SET has runnable entries, an unreadable line, or a red entry.
+5. No CHECKS line numbered for a runnable entry, an unreadable line, or a red entry. Each runnable entry is reported under its number in the prompt.
 6. Every reviewer finding, a nit included.
 
-oe checks the form of evidence only, and whether it proves its criterion stays the reviewer's judgment. Evidence is secret-scanned before it is stored, and a finding parks the Issue as ship-class secret without posting the text.
+oe checks the form of evidence only, and whether it proves its criterion stays the reviewer's judgment. Evidence is secret-scanned before it is stored, and a finding parks the Issue as ship-class secret without posting or printing the text.
 
 ### 17.3 Staleness
 
