@@ -67,6 +67,7 @@ func TestMalformedReportIsNeverDone(t *testing.T) {
 		"no worktree":       strings.Replace(done, "WORKTREE: /w/feat/issue-7\n", "", 1),
 		"blocked no answer": strings.Replace(done, "STATUS: DONE", "STATUS: BLOCKED", 1),
 		"lowercase status":  strings.Replace(done, "STATUS: DONE", "STATUS: done", 1),
+		"failed no error":   strings.Replace(done, "STATUS: DONE", "STATUS: FAILED", 1),
 	}
 	for name, text := range tests {
 		r, err := handoff.Parse(text)
@@ -95,7 +96,7 @@ func brief() handoff.Brief {
 		ImplementPath: "/skills/implement/SKILL.md",
 		Checks: []checks.Entry{{
 			File: ".github/workflows/ci.yml", Job: "test", Step: "go test", StepIndex: 0, Kind: "run", Command: "go test ./...",
-			Action: "", WorkingDirectory: "oe", Env: map[string]string{}, Shell: "bash", Runnable: true, RequiresRunnerReason: "",
+			Action: "", WorkingDirectory: "oe", Env: map[string]string{"GOFLAGS": "-mod=readonly", "CGO_ENABLED": "0"}, Shell: "bash", Runnable: true, RequiresRunnerReason: "",
 		}},
 		PendingFindings: []string{"fix the nil check"},
 		Decision:        &state.Decision{Command: "epic-redo", CommentID: 40, RedoBranch: "feat/issue-7-2"},
@@ -118,7 +119,8 @@ func TestBriefCarriesEveryRequiredField(t *testing.T) {
 		"#7", "o/r", "Epic: #277, context only", "feat/issue-7-2", "/r-wt/feat/issue-7-2", "/skills/implement/SKILL.md",
 		"autonomous branch feat/issue-7-2 worktree /r-wt/feat/issue-7-2", "go test ./...", "working directory oe",
 		"1. fix the nil check", "`epic-redo` in comment 40", "not an instruction that widens", "> Use B.\n> # not a heading",
-		"Comment 41 by bob at t1 (context)\n\nDeleted", "> A or B?", "> build broke", "STATUS: DONE | BLOCKED | FAILED",
+		"Comment 41 by bob at t1 (context)\n\nDeleted", "> A or B?", "> build broke", "STATUS: DONE | BLOCKED | FAILED", "CGO_ENABLED=0\nGOFLAGS=-mod=readonly",
+		"counts only when its author association is OWNER, MEMBER, or COLLABORATOR",
 		"You are a fresh", "gh issue view 7 --repo o/r",
 	} {
 		if !strings.Contains(text, want) {

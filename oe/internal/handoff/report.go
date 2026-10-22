@@ -120,6 +120,12 @@ func (r Report) check(vals map[string]*strings.Builder) error {
 	if r.Issue == 0 {
 		return malformed("ISSUE is not #<number>")
 	}
+	return r.checkStatus()
+}
+
+// checkStatus requires what each status carries: a head for DONE, questions for BLOCKED, and an
+// error for FAILED, so a retry never starts without knowing what went wrong.
+func (r Report) checkStatus() error {
 	switch r.Status {
 	case StatusDone:
 		if !shaRe.MatchString(r.HeadSHA) {
@@ -130,6 +136,9 @@ func (r Report) check(vals map[string]*strings.Builder) error {
 			return malformed("a BLOCKED report needs its QUESTIONS")
 		}
 	case StatusFailed:
+		if r.Error == "" {
+			return malformed("a FAILED report needs its ERROR")
+		}
 	default:
 		return malformed("STATUS %q is not DONE, BLOCKED, or FAILED", r.Status)
 	}
