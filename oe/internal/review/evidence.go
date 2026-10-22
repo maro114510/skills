@@ -2,6 +2,7 @@ package review
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/maro114510/skills/oe/internal/state"
@@ -66,10 +67,16 @@ func criterionFailure(c Criterion) string {
 //   - A red entry.
 //   - A line oe cannot read.
 //   - No line at all while CHECKS_SET has runnable entries.
+//   - No line numbered for one of the runnable entries.
 func CheckFailures(r Report, runnable int) []string {
 	var out []string
 	if runnable > 0 && len(r.Checks) == 0 {
 		out = append(out, fmt.Sprintf("CHECKS lists no run although CHECKS_SET has %d runnable entries; run them and report each exit status", runnable))
+	}
+	for e := 1; len(r.Checks) > 0 && e <= runnable; e++ {
+		if !slices.ContainsFunc(r.Checks, func(c Check) bool { return c.Entry == e }) {
+			out = append(out, fmt.Sprintf("CHECKS has no line for runnable entry %d; run every entry and report it under its number", e))
+		}
 	}
 	for i, c := range r.Checks {
 		switch {

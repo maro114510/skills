@@ -198,3 +198,17 @@ func TestSeverityIsAWholeWord(t *testing.T) {
 		t.Errorf("findings = %+v", r.Findings)
 	}
 }
+
+// TestOmittedCheckIsABlockingFinding shows that every runnable entry needs its own numbered CHECKS line, so a report cannot leave a red entry out.
+func TestOmittedCheckIsABlockingFinding(t *testing.T) {
+	t.Parallel()
+
+	r := mustParse(t, report("APPROVE", "no — x", staticCriterion, "1. go test ./... -> exit 0", "none"))
+	got := strings.Join(review.CheckFailures(r, 2), "\n")
+	if !strings.Contains(got, "no line for runnable entry 2") || strings.Contains(got, "entry 1") {
+		t.Errorf("failures = %q", got)
+	}
+	if got := review.CheckFailures(mustParse(t, report("APPROVE", "no — x", staticCriterion, "1. a -> exit 0\n2. b -> exit 0", "none")), 2); len(got) != 0 {
+		t.Errorf("complete CHECKS: %q", got)
+	}
+}

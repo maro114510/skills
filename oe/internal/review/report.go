@@ -59,6 +59,8 @@ type Criterion struct {
 
 // Check is one CHECKS line with the command and the exit status the reviewer saw.
 type Check struct {
+	// Entry is the line's number, which names the runnable entry in the order the prompt lists them.
+	Entry int
 	Label string
 	Exit  int
 	// Problem says why the line has no readable exit status, and is empty otherwise.
@@ -201,25 +203,41 @@ func collect(lines []string) (map[string]*strings.Builder, error) {
 // items splits a numbered list, where each numbered line starts an item and later lines continue it.
 // Text before the first number becomes an item of its own, so nothing is dropped.
 func items(text string) []string {
+	list := numbered(text)
+	out := make([]string, 0, len(list))
+	for _, it := range list {
+		out = append(out, it.text)
+	}
+	return out
+}
+
+// item is one list item with its number, which is 0 for text before the first number.
+type item struct {
+	num  int
+	text string
+}
+
+func numbered(text string) []item {
 	if strings.TrimSpace(text) == "" || strings.EqualFold(strings.TrimSpace(text), none) {
 		return nil
 	}
-	var out []string
+	var out []item
 	for line := range strings.SplitSeq(text, "\n") {
 		if m := itemRe.FindStringSubmatch(line); m != nil {
-			out = append(out, m[2])
+			num, _ := strconv.Atoi(m[1])
+			out = append(out, item{num: num, text: m[2]})
 			continue
 		}
 		if len(out) == 0 {
 			if strings.TrimSpace(line) != "" {
-				out = append(out, strings.TrimSpace(line))
+				out = append(out, item{num: 0, text: strings.TrimSpace(line)})
 			}
 			continue
 		}
-		out[len(out)-1] += "\n" + line
+		out[len(out)-1].text += "\n" + line
 	}
 	for i := range out {
-		out[i] = strings.TrimSpace(out[i])
+		out[i].text = strings.TrimSpace(out[i].text)
 	}
 	return out
 }
@@ -258,11 +276,11 @@ func parseCriterion(i int, item string) Criterion {
 }
 
 func parseChecks(text string) []Check {
-	list := items(text)
+	list := numbered(text)
 	out := make([]Check, 0, len(list))
 	for _, it := range list {
-		c := Check{Label: it, Exit: 0, Problem: ""}
-		m := checkRe.FindStringSubmatch(it)
+		c := Check{Entry: it.num, Label: it.text, Exit: 0, Problem: ""}
+		m := checkRe.FindStringSubmatch(it.text)
 		if m == nil {
 			c.Problem = "it gives no `-> exit <code>`"
 			out = append(out, c)
