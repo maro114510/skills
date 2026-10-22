@@ -1,103 +1,196 @@
-// Package checks derives CHECKS_SET from a repository's own workflow files and runs its runnable
-// entries. Derivation walks an ordered YAML node tree, so job order, step order, duplicate
-// entries, and multi-line run blocks survive exactly, and nothing is ever inferred from
-// package.json or Makefile script names. A set carries the revision it was derived from, and a
-// moved revision invalidates it.
+// Package checks is the one classification of the checks on a commit, shared by the merge
+// readiness and the default-branch health classifiers. It decides what a single check run or
+// commit status means, and keeps only the latest run of each check. It also derives CHECKS_SET
+// from a repository's workflow files and runs its entries, see checkset.go.
 package checks
 
 import (
-	"bytes"
-	"context"
-	"encoding/json"
-	"errors"
-	"io"
-	"os"
-
-	"github.com/maro114510/skills/oe/internal/exitcode"
+	"slices"
+	"strconv"
 )
 
-// GitReader reads git output. *gh.Client satisfies it.
-type GitReader interface {
-	Git(ctx context.Context, args ...string) ([]byte, error)
+// Class is what one check means. The classes are the union of what readiness and health need;
+// each consumer maps the two it reads differently, see Cancelled and Action.
+type Class string
+
+// The check classes.
+const (
+	// Pass is a success, a neutral, or a skipped run.
+	Pass Class = "pass"
+	// Pending is a run that has not finished or a status that is not final.
+	Pending Class = "pending"
+	// Failed is any other finished result.
+	Failed Class = "failed"
+	// Action is a run that asks for a human. Readiness holds the merge for a person; health,
+	// after a merge that already landed, counts it as a failure.
+	Action Class = "action"
+	// Cancelled is a cancelled run, usually superseded by a later push. Readiness counts it as a
+	// failure; health leaves the result unconfirmed.
+	Cancelled Class = "cancelled"
+	// Unreadable is a check whose state is missing or of an unknown kind. It is never a pass.
+	Unreadable Class = "unreadable"
+)
+
+// UnnamedCheck names a check that carries neither a name nor a context.
+const UnnamedCheck = "unnamed check"
+
+const (
+	typeCheckRun      = "CheckRun"
+	typeStatusContext = "StatusContext"
+	statusCompleted   = "COMPLETED"
+	keyStatus         = "status"
+	keySuite          = "suite"
+	keyUnkeyed        = "unkeyed"
+)
+
+// Check is one check, after superseded runs were dropped.
+type Check struct {
+	Name  string
+	Class Class
 }
 
-// workflowsDir is the only directory derivation reads, relative to the repository root.
-const workflowsDir = ".github/workflows"
-
-// nullTag marks a YAML null value, such as an event with no configuration.
-const nullTag = "!!null"
-
-// mapPair is the number of nodes in one mapping entry: key then value.
-const mapPair = 2
-
-// The shells a runnable entry can carry.
-const (
-	shellBash = "bash"
-	shellSh   = "sh"
-)
-
-// The two kinds of captured step.
-const (
-	kindRun    = "run"
-	kindAction = "action"
-)
-
-// DefaultBranchPush values: whether any kept workflow runs on a push to the default branch.
-const (
-	pushRuns     = "runs"          // at least one kept workflow runs on an unfiltered default-branch push
-	pushFiltered = "path_filtered" // every default-branch push workflow is path-filtered
-	pushNone     = "none"          // no kept workflow triggers on a default-branch push
-)
-
-// Set is CHECKS_SET: the ordered entries a revision would run, plus the revision it came from.
-type Set struct {
-	Ref               string  `json:"ref"`
-	Base              string  `json:"base"`
-	Revision          string  `json:"revision"`
-	DefaultBranchPush string  `json:"default_branch_push"`
-	Entries           []Entry `json:"entries"`
+func (c Context) name() string {
+	switch {
+	case c.Name != nil:
+		return *c.Name
+	case c.Context != nil:
+		return *c.Context
+	default:
+		return UnnamedCheck
+	}
 }
 
-// Entry is one captured workflow step. A run entry carries Command; an action entry carries
-// Action and no command. Runnable is false for every requires-runner entry, which is reported
-// but never executed.
-type Entry struct {
-	File                 string            `json:"file"`
-	Job                  string            `json:"job"`
-	Step                 string            `json:"step"`
-	StepIndex            int               `json:"step_index"`
-	Kind                 string            `json:"kind"`
-	Command              string            `json:"command"`
-	Action               string            `json:"action"`
-	WorkingDirectory     string            `json:"working_directory"`
-	Env                  map[string]string `json:"env"`
-	Shell                string            `json:"shell"`
-	Runnable             bool              `json:"runnable"`
-	RequiresRunnerReason string            `json:"requires_runner_reason"`
+func (c Context) class() Class {
+	switch c.Typename {
+	case typeCheckRun:
+		return c.runClass()
+	case typeStatusContext:
+		return c.statusClass()
+	default:
+		return Unreadable
+	}
 }
 
-// LoadSet reads a CHECKS_SET file written by `oe checks derive`.
-func LoadSet(path string) (Set, error) {
-	data, err := os.ReadFile(path) //nolint:gosec // The set path is an explicit operator argument.
-	if err != nil {
-		return Set{}, exitcode.Wrap(exitcode.Usage, err, "read CHECKS_SET file")
+func (c Context) runClass() Class {
+	switch {
+	case c.Status == nil:
+		return Unreadable
+	case *c.Status != statusCompleted:
+		return Pending
+	case c.Conclusion == nil:
+		return Unreadable
 	}
-	dec := json.NewDecoder(bytes.NewReader(data))
-	dec.DisallowUnknownFields()
-	var set Set
-	if err := dec.Decode(&set); err != nil {
-		return Set{}, exitcode.Wrap(exitcode.Usage, err, "parse CHECKS_SET file")
+	switch *c.Conclusion {
+	case "SUCCESS", "NEUTRAL", "SKIPPED":
+		return Pass
+	case "ACTION_REQUIRED":
+		return Action
+	case "CANCELLED":
+		return Cancelled
+	default:
+		return Failed
 	}
-	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
-		return Set{}, exitcode.New(exitcode.Usage, "parse CHECKS_SET file: trailing data")
+}
+
+func (c Context) statusClass() Class {
+	if c.State == nil {
+		return Unreadable
 	}
-	if set.Ref == "" || set.Revision == "" {
-		return Set{}, exitcode.New(exitcode.Usage, "CHECKS_SET file has no ref or revision")
+	switch *c.State {
+	case "SUCCESS":
+		return Pass
+	case "PENDING", "EXPECTED":
+		return Pending
+	default:
+		return Failed
 	}
-	for i := range set.Entries {
-		if set.Entries[i].Env == nil {
-			set.Entries[i].Env = map[string]string{}
+}
+
+// key identifies the check a run belongs to. A re-run leaves the superseded run in the rollup,
+// so Latest keeps one run per key: the same check suite and name for a check run, the same
+// context for a status. The suite id is the key because a workflow display name is not unique
+// across files, and one file triggered twice on a head yields two suites; collapsing either
+// would let a success hide a failure. A check run without a suite id is never collapsed.
+func (c Context) key(index int) []string {
+	switch {
+	case c.Typename == typeStatusContext:
+		return []string{keyStatus, c.name()}
+	case c.CheckSuite != nil && c.CheckSuite.DatabaseID != nil:
+		return []string{keySuite, strconv.FormatInt(*c.CheckSuite.DatabaseID, 10), c.name()}
+	default:
+		return []string{keyUnkeyed, strconv.Itoa(index)}
+	}
+}
+
+// started is the run's timestamp. A run that has not started yet has none and counts as the
+// latest, since it is the pending re-run.
+func (c Context) started() *string {
+	if c.StartedAt != nil {
+		return c.StartedAt
+	}
+	return c.CreatedAt
+}
+
+// olderThan orders runs by time, with a missing time last.
+func olderThan(a, b Context) int {
+	ta, tb := a.started(), b.started()
+	switch {
+	case ta == nil && tb == nil:
+		return 0
+	case ta == nil:
+		return 1
+	case tb == nil:
+		return -1
+	}
+	return compareStrings(*ta, *tb)
+}
+
+func compareStrings(a, b string) int {
+	switch {
+	case a < b:
+		return -1
+	case a > b:
+		return 1
+	default:
+		return 0
+	}
+}
+
+type group struct {
+	key  []string
+	runs []Context
+}
+
+// Latest classifies the nodes of a rollup, keeping only the latest run of each check. Checks
+// come back ordered by their key, so every reason built from them is reproducible.
+func Latest(nodes []Context) []Check {
+	var groups []*group
+	for i, n := range nodes {
+		key := n.key(i)
+		at := slices.IndexFunc(groups, func(g *group) bool { return slices.Equal(g.key, key) })
+		if at < 0 {
+			groups = append(groups, &group{key: key, runs: nil})
+			at = len(groups) - 1
+		}
+		groups[at].runs = append(groups[at].runs, n)
+	}
+	slices.SortStableFunc(groups, func(a, b *group) int { return slices.Compare(a.key, b.key) })
+	out := make([]Check, 0, len(groups))
+	for _, g := range groups {
+		slices.SortStableFunc(g.runs, olderThan)
+		latest := g.runs[len(g.runs)-1]
+		out = append(out, Check{Name: latest.name(), Class: latest.class()})
+	}
+	return out
+}
+
+// Named returns the names of the checks of one class, in order.
+func Named(all []Check, class Class) []string {
+	var names []string
+	for _, c := range all {
+		if c.Class == class {
+			names = append(names, c.Name)
 		}
 	}
-	return set, nil
+	return names
 }

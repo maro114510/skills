@@ -2,7 +2,7 @@
 # Rule inventory for Epic #277. Format and checks: tests/check-rule-inventory.sh. Contract: contract.md.
 # owner stays - until the Issue in `issue` takes the row over; retired rows point at contract.md section 11.
 id	source	quote	rule	disposition	issue	owner	reason
-GL-01	skills/orchestrate-epic/SKILL.md	It never creates, reads, adds, or removes a label on any Issue.	No label is ever created, read, added, or removed	kept	#282	-	-
+GL-01	skills/orchestrate-epic/SKILL.md	It never creates, reads, adds, or removes a label on any Issue.	No label is ever created, read, added, or removed	kept	#282	test:oe/internal/snapshot/snapshot_test.go::TestNothingIsReadPerChildAndNoLabelIsRead	-
 GL-02	skills/orchestrate-epic/SKILL.md	**GitHub is the single source of truth.**	All progress lives in GitHub; nothing depends on conversation memory	kept	#285	-	-
 GL-03	skills/orchestrate-epic/SKILL.md	a comment counts only when it is trusted and every non-blank line is exactly that one command	Only a trusted author's strict command is a human signal	kept	#285	-	-
 GL-04	skills/orchestrate-epic/SKILL.md	**The loop asks nothing interactively.**	No step blocks on an interactive question; decisions arrive as comments	kept	#292	-	-
@@ -33,23 +33,23 @@ IN-03	skills/orchestrate-epic/SKILL.md	else look for an Epic number in the recen
 IN-04	skills/orchestrate-epic/SKILL.md	Reject anything that isn't a positive integer	An invalid max-parallel falls back to 3 and says why	kept	#280	test:oe/internal/inputs/inputs_test.go::TestMaxParallelFallback	-
 IN-05	skills/orchestrate-epic/SKILL.md	Confirm `gh auth status` succeeds.	gh authentication is confirmed first	kept	#280	test:oe/internal/inputs/inputs_test.go::TestGHAuthIsConfirmed	-
 IN-06	skills/orchestrate-epic/SKILL.md	If the main checkout is dirty, stop and tell the user	A dirty main checkout stops the run	retired	#280	prose:docs/design/orchestrate-epic-v2/contract.md#| R4 |	YAGNI cut of Epic #277: the dirty-checkout entry gate; its reason (Step 4 updating main) is gone since #262
-BD-01	skills/orchestrate-epic/SKILL.md	Never fetch children one at a time	The board read is a fixed number of calls, never per child	kept	#282	-	-
-BD-02	skills/orchestrate-epic/SKILL.md	never pull the Epic or an Issue body into context at this step	Bodies never enter context during classification	kept	#282	-	-
-BD-03	skills/orchestrate-epic/SKILL.md	it is never dispatched itself and never appears as a unit of work	A container Tn is never dispatched	kept	#282	-	-
-BD-04	skills/orchestrate-epic/SKILL.md	it counts as `done` only when every one of its `Tn.m` is `done`	A container is done only when all its grandchildren are done	kept	#282	-	-
-BD-05	skills/orchestrate-epic/SKILL.md	`blockedBy` is the dependency ground truth.	blockedBy relations are the dependency ground truth	kept	#282	-	-
+BD-01	skills/orchestrate-epic/SKILL.md	Never fetch children one at a time	The board read is a fixed number of calls, never per child	kept	#282	test:oe/internal/snapshot/snapshot_test.go::TestNothingIsReadPerChildAndNoLabelIsRead	-
+BD-02	skills/orchestrate-epic/SKILL.md	never pull the Epic or an Issue body into context at this step	Bodies never enter context during classification	kept	#282	test:oe/cmd/classify_test.go::TestBoardNeverPrintsABody	-
+BD-03	skills/orchestrate-epic/SKILL.md	it is never dispatched itself and never appears as a unit of work	A container Tn is never dispatched	kept	#282	test:oe/internal/board/board_test.go::TestAContainerIsNeverAUnitOfWork	-
+BD-04	skills/orchestrate-epic/SKILL.md	it counts as `done` only when every one of its `Tn.m` is `done`	A container is done only when all its grandchildren are done	kept	#282	test:oe/internal/board/board_test.go::TestAContainerIsDoneOnlyWhenEveryGrandchildIs	-
+BD-05	skills/orchestrate-epic/SKILL.md	`blockedBy` is the dependency ground truth.	blockedBy relations are the dependency ground truth	kept	#282	test:oe/internal/board/board_test.go::TestReadyAndWaiting	-
 BD-06	skills/orchestrate-epic/SKILL.md	The Epic body's diagram is only the fallback described in §1	The Epic body diagram is a dependency fallback	retired	#282	prose:docs/design/orchestrate-epic-v2/contract.md#| R1 |	YAGNI cut of Epic #277: the Epic-body Mermaid fallback parser
 BD-07	skills/orchestrate-epic/SKILL.md	a failed lookup stops the run, never resumes at cycle 0	A failed state lookup stops the run	kept	#285	-	-
 BD-08	skills/orchestrate-epic/SKILL.md	so stop and tell the user instead of either trusting the worktree's current state	A worktree HEAD that diverged from the recorded head stops the run	kept	#287	-	-
-BD-09	skills/orchestrate-epic/SKILL.md	| `done` | Issue closed, and not `verifying` |	done: closed and not verifying	kept	#282	-	-
-BD-10	skills/orchestrate-epic/SKILL.md	| `verifying` | Issue closed by this loop's latest merge	verifying: closed by the latest merge whose default-branch checks have not passed	kept	#282	-	-
-BD-11	skills/orchestrate-epic/SKILL.md	| `awaiting-merge` | Open Issue with an open PR whose head equals `reviewed_sha`	awaiting-merge: open PR on the bound pair with present evidence	kept	#282	-	-
-BD-12	skills/orchestrate-epic/SKILL.md	| `reverify` | Open Issue with an open PR whose head or base no longer matches the bound pair	reverify: open PR whose pair or evidence no longer holds	kept	#282	-	-
-BD-13	skills/orchestrate-epic/SKILL.md	| `rejected` | Open Issue whose PRs were all closed **without** merging	rejected: every PR closed unmerged and no epic-redo	kept	#282	-	-
-BD-14	skills/orchestrate-epic/SKILL.md	| `parked` | No PR or an open PR whose re-verification or repair parked	parked: unresolved blockers or epic-drop, with no newer decision	kept	#282	-	-
-BD-15	skills/orchestrate-epic/SKILL.md	| `in-progress` | Open, no PR, not `parked`, and at least one of: a branch, a start comment, or a state comment	in-progress: open, no PR, not parked, with in-flight evidence	changed	#282	-	D2: the Issue state written at dispatch is the in-flight evidence; the start comment is only a human-facing note
-BD-16	skills/orchestrate-epic/SKILL.md	| `ready` | Open, no PR, none of the `in-progress` evidence, and every dependency `done` |	ready: open, no PR, no in-flight evidence, every dependency done	kept	#282	-	-
-BD-17	skills/orchestrate-epic/SKILL.md	| `waiting` | Open with at least one non-`done` dependency |	waiting: at least one dependency not done	kept	#282	-	-
+BD-09	skills/orchestrate-epic/SKILL.md	| `done` | Issue closed, and not `verifying` |	done: closed and not verifying	kept	#282	test:oe/internal/board/board_test.go::TestClosedIssuesAreDone	-
+BD-10	skills/orchestrate-epic/SKILL.md	| `verifying` | Issue closed by this loop's latest merge	verifying: closed by the latest merge whose default-branch checks have not passed	kept	#282	test:oe/internal/board/board_test.go::TestVerifyingIssueBlocksItsDependents	-
+BD-11	skills/orchestrate-epic/SKILL.md	| `awaiting-merge` | Open Issue with an open PR whose head equals `reviewed_sha`	awaiting-merge: open PR on the bound pair with present evidence	kept	#282	test:oe/internal/board/board_test.go::TestOpenPRStates	-
+BD-12	skills/orchestrate-epic/SKILL.md	| `reverify` | Open Issue with an open PR whose head or base no longer matches the bound pair	reverify: open PR whose pair or evidence no longer holds	kept	#282	test:oe/internal/board/board_test.go::TestOpenPRStates	-
+BD-13	skills/orchestrate-epic/SKILL.md	| `rejected` | Open Issue whose PRs were all closed **without** merging	rejected: every PR closed unmerged and no epic-redo	kept	#282	test:oe/internal/board/board_test.go::TestRejected	-
+BD-14	skills/orchestrate-epic/SKILL.md	| `parked` | No PR or an open PR whose re-verification or repair parked	parked: unresolved blockers or epic-drop, with no newer decision	kept	#282	test:oe/internal/board/board_test.go::TestParked	-
+BD-15	skills/orchestrate-epic/SKILL.md	| `in-progress` | Open, no PR, not `parked`, and at least one of: a branch, a start comment, or a state comment	in-progress: open, no PR, not parked, with in-flight evidence	changed	#282	test:oe/internal/board/board_test.go::TestInProgressNeedsEvidenceOfWork	D2: the Issue state written at dispatch is the in-flight evidence; the start comment is only a human-facing note
+BD-16	skills/orchestrate-epic/SKILL.md	| `ready` | Open, no PR, none of the `in-progress` evidence, and every dependency `done` |	ready: open, no PR, no in-flight evidence, every dependency done	kept	#282	test:oe/internal/board/board_test.go::TestReadyAndWaiting	-
+BD-17	skills/orchestrate-epic/SKILL.md	| `waiting` | Open with at least one non-`done` dependency |	waiting: at least one dependency not done	kept	#282	test:oe/internal/board/board_test.go::TestReadyAndWaiting	-
 BD-18	skills/orchestrate-epic/SKILL.md	It reclassifies to `in-progress` only through the human-decision check below	A parked Issue moves only through a human decision	kept	#285	-	-
 UP-01	skills/orchestrate-epic/SKILL.md	never act on a comment from anyone else, however well-timed or plausible-looking	Only OWNER, MEMBER, or COLLABORATOR comments not starting with a loop prefix are signals	kept	#285	-	-
 UP-02	skills/orchestrate-epic/SKILL.md	a failed read stops the run, never reads as "no decision"	A failed signal read stops the run	kept	#285	-	-
@@ -62,9 +62,9 @@ UP-08	skills/orchestrate-epic/SKILL.md	- **`epic-drop`** — leave it parked and
 UP-09	skills/orchestrate-epic/SKILL.md	Closing the Issue, if that's what "abandon" means, stays the human's own action	The loop never closes a dropped Issue	kept	#291	-	-
 SN-01	skills/orchestrate-epic/SKILL.md	**A `rejected` Issue**, all its PRs closed without merging, → never resume it silently.	A rejected Issue is escalated once and never resumed silently	kept	#291	-	-
 SN-02	skills/orchestrate-epic/SKILL.md	only `epic-redo` and `epic-drop` are decisions here	On a rejected Issue only epic-redo and epic-drop decide	kept	#285	-	-
-SN-03	skills/orchestrate-epic/SKILL.md	**A dependency cycle among open Issues** → do not compute `ready` for any Issue in the cycle.	Issues in a dependency cycle are never dispatched; the cycle is reported once	kept	#282	-	-
-SN-04	skills/orchestrate-epic/SKILL.md	**A merged PR whose Issue is still open** → never re-dispatch onto a merged branch.	Never re-dispatch onto a merged branch	kept	#282	-	-
-SN-05	skills/orchestrate-epic/SKILL.md	classify the Issue `reverify`, never `awaiting-merge`, and never treat it as merge-ready	A stale verdict is never merge-ready	kept	#282	-	-
+SN-03	skills/orchestrate-epic/SKILL.md	**A dependency cycle among open Issues** → do not compute `ready` for any Issue in the cycle.	Issues in a dependency cycle are never dispatched; the cycle is reported once	kept	#282	test:oe/internal/board/board_test.go::TestADependencyCycleProposesNoDispatchAndOneNotification	-
+SN-04	skills/orchestrate-epic/SKILL.md	**A merged PR whose Issue is still open** → never re-dispatch onto a merged branch.	Never re-dispatch onto a merged branch	kept	#282	test:oe/internal/board/board_test.go::TestAMergedPRWithTheIssueStillOpenIsNeverRedispatched	-
+SN-05	skills/orchestrate-epic/SKILL.md	classify the Issue `reverify`, never `awaiting-merge`, and never treat it as merge-ready	A stale verdict is never merge-ready	kept	#282	test:oe/internal/board/board_test.go::TestAStaleVerdictIsNeverMergeReady	-
 SN-06	skills/orchestrate-epic/SKILL.md	comment it on the Issue once per stale pair	A stale verdict is commented once per head and base pair	kept	#288	-	-
 SN-07	skills/orchestrate-epic/SKILL.md	a leftover `{{Tn}}` or `{{Tn.m}}` in the Epic body	A leftover placeholder token is surfaced	changed	#291	-	Posted as a deduplicated note through the single comment writer instead of session output only
 SN-08	skills/orchestrate-epic/SKILL.md	**A start comment with no branch anywhere**	A recorded dispatch whose branch is gone is reported and recreated	changed	#291	-	Detected from the Issue state's branch and posted as a stale-start note through the comment writer
@@ -84,12 +84,12 @@ MA-02	skills/orchestrate-epic/SKILL.md	Run it again immediately before **every**
 MA-03	skills/orchestrate-epic/SKILL.md	An unreadable grant is never permission.	An unreadable grant is never permission	kept	#290	-	-
 MA-04	skills/orchestrate-epic/SKILL.md	never bypass one with `--admin` or by changing repository settings	Never bypass a repository control	kept	#290	-	-
 FZ-01	skills/orchestrate-epic/SKILL.md	a freeze check, commands §1.7, that prints `status=CLEAR` immediately before the merge request	A freeze check prints CLEAR immediately before every merge	kept	#290	-	-
-MR-01	skills/orchestrate-epic/SKILL.md	Whether the repository's own gates are satisfied is never judged by reading a PR by eye.	Merge readiness is classified by code, never by eye	kept	#282	-	-
+MR-01	skills/orchestrate-epic/SKILL.md	Whether the repository's own gates are satisfied is never judged by reading a PR by eye.	Merge readiness is classified by code, never by eye	kept	#282	test:oe/internal/readiness/readiness_test.go::TestReadyCases	-
 MR-02	skills/orchestrate-epic/SKILL.md	Merge only on exit 0 with `status=READY` and a `head=` line equal to the state comment's `reviewed_sha`	Merge only on READY for exactly reviewed_sha	kept	#290	-	-
-MR-03	skills/orchestrate-epic/SKILL.md	Exit 1 means a required signal could not be read; it always prints `status=BLOCKED`	An unreadable readiness signal is BLOCKED	kept	#282	-	-
-MR-04	skills/orchestrate-epic/SKILL.md	Each result also prints one `next=` line, the action Step 8 takes	Each readiness result maps to one next action	kept	#282	-	-
-MR-05	skills/orchestrate-epic/SKILL.md	which wins over any repairable block beside it	A block needing a person wins over a repairable one	kept	#282	-	-
-MR-06	skills/orchestrate-epic/SKILL.md	requested changes from any reviewer including an AI bot	Requested changes from any reviewer, an AI bot included, and a merge queue are BLOCKED	kept	#282	-	-
+MR-03	skills/orchestrate-epic/SKILL.md	Exit 1 means a required signal could not be read; it always prints `status=BLOCKED`	An unreadable readiness signal is BLOCKED	kept	#282	test:oe/internal/readiness/readiness_test.go::TestUnreadableSignalsHoldTheMerge	-
+MR-04	skills/orchestrate-epic/SKILL.md	Each result also prints one `next=` line, the action Step 8 takes	Each readiness result maps to one next action	kept	#282	test:oe/internal/readiness/readiness_test.go::TestBlockedCases	-
+MR-05	skills/orchestrate-epic/SKILL.md	which wins over any repairable block beside it	A block needing a person wins over a repairable one	kept	#282	test:oe/internal/readiness/readiness_test.go::TestBlockedCases	-
+MR-06	skills/orchestrate-epic/SKILL.md	requested changes from any reviewer including an AI bot	Requested changes from any reviewer, an AI bot included, and a merge queue are BLOCKED	kept	#282	test:oe/internal/readiness/readiness_test.go::TestBlockedCases	-
 LO-01	skills/orchestrate-epic/SKILL.md	- **Implement concurrently.**	Overlapping Issues are implemented in parallel; overlap never holds work	kept	#291	-	-
 LO-02	skills/orchestrate-epic/SKILL.md	- **Land one at a time.**	One merge at a time; never merge on a pre-merge verdict	kept	#290	-	-
 LO-03	skills/orchestrate-epic/SKILL.md	never a rebase or `gh-stack` restack	The new base is merged in with a plain merge commit	kept	#288	-	-
@@ -207,12 +207,12 @@ LD-07	skills/orchestrate-epic/SKILL.md	Run each sleep as its own call, shorter t
 LD-08	skills/orchestrate-epic/SKILL.md	A PR whose only wait reason is `no checks reported on head` gets 5 polls from its latest push	A PR with no checks gets 5 polls, then needs a human	kept	#291	-	-
 PH-01	skills/orchestrate-epic/SKILL.md	Before each landing pass and immediately before every merge request	Post-merge health runs before each pass and each merge	kept	#290	-	-
 PH-02	skills/orchestrate-epic/SKILL.md	so a session that dies right after a merge still checks it on the next invocation	The post-merge record is written before the merge request	kept	#290	-	-
-PH-03	skills/orchestrate-epic/SKILL.md	none is reported yet within 10 minutes of the merge	No checks within 10 minutes waits, then freezes as unconfirmed	kept	#282	-	-
-PH-04	skills/orchestrate-epic/SKILL.md	or one is still pending an hour after it	A check pending an hour after the merge freezes as unconfirmed	kept	#282	-	-
+PH-03	skills/orchestrate-epic/SKILL.md	none is reported yet within 10 minutes of the merge	No checks within 10 minutes waits, then freezes as unconfirmed	kept	#282	test:oe/internal/health/health_test.go::TestUnconfirmedCases	-
+PH-04	skills/orchestrate-epic/SKILL.md	or one is still pending an hour after it	A check pending an hour after the merge freezes as unconfirmed	kept	#282	test:oe/internal/health/health_test.go::TestUnconfirmedCases	-
 PH-05	skills/orchestrate-epic/SKILL.md	Never revert, never push a fix, and never retry the merge	Never revert, push a fix, or retry the merge	kept	#290	-	-
-PH-06	skills/orchestrate-epic/SKILL.md	A failure is never retried into a pass by waiting, and an unreadable signal is never a pass.	A failure or unreadable signal is never a pass	kept	#282	-	-
-PH-07	skills/orchestrate-epic/SKILL.md	After `epic-release`, the gate reads the same result as `HANDLED`	A released freeze's result reads HANDLED; a different result freezes again	kept	#282	-	-
-PH-08	skills/orchestrate-epic/SKILL.md	a merge a human makes by hand is the human's to verify	Health covers only merges this loop records	kept	#282	-	-
+PH-06	skills/orchestrate-epic/SKILL.md	A failure is never retried into a pass by waiting, and an unreadable signal is never a pass.	A failure or unreadable signal is never a pass	kept	#282	test:oe/internal/health/health_test.go::TestUnreadableCases	-
+PH-07	skills/orchestrate-epic/SKILL.md	After `epic-release`, the gate reads the same result as `HANDLED`	A released freeze's result reads HANDLED; a different result freezes again	kept	#282	test:oe/internal/health/health_test.go::TestAReleasedFreezeStillHandlesItsResult	-
+PH-08	skills/orchestrate-epic/SKILL.md	a merge a human makes by hand is the human's to verify	Health covers only merges this loop records	kept	#282	test:oe/internal/health/health_test.go::TestAnEpicWithNoPostMergeRecordIsClear	-
 RP-01	skills/orchestrate-epic/SKILL.md	A repair changes code, so a worker always makes it; the Publisher never edits code.	A worker makes every repair	kept	#290	-	-
 RP-02	skills/orchestrate-epic/SKILL.md	- **Cap.** Read `cycle` first.	A repair is a fix cycle under the same cap	kept	#290	-	-
 RP-03	skills/orchestrate-epic/SKILL.md	There are no separate repair bounds.	No separate repair bounds	kept	#290	-	-
@@ -260,16 +260,16 @@ EC-09	skills/orchestrate-epic/SKILL.md	Compensating controls: reviews diff again
 EC-10	skills/orchestrate-epic/SKILL.md	If a worker pushed or opened a PR on its own, stop and tell the user before anything else ships.	An out-of-flow push or PR stops shipping	kept	#289	-	-
 EC-11	skills/orchestrate-epic/SKILL.md	run `git status --short` on the **main** checkout, never a worktree	A dirty shared checkout before shipping stops the ship	changed	#289	-	oe pushes exactly the reviewed SHA from the worktree, so shared-checkout edits cannot ride along; a human's own work there no longer blocks shipping (contract R4)
 EC-12	skills/orchestrate-epic/SKILL.md	show the error, retry once, then stop and report it	Retry a failed gh call once	retired	#280	prose:docs/design/orchestrate-epic-v2/contract.md#| R5 |	YAGNI cut of Epic #277: rate-limit backoff; a failed or rate-limited read stops with exit 1
-CMD-01	skills/orchestrate-epic/references/commands.md	No call reads a label	The board read never reads a label	kept	#282	-	-
-CMD-02	skills/orchestrate-epic/references/commands.md	Never loop `gh issue view` or a comment read per child	No per-child reads	kept	#282	-	-
-CMD-03	skills/orchestrate-epic/references/commands.md	A non-zero exit prints no list, only an error on	A failed edge read is never read as no dependencies	kept	#282	-	-
-CMD-04	skills/orchestrate-epic/references/commands.md	Call 4 is complete only when it returns exactly one line per number in `OPEN_ISSUES`	A partial comment read stops classification	kept	#282	-	-
-CMD-05	skills/orchestrate-epic/references/commands.md	An Issue whose `total` exceeds 100 has comments beyond the first page	Issues over one page of comments are read with pagination	kept	#282	-	-
-CMD-06	skills/orchestrate-epic/references/commands.md	if an open `Tn` or `Tn.m` is missing from call 2, the read is incomplete	A truncated issue listing stops classification	kept	#282	-	-
+CMD-01	skills/orchestrate-epic/references/commands.md	No call reads a label	The board read never reads a label	kept	#282	test:oe/internal/snapshot/snapshot_test.go::TestNothingIsReadPerChildAndNoLabelIsRead	-
+CMD-02	skills/orchestrate-epic/references/commands.md	Never loop `gh issue view` or a comment read per child	No per-child reads	kept	#282	test:oe/internal/snapshot/snapshot_test.go::TestNothingIsReadPerChildAndNoLabelIsRead	-
+CMD-03	skills/orchestrate-epic/references/commands.md	A non-zero exit prints no list, only an error on	A failed edge read is never read as no dependencies	kept	#282	test:oe/internal/snapshot/snapshot_test.go::TestAPartialTreeIsNeverClassified	-
+CMD-04	skills/orchestrate-epic/references/commands.md	Call 4 is complete only when it returns exactly one line per number in `OPEN_ISSUES`	A partial comment read stops classification	kept	#282	test:oe/internal/snapshot/snapshot_test.go::TestAnIssueMissingFromTheCommentsReadIsPartial	-
+CMD-05	skills/orchestrate-epic/references/commands.md	An Issue whose `total` exceeds 100 has comments beyond the first page	Issues over one page of comments are read with pagination	kept	#282	test:oe/internal/snapshot/snapshot_test.go::TestCommentsPastTheFirstPageAreReadOn	-
+CMD-06	skills/orchestrate-epic/references/commands.md	if an open `Tn` or `Tn.m` is missing from call 2, the read is incomplete	A truncated issue listing stops classification	kept	#282	test:oe/internal/snapshot/snapshot_test.go::TestAPartialTreeIsNeverClassified	-
 CMD-07	skills/orchestrate-epic/references/commands.md	Any non-zero exit stops the run, like every other failed read here.	Every failed read stops the run	kept	#280	test:oe/internal/gh/gh_test.go::TestFailedLookupIsNeverNothingFound	-
 CMD-08	skills/orchestrate-epic/references/commands.md	Fallback when `subIssues`/`blockedBy` are unavailable	Parse the Epic body when relations are unavailable	retired	#280	prose:docs/design/orchestrate-epic-v2/contract.md#| R1 |	YAGNI cut of Epic #277: the Epic-body Mermaid fallback parser; oe refuses such a host
 CMD-09	skills/orchestrate-epic/references/commands.md	every marker lookup below trusts only a comment this identity	Marker lookups trust only the loop identity's comments	kept	#285	-	-
-CMD-10	skills/orchestrate-epic/references/commands.md	restoring the `[bot]` suffix REST puts on a bot login and	GraphQL and REST reads classify identically	kept	#282	-	-
+CMD-10	skills/orchestrate-epic/references/commands.md	restoring the `[bot]` suffix REST puts on a bot login and	GraphQL and REST reads classify identically	kept	#282	test:oe/internal/snapshot/snapshot_test.go::TestABotLoginCarriesItsSuffix	-
 CMD-11	skills/orchestrate-epic/references/commands.md	a comment edited into a command after the fact does not move into the window	An edited comment does not enter the window	changed	#285	-	Edits are judged against the comment-ID watermark, contract 6
 CMD-12	skills/orchestrate-epic/references/commands.md	a comment mixing two different commands therefore all carry command: null	Commands in other text, uppercase, or mixed are context	kept	#285	-	-
 CMD-13	skills/orchestrate-epic/references/commands.md	(create only — never edit/replace an existing Run Plan)	The Run Plan is never edited or replaced	kept	#286	-	-
@@ -296,7 +296,7 @@ ST-03	skills/orchestrate-epic/references/commands.md	`review_evidence` is always
 ST-04	skills/orchestrate-epic/references/commands.md	The field is **present** only when an empty header is followed by at least one indented line	Evidence is present only with at least one criterion line	changed	#285	-	D2: present means a non-null approval whose evidence has at least one criterion
 ST-05	skills/orchestrate-epic/references/commands.md	`decisions` holds the latest human decision only, replaced by the next one	Only the latest decision is recorded	kept	#285	-	-
 ST-06	skills/orchestrate-epic/references/commands.md	fetched by `id` so they still reach the worker after a restart	Context comments are fetched by ID after a restart	kept	#287	-	-
-ST-07	skills/orchestrate-epic/references/commands.md	it never makes Step 2 classify the Issue `parked`	pending_findings never parks an Issue	kept	#282	-	-
+ST-07	skills/orchestrate-epic/references/commands.md	it never makes Step 2 classify the Issue `parked`	pending_findings never parks an Issue	kept	#282	test:oe/internal/board/board_test.go::TestParked	-
 ST-08	skills/orchestrate-epic/references/commands.md	git-wt may place worktrees outside the repo	Use the path git wt prints	retired	#287	prose:docs/design/orchestrate-epic-v2/contract.md#| R2 |	YAGNI cut of Epic #277: the git wt dependency
 ST-09	skills/orchestrate-epic/references/commands.md	A state comment written before `review_evidence` existed has no such line	A pre-evidence state comment re-verifies once	retired	#285	prose:docs/design/orchestrate-epic-v2/contract.md#| R12 |	D2: no backward compatibility; a v1 state stops oe
 PN-01	skills/orchestrate-epic/references/commands.md	A merge, never a rebase: a branch that already has a PR must move forward without a force-push	Never force-push a branch with a PR	kept	#288	-	-
@@ -305,8 +305,8 @@ SP-02	skills/orchestrate-epic/references/commands.md	succeeds only if the branch
 SP-03	skills/orchestrate-epic/references/commands.md	`.env*`, `*.pem`, `*.key`, `id_rsa*`	Secret-screen patterns for the diff	changed	#283	-	D5: the union of these and the commit skill's Step 2 patterns, over outgoing commits, messages, worktree, and published text
 SP-04	skills/orchestrate-epic/references/commands.md	This is a snapshot taken when the PR was created	The PR body evidence is a snapshot; the state is authoritative	kept	#289	-	-
 MC-01	skills/orchestrate-epic/references/commands.md	Only a moved base exits 3, so the caller can route it to re-verification	Exit 3 means stale, exit 4 means stop	kept	#280	test:oe/internal/exitcode/exitcode_test.go::TestContractExitCodes	-
-MC-02	skills/orchestrate-epic/references/commands.md	Every check on the head counts, required or not	Every check counts, required or not	kept	#282	-	-
-MC-03	skills/orchestrate-epic/references/commands.md	a connection held more than 100 nodes	A connection at its node limit is unreadable	kept	#282	-	-
+MC-02	skills/orchestrate-epic/references/commands.md	Every check on the head counts, required or not	Every check counts, required or not	kept	#282	test:oe/internal/readiness/readiness_test.go::TestBlockedCases	-
+MC-03	skills/orchestrate-epic/references/commands.md	a connection held more than 100 nodes	A connection at its node limit is unreadable	kept	#282	test:oe/internal/readiness/readiness_test.go::TestTruncatedConnectionsAreNamed	-
 LC-01	skills/orchestrate-epic/references/commands.md	Every lookup that fails stops the action it guards; a failed read is never "nothing found".	A failed lookup is never nothing found	kept	#280	test:oe/internal/gh/gh_test.go::TestFailedLookupIsNeverNothingFound	-
 LC-02	skills/orchestrate-epic/references/commands.md	the trailing space keeps PR 12 from matching 123	Repair markers match the exact PR number	changed	#290	-	Exact structured dedup keys replace prefix matching, contract 7
 LC-03	skills/orchestrate-epic/references/commands.md	Filtering on that, not the marker's own created_at	Repair feedback is filtered by the recorded since	kept	#290	-	-
@@ -316,9 +316,9 @@ LC-06	skills/orchestrate-epic/references/commands.md	GraphQL, since REST omits t
 LC-07	skills/orchestrate-epic/references/commands.md	A failed write merges nothing.	A failed post-merge record write merges nothing	kept	#290	-	-
 LC-08	skills/orchestrate-epic/references/commands.md	A parent that cannot be read counts the same, since it is not proof.	An unreadable first parent counts as an unverified base	kept	#290	-	-
 LC-09	skills/orchestrate-epic/references/commands.md	so an earlier `rejected` or `unknown` never suppresses the record of a later attempt that merged	Merge result keys include reviewed_sha and result	kept	#290	-	-
-LC-10	skills/orchestrate-epic/references/commands.md	If the request still does not merge — a moved base, a 409, a rejection — the record names a PR that is not merged	A record for an unmerged PR reads CLEAR	kept	#282	-	-
-HC-01	skills/orchestrate-epic/references/commands.md	`ACTION_REQUIRED`, a human hold on a PR, is a failure here	ACTION_REQUIRED after a merge is a failure	kept	#282	-	-
-HC-02	skills/orchestrate-epic/references/commands.md	`HANDLED` matches only a freeze whose `- merge:` line names this merge commit	HANDLED needs the same merge commit and status	kept	#282	-	-
+LC-10	skills/orchestrate-epic/references/commands.md	If the request still does not merge — a moved base, a 409, a rejection — the record names a PR that is not merged	A record for an unmerged PR reads CLEAR	kept	#282	test:oe/internal/health/health_test.go::TestARecordedPRThatNeverMergedIsClear	-
+HC-01	skills/orchestrate-epic/references/commands.md	`ACTION_REQUIRED`, a human hold on a PR, is a failure here	ACTION_REQUIRED after a merge is a failure	kept	#282	test:oe/internal/health/health_test.go::TestFailCases	-
+HC-02	skills/orchestrate-epic/references/commands.md	`HANDLED` matches only a freeze whose `- merge:` line names this merge commit	HANDLED needs the same merge commit and status	kept	#282	test:oe/internal/health/health_test.go::TestFailCases	-
 CL-01	skills/orchestrate-epic/references/commands.md	-d refuses if unmerged, which is the point	Cleanup never force-deletes a branch	kept	#291	-	-
 TP-01	skills/orchestrate-epic/references/templates.md	絵文字は使わず、`[!]` などのテキスト記号を使う	No emoji in output	kept	#292	-	-
 TP-02	skills/orchestrate-epic/references/templates.md	同じ Epic に対して二度目以降は投稿し直さない。	The Run Plan is posted once per Epic	kept	#286	-	-
