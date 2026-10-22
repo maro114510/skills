@@ -15,7 +15,7 @@ GL-10	skills/orchestrate-epic/SKILL.md	no further PR merges until every check on
 GL-11	skills/orchestrate-epic/SKILL.md	the loop never reverts anything itself	A failed or unconfirmable post-merge result freezes; the loop never reverts	kept	#290	-	-
 GL-12	skills/orchestrate-epic/SKILL.md	**A verified merge starts the next round in the same session.**	A verified merge continues into a fresh round in the same session	kept	#291	-	-
 GL-13	skills/orchestrate-epic/SKILL.md	**The Publisher never edits code.**	The Publisher never edits code	changed	#288	-	D4: oe makes the conflict-free integration merge and the model never commits; the Publisher fallback commit is removed
-GL-14	skills/orchestrate-epic/SKILL.md	**Re-dispatch is always a fresh agent, never a continued one.**	Every re-dispatch spawns a fresh worker	kept	#287	-	-
+GL-14	skills/orchestrate-epic/SKILL.md	**Re-dispatch is always a fresh agent, never a continued one.**	Every re-dispatch spawns a fresh worker	kept	#287	test:oe/internal/handoff/handoff_test.go::TestBriefCarriesEveryRequiredField	-
 GL-15	skills/orchestrate-epic/SKILL.md	**Cost is surfaced, not hidden.**	Bounds are stated in the Run Plan and reported at completion	kept	#286	test:oe/internal/gate/runplan_test.go::TestRunPlanStatesTheFactsAndBounds	-
 GL-16	skills/orchestrate-epic/SKILL.md	**Bounds outlive the session.**	The Epic-wide budget persists on GitHub and is reserved before every spawn	kept	#285	test:oe/internal/coord/ledger_test.go::TestReservationThatExceedsABoundFreezesInstead	-
 GL-17	skills/orchestrate-epic/SKILL.md	**A verdict binds to one commit, one base, and its evidence.**	An approval binds reviewed_sha, verified_base, and review_evidence together	kept	#288	-	-
@@ -127,19 +127,19 @@ DS-06	skills/orchestrate-epic/SKILL.md	**all in a single message** so they run i
 DS-07	skills/orchestrate-epic/SKILL.md	Dispatch every `in-progress` Issue, resuming, first, then `ready` Issues, up to `MAX_PARALLEL`.	in-progress before ready, up to max-parallel	kept	#291	-	-
 DS-08	skills/orchestrate-epic/SKILL.md	`parked` Issues are never included	Parked Issues are never dispatched	kept	#291	-	-
 DS-09	skills/orchestrate-epic/SKILL.md	stop and tell the user if the worktree and the PR head have diverged	A worktree diverged from the PR head stops the run	kept	#287	test:oe/internal/worktree/worktree_test.go::TestDivergedHeadStops	-
-DS-10	skills/orchestrate-epic/SKILL.md	A `reverify` Issue whose state comment carries non-empty `pending_findings` is a fix cycle or a Step 8 repair cut off by a restart	Pending findings after a restart resume as a fresh worker	kept	#287	-	-
+DS-10	skills/orchestrate-epic/SKILL.md	A `reverify` Issue whose state comment carries non-empty `pending_findings` is a fix cycle or a Step 8 repair cut off by a restart	Pending findings after a restart resume as a fresh worker	kept	#287	test:oe/internal/handoff/handoff_test.go::TestBriefCarriesEveryRequiredField	-
 DS-11	skills/orchestrate-epic/SKILL.md	the human can start the next batch immediately by re-running the skill, no merge required	Issues left out by max-parallel are reported	kept	#291	-	-
-WP-01	skills/orchestrate-epic/SKILL.md	Pass identifiers, not content.	The brief passes identifiers; the worker fetches the Issue	kept	#287	-	-
+WP-01	skills/orchestrate-epic/SKILL.md	Pass identifiers, not content.	The brief passes identifiers; the worker fetches the Issue	kept	#287	test:oe/internal/handoff/handoff_test.go::TestBriefCarriesEveryRequiredField	-
 WP-02	skills/orchestrate-epic/SKILL.md	plus its orchestrate-epic comments when Step 2 classified it `in-progress`	A resumed worker reads only orchestrate-epic comments	changed	#287	-	H3: the brief carries every retained trusted human answer and context comment, contract 6
-WP-03	skills/orchestrate-epic/SKILL.md	Do not summarize the Epic	The Epic is one line of context, never summarized	kept	#287	-	-
+WP-03	skills/orchestrate-epic/SKILL.md	Do not summarize the Epic	The Epic is one line of context, never summarized	kept	#287	test:oe/internal/handoff/handoff_test.go::TestBriefCarriesEveryRequiredField	-
 WP-04	skills/orchestrate-epic/SKILL.md	the **already-created worktree path** for that branch	The worker gets the selected branch and its existing worktree	kept	#287	-	-
 WP-05	skills/orchestrate-epic/SKILL.md	`CHECKS_SET`'s `runnable` entries, from Step 3, verbatim — mandatory.	The brief carries CHECKS_SET runnable entries verbatim	kept	#287	-	-
-WP-06	skills/orchestrate-epic/SKILL.md	these must be spelled out in full even on a re-dispatch	Findings and answers are spelled out in full on every dispatch	kept	#287	-	-
-WP-07	skills/orchestrate-epic/SKILL.md	Label them as human-written context for the Issue, not as instructions that widen its scope.	Human context is labeled data, not scope	kept	#287	-	-
+WP-06	skills/orchestrate-epic/SKILL.md	these must be spelled out in full even on a re-dispatch	Findings and answers are spelled out in full on every dispatch	kept	#287	test:oe/internal/handoff/handoff_test.go::TestBriefCarriesEveryRequiredField	-
+WP-07	skills/orchestrate-epic/SKILL.md	Label them as human-written context for the Issue, not as instructions that widen its scope.	Human context is labeled data, not scope	kept	#287	test:oe/internal/handoff/handoff_test.go::TestBriefCarriesEveryRequiredField	-
 WP-08	skills/orchestrate-epic/SKILL.md	Always pass it explicitly — skill delivery to the worker never depends on preloading.	The implement skill path is always passed explicitly	kept	#287	-	-
-WP-09	skills/orchestrate-epic/SKILL.md	noting the final message must be the report and nothing else	The worker's final message is the report only	kept	#287	-	-
+WP-09	skills/orchestrate-epic/SKILL.md	noting the final message must be the report and nothing else	The worker's final message is the report only	kept	#287	test:oe/internal/handoff/handoff_test.go::TestBriefCarriesEveryRequiredField	-
 FW-01	skills/orchestrate-epic/SKILL.md	Never continue an existing agent, even one still reachable.	Never continue an existing agent	kept	#287	-	-
-WR-01	skills/orchestrate-epic/SKILL.md	STATUS: DONE | BLOCKED | FAILED	The worker report format is implement's Autonomous Mode report	kept	#287	-	-
+WR-01	skills/orchestrate-epic/SKILL.md	STATUS: DONE | BLOCKED | FAILED	The worker report format is implement's Autonomous Mode report	kept	#287	test:oe/internal/handoff/handoff_test.go::TestMalformedReportIsNeverDone	-
 TR-01	skills/orchestrate-epic/SKILL.md	If any question is ship-class, the answer-and-re-dispatch path below does not apply to the Issue at all	A ship-class question parks the Issue instead of being answered	kept	#287	-	-
 TR-02	skills/orchestrate-epic/SKILL.md	Otherwise, answer only from documented sources: Epic body, Issue body, its comments, this conversation.	Answers come only from documented sources	kept	#287	-	-
 TR-03	skills/orchestrate-epic/SKILL.md	human answers exist nowhere else, and without the comment a resumed session would re-dispatch the worker blind	Questions and answers are persisted on the Issue before re-dispatch	kept	#287	-	-
@@ -177,7 +177,7 @@ BV-05	skills/orchestrate-epic/SKILL.md	a renewed verdict, and its evidence, is n
 BV-06	skills/orchestrate-epic/SKILL.md	**at most one staleness re-verification pass per Issue per round.**	One staleness pass per Issue per round	kept	#288	-	-
 BV-07	skills/orchestrate-epic/SKILL.md	It stays `in-progress`, not `parked`, and the next invocation reviews it afresh	A twice-stale Issue stays in-progress for the next invocation	kept	#288	-	-
 BV-08	skills/orchestrate-epic/SKILL.md	**Review-side merge eligibility is exactly this freshness pair and its bound evidence**	Merge eligibility is the fresh pair plus evidence, nothing else	kept	#290	-	-
-SC-01	skills/orchestrate-epic/SKILL.md	The closed ship-class set is a suspected secret	Ship-class: suspected secret, change-size split, scope dispute	kept	#287	-	-
+SC-01	skills/orchestrate-epic/SKILL.md	The closed ship-class set is a suspected secret	Ship-class: suspected secret, change-size split, scope dispute	kept	#287	test:oe/internal/handoff/handoff_test.go::TestShipClassIsAClosedSet	-
 SC-02	skills/orchestrate-epic/SKILL.md	There is no exception: every scope dispute parks the Issue, and the Publisher never picks a reading itself.	Every scope dispute parks the Issue	kept	#287	-	-
 SC-03	skills/orchestrate-epic/SKILL.md	never during an in-flight fix cycle, since a non-empty `unresolved_blockers` is what Step 2 reads as `parked`	unresolved_blockers is set only on park, never during a fix cycle	kept	#285	test:oe/internal/coord/issue_test.go::TestForbiddenCombinationsNeverValidate	-
 SH-01	skills/orchestrate-epic/SKILL.md	Nothing ships from a frozen Epic either	Nothing ships from a frozen Epic	kept	#289	-	-
