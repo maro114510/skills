@@ -40,7 +40,7 @@ flowchart LR
 
 | Mode | Behavior |
 |---|---|
-| `check` | Reads once and reports without touching the ledger |
+| `check` | Reads GitHub and the ledger once and reports without writing anything |
 | `watch` | Default. Loops on `wait` and reports each event without writing code |
 | `drive` | Loops on `wait`, repairs, and pushes through the gate |
 
@@ -48,12 +48,13 @@ flowchart LR
 
 ## Ledger
 
-Path is `$(git rev-parse --path-format=absolute --git-common-dir)/babysit/<owner>-<repo>-<pr>.json`. Every write goes to a temp file and is renamed into place.
+Path is `$(git rev-parse --path-format=absolute --git-common-dir)/babysit/<owner>/<repo>/<pr>.json`. Separate directories keep names containing `-` from colliding. Every write goes to a temp file and is renamed into place.
 
 | Field | Writer | Purpose | Reset at session start |
 |---|---|---|---|
 | `started_at`, `rounds` | skill | Limits | Yes |
 | `repairs.<check key>` | skill | Repair pushes per check across heads | Yes |
+| `replies.<thread id>` | skill | Agent replies per thread | Yes |
 | `api_failures` | `wait` | Consecutive API failures across re-arms | Yes |
 | `lock` | skill, `wait` | Session token and heartbeat | Replaced |
 | `heads.<sha>.first_seen` | `wait` | Start of the no-CI clock | No |
@@ -65,8 +66,8 @@ Lock rules follow.
 
 - `wait` refreshes the heartbeat on every poll, and the skill refreshes it before each action and gate run.
 - Another session refuses to start while the heartbeat is under 70 minutes old and takes over once it is older.
-- `wait` and the gate refuse when the token is no longer theirs.
-- Every stop clears the lock.
+- `wait` and the gate exit 3 when the token is no longer theirs, and the skill then stops without touching the lock.
+- Every other stop clears the lock.
 
 | Item | Key | Raised again when |
 |---|---|---|
@@ -85,29 +86,33 @@ The first matching row wins.
 | 1 | `merged` | PR is merged | Stop and report | Stop and report |
 | 2 | `closed` | PR is closed without merging | Stop and report | Stop and report |
 | 3 | `ready` | READY holds | Stop and report | Stop and report |
-| 4 | `limit` | 8 hours have passed, or 5 rounds are used and an item for rows 5, 8, or 9 is pending | Stop and report | Stop and report |
-| 5 | `conflict` | Head conflicts with the base | Report | Merge base |
-| 6 | `check_stuck` | A check fails after 2 repair pushes for it | Report | Park |
-| 7 | `check_failed` | A re-runnable check fails for the first time on this head | Report | Re-run once |
-| 8 | `check_confirmed` | A run newer than the recorded re-run fails, or a check that cannot be re-run fails | Report | Repair |
-| 9 | `comment` | A comment, review body, or thread reply is new or edited | Report | Triage |
-| 10 | `idle` | `--max` expired | Re-arm `wait` | Re-arm `wait` |
+| 4 | `limit` | 8 hours have passed, or 5 rounds are used and an item for rows 6, 9, or 10 is pending | Stop and report | Stop and report |
+| 5 | `stalled` | Nothing is pending and a parked item is among the READY blockers | Stop and report | Stop and report |
+| 6 | `conflict` | Head conflicts with the base | Report | Merge base |
+| 7 | `check_stuck` | A check fails after 2 repair pushes for it | Report | Park |
+| 8 | `check_failed` | A re-runnable check fails for the first time on this head | Report | Re-run once |
+| 9 | `check_confirmed` | A run newer than the recorded re-run fails, or a check that cannot be re-run fails | Report | Repair |
+| 10 | `comment` | A comment, review body, or thread reply is new or edited | Report | Triage |
+| 11 | `idle` | `--max` expired | Re-arm `wait` | Re-arm `wait` |
 
 | Drive action | Steps |
 |---|---|
 | Repair | Reset the worktree to the PR head, fix, verify locally, pass the gate, push, reply if a comment asked, record, and count one round and one repair for a check |
-| Merge base | Merge the fetched base, fold any needed fix into that merge commit, then continue as Repair, or park when the conflict cannot be resolved |
-| Triage | Confirm the claim against the code, then pick one outcome among Repair, reply only, and park |
+| Merge base | Reset the worktree to the PR head, merge the fetched base, fold any needed fix into that merge commit, verify locally, pass the gate, push, record, and count one round, or park when the conflict cannot be resolved |
+| Triage | Confirm the claim against the code, then pick one outcome among Repair, reply only, and park, and park once the thread already holds 2 agent replies |
 | Park | Record the item as parked, notify, and continue |
 
 Event rules follow.
 
 - Only GitHub Actions check runs can be re-run, so other checks go straight to `check_confirmed`.
-- A pending item has no disposition yet.
+- A `rerun` item is pending until a newer run finishes, and that run decides it without a ledger write, closing it on a pass and firing `check_confirmed` on a failure.
+- Any other pending item has no disposition yet.
 - In watch, reported, handled, and parked all count as dispositions.
 - In drive, only handled and parked count, so drive still acts on items watch reported.
-- Every drive stop report lists all parked and unresolved items.
+- Only drive parks items, so `stalled` fires only in drive.
+- Every stop report lists all parked, reported, and unresolved items in every mode.
 - A bot that rewrites one comment on each push costs one triage per push, bounded by the round limit.
+- A bot that answers each reply is bounded by the 2-reply cap per thread.
 - `wait` exits nonzero when the API keeps failing, and the skill then stops and reports.
 
 ### Never an event
@@ -116,10 +121,10 @@ Event rules follow.
 - The agent's own replies, found in `own.replies` by comment id or pending body hash
 - A check that is queued or pending, or moves from pending to pass
 - An item already parked whose text is unchanged
-- An item already reported or handled under the same key
+- An item already reported, re-run, or handled under the same key
 - A head change by itself, which only resets the check and conflict keys
 - A requested reviewer who has not reviewed yet
-- A draft PR
+- Converting the PR to draft, which only blocks READY while other events still fire
 - An approval without a body
 
 ## READY
@@ -132,7 +137,7 @@ READY requires all of these.
 - The latest run of every check on the head passes, unless the PR counts as having no CI.
 - No latest review requests changes, no review request is pending, and `reviewDecision` is not `REVIEW_REQUIRED`.
 - No review thread is unresolved.
-- No item for rows 5 to 9 is pending.
+- No item for rows 6 to 10 is pending.
 - Every signal could be read.
 
 What follows from these rules.
@@ -185,14 +190,14 @@ Diff range rules follow.
 | Comment input | Comments from anyone are accepted and checked against the code before acting |
 | Accepted risk | On a public repository a third party can steer a fix outside every hard stop, and its local verification runs on the user's machine |
 | Threads | Reply, never resolve |
-| Park and continue | A parked item waits for a human while the rest continue, and returns only when its text changes |
-| Worktree | Drive uses a detached HEAD worktree at `$(git-common-dir)/babysit/wt/<owner>-<repo>-<pr>`, never touches the user's checkout, and stages only changed files instead of `git add -A` |
+| Park and continue | A parked item waits for a human while the rest continue, returns only when its text changes, and ends the session through `stalled` once only parked blockers remain |
+| Worktree | Drive uses a detached HEAD worktree at `$(git-common-dir)/babysit/wt/<owner>/<repo>/<pr>`, never touches the user's checkout, and stages only changed files instead of `git add -A` |
 | Conflicts | Merge the base branch, never rebase, since force push is forbidden |
 | No CI | A head with no check within 10 minutes of `first_seen` counts as having no CI, and READY uses review state alone |
 | Notifications | Run `osascript` on park when it is available, and skip silently otherwise |
 | Limits | 5 rounds with one round per push, or 8 hours from `started_at`, and `wait` shortens `--max` to hit the 8-hour mark |
 | Flaky checks | Re-run once on the first failure, and park after 2 failed repair pushes |
-| API failure | Back off from 30 seconds up to 8 minutes within the `--max` deadline, exit 1 at 5 consecutive failures, and exit 2 on usage errors |
+| API failure | Back off from 30 seconds up to 8 minutes within the `--max` deadline, exit 1 at 5 consecutive failures, exit 2 on usage errors, and exit 3 on a lost lock |
 | Concurrency | One session per PR through the lock |
 | Session | Operating rule is to run babysit in a dedicated session, because a background exit injects a turn into the session that started it |
 | Idle cost | Each wait is bounded, so an unchanged PR costs one turn per `--max` instead of zero |
