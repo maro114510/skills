@@ -106,6 +106,19 @@ argument-hint: "[ready] [base <branch>]"
 - Declare only the tools a skill needs; prefer scoped `Bash(cmd:*)` when the command set is small and predictable
 - This repository relies on the `PreToolUse` hook in `.claude/settings.json` to stop an unapproved `git push`; that stop is intended behavior
 
+## Target Repository Config
+
+Skill scripts read the target repository's `.agents/skills.toml`.
+The `[paths]` section is neutral: no single skill owns it, and every key holds Git glob pathspecs as a string or an array.
+Every other section is named after the skill that reads it.
+
+| Key | Holds | Read by |
+|---|---|---|
+| `[paths] tests` | Test files | `skills/implement/scripts/gate-tests.sh` |
+| `[paths] generated` | Generated files | - |
+| `[paths] design_docs` | Design docs and ADRs | - |
+| `[implement.testing]` | gate-tests's commands and patterns, listed in its header | `skills/implement/scripts/gate-tests.sh` |
+
 ## Workflow
 
 1. Create or edit `skills/<skill-name>/SKILL.md`
