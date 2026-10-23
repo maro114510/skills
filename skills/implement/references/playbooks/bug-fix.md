@@ -1,33 +1,14 @@
 # Bug Fix
 
-The procedure for writing tests when a task corrects behavior that differs from what was specified or intended.
-It lists steps only. The rules live in [test-policy.md](../test-policy.md), read whole first, and each step names the section it follows.
+Tests for a task that corrects behavior that differs from what was specified or intended.
+Steps only: the rules are in [test-policy.md](../test-policy.md), cited by section.
 
-## Steps
+1. Find the condition that makes the defect occur, as the regression rule in § Preconditions asks.
+2. Red. Write one test that sets that condition inside the test and asserts the correct outcome. On the current code it fails at its assertion with the reported symptom, as § Process says; if it passes, the defect does not reproduce: Phase 2 trigger 2.
+   Record the command, exit code, and failure excerpt. This run is the evidence that the test fails without the fix, as [evidence.md](../evidence.md) section 2.2 says. Commit the test as `test:`.
+3. Fix production code only, never the step 2 test, as § Prohibitions says, and commit as `fix:`.
+4. Refactor while green, without changing an assertion, and commit as `refactor:`. Skip it when nothing needs it.
 
-1. Find the condition. Establish what makes the defect occur, to the depth the regression rule in test-policy § Preconditions asks for.
-2. Red. Write one test that sets that condition inside the test, as § Preconditions says, names it, as § Writing says, and asserts the correct outcome. Run it on the current code.
-   It fails at its assertion with the reported symptom, never with a build, import, or setup error, as § Process says. If it passes, the defect does not reproduce: Phase 2 trigger 2.
-   Record the command, exit code, and failure excerpt. This run is the observation of the test failing without the fix that [evidence.md](../evidence.md) section 2.2 asks for.
-   Commit the test alone as `test:`, naming the defect it pins.
-3. Fix. Change only production code until the suite passes. Never edit the step 2 test, as § Prohibitions says. A test that has to change did not reproduce the condition: return to step 1, and the new test goes through step 2 again.
-   Commit as `fix:`.
-4. Refactor. Clean up while the suite stays green, without changing any test's assertion, and commit as `refactor:`. Skip the step when nothing needs cleaning.
+When no test can reproduce the defect, follow the same steps with a script or manual steps, record why in the decision log, and record each run.
 
-If the commit skill reports that a hook rejected the `test:` commit and left the test staged, run step 3 and commit both as one `fix:`. The history check below still runs that test against the commit's parent.
-
-When no test can reproduce the defect, follow the same steps with a script or manual steps, record why in the decision log, and record each run as step 2 says. The history check then has nothing to check.
-
-## History Check
-
-Phase 6 runs `scripts/gate-tests.sh`, whose `before-change` check runs each new or changed test of a commit against that commit's parent.
-It is the one step that shows the committed step 2 test guards the defect; no other step reruns the test without the fix.
-
-| `before-change` reports the step 2 test | Action |
-|---|---|
-| Failed on the parent | Proceed |
-| Passed on the parent | It does not guard the defect. It failed in step 2 only through something its commit does not hold, such as an untracked file or local state, which means it lacks a precondition, or an edit made after step 2. Redo the cycle from step 1, as Redo a Cycle in SKILL.md says. If no test can set that condition, Phase 2 trigger 2 |
-| Failed with a build error on the parent | The test needs something its parent lacks, because the check applies only test files to the parent. Redo the cycle as Redo a Cycle in SKILL.md says, committing that, such as a minimal stub, as `refactor:` before the `test:` commit |
-| `not-run` | Report the line. The step 2 observation stands alone |
-
-A passing check is never evidence, as evidence.md section 2.2 says. The step 2 observation is.
+History check: instead of rerunning the test without the fix, rely on `before-change`, which runs the committed step 2 test against its parent and must report it failed there. Passing there means the test relied on something its commit lacks, such as local state: return to step 1. A passing check is never evidence.

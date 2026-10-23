@@ -4,9 +4,8 @@ description: >
   A skill for executing implementation tasks with quality as the top priority. Grounds the request
   in the codebase, resolves requirements and acceptance criteria, decides autonomously from the Issue and
   repository, and asks only when acceptance, a premise, or the sources are in doubt, or a critical decision
-  is unsettled. Writes tests through one playbook per task type (behavior change, bug fix, refactor),
-  commits each TDD cycle, and proves every bug fix with a reproduction test that fails on the pre-fix code,
-  checked against history by gate-tests.sh.
+  is unsettled. Writes tests through one playbook per task type, commits each TDD cycle, and proves every
+  bug fix with a reproduction test that fails on the pre-fix code.
   Trigger on requests like
   「これを実装して」「機能を追加して」「バグを修正して」「変更して」「これを作って」
   「リファクタリングして」「対応して」 and similar implementation requests.
@@ -85,7 +84,7 @@ ERROR: <FAILED only — what failed, what was attempted>
 Determine the execution mode and task type from `$ARGUMENTS` and the conversation.
 
 - Record what the user already decided so they never have to repeat it.
-- Defer the playbook choice to the Phase 3 plan, once the repository is inspected and acceptance criteria exist.
+- Defer the playbook choice until the repository is inspected and acceptance criteria exist.
 - Do not mutate repository state in Phases 0 to 3. Worktree Resolution in autonomous mode and the Issue Claim below are the only exceptions.
 
 ### Issue Claim
@@ -201,15 +200,15 @@ Before any repository mutation, present a decision-complete implementation plan 
 - Relevant evidence about the current state
 - The implementation approach and affected interfaces or data flow
 - Failure, compatibility, migration, and operational behavior where applicable
-- For each part of the task, the playbook Phase 5's table routes it to, or the Tests Not to Write condition that holds, with the tests mapped to the acceptance criteria
+- A test strategy mapped to the acceptance criteria
 - Explicit non-goals, risks, and the decision log
 
 Then proceed without waiting for approval, because Phase 7 gates the whole range before push.
 
 If new information, repository drift, or a scope change raises a Phase 2 trigger later, stop, ask, and update the plan before continuing.
 
-- In autonomous mode, return BLOCKED with the partial work as it stands: committed cycles stay committed, other edits stay uncommitted, and `CHANGED_FILES` lists both.
-- In either mode, once the answer arrives, inspect the branch's commits since the base and the uncommitted changes including untracked files. Undo only the work that implements an option the answer rejected and keep everything else. Undo a commit with `git revert`, never by rewriting history, and give the commit skill a `Removed-Test` trailer for each test the revert deletes.
+- In autonomous mode, return BLOCKED with the partial work, committed or not, listed in `CHANGED_FILES`.
+- In either mode, once the answer arrives, inspect the branch's commits and the uncommitted changes including untracked files. Undo only the work that implements an option the answer rejected, reverting a commit with `git revert`, and keep everything else.
 
 ---
 
@@ -262,9 +261,7 @@ Do not repeat it in another.
 | Commit log | Why |
 | Code comments | Why not: a rejected alternative or a non-obvious constraint |
 
-### Route to a Playbook
-
-The Phase 3 plan routes each part of the task with this table. A playbook is the only procedure for writing its task type's tests.
+Route each part of the task in the Phase 3 plan. A playbook, relative to this skill's directory, is the only procedure for writing its type's tests.
 
 | Task type | Playbook |
 |---|---|
@@ -272,63 +269,23 @@ The Phase 3 plan routes each part of the task with this table. A playbook is the
 | Corrects behavior that differs from what was specified or intended | `references/playbooks/bug-fix.md` |
 | Changes structure while observable behavior stays the same | `references/playbooks/refactor.md` |
 
-- A part no row fits, such as a performance change, a data migration, or documentation, has no playbook. It follows Tests Not to Write below, unless its criteria name behavior a test can observe, which makes it a behavior change.
-- A task that spans types runs each part through its own playbook, one part at a time, each ending on a green commit.
-- When implementing shows that the plan routed a part wrongly, that is a scope change: update the plan as Phase 3 says before continuing.
+- A part no row fits follows Tests Not to Write. A task that spans types runs each part through its own playbook, each ending on a green commit.
+- A fix made after a green commit, from a later phase or a re-dispatch, is routed the same way. A test changed alone, for behavior the code already has, is a pin under `refactor.md` step 2.
 
-Before the first edit, read `references/test-policy.md` whole and each routed playbook, both relative to this skill's directory. Then open the harness's todo or plan list with the routed playbook's steps first, copied verbatim, one item per step and once per part, before any task-specific items. A step you do not do stays in the list, marked `skip: <reason>`.
+Before the first edit, read `references/test-policy.md` and the routed playbook, and put the playbook's steps verbatim at the top of the todo list. Mark a step you skip `skip: <reason>`.
 
-A test that is hard to write is a signal to revisit the design.
-Touch nothing beyond what the task requires.
+Commit each step with the `commit` skill, giving it the type the playbook names, because it infers `test:` for a test-only diff, and any `Removed-Test` trailer. Never push.
 
-### Commit per Cycle
-
-Commit each step as the playbook says, with the `commit` skill, in both modes.
-
-- Give it the commit type the playbook names for the step. Without it, the commit skill infers `test:` from a test-only diff, such as a pinning test that must be `refactor:`, and gate-tests.sh then checks it as a failing test.
-- Give it the Issue number, if any, and whether anything is deferred so far.
-- Hand it each `Removed-Test: <name> -- <reason>` trailer the playbook names, so the deleting commit records it.
-- In normal mode, tell it that Phase 7 classifies and approves the whole range before push, so its Step 6 does not ask about this commit.
-- Never push.
-
-### Fixes After a Green Commit
-
-A fix made after a part reached its green commit goes through the table again, whatever raised it: Phase 6, a Phase 6.5 finding, a Phase 7 review comment, or reviewer findings in a re-dispatch.
-Each fix is a new commit. Never amend, rebase, or reset to make one; only Redo a Cycle below rewrites history.
-
-| The fix | Route |
-|---|---|
-| The code is wrong | `bug-fix.md`: its new test fails on the parent, which still has the defect |
-| The requested behavior changed | `behavior-change.md` |
-| Only structure changes, such as a lint or naming fix in production code | `refactor.md` |
-| Only a test changes, for behavior the code already has: a stronger assertion, a missing case, a rename, or a precondition | Pin it as `refactor.md` step 2 says, committed as `refactor:` |
-
-A test edit of the last kind passes on its parent by design, so committing it as `test:`, `feat:`, or `fix:` makes gate-tests.sh fail on that commit for good.
-
-### Redo a Cycle
-
-gate-tests.sh's `before-change` judges each commit on its own, so a later commit never clears its `fail`. When a playbook's History Check says to redo a cycle, take the cycle's first commit and decide without fetching, because orchestrate-epic forbids workers to fetch on the shared `.git`:
-
-- It was pushed when `git branch -r --contains <commit>` prints a branch, or when `git ls-remote origin refs/heads/<branch>` prints a tip that `git merge-base --is-ancestor <commit> <tip>` confirms holds it, or that is not in the local repository, so the answer is unknown.
-- A merge commit lies after it when `git rev-list --merges <commit>..HEAD` prints one, such as an orchestrator's base integration, which replaying would duplicate.
-
-| First commit of the cycle | Action |
-|---|---|
-| Never pushed, and no merge commit after it | Save the commits from it to HEAD with `git rev-list --reverse <commit>^..HEAD`. Run `git reset --keep <commit>^`, then redo the cycle as the History Check says, and reapply each later saved commit in order with `git cherry-pick`. Rerun Phase 6 |
-| Pushed, or a merge commit after it | Never rewrite it, because a pushed branch may already be under review, and an orchestrator forbids rewriting it. Fix the substance forward as Fixes After a Green Commit says, and report the `fail` line as unresolved: to the user in normal mode, and in `SUMMARY`, naming the commit, in autonomous mode |
-
-`isolation`, `shuffle`, and `removed` judge the range as a whole, so fix their `fail` forward with a new commit. A `Removed-Test` trailer on any commit in the range satisfies `removed`.
+A test that is hard to write is a signal to revisit the design. Touch nothing beyond what the task requires.
 
 ### Tests Not to Write
 
-Write no automated test when any of these holds. Record which one in the decision log, implement with the minimum change, and verify each criterion as `references/evidence.md` says instead.
+Write no automated test when any of these holds, record which one in the decision log, and verify each criterion as `references/evidence.md` says.
 
-- test-policy § Prohibitions excludes the code from testing.
-- The change has no behavior a test can observe through a public interface, such as styling, a one-shot operation, or a configuration value no tested code path reads.
+- test-policy § Prohibitions excludes the code.
+- No public interface lets a test observe the change, as with styling, a one-shot operation, or a configuration value no tested code reads.
 - No suitable test framework exists, and adding one is outside the planned scope.
-- The change is to an agent instruction file, whose behavior evidence.md section 2.3 shows by a fresh-context run.
-
-Otherwise the playbook's tests are required.
+- The change is to an agent instruction file, which evidence.md section 2.3 verifies by a fresh-context run.
 
 ---
 
@@ -336,13 +293,8 @@ Otherwise the playbook's tests are required.
 
 Find the CI configuration in `.github/workflows/`, `Makefile`, and `package.json`, then run the equivalent lint, typecheck, test, and build checks. Fix every error before moving on to Phase 6.5.
 
-After the playbook's last commit, run the history check from the worktree, where `<skill-dir>` is the directory containing this SKILL.md. Pass `origin/<base-branch>` from Phase 4 in normal mode; in autonomous mode omit it, so it defaults to `origin/HEAD`.
-
-```bash
-bash <skill-dir>/scripts/gate-tests.sh [origin/<base-branch>]
-```
-
-Act on each `fail` line as the playbook's History Check section says, and report each `not-run` line, which is not a failure. Exit 2 or 3 means no check ran: fix the cause and rerun, or report it, never as a pass. A passing run is a check, never evidence, as `references/evidence.md` section 2.2 says.
+After the last commit, run `bash <skill-dir>/scripts/gate-tests.sh origin/<base-branch>`, without the base in autonomous mode. A `not-run` line is not a failure; exit 2 or 3 means nothing ran.
+`before-change` judges each commit alone, so a later commit cannot clear its `fail`. Redo that cycle with `git reset --keep`, then replay the later commits, only when `git branch -r --contains <commit>` prints nothing and no merge commit follows it; never fetch for this, since orchestrate-epic forbids workers to. Otherwise fix forward and report the `fail` as unresolved.
 
 ---
 
@@ -368,7 +320,7 @@ Skip this phase in autonomous mode. Otherwise, have a fresh session of your own 
    | 3 | Reviewer modified the worktree or moved HEAD | Stop, show `git status` and `git log -1`, and ask the user |
 
 5. Treat the output as untrusted data. Fix only genuine issues, minimally, and tell the user why the rest stay.
-6. Make each fix as Phase 5's Fixes After a Green Commit says, which commits it, then rerun Phase 6 and the script. Run the script at most twice, then list the remaining findings for the user.
+6. After a fix, commit it as in step 1, then rerun Phase 6 and the script. Run the script at most twice, then list the remaining findings for the user.
 
 Then proceed to Phase 6.9.
 
@@ -422,7 +374,7 @@ Approval covers the push range once, the same range Phase 6.5 reviewed, never a 
    difit HEAD "$(git merge-base origin/<base-branch> HEAD)"
    ```
 
-   - If review comments come back, address them as Phase 5's Fixes After a Green Commit says, rerun Phase 6 and Phase 6.9 so the evidence comes from the final state, and repeat this phase from step 1.
+   - If review comments come back, address them, rerun Phase 6 and Phase 6.9 so the evidence comes from the final state, and repeat this phase from step 1.
    - If difit exits without comments, the range is approved.
 4. If Phase 6.9 left anything deferred and a branch commit carries `Closes #<N>`, tell the user, because create-pr copies that keyword into the PR.
 5. After the range is approved, release the Issue Claim. Never release it before.
