@@ -51,6 +51,8 @@ func criterionFailure(c Criterion) string {
 	switch {
 	case c.Problem != "":
 		return c.Problem
+	case c.Text == "":
+		return "no criterion text before its result; quote the criterion"
 	case c.Result == ResultUnverified:
 		missing := oneLine(c.Evidence)
 		if missing == "" {

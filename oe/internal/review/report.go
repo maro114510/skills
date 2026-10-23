@@ -112,7 +112,7 @@ var (
 	unverifRe  = regexp.MustCompile(`(?s)^unverified\b[ \t]*(?:[—–:-][ \t]*)?(.*)$`)
 	checkRe    = regexp.MustCompile(`^(.*?)[ \t]*->[ \t]*exit[ \t]+(-?[0-9]+)[ \t]*$`)
 	severityRe = regexp.MustCompile(`(?i)^(?:\[(blocking|nit)\]|(blocking|nit)\b)(?:[ \t]*[:—–-])?[ \t]*`)
-	resultRe   = regexp.MustCompile(` -> (?:verified[ \t]*\[|unverified\b)`)
+	resultRe   = regexp.MustCompile(`(?:^|[ \t])-> (?:verified[ \t]*\[|unverified\b)`)
 )
 
 func malformed(format string, args ...any) error {
@@ -262,7 +262,7 @@ func parseCriterion(i int, item string) Criterion {
 	}
 	at := loc[0]
 	c.Text = strings.TrimSpace(item[:at])
-	rest := strings.TrimSpace(item[at+len(" -> "):])
+	rest := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(item[at:]), "->"))
 	if m := verifiedRe.FindStringSubmatch(rest); m != nil {
 		c.Result, c.Kind, c.Evidence = ResultVerified, m[1], strings.TrimSpace(m[2])
 		return c

@@ -212,3 +212,13 @@ func TestOmittedCheckIsABlockingFinding(t *testing.T) {
 		t.Errorf("complete CHECKS: %q", got)
 	}
 }
+
+// TestCriterionWithoutTextFailsValidation shows that an item with a result but no criterion text is a blocking finding and is never bound.
+func TestCriterionWithoutTextFailsValidation(t *testing.T) {
+	t.Parallel()
+
+	ev := review.Evaluate(mustParse(t, report("APPROVE", "no — x", "1. -> verified [static] — x.go:1", greenChecks, "none")))
+	if !strings.Contains(strings.Join(ev.Failures, "\n"), "no criterion text") || len(ev.Bound.Criteria) != 0 {
+		t.Errorf("evidence = %+v", ev)
+	}
+}
