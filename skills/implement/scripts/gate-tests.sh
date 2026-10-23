@@ -26,7 +26,8 @@
 # That worktree holds only tracked files, and setup does not run in it, so run_one must install what it needs
 # there, or build_failure must match the output of its absence.
 # Values reach them only through the environment and arguments, never by substitution into the command text.
-# A test case counts as changed when a changed line falls between its declaration and the next one.
+# A test case counts as changed when a changed non-blank line falls between its declaration and the next one,
+# where the lines right above a declaration that a blank line sets apart, such as a comment or annotation, belong to it.
 # isolation and shuffle run the working tree as it is, uncommitted edits included, but pick their tests from the
 # commits only. Set GATE_TESTS_SEED to replay a shuffle.
 #
@@ -133,30 +134,59 @@ if cmd == "config":
     sys.stdout.write("".join(f"{k}\0{v}\0" for k, v in out))
 elif cmd == "cases":
     # Names of the cases in new file argv[3] that hold a line changed by the -U0 diff in argv[4].
+    # A case runs from its declaration, or from the lines right above it that a blank line sets apart, such as a
+    # comment, decorator, or annotation, to the line before the next case. A blank line changes no case, so the
+    # blank lines that separate an added case from the one above it never mark that one as changed.
     rx = re.compile(sys.argv[2])
+    text = read(sys.argv[3])
+    lines = text.splitlines()
+
+    def blank(no):
+        # Line 0 is the start of the file.
+        return no < 1 or no > len(lines) or not lines[no - 1].strip()
+
     changed = set()
     hunk = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
-    deletion, own = None, False
+    deletion = None
     for line in read(sys.argv[4]).splitlines() + ["@@ -0 +0 @@"]:
         m = hunk.match(line)
         if m:
             # A pure deletion sits after line start. It changes the case holding that line only when it removes
-            # text of that case, before the first case declaration it removes.
-            if deletion is not None and own:
+            # text of that case, before the first case declaration it removes. Removed lines right above that
+            # declaration, set apart by a blank line, belong to the removed case instead.
+            if deletion is not None and (own or block):
                 changed.add(deletion)
             start, count = int(m.group(1)), int(m.group(2) or 1)
-            changed.update(range(start, start + count))
+            changed.update(no for no in range(start, start + count) if not blank(no))
             deletion, own, seen = (start if count == 0 else None), False, False
+            block, block_after_blank, after_blank = False, False, blank(start)
         elif deletion is not None and line.startswith("-") and not seen:
-            if rx.search(line[1:]):
+            removed = line[1:]
+            if rx.search(removed):
                 seen = True
-            elif line[1:].strip():
-                own = True
-    found = decls(rx, read(sys.argv[3]))
+                own = own or (block and not block_after_blank)
+                block = False
+            elif not removed.strip():
+                own = own or block
+                block, after_blank = False, True
+            else:
+                if not block:
+                    block, block_after_blank = True, after_blank
+                after_blank = False
+    found = decls(rx, text)
+    starts = {no for no, _ in found}
+
+    def first_line(no):
+        top = no
+        while not blank(top - 1) and top - 1 not in starts:
+            top -= 1
+        return top if top - 1 >= 1 and blank(top - 1) else no
+
+    firsts = [first_line(no) for no, _ in found]
     names = []
-    for i, (no, name) in enumerate(found):
-        end = found[i + 1][0] - 1 if i + 1 < len(found) else float("inf")
-        if any(no <= c <= end for c in changed):
+    for i, (_, name) in enumerate(found):
+        end = firsts[i + 1] - 1 if i + 1 < len(found) else float("inf")
+        if any(firsts[i] <= c <= end for c in changed):
             names.append(name)
     emit(names)
 elif cmd == "names":
