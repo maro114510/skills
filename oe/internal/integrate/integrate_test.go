@@ -157,7 +157,7 @@ func TestInterruptedMergeIsRecovered(t *testing.T) {
 	t.Parallel()
 
 	r := newRepo(t, [2]string{"w.txt", "worker\n"}, [2]string{"b.txt", "upstream\n"})
-	git(t, r.wt, "-c", "core.hooksPath="+os.DevNull, "merge", "--no-ff", "--no-commit", "--no-autostash", r.base)
+	git(t, r.wt, "-c", "core.hooksPath="+os.DevNull, "merge", "--no-ff", "--no-commit", "--no-autostash", "-m", integrate.Message(r.base, branch), r.base)
 	res, err := integrate.Integrate(t.Context(), client(), r.req())
 	if err != nil || !res.Merged || res.Recovered != integrate.RecoveredAborted {
 		t.Fatalf("leftover MERGE_HEAD: %+v, %v", res, err)
@@ -263,5 +263,25 @@ func TestIntegrationNeedsTheBranchCheckedOut(t *testing.T) {
 	req.Branch = "feat/issue-7-x.foo=bar"
 	if _, err := integrate.Integrate(t.Context(), client(), req); exitcode.CodeOf(err) != exitcode.Refused {
 		t.Errorf("a branch with = : %v", err)
+	}
+}
+
+// TestForeignMergeInProgressIsLeftAlone shows that a merge someone else started is refused and kept with its staged resolutions, since only oe's own interrupted merge is aborted.
+func TestForeignMergeInProgressIsLeftAlone(t *testing.T) {
+	t.Parallel()
+
+	r := newRepo(t, [2]string{"a.txt", "worker\n"}, [2]string{"a.txt", "upstream\n"})
+	res, err := runner.Exec{}.Run(t.Context(), runner.Git, []string{"-C", r.wt, "-c", "core.hooksPath=" + os.DevNull, "merge", "--no-ff", "--no-autostash", r.base})
+	if err != nil || res.ExitCode == 0 {
+		t.Fatalf("the manual merge should conflict: %v", err)
+	}
+	write(t, r.wt, "a.txt", "resolved by hand\n")
+	git(t, r.wt, "add", "a.txt")
+	_, err = integrate.Integrate(t.Context(), client(), r.req())
+	if exitcode.CodeOf(err) != exitcode.Refused {
+		t.Fatalf("err %v, want exit 8", err)
+	}
+	if got := git(t, r.wt, "show", ":a.txt"); got != "resolved by hand" {
+		t.Errorf("the staged resolution was discarded: %q", got)
 	}
 }

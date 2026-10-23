@@ -102,7 +102,7 @@ func onBranch(ctx context.Context, g Git, req Request) error {
 // It returns the head to integrate onto.
 func recoverHead(ctx context.Context, g Git, req Request) (string, string, error) {
 	recovered := RecoveredNone
-	aborted, err := abortLeftover(ctx, g, req.Worktree)
+	aborted, err := abortLeftover(ctx, g, req.Worktree, req.Branch)
 	if err != nil {
 		return "", recovered, err
 	}
@@ -143,7 +143,7 @@ func merge(ctx context.Context, g Git, req Request, res Result) (Result, error) 
 	if err != nil {
 		return res, err
 	}
-	if err := restore(ctx, g, req.Worktree, res.Head); err != nil {
+	if err := restore(ctx, g, req, res.Head); err != nil {
 		return res, err
 	}
 	if len(conflicts) == 0 {
@@ -162,21 +162,22 @@ func made(ctx context.Context, g Git, req Request, res Result) (Result, error) {
 	}
 	fields := strings.Fields(string(out))
 	if len(fields) == 3 && fields[1] == res.Head && fields[2] == req.Base {
-		if aborted, err := abortLeftover(ctx, g, req.Worktree); err != nil || aborted {
+		if aborted, err := abortLeftover(ctx, g, req.Worktree, req.Branch); err != nil || aborted {
 			return res, errors.Join(err, exitcode.New(exitcode.Unreadable, "a merge was still in progress after oe's merge commit"))
 		}
 		res.Head, res.Merged = fields[0], true
 		return res, nil
 	}
-	if err := restore(ctx, g, req.Worktree, res.Head); err != nil {
+	if err := restore(ctx, g, req, res.Head); err != nil {
 		return res, err
 	}
 	return res, exitcode.New(exitcode.Unreadable, "git merge exited 0 without making oe's merge commit; the worktree was restored")
 }
 
 // restore aborts a merge left in progress and checks the worktree is exactly as it was.
-func restore(ctx context.Context, g Git, wt, head string) error {
-	if _, err := abortLeftover(ctx, g, wt); err != nil {
+func restore(ctx context.Context, g Git, req Request, head string) error {
+	wt := req.Worktree
+	if _, err := abortLeftover(ctx, g, wt, req.Branch); err != nil {
 		return err
 	}
 	now, err := Rev(ctx, g, wt, "HEAD")
@@ -193,18 +194,28 @@ func restore(ctx context.Context, g Git, wt, head string) error {
 	return nil
 }
 
-// abortLeftover aborts a merge in progress, reporting whether there was one.
-func abortLeftover(ctx context.Context, g Git, wt string) (bool, error) {
+// abortLeftover aborts oe's own interrupted merge and reports whether there was one.
+// A merge whose message is not the one oe writes for MERGE_HEAD on this branch was started by someone else, so it is refused and left as it is.
+func abortLeftover(ctx context.Context, g Git, wt, branch string) (bool, error) {
 	out, err := g.Git(ctx, "-C", wt, "rev-parse", "--absolute-git-dir")
 	if err != nil {
 		return false, err
 	}
-	_, err = os.Stat(filepath.Join(strings.TrimSpace(string(out)), "MERGE_HEAD"))
+	dir := strings.TrimSpace(string(out))
+	head, err := os.ReadFile(filepath.Join(dir, "MERGE_HEAD")) //nolint:gosec // The path is git's own directory for this worktree.
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
 		return false, nil
 	case err != nil:
 		return false, exitcode.Wrap(exitcode.Unreadable, err, "cannot tell whether a merge is in progress in "+wt)
+	}
+	msg, err := os.ReadFile(filepath.Join(dir, "MERGE_MSG")) //nolint:gosec // The path is git's own directory for this worktree.
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return false, exitcode.Wrap(exitcode.Unreadable, err, "cannot read the merge message in "+wt)
+	}
+	subject, _, _ := strings.Cut(string(msg), "\n")
+	if subject != Message(strings.TrimSpace(string(head)), branch) {
+		return false, exitcode.New(exitcode.Refused, "a merge oe did not start is in progress in "+wt+"; a person must finish or abort it")
 	}
 	if _, err := g.GitWrite(ctx, noHooks(wt, "merge", "--abort")...); err != nil {
 		return true, err
