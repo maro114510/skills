@@ -309,11 +309,18 @@ run_range_stub() {
   run env TMPDIR="${work}" PATH="${bin}:${PATH}" bash "${target}" "${harness}" "${repo}" main
 }
 
+@test "claude reviews the uncommitted changes without pinning a level" {
+  # shellcheck disable=SC2016 # expanded by the stub, not here
+  run_stub 'echo "ARGS: $*"'
+  [ "${status}" -eq 0 ]
+  has_line "ARGS: -p /code-review --permission-mode plan --no-session-persistence"
+}
+
 @test "claude reviews the committed range from the merge base with a clean worktree" {
   # shellcheck disable=SC2016 # expanded by the stub, not here
   run_range_stub 'echo "ARGS: $*"'
   [ "${status}" -eq 0 ]
-  has_line "ARGS: -p /code-review high ${mb}..HEAD --permission-mode plan --no-session-persistence"
+  has_line "ARGS: -p /code-review ${mb}..HEAD --permission-mode plan --no-session-persistence"
 }
 
 @test "codex reviews against the merge base instead of the uncommitted changes" {

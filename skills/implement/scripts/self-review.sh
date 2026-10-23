@@ -81,18 +81,19 @@ log="${out}.log"
 trap 'rm -f "${out}" "${log}"' EXIT
 
 if [[ -n "${range}" ]]; then
-  claude_prompt="/code-review high ${range}"
+  claude_prompt="/code-review ${range}"
   codex_target=(--base "${mb}")
   opencode_prompt="Review the committed changes in ${range}."
 else
-  claude_prompt="/code-review high"
+  claude_prompt="/code-review"
   codex_target=(--uncommitted)
   opencode_prompt="Review the uncommitted changes."
 fi
 
 before="$(fingerprint)"
 # Read-only is pinned per CLI because user configuration can override each CLI's default sandbox.
-# The Claude Code level is pinned because /code-review otherwise reuses the last level typed, and ultra is billed.
+# The Claude Code review level is deliberately not pinned: /code-review reuses the last level typed, so the
+# user's own choice applies, including ultra, which is billed.
 case "${harness}" in
 claude)
   claude -p "${claude_prompt}" --permission-mode plan --no-session-persistence </dev/null >"${out}" 2>"${log}"
