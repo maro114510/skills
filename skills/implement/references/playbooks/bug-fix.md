@@ -27,7 +27,7 @@ It is the one step that shows the committed step 2 test guards the defect; no ot
 |---|---|
 | Failed on the parent | Proceed |
 | Passed on the parent | It does not guard the defect: Phase 2 trigger 2, because the defect cannot be shown with this test |
-| Failed with a build error on the parent | The test needs something its parent lacks. The check applies only test files to the parent, so put that, such as a minimal stub, in a commit of its own before the `test:` commit, and run the check again |
+| Failed with a build error on the parent | The test needs something its parent lacks. The check applies only test files to the parent, so put that, such as a minimal stub, in a `refactor:` commit of its own before the `test:` commit, and run the check again |
 | `not-run` | Report the line. The step 2 observation stands alone |
 
 A passing check is never evidence, as evidence.md section 2.2 says. The step 2 observation is.

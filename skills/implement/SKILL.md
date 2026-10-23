@@ -306,7 +306,7 @@ After the playbook's last commit, run the history check from the worktree, where
 bash <skill-dir>/scripts/gate-tests.sh [origin/<base-branch>]
 ```
 
-Act on each `fail` line as the playbook's History Check section says, and report each `not-run` line, which is not a failure. A passing run is a check, never evidence, as `references/evidence.md` section 2.2 says.
+Act on each `fail` line as the playbook's History Check section says, and report each `not-run` line, which is not a failure. Exit 2 or 3 means no check ran: fix the cause and rerun, or report it, never as a pass. A passing run is a check, never evidence, as `references/evidence.md` section 2.2 says.
 
 ---
 

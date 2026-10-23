@@ -14,7 +14,7 @@ It lists steps only. The rules live in [test-policy.md](../test-policy.md), read
    | Changed | The existing test, with its expected value changed to the new one | The code still behaves the old way |
    | Removed | A new test asserting the removed outcome, as step 1 names it | The code still has the behavior |
 
-   Commit a stub alone, before the test, because the history check applies only test files to the parent.
+   Commit a stub alone as `refactor:`, before the test, because it adds no behavior and the history check applies only test files to the parent.
    The first test of a removal must fail on the pre-change code. If it passes, the behavior is already gone: Phase 2 trigger 2.
    Set its preconditions as § Preconditions says, and keep it independent as § Independence says.
    Record the command and the failure excerpt for Phase 6.9, as [evidence.md](../evidence.md) section 2.2 says.
