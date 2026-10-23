@@ -1,14 +1,14 @@
 #!/usr/bin/env bats
-# Tests for test-gate.sh, against a throwaway repo whose tests are shell functions run by a fake runner.
+# Tests for gate-tests.sh, against a throwaway repo whose tests are shell functions run by a fake runner.
 # shellcheck disable=SC2292 # bats fails a test on a mid-test `[[ ]]` only under bash 4.1+; `[ ]` works on every bash.
 # shellcheck disable=SC2016 # config values and fixture code are expanded by the fixture, not here
 
 setup() {
-  target="${BATS_TEST_DIRNAME}/test-gate.sh"
+  target="${BATS_TEST_DIRNAME}/gate-tests.sh"
   repo="${BATS_TEST_TMPDIR}/repo"
   log="${BATS_TEST_TMPDIR}/order.log"
   export TG_LOG="${log}"
-  unset TEST_GATE_SEED
+  unset GATE_TESTS_SEED
   git init -q -b main "${repo}"
   cd "${repo}" || return 1
   git config user.name t
@@ -232,10 +232,10 @@ lacks_match() {
   printf '%s\n' 'test_open() { open_store; }' 'test_read() { [ "${STORE:-}" = open ]; }' >tests/store_test.sh
   echo 'open_store() { STORE=open; }' >>src/lib.sh
   commit "feat: add the store"
-  TEST_GATE_SEED=1 gate
+  GATE_TESTS_SEED=1 gate
   [ "${status}" -eq 1 ]
   has_line "shuffle: fail (seed=1)"
-  TEST_GATE_SEED=2 gate
+  GATE_TESTS_SEED=2 gate
   has_line "shuffle: pass (seed=2)"
 }
 
@@ -249,7 +249,7 @@ lacks_match() {
 }
 
 @test "the shuffle check rejects a seed that is not a number" {
-  TEST_GATE_SEED='1;x' gate
+  GATE_TESTS_SEED='1;x' gate
   [ "${status}" -eq 2 ]
 }
 

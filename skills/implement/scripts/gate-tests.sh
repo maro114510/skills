@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Checks the test policy over the non-merge commits in <base>..HEAD, with the target repository's own test runner.
-# Usage: test-gate.sh [<base>]
+# Usage: gate-tests.sh [<base>]
 # Run from inside the repository. <base> defaults to origin/HEAD; the range starts at its merge base with HEAD.
 #
 # | Check         | Fails when |
@@ -28,7 +28,7 @@
 # Values reach them only through the environment and arguments, never by substitution into the command text.
 # A test case counts as changed when a changed line falls between its declaration and the next one.
 # isolation and shuffle run the working tree as it is, uncommitted edits included, but pick their tests from the
-# commits only. Set TEST_GATE_SEED to replay a shuffle.
+# commits only. Set GATE_TESTS_SEED to replay a shuffle.
 #
 # | Exit | Meaning |
 # |------|---------|
@@ -39,11 +39,11 @@
 set -uo pipefail
 
 die() {
-  echo "test-gate: $1" >&2
+  echo "gate-tests: $1" >&2
   exit 2
 }
 
-[[ $# -le 1 ]] || die "Usage: test-gate.sh [<base>]"
+[[ $# -le 1 ]] || die "Usage: gate-tests.sh [<base>]"
 top="$(git rev-parse --show-toplevel 2>/dev/null)" || die "Not inside a Git repository"
 cd "${top}" || die "Cannot enter ${top}"
 head="$(git rev-parse -q --verify 'HEAD^{commit}')" || die "HEAD has no commit"
@@ -51,10 +51,10 @@ base_ref="${1:-origin/HEAD}"
 git rev-parse -q --verify "${base_ref}^{commit}" >/dev/null || die "Unknown base: ${base_ref}"
 base="$(git merge-base "${base_ref}" HEAD)" || die "No merge base between ${base_ref} and HEAD"
 
-seed="${TEST_GATE_SEED:-$(((RANDOM << 15) | RANDOM))}"
-[[ "${seed}" =~ ^[0-9]{1,18}$ ]] || die "TEST_GATE_SEED must be a non-negative integer"
+seed="${GATE_TESTS_SEED:-$(((RANDOM << 15) | RANDOM))}"
+[[ "${seed}" =~ ^[0-9]{1,18}$ ]] || die "GATE_TESTS_SEED must be a non-negative integer"
 
-work="$(mktemp -d "${TMPDIR:-/tmp}/test-gate.XXXXXX")" || die "Cannot create a temporary directory"
+work="$(mktemp -d "${TMPDIR:-/tmp}/gate-tests.XXXXXX")" || die "Cannot create a temporary directory"
 wt="${work}/parent"
 # shellcheck disable=SC2329 # invoked by the EXIT trap
 cleanup() {
@@ -67,7 +67,7 @@ read -r -d '' PY <<'EOF'
 import re, sys
 
 def die(msg):
-    print("test-gate: " + msg, file=sys.stderr)
+    print("gate-tests: " + msg, file=sys.stderr)
     sys.exit(2)
 
 def read(path):
@@ -235,7 +235,7 @@ changed_cases() {
 run_in() {
   local dir="$1" command="$2"
   shift 2
-  (cd "${dir}" && bash -c "${command}" test-gate "$@") >"${work}/log" 2>&1 </dev/null
+  (cd "${dir}" && bash -c "${command}" gate-tests "$@") >"${work}/log" 2>&1 </dev/null
 }
 
 # Prints the end of the last command's output, indented.

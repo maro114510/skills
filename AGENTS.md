@@ -114,10 +114,10 @@ Every other section is named after the skill that reads it.
 
 | Key | Holds | Read by |
 |---|---|---|
-| `[paths] tests` | Test files | `skills/implement/scripts/test-gate.sh` |
+| `[paths] tests` | Test files | `skills/implement/scripts/gate-tests.sh` |
 | `[paths] generated` | Generated files | - |
 | `[paths] design_docs` | Design docs and ADRs | - |
-| `[implement.testing]` | test-gate's commands and patterns, listed in its header | `skills/implement/scripts/test-gate.sh` |
+| `[implement.testing]` | gate-tests's commands and patterns, listed in its header | `skills/implement/scripts/gate-tests.sh` |
 
 ## Workflow
 
