@@ -41,7 +41,7 @@ A direct run of a command or procedure needs none of them.
 - It was seen to fail. For new or changed behavior, it failed at its assertion against the code without the change, not with a build, import, or setup error. When the interface it calls does not exist there, it failed at its assertion against that code plus only a minimal stub of the interface. For behavior the change must preserve, it passed against the code without the change and on the final state, and a test the change adds for it also failed at its assertion with that behavior deliberately broken.
 - The observation is of the test exactly as it is on the final state. An edit to the test, or to the fixtures and helpers it uses, made after the observation voids it. An edit to the code under test does not, since that is the change itself.
 
-The observation can come from a Phase 5 run, or from a script that runs the test against the code without the change. Otherwise make it yourself, outside the worktree:
+The observation can come from a Phase 5 run, or from a script that runs the test against the code without the change. A `scripts/gate-tests.sh` before-change pass counts only when the repository configures `build_failure`, which marks build, import, and setup failures, because without it such a failure on the parent also counts as failing. A test whose interface does not exist on the parent never passes that check, so observe it against a stub yourself. Otherwise make it yourself, outside the worktree:
 
 | Observation | How |
 |---|---|
