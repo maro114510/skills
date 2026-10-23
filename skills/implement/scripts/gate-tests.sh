@@ -28,6 +28,8 @@
 # Values reach them only through the environment and arguments, never by substitution into the command text.
 # A test case counts as changed when a changed non-blank line falls between its declaration and the next one,
 # where the lines right above a declaration that a blank line sets apart, such as a comment or annotation, belong to it.
+# Cases written back to back without a blank line between them can have lines attributed to the wrong case, because
+# no language-neutral rule tells where one ends.
 # isolation and shuffle run the working tree as it is, uncommitted edits included, but pick their tests from the
 # commits only. Set GATE_TESTS_SEED to replay a shuffle.
 #
@@ -145,17 +147,22 @@ elif cmd == "cases":
         # Line 0 is the start of the file.
         return no < 1 or no > len(lines) or not lines[no - 1].strip()
 
+    found = decls(rx, text)
+    starts = {no for no, _ in found}
     changed = set()
     hunk = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
     deletion = None
+    own = seen = block = block_after_blank = after_blank = False
     for line in read(sys.argv[4]).splitlines() + ["@@ -0 +0 @@"]:
         m = hunk.match(line)
         if m:
             # A pure deletion sits after line start. It changes the case holding that line only when it removes
             # text of that case, before the first case declaration it removes. Removed lines right above that
-            # declaration, set apart by a blank line, belong to the removed case instead.
+            # declaration, set apart by a blank line, belong to the removed case instead. When nothing else is
+            # removed and a declaration follows the deletion, they led that declaration, so they change its case.
             if deletion is not None and (own or block):
-                changed.add(deletion)
+                leads = not own and block_after_blank and deletion >= 1 and deletion + 1 in starts
+                changed.add(deletion + 1 if leads else deletion)
             start, count = int(m.group(1)), int(m.group(2) or 1)
             changed.update(no for no in range(start, start + count) if not blank(no))
             deletion, own, seen = (start if count == 0 else None), False, False
@@ -173,8 +180,6 @@ elif cmd == "cases":
                 if not block:
                     block, block_after_blank = True, after_blank
                 after_blank = False
-    found = decls(rx, text)
-    starts = {no for no, _ in found}
 
     def first_line(no):
         top = no
