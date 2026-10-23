@@ -6,7 +6,7 @@ It lists steps only. The rules live in [test-policy.md](../test-policy.md), read
 ## Steps
 
 1. List the preserved behavior. Name each behavior the touched code provides through its public interface, as test-policy § Prohibitions says tests observe it, and find the tests that already cover each one.
-2. Pin. For each behavior no test covers, write a test of it. It passes on the current code, so show that it can fail as the exception in § Process says, using the deliberate break in [evidence.md](../evidence.md) section 2.2, never in the worktree. Record the command and the failure excerpt.
+2. Pin. For each behavior no test covers, write a test of it; a test edited for behavior the code already has, after a green commit, goes through this step too. It passes on the current code, so show that it can fail as the exception in § Process says, using the deliberate break in [evidence.md](../evidence.md) section 2.2, never in the worktree. Record the command and the failure excerpt.
    Set its preconditions as § Preconditions says, and keep it independent as § Independence says.
    Commit the pinning tests as `refactor:`, as § Process says.
 3. Restructure in small steps. After each one the suite stays green, and no test's assertion changes. Commit each green step as `refactor:`.
