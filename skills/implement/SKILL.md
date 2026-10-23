@@ -46,7 +46,7 @@ WORKTREE: <absolute worktree path, or UNKNOWN if unavailable>
 HEAD_SHA: <commit SHA of the worker's final commit, or UNKNOWN if unavailable>
 CHANGED_FILES: <one path per line; empty if BLOCKED before implementing>
 CHECKS: <one per line, `<command> -> exit <code>`>
-CRITERIA: <every criterion from Phase 6.9, one per line, `<criterion verbatim from the source> -> [behavior|static] <evidence>` as references/evidence.md defines; a criterion with no evidence is still listed, with `-> none`>
+CRITERIA: <every criterion from Phase 6.9, one per line, `<criterion verbatim from the source, or (derived) text> -> [behavior|static] <evidence>` as references/evidence.md defines; a criterion with no evidence is still listed, with `-> none`>
 SKIPPED: <criteria and requirements deferred rather than met, one per line, `<criterion> -> <what was done instead, and why>`; empty if none>
 FOUND: <defects found outside scope but not fixed, one per line; empty if none>
 SUMMARY: <what was implemented, then each decision-log entry one per line, `<decision> -> <basis>; rejected: <alternative>`>
@@ -282,7 +282,7 @@ If the test passes in step 1, the bug does not reproduce: Phase 2 trigger 2. If 
 Follow t-wada's TDD cycle strictly.
 
 1. Test list: enumerate every test case you can think of before writing any code.
-2. Red: write one failing test.
+2. Red: write one failing test, and confirm it fails at its assertion, not from a build, import, or setup error; when the interface does not exist yet, add a minimal stub first. Record the run's command and failure excerpt for Phase 6.9.
 3. Green: write the minimum code to make it pass.
 4. Refactor: clean up the design while the tests stay green.
 5. Repeat steps 2 to 4 until the test list is exhausted.
@@ -348,7 +348,7 @@ Deferred, not satisfied: <criterion> -> <what was done instead, and why>
 No evidence: <criterion>
 ```
 
-Lead with the last two lines whenever either has content. In autonomous mode, every table row becomes a `CRITERIA` line in the form references/evidence.md defines, with `-> none` for each `No evidence` criterion, and each `Deferred` line becomes a `SKIPPED` line.
+Lead with the last two lines whenever either has content. In autonomous mode, every table row becomes a `CRITERIA` line in the form references/evidence.md defines, with `-> none` for each `No evidence` criterion, and each `Deferred` line becomes a `SKIPPED` line. A deferred criterion stays in the table as `No evidence`, so it appears in both.
 
 ---
 
@@ -363,7 +363,7 @@ Restate the decision log, then have the user review the diff against it in difit
 difit .
 ```
 
-- If review comments come back, address them and run difit again.
+- If review comments come back, address them, rerun Phase 6 and Phase 6.9 so the evidence comes from the final state, and run difit again.
 - If difit exits without comments, treat that as approval to proceed.
 - Invoke the `commit` skill to compose and make the commit. It decides on its own whether to commit automatically or ask first, independent of the difit review.
 - If the work traces to an Issue, tell the `commit` skill its number and whether Phase 6.9 left anything deferred.
