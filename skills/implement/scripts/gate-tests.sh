@@ -26,7 +26,8 @@
 # That worktree holds only tracked files, and setup does not run in it, so run_one must install what it needs
 # there, or build_failure must match the output of its absence.
 # Values reach them only through the environment and arguments, never by substitution into the command text.
-# A test case counts as changed when a changed line falls between its declaration and the next one.
+# A test case counts as changed when its non-blank lines differ from the same-named case in the parent. A case runs
+# from its declaration, or from the lines a blank line sets apart right above it, such as an annotation, to the next.
 # isolation and shuffle run the working tree as it is, uncommitted edits included, but pick their tests from the
 # commits only. Set GATE_TESTS_SEED to replay a shuffle.
 #
@@ -132,33 +133,29 @@ if cmd == "config":
         out.append((key, v))
     sys.stdout.write("".join(f"{k}\0{v}\0" for k, v in out))
 elif cmd == "cases":
-    # Names of the cases in new file argv[3] that hold a line changed by the -U0 diff in argv[4].
+    # Names of the cases in new file argv[4] whose text differs from the same-named case in old file argv[3].
     rx = re.compile(sys.argv[2])
-    changed = set()
-    hunk = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
-    deletion, own = None, False
-    for line in read(sys.argv[4]).splitlines() + ["@@ -0 +0 @@"]:
-        m = hunk.match(line)
-        if m:
-            # A pure deletion sits after line start. It changes the case holding that line only when it removes
-            # text of that case, before the first case declaration it removes.
-            if deletion is not None and own:
-                changed.add(deletion)
-            start, count = int(m.group(1)), int(m.group(2) or 1)
-            changed.update(range(start, start + count))
-            deletion, own, seen = (start if count == 0 else None), False, False
-        elif deletion is not None and line.startswith("-") and not seen:
-            if rx.search(line[1:]):
-                seen = True
-            elif line[1:].strip():
-                own = True
-    found = decls(rx, read(sys.argv[3]))
-    names = []
-    for i, (no, name) in enumerate(found):
-        end = found[i + 1][0] - 1 if i + 1 < len(found) else float("inf")
-        if any(no <= c <= end for c in changed):
-            names.append(name)
-    emit(names)
+
+    def cases(path):
+        text = read(path)
+        lines = text.splitlines()
+        found = decls(rx, text)
+        starts = {no for no, _ in found}
+
+        def first(no):
+            top = no
+            while top > 1 and lines[top - 2].strip() and top - 1 not in starts:
+                top -= 1
+            return top if top > 1 and not lines[top - 2].strip() else no
+
+        firsts = [first(no) for no, _ in found] + [len(lines) + 1]
+        out = {}
+        for i, (_, name) in enumerate(found):
+            out.setdefault(name, []).append([s for s in lines[firsts[i] - 1:firsts[i + 1] - 1] if s.strip()])
+        return out
+
+    old = cases(sys.argv[3])
+    emit(name for name, texts in cases(sys.argv[4]).items() if old.get(name) != texts)
 elif cmd == "names":
     rx = re.compile(sys.argv[2])
     # Duplicates stay, so the removed check can count the cases of each name.
@@ -223,8 +220,12 @@ changed_cases() {
   while IFS= read -r -d '' status && IFS= read -r -d '' file; do
     [[ "${status}" == D ]] && continue
     git cat-file blob "$2:${file}" >"${work}/new" || return 1
-    git diff --no-color --no-ext-diff --no-renames -U0 "$1" "$2" -- "${file}" >"${work}/diff" || return 1
-    py cases "${test_case}" "${work}/new" "${work}/diff" >"${work}/names" || return 1
+    if [[ "${status}" == A ]]; then
+      : >"${work}/old"
+    else
+      git cat-file blob "$1:${file}" >"${work}/old" || return 1
+    fi
+    py cases "${test_case}" "${work}/old" "${work}/new" >"${work}/names" || return 1
     while IFS= read -r -d '' name; do
       printf '%s\0%s\0' "${file}" "${name}"
     done <"${work}/names"

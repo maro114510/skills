@@ -205,6 +205,72 @@ lacks_match() {
   has_match 'tests/math_test.sh test_add: (passed|failed) on the parent$'
 }
 
+@test "appending a test after a blank line does not mark the test above it as changed" {
+  printf '%s\n' 'test_add() {' '  [ "$(add 1 2)" = 3 ]' '}' >tests/math_test.sh
+  commit "chore: add an existing test"
+  base="$(git rev-parse HEAD)"
+  printf '%s\n' '' 'test_sub() {' '  [ "$(sub 3 1)" = 2 ]' '}' >>tests/math_test.sh
+  commit "test: pin sub"
+  echo 'sub() { echo $(($1 - $2)); }' >>src/lib.sh
+  commit "feat: add sub"
+  gate
+  [ "${status}" -eq 0 ]
+  lacks_match 'test_add'
+  has_line "before-change: pass"
+}
+
+@test "appending a test with a comment above its declaration does not mark the test above it as changed" {
+  printf '%s\n' 'test_add() {' '  [ "$(add 1 2)" = 3 ]' '}' >tests/math_test.sh
+  commit "chore: add an existing test"
+  base="$(git rev-parse HEAD)"
+  printf '%s\n' '' '# sub subtracts its second argument' 'test_sub() {' '  [ "$(sub 3 1)" = 2 ]' '}' >>tests/math_test.sh
+  commit "test: pin sub"
+  echo 'sub() { echo $(($1 - $2)); }' >>src/lib.sh
+  commit "feat: add sub"
+  gate
+  [ "${status}" -eq 0 ]
+  lacks_match 'test_add'
+  has_line "before-change: pass"
+}
+
+@test "deleting a test with a comment above its declaration does not mark the test above it as changed" {
+  printf '%s\n' 'test_add() {' '  [ "$(add 1 2)" = 3 ]' '}' '' '# adding zero keeps the number' 'test_add_zero() {' '  [ "$(add 0 2)" = 2 ]' '}' >tests/math_test.sh
+  commit "chore: add existing tests"
+  base="$(git rev-parse HEAD)"
+  printf '%s\n' 'test_add() {' '  [ "$(add 1 2)" = 3 ]' '}' >tests/math_test.sh
+  git add -A
+  git commit -q -m "test: drop a duplicate" -m "Removed-Test: test_add_zero -- test_add covers the same path"
+  gate
+  [ "${status}" -eq 0 ]
+  lacks_match 'test_add: passed'
+  has_line "before-change: pass"
+}
+
+@test "changing the comment above a declaration marks that test, not the test above it, as changed" {
+  printf '%s\n' 'test_add() {' '  [ "$(add 1 2)" = 3 ]' '}' '' '# adding zero keeps the number' 'test_add_zero() {' '  [ "$(add 0 2)" = 2 ]' '}' >tests/math_test.sh
+  commit "chore: add existing tests"
+  base="$(git rev-parse HEAD)"
+  sed -i.bak 's/^# adding zero keeps the number$/# adding zero to a number keeps it/' tests/math_test.sh
+  rm tests/math_test.sh.bak
+  commit "test: reword a comment"
+  gate
+  [ "${status}" -eq 1 ]
+  has_match 'tests/math_test.sh test_add_zero: passed on the parent$'
+  lacks_match 'test_add: passed'
+}
+
+@test "deleting the comment above a declaration marks that test, not the test above it, as changed" {
+  printf '%s\n' 'test_add() {' '  [ "$(add 1 2)" = 3 ]' '}' '' '# adding zero keeps the number' 'test_add_zero() {' '  [ "$(add 0 2)" = 2 ]' '}' >tests/math_test.sh
+  commit "chore: add existing tests"
+  base="$(git rev-parse HEAD)"
+  printf '%s\n' 'test_add() {' '  [ "$(add 1 2)" = 3 ]' '}' '' 'test_add_zero() {' '  [ "$(add 0 2)" = 2 ]' '}' >tests/math_test.sh
+  commit "test: drop a comment"
+  gate
+  [ "${status}" -eq 1 ]
+  has_match 'tests/math_test.sh test_add_zero: passed on the parent$'
+  lacks_match 'test_add: passed'
+}
+
 @test "a refactor commit is exempt from the before-change check" {
   printf '%s\n' 'test_add() {' '  [ "$(add 1 2)" = 3 ]' '}' >tests/math_test.sh
   commit "chore: add an existing test"
