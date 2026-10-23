@@ -219,7 +219,8 @@ lacks_match() {
   paths_config
   echo 'api/*.pb.go linguist-generated' >.gitattributes
   echo 'notes/** linguist-documentation' >>.gitattributes
-  lines src/gone.sh 3
+  # Content unlike any file added below, so Git does not pair the deletion with an addition as a rename.
+  printf 'alpha\nbeta\ngamma\n' >src/gone.sh
   commit "feat: gone"
   base="$(git rev-parse HEAD)"
   git rm -q src/gone.sh
