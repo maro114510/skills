@@ -98,7 +98,7 @@ type Report struct {
 }
 
 // WorkerResult records a worker report whose Issue, branch, and worktree match. DONE records
-// the head, resets failures, and clears approval. BLOCKED is recorded only after its question
+// the head, resets failures, clears approval, and empties the pending findings it answered. BLOCKED is recorded only after its question
 // note exists. FAILED counts a failure; a second in a row parks the Issue. A BLOCKED or FAILED
 // report that carries a head the worker committed records it too.
 type WorkerResult struct {
@@ -132,7 +132,8 @@ func (t WorkerResult) record(st *state.Issue, r comments) error {
 		if rep.HeadSHA == "" {
 			return refused("a DONE report needs its head SHA")
 		}
-		st.HeadSHA, st.ConsecutiveFailures, st.Approval = &rep.HeadSHA, 0, nil
+		// DONE ends the fix cycle in flight, so the same findings on the next review count against the cap and never read as a replay.
+		st.HeadSHA, st.ConsecutiveFailures, st.Approval, st.PendingFindings = &rep.HeadSHA, 0, nil, []string{}
 	case StatusBlocked:
 		if t.QuestionKey == "" || r.noteID(t.QuestionKey) == 0 {
 			return refused("a BLOCKED report is recorded only after its question note %q is posted", t.QuestionKey)
