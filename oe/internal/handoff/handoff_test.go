@@ -49,6 +49,23 @@ func TestParseReadsEveryField(t *testing.T) {
 	}
 }
 
+// TestParseKeepsTaggedCriteria: CRITERIA lines in the form implement's references/evidence.md
+// defines parse as the field's text, verbatim and in order, without making the report malformed.
+func TestParseKeepsTaggedCriteria(t *testing.T) {
+	t.Parallel()
+
+	criteria := "`greet` rejects an empty name -> [behavior] greet --name \"\"; observed exit 2, \"name is empty\"\n" +
+		"The usage section documents `--name` -> [static] README.md:18\n" +
+		"(derived) `greet` keeps its exit codes -> none"
+	r, err := handoff.Parse(strings.Replace(done, "CRITERIA:\nx -> test", "CRITERIA:\n"+criteria, 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Criteria != criteria || r.Skipped != "" {
+		t.Errorf("Criteria = %q, Skipped = %q", r.Criteria, r.Skipped)
+	}
+}
+
 // TestMalformedReportIsNeverDone: anything that does not follow the format is an error, which
 // the triage routes as FAILED.
 func TestMalformedReportIsNeverDone(t *testing.T) {

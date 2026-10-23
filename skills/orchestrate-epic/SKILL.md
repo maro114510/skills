@@ -237,7 +237,7 @@ WORKTREE: <absolute worktree path, or UNKNOWN if unavailable>
 HEAD_SHA: <commit SHA of the worker's final commit, or UNKNOWN if unavailable>
 CHANGED_FILES: <one path per line; empty if BLOCKED before implementing>
 CHECKS: <one per line, `<command> -> exit <code>`>
-CRITERIA: <every criterion from the implement skill's Phase 6.9, one per line, `<criterion verbatim from the source> -> <evidence>`; a criterion with no evidence is still listed, with `-> none`>
+CRITERIA: <every criterion from the implement skill's Phase 6.9, one per line, `<criterion verbatim from the source> -> [behavior|static] <evidence>` as the implement skill's references/evidence.md defines; a criterion with no evidence is still listed, with `-> none`>
 SKIPPED: <criteria and requirements deferred rather than met, one per line, `<criterion> -> <what was done instead, and why>`; empty if none>
 FOUND: <defects found outside scope but not fixed, one per line; empty if none>
 SUMMARY: <what was implemented, then each decision-log entry one per line, `<decision> -> <basis>; rejected: <alternative>`>

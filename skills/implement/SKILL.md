@@ -46,7 +46,7 @@ WORKTREE: <absolute worktree path, or UNKNOWN if unavailable>
 HEAD_SHA: <commit SHA of the worker's final commit, or UNKNOWN if unavailable>
 CHANGED_FILES: <one path per line; empty if BLOCKED before implementing>
 CHECKS: <one per line, `<command> -> exit <code>`>
-CRITERIA: <every criterion from Phase 6.9, one per line, `<criterion verbatim from the source> -> <evidence>`; a criterion with no evidence is still listed, with `-> none`>
+CRITERIA: <every criterion from Phase 6.9, one per line, `<criterion verbatim from the source> -> [behavior|static] <evidence>` as references/evidence.md defines; a criterion with no evidence is still listed, with `-> none`>
 SKIPPED: <criteria and requirements deferred rather than met, one per line, `<criterion> -> <what was done instead, and why>`; empty if none>
 FOUND: <defects found outside scope but not fixed, one per line; empty if none>
 SUMMARY: <what was implemented, then each decision-log entry one per line, `<decision> -> <basis>; rejected: <alternative>`>
@@ -334,19 +334,21 @@ This phase runs in both modes. Phase 2's criteria live in context, and context d
 
 1. Re-fetch the source: the Issue body, linked spec, and caller's prompt. If it changed since Phase 2, say so first.
 2. Quote each acceptance criterion verbatim, because paraphrasing is where a criterion gets softened. A criterion derived from the request's intent has no source text, so prefix it with `(derived)` and never present it as a quote.
-3. Attach evidence to each criterion: a command and its exit code, the covering test, a file path, or a quoted user decision.
-4. Treat a criterion without evidence as unsatisfied. A TODO, a new Issue, out of scope, future work, or a later Epic is not evidence. Deferring a criterion is the user's call, and surfacing it is yours.
+3. Read `references/evidence.md`, relative to this skill's directory. Classify each criterion, attach evidence tagged `[behavior]` or `[static]` as it defines, and classify the outcome. A behavior criterion needs `[behavior]` evidence. A fully green CI run is never behavior evidence.
+4. Treat a `No evidence` criterion as unsatisfied. Deferring a criterion is the user's call, and surfacing it is yours.
 
 ```
 | Criterion (verbatim, or `(derived)`) | Evidence |
 |---|---|
-| <the source's own words> | `go test ./...` -> exit 0 |
+| <behavior criterion> | `[behavior]` <command or input>; observed <result> |
+| <structure or content criterion> | `[static]` <file:line> |
+| <criterion without evidence> | none |
 
 Deferred, not satisfied: <criterion> -> <what was done instead, and why>
 No evidence: <criterion>
 ```
 
-Lead with the last two lines whenever either has content. In autonomous mode, they are what `CRITERIA` and `SKIPPED` carry.
+Lead with the last two lines whenever either has content. In autonomous mode, every table row becomes a `CRITERIA` line in the form references/evidence.md defines, with `-> none` for each `No evidence` criterion, and each `Deferred` line becomes a `SKIPPED` line.
 
 ---
 
