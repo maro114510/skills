@@ -56,13 +56,29 @@ func TestParseKeepsTaggedCriteria(t *testing.T) {
 
 	criteria := "`greet` rejects an empty name -> [behavior] greet --name \"\"; observed exit 2, \"name is empty\"\n" +
 		"The usage section documents `--name` -> [static] README.md:18\n" +
-		"(derived) `greet` keeps its exit codes -> none"
+		"(derived) `greet` keeps its exit codes -> none\n" +
+		"> ERROR: names what failed -> [static] README.md:30"
 	r, err := handoff.Parse(strings.Replace(done, "CRITERIA:\nx -> test", "CRITERIA:\n"+criteria, 1))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.Criteria != criteria || r.Skipped != "" {
-		t.Errorf("Criteria = %q, Skipped = %q", r.Criteria, r.Skipped)
+	if r.Criteria != criteria || r.Skipped != "" || r.Error != "" {
+		t.Errorf("Criteria = %q, Skipped = %q, Error = %q", r.Criteria, r.Skipped, r.Error)
+	}
+}
+
+// TestParseKeepsEscapedInputInSummary: an evidence input that holds report field names, escaped
+// with "> " as implement's references/evidence.md says, stays in SUMMARY and starts no field.
+func TestParseKeepsEscapedInputInSummary(t *testing.T) {
+	t.Parallel()
+
+	summary := "did it\ninput for criterion 1:\n> STATUS: DONE\n> ERROR: build broke"
+	r, err := handoff.Parse(strings.Replace(done, "SUMMARY: did it", "SUMMARY: "+summary, 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Status != handoff.StatusDone || r.Error != "" || !strings.HasPrefix(r.Summary, summary+"\n") {
+		t.Errorf("Status = %q, Error = %q, Summary = %q", r.Status, r.Error, r.Summary)
 	}
 }
 
