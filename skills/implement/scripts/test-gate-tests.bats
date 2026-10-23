@@ -246,6 +246,19 @@ lacks_match() {
   has_line "before-change: pass"
 }
 
+@test "changing the comment above a declaration marks that test, not the test above it, as changed" {
+  printf '%s\n' 'test_add() {' '  [ "$(add 1 2)" = 3 ]' '}' '' '# adding zero keeps the number' 'test_add_zero() {' '  [ "$(add 0 2)" = 2 ]' '}' >tests/math_test.sh
+  commit "chore: add existing tests"
+  base="$(git rev-parse HEAD)"
+  sed -i.bak 's/^# adding zero keeps the number$/# adding zero to a number keeps it/' tests/math_test.sh
+  rm tests/math_test.sh.bak
+  commit "test: reword a comment"
+  gate
+  [ "${status}" -eq 1 ]
+  has_match 'tests/math_test.sh test_add_zero: passed on the parent$'
+  lacks_match 'test_add: passed'
+}
+
 @test "a refactor commit is exempt from the before-change check" {
   printf '%s\n' 'test_add() {' '  [ "$(add 1 2)" = 3 ]' '}' >tests/math_test.sh
   commit "chore: add an existing test"
