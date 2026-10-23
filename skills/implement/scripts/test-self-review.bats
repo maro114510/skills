@@ -273,6 +273,95 @@ echo "ARGS: $*"' '' opencode
   [ "$(find "${work}" -maxdepth 1 -type f | wc -l | tr -d ' ')" -eq 0 ]
 }
 
+# Prints a repo whose `main` gained a commit after `feature` branched from it, with two commits on
+# `feature` checked out and a clean worktree, so only committed changes are left to review.
+new_range_repo() {
+  local d
+  d="$(mktemp -d "${work}/range.XXXXXX")"
+  g() { git -C "${d}" -c core.hooksPath=/dev/null -c user.name=t -c user.email=t@t "$@"; }
+  g init -q -b main
+  echo a >"${d}/tracked.txt"
+  g add .
+  g commit -q -m init
+  g switch -q -c feature
+  for n in 1 2; do
+    echo "${n}" >>"${d}/tracked.txt"
+    g commit -q -am "cycle ${n}"
+  done
+  g switch -q main
+  echo m >"${d}/main.txt"
+  g add .
+  g commit -q -m later
+  g switch -q feature
+  echo "${d}"
+}
+
+# Runs self-review.sh in range mode against main on a fresh range repo, with a stub harness CLI whose body
+# is $1; sets ${mb} to the merge base the review must start at.
+run_range_stub() {
+  local repo bin harness="${2:-claude}"
+  repo="$(new_range_repo)"
+  mb="$(git -C "${repo}" merge-base main feature)"
+  bin="$(mktemp -d "${work}/bin.XXXXXX")"
+  printf '#!/bin/sh\n%s\n' "$1" >"${bin}/${harness}"
+  chmod +x "${bin}/${harness}"
+  cd "${repo}" || return 1
+  run env TMPDIR="${work}" PATH="${bin}:${PATH}" bash "${target}" "${harness}" "${repo}" main
+}
+
+@test "claude reviews the committed range from the merge base with a clean worktree" {
+  # shellcheck disable=SC2016 # expanded by the stub, not here
+  run_range_stub 'echo "ARGS: $*"'
+  [ "${status}" -eq 0 ]
+  has_line "ARGS: -p /code-review high ${mb}..HEAD --permission-mode plan --no-session-persistence"
+}
+
+@test "codex reviews against the merge base instead of the uncommitted changes" {
+  # Codex writes its review to the -o file, so the stub echoes its argv there.
+  # shellcheck disable=SC2016 # expanded by the stub, not here
+  run_range_stub 'for a; do [ "${p:-}" = -o ] && f="$a"; p="$a"; done; echo "ARGS: $*" >"$f"' codex
+  [ "${status}" -eq 0 ]
+  grep -qF -- "ARGS: exec review --base ${mb} --ephemeral" <<<"${output}"
+  if grep -qF -- "--uncommitted" <<<"${output}"; then return 1; fi
+}
+
+@test "opencode names the committed range in the review message" {
+  for version in v1 v2; do
+    # shellcheck disable=SC2016 # expanded by the stub, not here
+    run_range_stub "$(opencode_stub "${version}" 'echo "ARGS: $*"')" opencode
+    [ "${status}" -eq 0 ]
+    grep -qF -- "Review the committed changes in ${mb}..HEAD." <<<"${output}"
+    if grep -qF -- "uncommitted" <<<"${output}"; then return 1; fi
+  done
+}
+
+@test "reviewer moving HEAD in range mode exits 3" {
+  run_range_stub 'git -c core.hooksPath=/dev/null -c user.name=t -c user.email=t@t commit -q --allow-empty -m pwned'
+  [ "${status}" -eq 3 ]
+  has_line "REVIEWER_CHANGED_WORKTREE"
+}
+
+# Runs self-review.sh in range mode with base $1 and a claude stub that announces any call.
+run_range_base() {
+  local bin
+  bin="$(mktemp -d "${work}/bin.XXXXXX")"
+  printf '#!/bin/sh\necho REVIEWER_CALLED\n' >"${bin}/claude"
+  chmod +x "${bin}/claude"
+  run env TMPDIR="${work}" PATH="${bin}:${PATH}" bash "${target}" claude "$(new_range_repo)" "$1"
+}
+
+@test "unknown base exits 2 before the review runs" {
+  run_range_base no-such-base
+  [ "${status}" -eq 2 ]
+  if has_line REVIEWER_CALLED; then return 1; fi
+}
+
+@test "base with no commits after it exits 2 before the review runs" {
+  run_range_base feature
+  [ "${status}" -eq 2 ]
+  if has_line REVIEWER_CALLED; then return 1; fi
+}
+
 @test "unsupported harness exits 2" {
   run bash "${target}" gemini "$(new_repo)"
   [ "${status}" -eq 2 ]
