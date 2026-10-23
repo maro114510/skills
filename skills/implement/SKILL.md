@@ -4,8 +4,9 @@ description: >
   A skill for executing implementation tasks with quality as the top priority. Grounds the request
   in the codebase, resolves requirements and acceptance criteria, decides autonomously from the Issue and
   repository, and asks only when acceptance, a premise, or the sources are in doubt, or a critical decision
-  is unsettled. Applies TDD as needed, and proves every bug fix with a reproduction test that fails,
-  passes, and fails again with the fix reverted.
+  is unsettled. Writes tests through one playbook per task type (behavior change, bug fix, refactor),
+  commits each TDD cycle, and proves every bug fix with a reproduction test that fails on the pre-fix code,
+  checked against history by gate-tests.sh.
   Trigger on requests like
   「これを実装して」「機能を追加して」「バグを修正して」「変更して」「これを作って」
   「リファクタリングして」「対応して」 and similar implementation requests.
@@ -84,7 +85,7 @@ ERROR: <FAILED only — what failed, what was attempted>
 Determine the execution mode and task type from `$ARGUMENTS` and the conversation.
 
 - Record what the user already decided so they never have to repeat it.
-- Defer the TDD decision until the repository is inspected and acceptance criteria exist.
+- Defer the playbook choice in Phase 5 until the repository is inspected and acceptance criteria exist.
 - Do not mutate repository state in Phases 0 to 3. Worktree Resolution in autonomous mode and the Issue Claim below are the only exceptions.
 
 ### Issue Claim
@@ -261,44 +262,51 @@ Do not repeat it in another.
 | Commit log | Why |
 | Code comments | Why not: a rejected alternative or a non-obvious constraint |
 
-Choose the test approach and record it in the plan.
+Choose the playbook for the task type and record it in the plan. Read `references/test-policy.md` whole, then the chosen playbook, both relative to this skill's directory. A playbook is the only procedure for writing its task type's tests.
 
-| Approach | Use when |
+| Task type | Playbook |
 |---|---|
-| TDD | All hold: the change involves business logic, API handlers, or data transformation; a test framework already exists without disproportionate setup cost; inputs and expected outputs follow from the acceptance criteria |
-| Without TDD | Any holds: the change is limited to UI styling, a migration, configuration, or a one-shot operation; no suitable test framework exists and adding one is outside the planned scope; another verification method maps more directly to the acceptance criteria |
+| Adds, changes, or removes behavior a user or caller can observe | `references/playbooks/behavior-change.md` |
+| Corrects behavior that differs from what was specified or intended | `references/playbooks/bug-fix.md` |
+| Changes structure while observable behavior stays the same | `references/playbooks/refactor.md` |
 
-### Bug Fixes
-
-Whichever approach the table selects, prove every bug fix with fail, pass, fail:
-
-1. Reproduce: before changing production code, write a test that reproduces the bug, and confirm it fails at its assertion with the reported symptom, not from a build, import, or setup error.
-2. Fix: change only production code until the suite passes. Do not edit the test.
-3. Mutate: in a temporary copy of the worktree's files, made as references/evidence.md section 2.2 says, remove only the fix and confirm the same test fails again. The worktree keeps the fix.
-
-If the test passes in step 1, the bug does not reproduce: Phase 2 trigger 2. If it passes in step 3, it does not guard the bug: remove the fix, rewrite the test, and restart. Record each run's command, exit code, and failure excerpt for Phase 6.9. When no test can reproduce the bug, follow the same sequence with a script or manual steps and log why.
-
-### With TDD
-
-Follow t-wada's TDD cycle strictly.
-
-1. Test list: enumerate every test case you can think of before writing any code.
-2. Red: write one failing test, and confirm it fails at its assertion, not from a build, import, or setup error; when the interface does not exist yet, add a minimal stub first. Record the run's command and failure excerpt for Phase 6.9.
-3. Green: write the minimum code to make it pass.
-4. Refactor: clean up the design while the tests stay green.
-5. Repeat steps 2 to 4 until the test list is exhausted.
-
+A task that spans types runs each part through its own playbook, one part at a time, each ending on a green commit.
 A test that is hard to write is a signal to revisit the design.
+Touch nothing beyond what the task requires.
 
-### Without TDD
+### Commit per Cycle
 
-Implement with the minimum change. Touch nothing beyond what is required.
+Commit each step as the playbook says, with the `commit` skill, in both modes.
+
+- Give it the Issue number, if any, and whether anything is deferred so far.
+- Hand it each `Removed-Test: <name> -- <reason>` trailer the playbook names, so the deleting commit records it.
+- In normal mode, tell it that Phase 7 classifies and approves the whole range before push, so its Step 6 does not ask about this commit.
+- Never push.
+
+### Tests Not to Write
+
+Write no automated test when any of these holds. Record which one in the decision log, implement with the minimum change, and verify each criterion as `references/evidence.md` says instead.
+
+- test-policy § Prohibitions excludes the code from testing.
+- The change has no behavior a test can observe through a public interface, such as styling, a one-shot operation, or a configuration value no tested code path reads.
+- No suitable test framework exists, and adding one is outside the planned scope.
+- The change is to an agent instruction file, whose behavior evidence.md section 2.3 shows by a fresh-context run.
+
+Otherwise the playbook's tests are required.
 
 ---
 
 ## Phase 6: Verify CI Locally
 
 Find the CI configuration in `.github/workflows/`, `Makefile`, and `package.json`, then run the equivalent lint, typecheck, test, and build checks. Fix every error before moving on to Phase 6.5.
+
+After the playbook's last commit, run the history check from the worktree, where `<skill-dir>` is the directory containing this SKILL.md. Pass `origin/<base-branch>` from Phase 4 in normal mode; in autonomous mode omit it, so it defaults to `origin/HEAD`.
+
+```bash
+bash <skill-dir>/scripts/gate-tests.sh [origin/<base-branch>]
+```
+
+Act on each `fail` line as the playbook's History Check section says, and report each `not-run` line, which is not a failure. A passing run is a check, never evidence, as `references/evidence.md` section 2.2 says.
 
 ---
 
