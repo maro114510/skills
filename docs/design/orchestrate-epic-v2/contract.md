@@ -492,7 +492,8 @@ flowchart LR
 | An approval on the recorded head and the current base | `BOUND` with next `ship`, and nothing else runs |
 | An approval on another pair | A staleness pass, then the rows below unless it defers |
 | A worktree without the branch checked out, or a branch name holding `=` | Exit 8 and nothing merged |
-| A merge in progress | Aborted and redone |
+| oe's own merge in progress, by its message | Aborted and redone |
+| Any other merge in progress | Exit 8 and left as it is for a person |
 | A head other than the recorded head | Adopted only when it is oe's merge commit on the recorded head, else exit 8 |
 | Uncommitted changes or untracked files | Nothing merged, and a blocking finding |
 | The base is already an ancestor of the head | Nothing merged |
@@ -507,7 +508,7 @@ oe's merge commit has two parents, the recorded head first and a commit the base
 
 The prompt is the reviewer's whole brief.
 
-- It carries the repository, the Issue, the Epic as context, the branch, the worktree, and the default branch by name.
+- It carries the repository, the Issue with a command that prints its title and body, the Epic as context, the branch, the worktree, and the default branch by name.
 - It pins `REVIEW_BASE` and `REVIEW_HEAD` as SHAs and diffs exactly those commits.
 - It carries CHECKS_SET's runnable entries and revision, and the report format below.
 - It never carries the worker's report.
@@ -552,13 +553,14 @@ The first matching row decides.
 | CHECKS_REVISION is not the set's revision | `STALE` | `reverify` or `defer` |
 | A `--ship-class` judgment with no finding below | Exit 2 and nothing written | the caller |
 | Any finding below | `FIX`, or `PARKED` at the cap or on a `--ship-class` judgment | `redispatch` or `parked` |
+| A fix cycle in flight, `pending_findings` not empty | Exit 8 and nothing written, since only a report after the fix worker's can bind | the worker |
 | Otherwise | `BOUND` with the head, the base, and the reviewer's own lines verbatim | `ship` |
 
 These are findings, in this order.
 
 1. Any path changed in the worktree or index, untracked files included, which closes `UncommittedDiffApprovalDrift`.
 2. A missing `BEHAVIOR_CHANGE` or `CRITERIA`, or no criterion.
-3. A criterion that is `unverified`, lacks evidence after its tag, or has no readable result.
+3. A criterion that is `unverified`, has no text, lacks evidence after its tag, or has no readable result.
 4. `BEHAVIOR_CHANGE: yes` with no `[behavior]` criterion, since passing checks alone never approve behavior-changing work.
 5. No CHECKS line numbered for a runnable entry, an unreadable line, or a red entry. Each runnable entry is reported under its number in the prompt.
 6. Every reviewer finding, a nit included.
