@@ -92,6 +92,10 @@ func coordCommands(token string) map[string][]string {
 		"worker brief": append([]string{"worker", "brief", "--issue", "7", "--worktree", "/w",
 			"--implement", implement, "--checks-set", "testdata/checks-set.json"}, tok...),
 		"worker report": append([]string{"worker", "report", "--issue", "7", "--worktree", "/w"}, tok...),
+		"review pin": append([]string{"review", "pin", "--issue", "7", "--worktree", "/w",
+			"--checks-set", "testdata/checks-set.json"}, tok...),
+		"review verdict": append([]string{"review", "verdict", "--issue", "7", "--worktree", "/w",
+			"--checks-set", "testdata/checks-set.json"}, tok...),
 	}
 }
 

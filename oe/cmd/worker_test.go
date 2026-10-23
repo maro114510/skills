@@ -74,8 +74,14 @@ func implementPath(t *testing.T) string {
 	return p
 }
 
-// checksSet writes a CHECKS_SET derived at revision with one runnable and one requires-runner entry.
+// checksSet writes a CHECKS_SET for main derived at revision with one runnable and one requires-runner entry.
 func checksSet(t *testing.T, revision string) string {
+	t.Helper()
+	return checksSetFor(t, "main", revision)
+}
+
+// checksSetFor is checksSet for the default branch base.
+func checksSetFor(t *testing.T, base, revision string) string {
 	t.Helper()
 	entry := func(step, command string, runnable bool) map[string]any {
 		return map[string]any{
@@ -85,7 +91,7 @@ func checksSet(t *testing.T, revision string) string {
 		}
 	}
 	data, err := json.Marshal(map[string]any{
-		"ref": "origin/main", "base": "origin/main", "revision": revision, "default_branch_push": "runs",
+		"ref": "origin/" + base, "base": base, "revision": revision, "default_branch_push": "runs",
 		"entries": []any{entry("go test", "go test ./...", true), entry("deploy", "sudo deploy", false)},
 	})
 	if err != nil {
