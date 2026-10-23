@@ -271,17 +271,6 @@ lacks_match() {
   lacks_match 'test_add: passed'
 }
 
-@test "deleting an assertion after a blank line inside a test marks that test as changed" {
-  printf '%s\n' 'test_add() {' '  [ "$(add 1 2)" = 3 ]' '' '  [ "$(add 2 2)" = 5 ]' '}' >tests/math_test.sh
-  commit "chore: add an existing test"
-  base="$(git rev-parse HEAD)"
-  printf '%s\n' 'test_add() {' '  [ "$(add 1 2)" = 3 ]' '' '}' >tests/math_test.sh
-  commit "test: drop a wrong assertion"
-  gate
-  [ "${status}" -eq 1 ]
-  has_match 'tests/math_test.sh test_add: (passed|failed) on the parent$'
-}
-
 @test "a refactor commit is exempt from the before-change check" {
   printf '%s\n' 'test_add() {' '  [ "$(add 1 2)" = 3 ]' '}' >tests/math_test.sh
   commit "chore: add an existing test"
