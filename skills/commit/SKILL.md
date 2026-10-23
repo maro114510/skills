@@ -153,16 +153,29 @@ Never remove a trailer such as `Removed-Test:`.
 
 ## Step 6. Decide: auto-commit or ask first
 
-Ask the user before committing — via `AskUserQuestion`, showing the staged diff summary and the message as finalized after Step 5's Compact Pass — if any of the following is true:
+One classifier decides, `scripts/classify-approval.sh` in this skill's directory; its header lists the conditions.
+Its path, size, and deletion conditions are mechanical, and a repository can only add paths to them, in `[commit.approval] paths` of `.agents/skills.toml`.
+Pass what only you can judge as `--require <reason>`, one per finding:
 
 - The diff mixes clearly unrelated concerns, for example an unrelated `fix` bundled with a `feat`.
-- The diff touches CI/CD workflow files under `.github/workflows/` or release configuration such as `Makefile`, `cliff.toml`, or plugin and version manifests.
-- The diff is large: more than 20 files or more than 1,000 changed lines.
-- The diff deletes tracked files that are not obviously superseded by the rest of the change or recorded in a `Removed-Test:` trailer.
 - Some of the changed files look unrelated to what the rest of the diff is doing — possibly stray edits caught up in the same working tree.
 - A confident Conventional Commits type/scope cannot be determined.
+- The caller reports a critical decision from its decision log; pass it as `--require "critical decision: <decision>"`.
 
-If none of these apply, skip straight to Step 7 and commit without asking.
+Add `--removed-test` when the message carries a `Removed-Test:` trailer.
+
+```bash
+bash <skill-dir>/scripts/classify-approval.sh --staged [--removed-test] [--require "<reason>"]...
+```
+
+| Exit | Action |
+|---|---|
+| 0 | Skip straight to Step 7 and commit without asking |
+| 10 or any other | Ask the user before committing via `AskUserQuestion`, showing the printed `reason:` lines, the staged diff summary, and the message as finalized after Step 5's Compact Pass |
+
+When the caller reports that a human already approved this same change, as implement does after difit, do not ask about the change a second time: commit, and list the printed `reason:` lines in Step 8.
+That approval already covers every `reason:`, including a critical decision, since implement restates its decision log before difit.
+The one exception is a type/scope you cannot determine confidently, because the human reviewed the diff, not the message; ask about the message only.
 A failing-test-only change is not by itself a reason to ask; commit it as `test:`.
 
 ## Step 7. Commit

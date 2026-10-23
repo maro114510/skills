@@ -363,7 +363,7 @@ difit .
 
 - If review comments come back, address them and run difit again.
 - If difit exits without comments, treat that as approval to proceed.
-- Invoke the `commit` skill to compose and make the commit. It decides on its own whether to commit automatically or ask first, independent of the difit review.
+- Invoke the `commit` skill to compose and make the commit. Tell it that the user approved this change in difit, so its Step 6 does not ask about the same change again, and give it each critical decision from the decision log. Whether a change needs approval is decided only by the commit skill's classifier, `classify-approval.sh`; never add size or path rules of your own.
 - If the work traces to an Issue, tell the `commit` skill its number and whether Phase 6.9 left anything deferred.
 - After the commit, release the Issue Claim.
 

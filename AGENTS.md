@@ -114,10 +114,11 @@ Every other section is named after the skill that reads it.
 
 | Key | Holds | Read by |
 |---|---|---|
-| `[paths] tests` | Test files | `skills/implement/scripts/gate-tests.sh` |
+| `[paths] tests` | Test files | `skills/implement/scripts/gate-tests.sh`, `skills/commit/scripts/classify-approval.sh` |
 | `[paths] generated` | Generated files | - |
 | `[paths] design_docs` | Design docs and ADRs | - |
 | `[implement.testing]` | gate-tests's commands and patterns, listed in its header | `skills/implement/scripts/gate-tests.sh` |
+| `[commit.approval] paths` | Paths whose change needs approval, added to the built-in conditions, which no key can remove | `skills/commit/scripts/classify-approval.sh` |
 
 ## Workflow
 
