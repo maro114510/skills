@@ -435,3 +435,38 @@ func TestStaleReasonNeverPrintsASecret(t *testing.T) {
 		t.Errorf("payload holds the secret: %s", raw)
 	}
 }
+
+// TestShipClassWithoutAFindingIsRefused shows that a ship-class judgment on a clean APPROVE is refused and writes nothing, since there is no finding to classify.
+func TestShipClassWithoutAFindingIsRefused(t *testing.T) {
+	t.Parallel()
+
+	w, token := reviewWorld(t, 0)
+	v := verdictOn(t, cleanApprove())
+	v.ShipClass = []handoff.ShipClass{handoff.ShipScope}
+	before := w.writes()
+	_, err := w.session(token).Verdict(ctx(), child, v)
+	wantCode(t, err, exitcode.Usage)
+	if w.writes() != before {
+		t.Error("a ship-class judgment without a finding wrote")
+	}
+}
+
+// TestEachStalePairGetsItsOwnNote shows that a later staleness on another pair posts a new note, so notes are deduplicated per pair and never per Issue.
+func TestEachStalePairGetsItsOwnNote(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld(t)
+	w.put(t, epic, ledgerOf(1))
+	token := w.acquire(t)
+	st := newIssue()
+	st.HeadSHA = new(head)
+	st.Publish = &state.Publish{SHA: head, PrevSHA: "", Base: pinBase, Branch: "feat/issue-7", PR: 12, Phase: coord.PublishLinked}
+	w.put(t, child, st)
+	for _, base := range []string{nextBase, strings.Repeat("2", 40), nextBase} {
+		res := coord.NewReviewResult(child)
+		ok(t, w.session(token).Stale(ctx(), child, head, base, "the default branch moved", &res))
+	}
+	if n := len(w.prefixed("stale:7:")); n != 2 {
+		t.Errorf("stale notes = %d, want one per distinct pair", n)
+	}
+}

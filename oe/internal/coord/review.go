@@ -242,7 +242,10 @@ func (s *Session) Verdict(ctx context.Context, n int, v Verdict) (ReviewResult, 
 	}
 	ev := review.Evaluate(v.Report)
 	findings := findingsOf(v, ev)
-	if len(findings) > 0 || len(v.ShipClass) > 0 {
+	if len(findings) == 0 && len(v.ShipClass) > 0 {
+		return res, exitcode.New(exitcode.Usage, "--ship-class classifies a finding, and this report has none")
+	}
+	if len(findings) > 0 {
 		return res, s.RouteFindings(ctx, n, findings, v.ShipClass, v.Head, &res)
 	}
 	return res, s.bind(ctx, n, v, ev.Bound, &res)
