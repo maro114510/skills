@@ -62,8 +62,8 @@ type Result struct {
 //   - It merges only when Base is not yet an ancestor of the head.
 func Integrate(ctx context.Context, g Git, req Request) (Result, error) {
 	res := Result{Head: "", Base: req.Base, Merged: false, Recovered: RecoveredNone, Dirty: []string{}, Conflicts: []string{}}
-	if req.Worktree == "" || req.Branch == "" || req.Recorded == "" || req.Base == "" {
-		return res, exitcode.New(exitcode.Refused, "an integration needs the worktree, branch, recorded head, and base")
+	if err := onBranch(ctx, g, req); err != nil {
+		return res, err
 	}
 	var err error
 	if res.Head, res.Recovered, err = recoverHead(ctx, g, req); err != nil {
@@ -77,6 +77,25 @@ func Integrate(ctx context.Context, g Git, req Request) (Result, error) {
 		return res, err
 	}
 	return merge(ctx, g, req, res)
+}
+
+// onBranch refuses a worktree that does not have the branch checked out, so the merge never advances another ref.
+// A branch name holding = is refused too, since -c would split the mergeOptions key at it.
+func onBranch(ctx context.Context, g Git, req Request) error {
+	if req.Worktree == "" || req.Branch == "" || req.Recorded == "" || req.Base == "" {
+		return exitcode.New(exitcode.Refused, "an integration needs the worktree, branch, recorded head, and base")
+	}
+	if strings.Contains(req.Branch, "=") {
+		return exitcode.New(exitcode.Refused, "branch "+req.Branch+" holds =, which git -c cannot name")
+	}
+	out, err := g.Git(ctx, "-C", req.Worktree, "rev-parse", "--symbolic-full-name", "HEAD")
+	if err != nil {
+		return err
+	}
+	if got := strings.TrimSpace(string(out)); got != "refs/heads/"+req.Branch {
+		return exitcode.New(exitcode.Refused, fmt.Sprintf("the worktree %s has %q checked out, not %s", req.Worktree, got, req.Branch))
+	}
+	return nil
 }
 
 // recoverHead aborts a merge in progress and adopts a merge commit that oe made but never recorded.

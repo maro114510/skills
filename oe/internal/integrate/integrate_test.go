@@ -243,3 +243,25 @@ func TestBranchStrategyOptionCannotResolveAConflict(t *testing.T) {
 		t.Errorf("result %+v, %v", res, err)
 	}
 }
+
+// TestIntegrationNeedsTheBranchCheckedOut shows that a worktree on another branch or a detached HEAD at the recorded commit is refused, so no other ref is ever advanced.
+func TestIntegrationNeedsTheBranchCheckedOut(t *testing.T) {
+	t.Parallel()
+
+	r := newRepo(t, [2]string{"w.txt", "worker\n"}, [2]string{"b.txt", "upstream\n"})
+	git(t, r.wt, "switch", "-q", "--detach")
+	_, err := integrate.Integrate(t.Context(), client(), r.req())
+	if exitcode.CodeOf(err) != exitcode.Refused || git(t, r.wt, "rev-parse", "HEAD") != r.recorded {
+		t.Errorf("detached: %v", err)
+	}
+	git(t, r.wt, "switch", "-q", "-c", "other")
+	_, err = integrate.Integrate(t.Context(), client(), r.req())
+	if exitcode.CodeOf(err) != exitcode.Refused || git(t, r.wt, "rev-parse", "HEAD") != r.recorded {
+		t.Errorf("other branch: %v", err)
+	}
+	req := r.req()
+	req.Branch = "feat/issue-7-x.foo=bar"
+	if _, err := integrate.Integrate(t.Context(), client(), req); exitcode.CodeOf(err) != exitcode.Refused {
+		t.Errorf("a branch with = : %v", err)
+	}
+}
