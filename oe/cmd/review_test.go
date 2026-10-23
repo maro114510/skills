@@ -9,6 +9,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/maro114510/skills/oe/internal/integrate"
 	"github.com/maro114510/skills/oe/internal/runner"
 )
 
@@ -199,12 +200,12 @@ func TestPinConflictQueuesAFixCycleAndRestoresTheWorktree(t *testing.T) {
 	}
 }
 
-// TestPinRecoversAnInterruptedMerge shows that the next pin aborts and redoes a merge left in progress in the worktree.
+// TestPinRecoversAnInterruptedMerge shows that the next pin aborts and redoes oe's own merge left in progress in the worktree.
 func TestPinRecoversAnInterruptedMerge(t *testing.T) {
 	t.Parallel()
 
 	f := newReviewFlow(t, "w.txt", "b.txt")
-	gitIn(t, f.wt, "-c", "core.hooksPath="+os.DevNull, "merge", "--no-ff", "--no-commit", f.base)
+	gitIn(t, f.wt, "-c", "core.hooksPath="+os.DevNull, "merge", "--no-ff", "--no-commit", "-m", integrate.Message(f.base, "feat/issue-7"), f.base)
 	p := f.pin(t)
 	if p.Route != "PINNED" || gitIn(t, f.wt, "log", "-1", "--format=%P", p.Head) != f.head+" "+f.base {
 		t.Fatalf("pin = %+v", p)
@@ -300,5 +301,34 @@ func TestMalformedReportNeverPrintsASecret(t *testing.T) {
 	r := f.w.runIn(f.tr, "VERDICT: "+secret+"\n", append([]string{"review", "verdict", "--issue", "7", "--worktree", f.wt, "--checks-set", f.set}, f.tok...)...)
 	if r.code != 8 || strings.Contains(r.stdout+r.stderr, secret) {
 		t.Errorf("exit %d, stdout %q", r.code, r.stdout)
+	}
+}
+
+// TestPinRoutesAConflictAndADirtyTreeToAFixCycle shows that both failures pin can meet become a fix-cycle finding while HEAD stays at the recorded head.
+func TestPinRoutesAConflictAndADirtyTreeToAFixCycle(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]struct {
+		worker, upstream, want string
+		dirty                  bool
+	}{
+		"conflict":   {"a.txt", "a.txt", "a.txt", false},
+		"dirty tree": {"w.txt", "b.txt", "stray.txt", true},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			f := newReviewFlow(t, tc.worker, tc.upstream)
+			if tc.dirty {
+				if err := os.WriteFile(filepath.Join(f.wt, "stray.txt"), []byte("left behind\n"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			p := f.pin(t)
+			if p.Route != "FIX" || p.State.Cycle != 1 || !strings.Contains(strings.Join(p.State.PendingFindings, " "), tc.want) ||
+				gitIn(t, f.wt, "rev-parse", "HEAD") != f.head {
+				t.Errorf("pin = %+v", p)
+			}
+		})
 	}
 }

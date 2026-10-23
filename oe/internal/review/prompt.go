@@ -35,7 +35,7 @@ func Render(b Brief) string {
 	p("## Assignment\n\n")
 	p("- Repository: %s\n", b.Repo)
 	p("- Issue: #%d. Read its requirements and acceptance criteria yourself:\n\n", b.Issue)
-	p("  ```bash\n  gh issue view %d --repo %s --json title,body --jq .body\n  ```\n\n", b.Issue, b.Repo)
+	p("  ```bash\n  gh issue view %d --repo %s --json title,body --jq '.title + \"\\n\\n\" + .body'\n  ```\n\n", b.Issue, b.Repo)
 	p("- Epic: #%d, context only. Do not read it for scope.\n", b.Epic)
 	p("- Branch: %s\n", b.Branch)
 	p("- Worktree: %s\n", b.Worktree)

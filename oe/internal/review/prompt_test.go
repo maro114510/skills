@@ -46,3 +46,14 @@ func TestPromptQuotesTheWorktreePath(t *testing.T) {
 		t.Errorf("prompt = %s", p)
 	}
 }
+
+// TestPromptShowsTheIssueTitleAndBody shows that the reviewer reads both the title and the body, since a requirement may sit only in the title.
+func TestPromptShowsTheIssueTitleAndBody(t *testing.T) {
+	t.Parallel()
+
+	p := review.Render(review.Brief{Repo: "o/r", Epic: 1, Issue: 7, Branch: "b", Worktree: "/w", DefaultBranch: "main",
+		Base: "b1", Head: "h1", ChecksRevision: "b1", Checks: nil})
+	if !strings.Contains(p, `--jq '.title + "\n\n" + .body'`) {
+		t.Errorf("prompt = %s", p)
+	}
+}
