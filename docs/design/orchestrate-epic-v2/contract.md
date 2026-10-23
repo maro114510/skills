@@ -491,6 +491,7 @@ flowchart LR
 | An approval while the worktree HEAD is not the recorded head | Exit 8 and nothing written |
 | An approval on the recorded head and the current base | `BOUND` with next `ship`, and nothing else runs |
 | An approval on another pair | A staleness pass, then the rows below unless it defers |
+| A worktree without the branch checked out, or a branch name holding `=` | Exit 8 and nothing merged |
 | A merge in progress | Aborted and redone |
 | A head other than the recorded head | Adopted only when it is oe's merge commit on the recorded head, else exit 8 |
 | Uncommitted changes or untracked files | Nothing merged, and a blocking finding |
@@ -535,7 +536,7 @@ FINDINGS:
 
 | Parsing rule | Effect |
 |---|---|
-| Not starting with `VERDICT`, a repeated field, an unknown verdict, or `REQUEST_CHANGES` without a blocking finding | Malformed, exit 8, nothing written, and a fresh reviewer is spawned |
+| Not starting with `VERDICT`, a repeated field, an unknown verdict, or `REQUEST_CHANGES` without a blocking finding | Malformed, exit 8, nothing written, and a fresh reviewer is spawned. An error that would quote a suspected secret is withheld |
 | `none` under CHECKS or FINDINGS | An empty list |
 | The first ` -> ` followed by `verified [` or `unverified` | Where a criterion's result starts, so an arrow in the criterion or the evidence is kept |
 | A finding starting with `[nit]` or the word `nit` | A nit, and every other finding is blocking |
@@ -549,7 +550,8 @@ The first matching row decides.
 | REVIEWED_HEAD is missing or not the head | `STALE` | `reverify` or `defer` |
 | REVIEWED_BASE is not the current base or not merged into the head | `STALE` | `reverify` or `defer` |
 | CHECKS_REVISION is not the set's revision | `STALE` | `reverify` or `defer` |
-| Any finding below, or a `--ship-class` judgment | `FIX` or `PARKED` | `redispatch` or `parked` |
+| A `--ship-class` judgment with no finding below | Exit 2 and nothing written | the caller |
+| Any finding below | `FIX`, or `PARKED` at the cap or on a `--ship-class` judgment | `redispatch` or `parked` |
 | Otherwise | `BOUND` with the head, the base, and the reviewer's own lines verbatim | `ship` |
 
 These are findings, in this order.
