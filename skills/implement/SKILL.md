@@ -35,7 +35,7 @@ The caller may pass `branch <name>` and `worktree <path>`. Phases not listed bel
 | Phases 1 to 3 | Run them. The Issue body, Epic body, caller prompt, and persisted user answers are the only authoritative product decisions. When a Phase 2 ask trigger fires, return BLOCKED with concrete questions and options instead of asking. The orchestrator relays them and re-dispatches you with answers. Otherwise decide as Phase 2 directs and carry the decision log into `SUMMARY` |
 | Phase 4 | Skip. The orchestrator already updated the base, parallel workers would race on the shared checkout, and the worktree is already resolved |
 | Phase 6.5 | Skip. The orchestrator's reviewer already reviews every diff in a fresh context |
-| Phase 7 | Skip difit because no human can review it. Commit in the worktree with the `commit` skill, giving it the Issue number and whether `SKIPPED` is non-empty. Never push and never open a PR. Leave the commit for the orchestrator to ship after human approval |
+| Phase 7 | Skip difit because no human can review it. Commit in the worktree with the `commit` skill, giving it the Issue number and whether `SKIPPED` is non-empty. If a commit hook rewrote any file, rerun Phase 6.9 on the committed state before the report. Never push and never open a PR. Leave the commit for the orchestrator to ship after human approval |
 | Final output | Exactly the report below. The caller parses it, so it is not a human-facing message |
 
 ```
@@ -46,7 +46,7 @@ WORKTREE: <absolute worktree path, or UNKNOWN if unavailable>
 HEAD_SHA: <commit SHA of the worker's final commit, or UNKNOWN if unavailable>
 CHANGED_FILES: <one path per line; empty if BLOCKED before implementing>
 CHECKS: <one per line, `<command> -> exit <code>`>
-CRITERIA: <every criterion from Phase 6.9, one per line, `<criterion verbatim from the source> -> <evidence>`; a criterion with no evidence is still listed, with `-> none`>
+CRITERIA: <every criterion from Phase 6.9, one per line, `<criterion verbatim from the source, or (derived) text> -> [behavior|static] <evidence>` as references/evidence.md defines; a criterion with no evidence is still listed, with `-> none`>
 SKIPPED: <criteria and requirements deferred rather than met, one per line, `<criterion> -> <what was done instead, and why>`; empty if none>
 FOUND: <defects found outside scope but not fixed, one per line; empty if none>
 SUMMARY: <what was implemented, then each decision-log entry one per line, `<decision> -> <basis>; rejected: <alternative>`>
@@ -273,7 +273,7 @@ Whichever approach the table selects, prove every bug fix with fail, pass, fail:
 
 1. Reproduce: before changing production code, write a test that reproduces the bug, and confirm it fails at its assertion with the reported symptom, not from a build, import, or setup error.
 2. Fix: change only production code until the suite passes. Do not edit the test.
-3. Mutate: remove only the fix, keeping the test and any other uncommitted work, and confirm the same test fails again. Then restore the fix.
+3. Mutate: in a temporary copy of the worktree's files, made as references/evidence.md section 2.2 says, remove only the fix and confirm the same test fails again. The worktree keeps the fix.
 
 If the test passes in step 1, the bug does not reproduce: Phase 2 trigger 2. If it passes in step 3, it does not guard the bug: remove the fix, rewrite the test, and restart. Record each run's command, exit code, and failure excerpt for Phase 6.9. When no test can reproduce the bug, follow the same sequence with a script or manual steps and log why.
 
@@ -282,7 +282,7 @@ If the test passes in step 1, the bug does not reproduce: Phase 2 trigger 2. If 
 Follow t-wada's TDD cycle strictly.
 
 1. Test list: enumerate every test case you can think of before writing any code.
-2. Red: write one failing test.
+2. Red: write one failing test, and confirm it fails at its assertion, not from a build, import, or setup error; when the interface does not exist yet, add a minimal stub first. Record the run's command and failure excerpt for Phase 6.9.
 3. Green: write the minimum code to make it pass.
 4. Refactor: clean up the design while the tests stay green.
 5. Repeat steps 2 to 4 until the test list is exhausted.
@@ -334,19 +334,21 @@ This phase runs in both modes. Phase 2's criteria live in context, and context d
 
 1. Re-fetch the source: the Issue body, linked spec, and caller's prompt. If it changed since Phase 2, say so first.
 2. Quote each acceptance criterion verbatim, because paraphrasing is where a criterion gets softened. A criterion derived from the request's intent has no source text, so prefix it with `(derived)` and never present it as a quote.
-3. Attach evidence to each criterion: a command and its exit code, the covering test, a file path, or a quoted user decision.
-4. Treat a criterion without evidence as unsatisfied. A TODO, a new Issue, out of scope, future work, or a later Epic is not evidence. Deferring a criterion is the user's call, and surfacing it is yours.
+3. Read `references/evidence.md`, relative to this skill's directory. Classify each criterion, attach evidence tagged `[behavior]` or `[static]` as it defines, and classify the outcome. A behavior criterion needs `[behavior]` evidence. A green CI run is never behavior evidence for a criterion that does not name that check.
+4. Treat a `No evidence` criterion as unsatisfied. Deferring a criterion is the user's call, and surfacing it is yours.
 
 ```
 | Criterion (verbatim, or `(derived)`) | Evidence |
 |---|---|
-| <the source's own words> | `go test ./...` -> exit 0 |
+| <behavior criterion> | `[behavior]` <command or input>; observed <result> |
+| <structure or content criterion> | `[static]` <file:line> |
+| <criterion without evidence> | none |
 
 Deferred, not satisfied: <criterion> -> <what was done instead, and why>
 No evidence: <criterion>
 ```
 
-Lead with the last two lines whenever either has content. In autonomous mode, they are what `CRITERIA` and `SKIPPED` carry.
+Lead with the last two lines whenever either has content. In autonomous mode, every table row becomes a `CRITERIA` line in the form references/evidence.md defines, with `-> none` for each `No evidence` criterion, and each `Deferred` line becomes a `SKIPPED` line. A deferred criterion stays in the table as `No evidence`, so it appears in both.
 
 ---
 
@@ -361,9 +363,9 @@ Restate the decision log, then have the user review the diff against it in difit
 difit .
 ```
 
-- If review comments come back, address them and run difit again.
+- If review comments come back, address them, rerun Phase 6 and Phase 6.9 so the evidence comes from the final state, and run difit again.
 - If difit exits without comments, treat that as approval to proceed.
-- Invoke the `commit` skill to compose and make the commit. It decides on its own whether to commit automatically or ask first, independent of the difit review.
+- Invoke the `commit` skill to compose and make the commit. It decides on its own whether to commit automatically or ask first, independent of the difit review. If a commit hook rewrote any file, rerun Phase 6.9 on the committed state.
 - If the work traces to an Issue, tell the `commit` skill its number and whether Phase 6.9 left anything deferred.
 - After the commit, release the Issue Claim.
 
