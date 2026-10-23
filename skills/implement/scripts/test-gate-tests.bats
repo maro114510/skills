@@ -259,6 +259,18 @@ lacks_match() {
   lacks_match 'test_add: passed'
 }
 
+@test "deleting the comment above a declaration marks that test, not the test above it, as changed" {
+  printf '%s\n' 'test_add() {' '  [ "$(add 1 2)" = 3 ]' '}' '' '# adding zero keeps the number' 'test_add_zero() {' '  [ "$(add 0 2)" = 2 ]' '}' >tests/math_test.sh
+  commit "chore: add existing tests"
+  base="$(git rev-parse HEAD)"
+  printf '%s\n' 'test_add() {' '  [ "$(add 1 2)" = 3 ]' '}' '' 'test_add_zero() {' '  [ "$(add 0 2)" = 2 ]' '}' >tests/math_test.sh
+  commit "test: drop a comment"
+  gate
+  [ "${status}" -eq 1 ]
+  has_match 'tests/math_test.sh test_add_zero: passed on the parent$'
+  lacks_match 'test_add: passed'
+}
+
 @test "deleting an assertion after a blank line inside a test marks that test as changed" {
   printf '%s\n' 'test_add() {' '  [ "$(add 1 2)" = 3 ]' '' '  [ "$(add 2 2)" = 5 ]' '}' >tests/math_test.sh
   commit "chore: add an existing test"
