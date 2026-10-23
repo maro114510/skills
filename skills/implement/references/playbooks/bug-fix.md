@@ -5,7 +5,7 @@ It lists steps only. The rules live in [test-policy.md](../test-policy.md), read
 
 ## Steps
 
-1. Find the condition. Establish the state, configuration, data, and ordering under which the defect occurs, as the regression rule in test-policy § Preconditions says, not only the input that showed it.
+1. Find the condition. Establish what makes the defect occur, to the depth the regression rule in test-policy § Preconditions asks for.
 2. Red. Write one test that sets that condition inside the test, as § Preconditions says, names it, as § Writing says, and asserts the correct outcome. Run it on the current code.
    It fails at its assertion with the reported symptom, never with a build, import, or setup error, as § Process says. If it passes, the defect does not reproduce: Phase 2 trigger 2.
    Record the command, exit code, and failure excerpt. This run is the observation of the test failing without the fix that [evidence.md](../evidence.md) section 2.2 asks for.
