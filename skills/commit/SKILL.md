@@ -94,6 +94,14 @@ The code carries how, the tests carry what, and code comments carry why not, so 
 | Overflow | Split into multiple commits, or keep the most load-bearing fact and defer the rest to the PR description |
 | Trivial | Omit the body |
 
+A commit may hold only a failing test. Each type's body states its own why:
+
+| Type | Why |
+|---|---|
+| `test:` | The behavior or defect the test pins |
+| `feat:`, `fix:` | Why the behavior is needed |
+| `refactor:` | Why the structure changes |
+
 Good (why facts, one per bullet):
 ```
 - Case 09 was a false positive: its integrity_concern justification restated "overextended" and "not_established."
@@ -108,6 +116,7 @@ Bad (what/how — cut this, the diff already shows it):
 Bad (verification narration — belongs in the PR's Test Plan, not here):
 ```
 - Re-verified all 12 eval cases against the fixed SKILL.md; the 9/9 overextension detection rate is preserved.
+- The new test fails as expected.
 ```
 
 Bad (file enumeration — "what" wearing structure, not why):
@@ -125,6 +134,7 @@ A criterion that lacks evidence but was not deferred does not by itself make it 
 On a follow-up commit, such as a review fix, keep `Closes` if an earlier branch commit, from the `origin/HEAD..HEAD` log, already carries it for the issue; never downgrade it to `Related` without one of the signals above. An earlier `Related` does not carry forward — judge afresh.
 create-pr copies this keyword into the PR, and a merge commit closes the issue from it alone.
 Add a `BREAKING CHANGE:` line when the change breaks an existing interface, config format, or behavior.
+Keep caller-supplied `Removed-Test:` trailers verbatim, as the last paragraph.
 
 **No AI attribution trailer.** Do not add `Co-Authored-By` or similar provenance trailers — this matches the existing convention across this repository's entire commit history.
 
@@ -139,6 +149,7 @@ Before moving to Step 6, re-read the bullets:
 - Over 4 bullets, or a bullet wrapped by character count? Shorten, defer to the PR description, or split the change.
 
 Otherwise keep as written.
+Never remove a trailer such as `Removed-Test:`.
 
 ## Step 6. Decide: auto-commit or ask first
 
@@ -147,11 +158,12 @@ Ask the user before committing — via `AskUserQuestion`, showing the staged dif
 - The diff mixes clearly unrelated concerns, for example an unrelated `fix` bundled with a `feat`.
 - The diff touches CI/CD workflow files under `.github/workflows/` or release configuration such as `Makefile`, `cliff.toml`, or plugin and version manifests.
 - The diff is large: more than 20 files or more than 1,000 changed lines.
-- The diff deletes tracked files that are not obviously superseded by the rest of the change.
+- The diff deletes tracked files that are not obviously superseded by the rest of the change or recorded in a `Removed-Test:` trailer.
 - Some of the changed files look unrelated to what the rest of the diff is doing — possibly stray edits caught up in the same working tree.
 - A confident Conventional Commits type/scope cannot be determined.
 
 If none of these apply, skip straight to Step 7 and commit without asking.
+A failing-test-only change is not by itself a reason to ask; commit it as `test:`.
 
 ## Step 7. Commit
 
@@ -165,6 +177,10 @@ git commit -m "$(cat <<'EOF'
 EOF
 )"
 ```
+
+Never pass `--no-verify`.
+If a hook rejects a test-only commit because the test fails, stage the implementation files the caller names, redo Steps 2 to 6, and commit both as one `feat:` or `fix:`; if none are named, leave the test staged and report back.
+Merged with a merge commit, red `test:` commits stay on the default branch, so bisect with `git bisect start --first-parent`.
 
 ## Step 8. Report
 
