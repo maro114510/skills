@@ -94,6 +94,16 @@ The code carries how, the tests carry what, and code comments carry why not, so 
 | Overflow | Split into multiple commits, or keep the most load-bearing fact and defer the rest to the PR description |
 | Trivial | Omit the body |
 
+**Per-cycle commits**: a TDD cycle may land as separate commits, and a commit may hold only a test that fails.
+That is a valid commit, not a defect to fix before committing.
+Each cycle type states its own why:
+
+| Type | The body states |
+|---|---|
+| `test:` | The behavior or defect the test pins |
+| `feat:`, `fix:` | Why the behavior is needed |
+| `refactor:` | Why the structure changes |
+
 Good (why facts, one per bullet):
 ```
 - Case 09 was a false positive: its integrity_concern justification restated "overextended" and "not_established."
@@ -108,6 +118,16 @@ Bad (what/how — cut this, the diff already shows it):
 Bad (verification narration — belongs in the PR's Test Plan, not here):
 ```
 - Re-verified all 12 eval cases against the fixed SKILL.md; the 9/9 overextension detection rate is preserved.
+```
+
+Good `test:` body (the defect it pins):
+```
+- An expired refresh token returns 500 instead of 401, so clients never re-authenticate.
+```
+
+Bad `test:` body (verification narration — the commit's own red state is not a why):
+```
+- The new test fails on the current code as expected.
 ```
 
 Bad (file enumeration — "what" wearing structure, not why):
@@ -125,6 +145,8 @@ A criterion that lacks evidence but was not deferred does not by itself make it 
 On a follow-up commit, such as a review fix, keep `Closes` if an earlier branch commit, from the `origin/HEAD..HEAD` log, already carries it for the issue; never downgrade it to `Related` without one of the signals above. An earlier `Related` does not carry forward — judge afresh.
 create-pr copies this keyword into the PR, and a merge commit closes the issue from it alone.
 Add a `BREAKING CHANGE:` line when the change breaks an existing interface, config format, or behavior.
+Keep every `Removed-Test:` trailer the caller supplies, verbatim, one per deleted test with its reason; it records why a test left the suite.
+Put these trailers in their own final paragraph, after every other footer line, so `git interpret-trailers` parses them.
 
 **No AI attribution trailer.** Do not add `Co-Authored-By` or similar provenance trailers — this matches the existing convention across this repository's entire commit history.
 
@@ -139,6 +161,7 @@ Before moving to Step 6, re-read the bullets:
 - Over 4 bullets, or a bullet wrapped by character count? Shorten, defer to the PR description, or split the change.
 
 Otherwise keep as written.
+The pass edits body bullets only and never removes a footer or trailer, including `Removed-Test:`.
 
 ## Step 6. Decide: auto-commit or ask first
 
@@ -147,11 +170,12 @@ Ask the user before committing — via `AskUserQuestion`, showing the staged dif
 - The diff mixes clearly unrelated concerns, for example an unrelated `fix` bundled with a `feat`.
 - The diff touches CI/CD workflow files under `.github/workflows/` or release configuration such as `Makefile`, `cliff.toml`, or plugin and version manifests.
 - The diff is large: more than 20 files or more than 1,000 changed lines.
-- The diff deletes tracked files that are not obviously superseded by the rest of the change.
+- The diff deletes tracked files that are not obviously superseded by the rest of the change. A test file whose deletion a `Removed-Test:` trailer records does not count.
 - Some of the changed files look unrelated to what the rest of the diff is doing — possibly stray edits caught up in the same working tree.
 - A confident Conventional Commits type/scope cannot be determined.
 
 If none of these apply, skip straight to Step 7 and commit without asking.
+A change holding only a test, even one that fails, is not a reason to ask: commit it as `test:`.
 
 ## Step 7. Commit
 
@@ -162,9 +186,24 @@ git commit -m "$(cat <<'EOF'
 <body>
 
 <footer>
+
+<Removed-Test trailers, if any>
 EOF
 )"
 ```
+
+Never pass `--no-verify`, and never bypass a hook any other way.
+
+When a hook rejects a commit that holds only a test, and its output shows that test failing, combine the test with its implementation:
+
+1. If the caller names the implementation files, stage them with the test, redo Steps 2 to 6 on the combined staged diff, and commit once as `feat:` or `fix:`.
+2. Otherwise leave the test staged, uncommitted, and report to the caller that it must land together with its implementation.
+
+For any other hook rejection, show the hook output and stop; a fix lands as a new commit attempt, never by skipping the hook.
+
+Failing `test:` commits remain in the default branch's history when the branch lands with a merge commit.
+Bisect with `git bisect start --first-parent` so it steps through the merge commits and skips the red intermediate ones.
+A squash merge drops them; a rebase merge puts them on the first-parent line, where `--first-parent` cannot skip them.
 
 ## Step 8. Report
 
