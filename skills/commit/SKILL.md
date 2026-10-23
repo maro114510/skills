@@ -173,9 +173,9 @@ bash <skill-dir>/scripts/classify-approval.sh --staged [--removed-test] [--requi
 | 0 | Skip straight to Step 7 and commit without asking |
 | 10 or any other | Ask the user before committing via `AskUserQuestion`, showing the printed `reason:` lines, the staged diff summary, and the message as finalized after Step 5's Compact Pass |
 
-When the caller reports that a human already approved this same change, as implement does after difit, do not ask about the change a second time: commit, and list the printed `reason:` lines in Step 8.
-That approval already covers every `reason:`, including a critical decision, since implement restates its decision log before difit.
-The one exception is a type/scope you cannot determine confidently, because the human reviewed the diff, not the message; ask about the message only.
+When the caller reports that it classifies the whole `base..HEAD` range with this classifier before push and gets human approval when the range needs it, as implement does in normal mode, leave out the caller's critical decisions here and do not ask about the mechanical `reason:` lines: commit, and list them in Step 8.
+The range classification covers them, since a path counts when any commit in the range touches it, and the caller passes its critical decisions to it.
+Still ask about your own findings above, because they concern how this commit is cut, which the range review cannot fix; for a type/scope you cannot determine confidently, ask about the message only.
 A failing-test-only change is not by itself a reason to ask; commit it as `test:`.
 
 ## Step 7. Commit
