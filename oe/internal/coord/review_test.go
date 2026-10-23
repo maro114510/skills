@@ -470,3 +470,18 @@ func TestEachStalePairGetsItsOwnNote(t *testing.T) {
 		t.Errorf("stale notes = %d, want one per distinct pair", n)
 	}
 }
+
+// TestNoApprovalBindsWhileAFixCycleIsInFlight shows that a clean report arriving before the fix worker reports, such as a late duplicate, binds nothing and writes nothing.
+func TestNoApprovalBindsWhileAFixCycleIsInFlight(t *testing.T) {
+	t.Parallel()
+
+	w, token := reviewWorld(t, 0)
+	_, err := w.session(token).Verdict(ctx(), child, verdictOn(t, reviewText("APPROVE", "yes — x", goodCriterion, "1. [nit] a.go:1 — typo")))
+	ok(t, err)
+	before := w.writes()
+	_, err = w.session(token).Verdict(ctx(), child, verdictOn(t, cleanApprove()))
+	wantCode(t, err, exitcode.Refused)
+	if st := w.current(t); st.Approval != nil || len(st.PendingFindings) != 1 || w.writes() != before {
+		t.Errorf("state = %+v", st)
+	}
+}

@@ -248,6 +248,10 @@ func (s *Session) Verdict(ctx context.Context, n int, v Verdict) (ReviewResult, 
 	if len(findings) > 0 {
 		return res, s.RouteFindings(ctx, n, findings, v.ShipClass, v.Head, &res)
 	}
+	if len(st.PendingFindings) > 0 {
+		// The fix worker has not reported yet, so this clean report predates the fix or duplicates an earlier review.
+		return res, refused("#%d has a fix cycle in flight; nothing binds until its worker reports", n)
+	}
 	return res, s.bind(ctx, n, v, ev.Bound, &res)
 }
 
