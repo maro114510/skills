@@ -26,8 +26,8 @@ It is the one step that shows the committed step 2 test guards the defect; no ot
 | `before-change` reports the step 2 test | Action |
 |---|---|
 | Failed on the parent | Proceed |
-| Passed on the parent | It does not guard the defect: Phase 2 trigger 2, because the defect cannot be shown with this test |
-| Failed with a build error on the parent | The test needs something its parent lacks. The check applies only test files to the parent, so put that, such as a minimal stub, in a `refactor:` commit of its own before the `test:` commit, and run the check again |
+| Passed on the parent | It does not guard the defect. It failed in step 2 only through something its commit does not hold, such as an untracked file or local state, which means it lacks a precondition, or an edit made after step 2. Redo the cycle from step 1, as Redo a Cycle in SKILL.md says. If no test can set that condition, Phase 2 trigger 2 |
+| Failed with a build error on the parent | The test needs something its parent lacks, because the check applies only test files to the parent. Redo the cycle as Redo a Cycle in SKILL.md says, committing that, such as a minimal stub, as `refactor:` before the `test:` commit |
 | `not-run` | Report the line. The step 2 observation stands alone |
 
 A passing check is never evidence, as evidence.md section 2.2 says. The step 2 observation is.

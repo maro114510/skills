@@ -30,4 +30,4 @@ If the commit skill reports that a hook rejected the `test:` commit and left the
 ## History Check
 
 Phase 6 runs `scripts/gate-tests.sh`. Its `before-change` line must report each test of the `test:` and `feat:` commits as failed on the parent, never passed or failed with a build error, and its `removed` line must pass.
-A `fail` means a step above was skipped: redo that cycle from step 2.
+A `before-change` fail means a step above was skipped: redo that cycle from step 2, as Redo a Cycle in SKILL.md says. A test that passed on the parent needs a precondition or an assertion it lacks; a build error needs a stub committed before the test, as step 2 says.

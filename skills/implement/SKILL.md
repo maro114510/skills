@@ -294,7 +294,7 @@ Commit each step as the playbook says, with the `commit` skill, in both modes.
 ### Fixes After a Green Commit
 
 A fix made after a part reached its green commit goes through the table again, whatever raised it: Phase 6, a Phase 6.5 finding, a Phase 7 review comment, or reviewer findings in a re-dispatch.
-Never amend, rebase, or reset a commit to make one, because gate-tests.sh checks every commit in the range, and an orchestrator forbids rewriting a pushed branch.
+Each fix is a new commit. Never amend, rebase, or reset to make one; only Redo a Cycle below rewrites history.
 
 | The fix | Route |
 |---|---|
@@ -304,6 +304,17 @@ Never amend, rebase, or reset a commit to make one, because gate-tests.sh checks
 | Only a test changes, for behavior the code already has: a stronger assertion, a missing case, a rename, or a precondition | Pin it as `refactor.md` step 2 says, committed as `refactor:` |
 
 A test edit of the last kind passes on its parent by design, so committing it as `test:`, `feat:`, or `fix:` makes gate-tests.sh fail on that commit for good.
+
+### Redo a Cycle
+
+gate-tests.sh's `before-change` judges each commit on its own, so a later commit never clears its `fail`. When a playbook's History Check says to redo a cycle, act on whether the cycle's first commit was ever pushed. Run `git fetch origin` first; `git branch -r --contains <commit>` then prints nothing for a commit no remote branch holds.
+
+| First commit of the cycle | Action |
+|---|---|
+| Never pushed | Save the commits from it to HEAD with `git rev-list --reverse <commit>^..HEAD`. Run `git reset --keep <commit>^`, then redo the cycle as the History Check says, and reapply each later saved commit in order with `git cherry-pick`. Rerun Phase 6 |
+| Pushed | Never rewrite it, because a pushed branch may already be under review, and an orchestrator forbids rewriting it. Fix the substance forward as Fixes After a Green Commit says, and report the `fail` line as unresolved: to the user in normal mode, and in `SUMMARY`, naming the commit, in autonomous mode |
+
+`isolation`, `shuffle`, and `removed` judge the range as a whole, so fix their `fail` forward with a new commit. A `Removed-Test` trailer on any commit in the range satisfies `removed`.
 
 ### Tests Not to Write
 
