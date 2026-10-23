@@ -76,7 +76,7 @@ ERROR: <FAILED only — what failed, what was attempted>
 - Without a supplied `branch`, set it to the verified current branch.
 - Never fall back to the current directory or another worktree.
 - When blocking or failing before the branch or worktree is known, report that field as `UNKNOWN`.
-- Existing changes in a validated worktree are prior work. Continue on top of them, except for edits Phase 3 says to undo.
+- Existing commits and changes in a validated worktree are prior work. Continue on top of them, except for work Phase 3 says to undo.
 
 ---
 
@@ -307,12 +307,15 @@ A test edit of the last kind passes on its parent by design, so committing it as
 
 ### Redo a Cycle
 
-gate-tests.sh's `before-change` judges each commit on its own, so a later commit never clears its `fail`. When a playbook's History Check says to redo a cycle, act on whether the cycle's first commit was ever pushed. Run `git fetch origin` first; `git branch -r --contains <commit>` then prints nothing for a commit no remote branch holds.
+gate-tests.sh's `before-change` judges each commit on its own, so a later commit never clears its `fail`. When a playbook's History Check says to redo a cycle, take the cycle's first commit and decide without fetching, because orchestrate-epic forbids workers to fetch on the shared `.git`:
+
+- It was pushed when `git branch -r --contains <commit>` prints a branch, or when `git ls-remote origin refs/heads/<branch>` prints a tip that `git merge-base --is-ancestor <commit> <tip>` confirms holds it, or that is not in the local repository, so the answer is unknown.
+- A merge commit lies after it when `git rev-list --merges <commit>..HEAD` prints one, such as an orchestrator's base integration, which replaying would duplicate.
 
 | First commit of the cycle | Action |
 |---|---|
-| Never pushed | Save the commits from it to HEAD with `git rev-list --reverse <commit>^..HEAD`. Run `git reset --keep <commit>^`, then redo the cycle as the History Check says, and reapply each later saved commit in order with `git cherry-pick`. Rerun Phase 6 |
-| Pushed | Never rewrite it, because a pushed branch may already be under review, and an orchestrator forbids rewriting it. Fix the substance forward as Fixes After a Green Commit says, and report the `fail` line as unresolved: to the user in normal mode, and in `SUMMARY`, naming the commit, in autonomous mode |
+| Never pushed, and no merge commit after it | Save the commits from it to HEAD with `git rev-list --reverse <commit>^..HEAD`. Run `git reset --keep <commit>^`, then redo the cycle as the History Check says, and reapply each later saved commit in order with `git cherry-pick`. Rerun Phase 6 |
+| Pushed, or a merge commit after it | Never rewrite it, because a pushed branch may already be under review, and an orchestrator forbids rewriting it. Fix the substance forward as Fixes After a Green Commit says, and report the `fail` line as unresolved: to the user in normal mode, and in `SUMMARY`, naming the commit, in autonomous mode |
 
 `isolation`, `shuffle`, and `removed` judge the range as a whole, so fix their `fail` forward with a new commit. A `Removed-Test` trailer on any commit in the range satisfies `removed`.
 
