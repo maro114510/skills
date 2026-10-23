@@ -275,3 +275,30 @@ func TestChecksSetForAnotherBaseBranchIsRefused(t *testing.T) {
 		t.Errorf("exit %d, stdout %q", r.code, r.stdout)
 	}
 }
+
+// TestPinOnADirtyTreeQueuesAFixCycle shows that uncommitted work found by pin becomes a fix-cycle finding and is never merged over.
+func TestPinOnADirtyTreeQueuesAFixCycle(t *testing.T) {
+	t.Parallel()
+
+	f := newReviewFlow(t, "w.txt", "b.txt")
+	if err := os.WriteFile(filepath.Join(f.wt, "stray.txt"), []byte("left behind\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	p := f.pin(t)
+	if p.Route != "FIX" || p.State.Cycle != 1 || !strings.Contains(strings.Join(p.State.PendingFindings, " "), "stray.txt") ||
+		gitIn(t, f.wt, "rev-parse", "HEAD") != f.head {
+		t.Errorf("pin = %+v", p)
+	}
+}
+
+// TestMalformedReportNeverPrintsASecret shows that a malformed report's error withholds a suspected secret it would quote.
+func TestMalformedReportNeverPrintsASecret(t *testing.T) {
+	t.Parallel()
+
+	f := newReviewFlow(t, "w.txt", "b.txt")
+	secret := "AKIA" + strings.Repeat("G", 16)
+	r := f.w.runIn(f.tr, "VERDICT: "+secret+"\n", append([]string{"review", "verdict", "--issue", "7", "--worktree", f.wt, "--checks-set", f.set}, f.tok...)...)
+	if r.code != 8 || strings.Contains(r.stdout+r.stderr, secret) {
+		t.Errorf("exit %d, stdout %q", r.code, r.stdout)
+	}
+}

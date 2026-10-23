@@ -13,6 +13,7 @@ import (
 	"github.com/maro114510/skills/oe/internal/handoff"
 	"github.com/maro114510/skills/oe/internal/integrate"
 	"github.com/maro114510/skills/oe/internal/review"
+	"github.com/maro114510/skills/oe/internal/scan"
 	"github.com/maro114510/skills/oe/internal/state"
 	"github.com/maro114510/skills/oe/internal/worktree"
 )
@@ -254,7 +255,12 @@ func newVerdictCmd(env Env, g *globals) *cobra.Command {
 			return g.coordinate(c, env, a.token, false, func(ctx context.Context, ss session) error {
 				if parseErr != nil {
 					// A missing lease or --snapshot is reported before a malformed report, and neither writes anything.
-					return exitcode.Wrap(exitcode.Refused, parseErr, "the reviewer report binds nothing; spawn a fresh reviewer")
+					msg := parseErr.Error()
+					// The error may quote the report, which the verdict line would print.
+					if report := scan.Text("reviewer-report-error", []byte(msg)); !report.Clean {
+						msg = "malformed reviewer report; its text holds a suspected secret and is withheld"
+					}
+					return exitcode.New(exitcode.Refused, msg+": the reviewer report binds nothing; spawn a fresh reviewer")
 				}
 				res, err := verdict(ctx, ss, &a, set, rep)
 				if res.Route == "" {
