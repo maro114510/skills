@@ -75,13 +75,9 @@ func (a *publishArgs) request() (ship.Request, error) {
 	if err != nil {
 		return req, err
 	}
-	text, err := os.ReadFile(a.reportFile) //nolint:gosec // G304: the caller names the file.
+	report, err := readDoneReport(a.reportFile)
 	if err != nil {
-		return req, exitcode.New(exitcode.Refused, "the worker report is unreadable")
-	}
-	report, err := handoff.Parse(string(text))
-	if err != nil || report.Status != handoff.StatusDone {
-		return req, exitcode.New(exitcode.Refused, "--report-file must hold a well-formed DONE worker report")
+		return req, err
 	}
 	nits := ""
 	if a.nitsFile != "" {
@@ -92,6 +88,19 @@ func (a *publishArgs) request() (ship.Request, error) {
 		nits = string(data)
 	}
 	return ship.Request{Issue: a.n, Set: set, Scripts: scripts, Title: a.title, Report: report, Nits: nits}, nil
+}
+
+// readDoneReport reads the worker report the pull request body is composed from, which must be a well-formed DONE one.
+func readDoneReport(path string) (handoff.Report, error) {
+	text, err := os.ReadFile(filepath.Clean(path))
+	if err != nil {
+		return handoff.Report{}, exitcode.New(exitcode.Refused, "the worker report is unreadable")
+	}
+	report, err := handoff.Parse(string(text))
+	if err != nil || report.Status != handoff.StatusDone {
+		return handoff.Report{}, exitcode.New(exitcode.Refused, "--report-file must hold a well-formed DONE worker report")
+	}
+	return report, nil
 }
 
 func (a *publishArgs) publish(ctx context.Context, env Env, ss session, req ship.Request) (ship.Result, error) {
