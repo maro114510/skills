@@ -500,7 +500,10 @@ expect_usage() {
 @test "parks outbound network access" {
   local entry path line
   for entry in "run.sh|curl -s example.invalid" "doc.md|see https://example.invalid/x" "a.js|fetch('/api')" \
-    "a.py|requests.get(url)" "a.go|http.Get(url)" "a.js|new XMLHttpRequest()"; do
+    "a.py|requests.get(url)" "a.go|http.Get(url)" "a.js|new XMLHttpRequest()" \
+    "n1.js|https.request(options)" "n2.js|https.get(options, cb)" "n3.js|http.request(opts)" \
+    "n4.mjs|import https from 'node:https'" "n5.js|const http = require('http')" \
+    "n6.js|net.connect(80, host)" "n7.js|tls.connect(443, host)" "n8.py|conn = http.client.HTTPSConnection(h)"; do
     path="${entry%%|*}"
     line="${entry#*|}"
     git reset -q --hard "${start}"
@@ -508,6 +511,13 @@ expect_usage() {
     gate_push
     expect_park network "${path}"
   done
+}
+
+@test "allows a router method that only looks like an http client call" {
+  commit_file routes.js $'app.get("/health", handler)\nrouter.post("/items", create)\nconst nethttp = 1'
+  gate_push
+  expect "${status}" 0
+  expect "$(field .verdict)" allow
 }
 
 @test "parks a binary file it cannot read" {
