@@ -37,8 +37,10 @@ const (
 	CommentsName = "comments"
 	MoreComments = "moreComments"
 	MergePull    = "mergePull"
-	Readiness    = "readiness"
-	Git          = "git"
+	// PullsByHead is the listing of the pull requests of one head branch, in every state.
+	PullsByHead = "pullsByHead"
+	Readiness   = "readiness"
+	Git         = "git"
 	// Protection is the REST read of the default branch's protection.
 	Protection = "protection"
 )
@@ -49,6 +51,7 @@ var phrases = map[string]string{ //nolint:gochecknoglobals // A fixed table of t
 	Tree:         "defaultBranchRef { name target",
 	Blockers:     "node(id: $id)",
 	Pulls:        "pullRequests(first: 100",
+	PullsByHead:  "headRefName: $branch",
 	Refs:         "refs(refPrefix",
 	CommentsName: "comments(first: 100) { totalCount",
 	MoreComments: "comments(first: 100, after: $after)",
@@ -61,7 +64,7 @@ func phrase(name string) string { return phrases[name] }
 
 // queryOrder is the order queries are told apart in: a query is the first whose phrase it holds.
 func queryOrder() []string {
-	return []string{CommentsName, MoreComments, Blockers, MergePull, Readiness, Tree, Pulls, Refs, Protection}
+	return []string{CommentsName, MoreComments, Blockers, MergePull, Readiness, Tree, PullsByHead, Pulls, Refs, Protection}
 }
 
 const probePhrase = "subIssues(first:0)"
@@ -78,6 +81,7 @@ func New() *Router {
 	r.Stderr(Protection, "gh: Branch not protected (HTTP 404)")
 	r.On(Tree, func(map[string]string) string { return EpicTree("", "[]", 0, false, "") })
 	r.On(Pulls, func(map[string]string) string { return PullPage("[]", false, "") })
+	r.On(PullsByHead, func(map[string]string) string { return PullPage("[]", false, "") })
 	r.On(Refs, func(map[string]string) string { return RefPage(false, "") })
 	r.On(Git, func(map[string]string) string { return "" })
 	return r
