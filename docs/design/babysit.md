@@ -194,6 +194,8 @@ A plain push is a fast-forward by Git itself, and condition 6 keeps it one. A br
 | Test weakening | Deleted test files, a test file with fewer test declarations than before, and added lines that skip or focus tests or lower coverage thresholds |
 | Unreadable | A binary change and a path with a control character, which the heuristics cannot read, so a person does |
 
+The line heuristics lean toward parking, because a park costs a person a look and a miss costs a leak. They read every added line of every file, so a new link in a doc, a prose word like `ssh`, or a bare `fit(` in application code parks the push.
+
 Diff range rules follow.
 
 - An ordinary push is inspected commit by commit, each against its parents, because a secret that one commit adds and the next removes still lands in the remote history. Every git read must succeed, since a diff that failed to print would otherwise look empty.
