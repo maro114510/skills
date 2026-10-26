@@ -6,6 +6,7 @@ on:
     paths:
       - '**.sh'
       - '**.bats'
+      - 'tests/implement-repro/**'
       - '.shellcheckrc'
       - '.github/workflows/lint-shell.yml'
       # The oe wrapper has no .sh extension.
@@ -20,6 +21,7 @@ on:
     paths:
       - '**.sh'
       - '**.bats'
+      - 'tests/implement-repro/**'
       - '.shellcheckrc'
       - '.github/workflows/lint-shell.yml'
       # The oe wrapper has no .sh extension.
@@ -55,6 +57,9 @@ jobs:
 
       - name: Run the push-approval hook suite
         run: bats tests/require-user-approval.bats
+
+      - name: Run the implement reproduction repository suite
+        run: bats tests/implement-repro.bats
 
       - name: Install git-cliff
         env:
