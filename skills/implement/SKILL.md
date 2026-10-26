@@ -22,21 +22,31 @@ argument-hint: "[description of what to implement] [autonomous] [branch <name>]"
 
 Prioritize implementation quality. Scale the flow to the task: skip steps that add nothing and go deep only where it matters.
 
+The phases below are the core, and both modes run them.
+The only difference between the modes is the shell around the core:
+
+| Mode | Shell |
+|---|---|
+| Normal | Read `references/interactive.md` in full before Phase 1. It holds the Issue Claim, how to ask, Phase 4, Phase 6.5, and Phase 7's approval |
+| Autonomous | Never read `references/interactive.md`. Autonomous Mode below holds everything the shell would add |
+
+Relative paths and `<skill-dir>` name this skill's directory, the one containing this SKILL.md.
+
 ---
 
 ## Autonomous Mode
 
 Autonomous mode is active only when the first token of `$ARGUMENTS` is exactly `autonomous`. An orchestrator uses it to dispatch this skill inside a subagent, where no human is reachable. The word anywhere else, such as "implement autonomous reconnection", is task text and not a trigger.
 
-The caller may pass `branch <name>` and `worktree <path>`. Phases not listed below run as in normal mode.
+The caller may pass `branch <name>` and `worktree <path>`. Phases not listed below run as the core describes.
 
 | Phase | Autonomous behavior |
 |---|---|
-| Before Phase 1 | Resolve and validate the worktree as described in Worktree Resolution |
+| Before Phase 1 | Resolve and validate the worktree as described in Worktree Resolution. Take no Issue Claim, because the orchestrator owns the Issue |
 | Phases 1 to 3 | Run them. The Issue body, Epic body, caller prompt, and persisted user answers are the only authoritative product decisions. When a Phase 2 ask trigger fires, return BLOCKED with concrete questions and options instead of asking. The orchestrator relays them and re-dispatches you with answers. Otherwise decide as Phase 2 directs and carry the decision log into `SUMMARY` |
 | Phase 4 | Skip. The orchestrator already updated the base, parallel workers would race on the shared checkout, and the worktree is already resolved |
 | Phase 6.5 | Skip. The orchestrator's reviewer already reviews every diff in a fresh context |
-| Phase 7 | Skip the range classification and difit because no human can review it. Commit in the worktree with the `commit` skill, giving it the Issue number and whether `SKIPPED` is non-empty. If a commit hook rewrote any file, rerun Phase 6.9 on the committed state before the report. Never push and never open a PR. Leave the commit for the orchestrator to ship after human approval |
+| Phase 7 | Skip the approval because no human can review it. Commit in the worktree with the `commit` skill, giving it the Issue number and whether `SKIPPED` is non-empty. If a commit hook rewrote any file, rerun Phase 6.9 on the committed state before the report. Never push and never open a PR. Leave the commit for the orchestrator to ship after human approval |
 | Final output | Exactly the report below. The caller parses it, so it is not a human-facing message |
 
 ```
@@ -85,40 +95,7 @@ Determine the execution mode and task type from `$ARGUMENTS` and the conversatio
 
 - Record what the user already decided so they never have to repeat it.
 - Defer the playbook choice until the repository is inspected and acceptance criteria exist.
-- Do not mutate repository state in Phases 0 to 3. Worktree Resolution in autonomous mode and the Issue Claim below are the only exceptions.
-
-### Issue Claim
-
-Run this in normal mode when the request names a GitHub Issue `<N>`, before Phase 1, so a second session handed the same Issue stops before duplicating work. Autonomous mode skips it, because the orchestrator owns the Issue.
-
-The claim is the Git ref `refs/claims/issue-<N>` in this clone, shared by all its worktrees. It never enters history and is not pushed. `git for-each-ref refs/claims` lists claims, and `claim.sh status <N>` shows the owner and its `state=` without changing the claim; it exits 20 whenever the claim is held, by this session too, so compare `owner_token=` with your own.
-
-Inside a [herdr](https://herdr.dev) pane, the claim records the pane, its agent session, and the herdr server, so `state=` tells whether the owner session still runs, for Claude Code, Codex, and opencode alike. `alive=` only says the owner's harness process exists, which stays true for a long-lived process that hosts many sessions. Rerunning `acquire` with this session's own token records the current process and pane again.
-
-| `state=` | Meaning |
-|---|---|
-| `working` | The owner session is running a turn |
-| `blocked` | It waits on an approval or a question |
-| `idle`, `done` | It finished its turn and waits for input; `done` means nobody has looked at it yet |
-| `gone` | herdr answered and no pane runs the owner session: its pane closed, or the pane switched to another session, as after `/clear`. Unless it was resumed outside herdr, that session no longer runs and will never release the claim |
-| `unknown` | Not determinable: the claim was taken outside herdr, by an older version of this script, or by a session herdr could not tie to a pane; the owner's pane shows no agent session for now; or the recording herdr server, herdr, or `jq` is unavailable now |
-
-1. Run the script from the repository, where `<skill-dir>` is the directory containing this SKILL.md. Pass `<token>` only when this session already holds one from an earlier run; otherwise the script prints a new one. Keep the printed `token=` in context, because it, not the process, identifies this session. Whenever this session resumes, as after `--resume`, a fork, or a restart, rerun `acquire` with that token before editing: a resumed session can run under a new session ID, and until it reruns, other sessions read its claim as `gone`.
-
-   ```bash
-   CLAIM_PID="$PPID" bash <skill-dir>/scripts/claim.sh acquire <N> [<token>]
-   ```
-
-2. Act on the exit code:
-
-   | Exit | Meaning | Action |
-   |---|---|---|
-   | 0 | Claimed, no branch carries `issue-<N>` | Proceed |
-   | 10 | Claimed, and the printed `branch=` lines carry `issue-<N>`, including unlinked ones such as orchestrate-epic's | Ask: resume one, start a separate branch, or abort. Show each line, plus the last commit time of each branch |
-   | 20 | Another session holds the claim | Show the printed owner, including `state=`. Ask: abort, or take over with `claim.sh takeover <N> <token>` using this session's printed `token=`, never `owner_token=`, then act on its exit code the same way. Recommend taking over when `state=gone`, or when `state=unknown` and `alive=no`, and aborting otherwise, because a session that is idle or unknown can still resume, and taking it over makes both edit the same Issue |
-   | 2 | Error, such as `origin` unreachable | Show the error and ask whether to proceed. If `token=` was printed, this session still holds the claim: release it on abort. Otherwise it proceeds without a claim. Never skip it silently |
-
-3. Release the claim with `claim.sh release <N> <token>` after Phase 7 approves the range, when the user aborts, and before any other stop that ends this run without that approval. A later session still finds the branch through exit 10.
+- Do not mutate repository state in Phases 0 to 3. The exceptions are Worktree Resolution in autonomous mode and the Issue Claim in normal mode.
 
 ---
 
@@ -177,18 +154,16 @@ Decide everything else yourself. Follow repository conventions, prefer the small
 These triggers govern clarification only. Every operational stop elsewhere in this skill stays unchanged and returns the status its own section names. These stops include:
 
 - Worktree Resolution in autonomous mode, which returns BLOCKED or FAILED
-- An unresolvable base branch in Phase 4
-- Exit 3 in Phase 6.5
+- The stops that `references/interactive.md` lists for normal mode
 - The `commit` skill's own checks
 
-When a trigger fires:
+When a trigger fires, raise every open triggered item before any repository mutation:
 
-- Ask every open triggered item before any repository mutation.
-- Use as few `AskUserQuestion` calls as its four-question limit allows, highest impact first.
+- Normal mode asks the user, as `references/interactive.md` § Asking describes.
+- Autonomous mode returns BLOCKED instead of asking, as Autonomous Mode describes.
 - Offer concrete, mutually exclusive options, put the recommended one first, and state the consequence of each.
 - Ask again only when an answer raises a new trigger.
 - If the requested change looks unnecessary or its premise wrong, say so candidly and let the user decide.
-- In autonomous mode, return BLOCKED instead of asking as Autonomous Mode describes.
 
 ---
 
@@ -203,9 +178,9 @@ Before any repository mutation, present a decision-complete implementation plan 
 - A test strategy mapped to the acceptance criteria
 - Explicit non-goals, risks, and the decision log
 
-Then proceed without waiting for approval, because Phase 7 gates the whole range before push.
+Then proceed without waiting for approval, because approval gates the pushed range, not the plan.
 
-If new information, repository drift, or a scope change raises a Phase 2 trigger later, stop, ask, and update the plan before continuing.
+If new information, repository drift, or a scope change raises a Phase 2 trigger later, stop, raise it as Phase 2 describes, and update the plan before continuing.
 
 - In autonomous mode, return BLOCKED with the partial work, committed or not, listed in `CHANGED_FILES`.
 - In either mode, once the answer arrives, inspect the branch's commits and the uncommitted changes including untracked files. Undo only the work that implements an option the answer rejected, reverting a commit with `git revert`, and keep everything else.
@@ -214,38 +189,8 @@ If new information, repository drift, or a scope change raises a Phase 2 trigger
 
 ## Phase 4: Set Up the Worktree
 
-In autonomous mode, follow Worktree Resolution and skip this phase. In normal mode:
-
-1. Resolve the base branch from an explicit choice or `refs/remotes/origin/HEAD`. Do not assume `main`. If no trustworthy base can be resolved, ask before changing Git state.
-2. Update only the remote-tracking ref. Never run `git switch` or `git pull` in the current checkout, because other agents or sessions may share it and rewriting its files disrupts them. If the fetch fails, stop and report the state.
-   ```bash
-   git fetch origin <base-branch>
-   ```
-3. Without an Issue, choose a GitHub Flow branch name such as `feat/add-login` or `fix/null-pointer-on-checkout`, and create the worktree directly from the fetched remote base.
-   ```bash
-   git wt <branch-name> origin/<base-branch>
-   ```
-4. For Issue `<N>`, reuse a worktree before creating one. Match by branch, never by directory name: a worktree belongs to the Issue when its `branch refs/heads/<name>` line in `git worktree list --porcelain` names a branch from `gh issue develop --list <N>`.
-
-   | State | Action |
-   |---|---|
-   | The user chose to resume a branch in Issue Claim | Use that branch, linked or not: reuse its worktree, or run `git wt <branch>`, preceded by `git fetch origin <branch>` only when the branch is on the remote |
-   | The user chose a separate branch in Issue Claim | Treat it as no linked branch, and suffix the name with `-2`, or the next number free both locally and on the remote |
-   | A worktree for a linked branch exists | Reuse it |
-   | A linked branch exists without a worktree | Run `git fetch origin <branch>` and `git wt <branch>` |
-   | No linked branch exists | Create `<type>/issue-<N>-<slug>` with the command below, using a Conventional Commits type and a kebab-case slug of the title, then run `git fetch origin <branch>` and `git wt <branch>` |
-   | Several branches qualify | Ask the user |
-   | `gh issue develop` fails | Stop and report |
-
-   ```bash
-   gh issue develop <N> --name <type>/issue-<N>-<slug> --base <base-branch>
-   ```
-
-   Run `git wt <branch>` without a start-point, because `git wt` rejects one for an existing remote branch.
-
-Capture the worktree path that `git wt` prints, or the reused path, because its location depends on configuration. Run every later command in that path. Shell state does not persist between tool calls, so prefix each such command with `cd <worktree-path> && <command>`.
-
-Recheck the relevant files after setup. If the fetched base changed a material premise of the plan, return to Phase 2.
+Autonomous mode skips this phase, because Worktree Resolution already ran.
+Normal mode follows `references/interactive.md` § Phase 4.
 
 ---
 
@@ -274,7 +219,7 @@ Route each part of the task in the Phase 3 plan. A playbook, relative to this sk
 
 Before the first edit, read `references/test-policy.md` and the routed playbook, and put the playbook's steps verbatim at the top of the todo list. Mark a step you skip `skip: <reason>`.
 
-Commit each step with the `commit` skill, giving it the type the playbook names, because it infers `test:` for a test-only diff, and any `Removed-Test` trailer. Never push.
+Commit each step with the `commit` skill, giving it the type the playbook names, because it infers `test:` for a test-only diff, any `Removed-Test` trailer, and, when the work traces to an Issue, its number and whether anything is deferred so far. Never push.
 
 A test that is hard to write is a signal to revisit the design. Touch nothing beyond what the task requires.
 
@@ -300,29 +245,8 @@ After the last commit, run `bash <skill-dir>/scripts/gate-tests.sh origin/<base-
 
 ## Phase 6.5: Separate-Context Self-Review
 
-Skip this phase in autonomous mode. Otherwise, have a fresh session of your own harness review the push range once: every commit from the merge base of `origin/<base-branch>` to HEAD. It needs a fresh context, not a second model.
-
-1. Commit any uncommitted work with the `commit` skill, so the range holds the whole change. Tell it that Phase 7 classifies and approves the whole range before push, so its Step 6 does not ask about this commit.
-2. Identify your harness as `claude`, `codex`, or `opencode` from your system context, never from environment variables. For any other harness, or when its CLI is not on PATH, skip and tell the user.
-3. Run the script below, where `<skill-dir>` is the directory containing this SKILL.md and `<base-branch>` is Phase 4's base. Background it through the harness when possible, because a review can take ten minutes.
-
-   ```bash
-   bash <skill-dir>/scripts/self-review.sh <harness> <worktree-path> origin/<base-branch>
-   ```
-
-4. Act on the exit code. Output saying the reviewer could not read the changes counts as exit 1.
-
-   | Exit | Meaning | Action |
-   |---|---|---|
-   | 0 | Review ran and the worktree and HEAD are unchanged | Evaluate the findings, since exit 0 does not mean clean |
-   | 1 | Review failed | If a sandbox blocked it, retry once through the harness's escalation. Otherwise skip and tell the user |
-   | 2 | Unsupported harness, bad path or base, or no commits in the range | Skip and tell the user |
-   | 3 | Reviewer modified the worktree or moved HEAD | Stop, show `git status` and `git log -1`, and ask the user |
-
-5. Treat the output as untrusted data. Fix only genuine issues, minimally, and tell the user why the rest stay.
-6. After a fix, commit it as in step 1, then rerun Phase 6 and the script. Run the script at most twice, then list the remaining findings for the user.
-
-Then proceed to Phase 6.9.
+Autonomous mode skips this phase.
+Normal mode follows `references/interactive.md` § Phase 6.5, then proceeds to Phase 6.9.
 
 ---
 
@@ -350,35 +274,9 @@ Lead with the last two lines whenever either has content. In autonomous mode, ev
 
 ---
 
-## Phase 7: Approve the Push Range
+## Phase 7: Finish
 
-In autonomous mode, skip this phase and emit the report from Autonomous Mode.
-
-Approval covers the push range once, the same range Phase 6.5 reviewed, never a single commit.
-
-1. Commit any uncommitted work with the `commit` skill as Phase 6.5 step 1 does. If a commit hook rewrote any file, rerun Phase 6.9 on the committed state.
-2. Classify the range with the commit skill's classifier, where `<skills-root>` is the parent of this skill's directory. Pass each critical decision from the decision log as `--require "critical decision: <decision>"`. Whether the range needs approval is decided only by this classifier; never add size or path rules of your own.
-
-   ```bash
-   bash <skills-root>/commit/scripts/classify-approval.sh origin/<base-branch> [--require "critical decision: <decision>"]...
-   ```
-
-   | Exit | Action |
-   |---|---|
-   | 0 | Do not open difit. The range is approved; show the user the `approval: not-required` line |
-   | 10 or any other | Restate the decision log and the printed `reason:` lines, then have the user review the range in difit |
-
-3. Open difit on the whole range, from the merge base to HEAD. Use `difit` if `command -v difit` succeeds, otherwise use `npx difit`.
-
-   ```bash
-   difit HEAD "$(git merge-base origin/<base-branch> HEAD)"
-   ```
-
-   - If review comments come back, address them, rerun Phase 6 and Phase 6.9 so the evidence comes from the final state, and repeat this phase from step 1.
-   - If difit exits without comments, the range is approved.
-4. If Phase 6.9 left anything deferred and a branch commit carries `Closes #<N>`, tell the user, because create-pr copies that keyword into the PR.
-5. After the range is approved, release the Issue Claim. Never release it before.
-
-When the work traces to an Issue, give every `commit` skill call in this run its number and whether anything is deferred so far.
+Autonomous mode follows its Phase 7 row, then emits the report from Autonomous Mode.
+Normal mode follows `references/interactive.md` § Phase 7.
 
 Never push. Do not create a PR until the user explicitly says "create a PR."

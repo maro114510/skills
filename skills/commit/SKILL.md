@@ -85,7 +85,7 @@ Omit the scope rather than inventing one when nothing naturally fits.
 
 **Body**: up to 4 bullets, one why fact each — problem, root cause, evidence, or a tradeoff that matters.
 Never what/how; no lead sentence.
-The code carries how, the tests carry what, and code comments carry why not, so the body carries only why.
+The Commit log row of the artifact-role table in `../implement/SKILL.md` § Phase 5 assigns the body only why.
 
 | Item | Rule |
 |---|---|
