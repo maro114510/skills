@@ -604,24 +604,31 @@ func TestPublishParksWhenAnOlderClosesWouldStillCloseAnIssueTheNewestMarksRelate
 
 // crashPoint stops a run at one place between the intent and the linked record.
 type crashPoint struct {
-	crash func(s shipFlow)
-	// phase is the record the crashed run leaves.
-	phase string
+	crash func(t *testing.T, s shipFlow)
+	// phase is the record the crashed run leaves, and pushes the push attempts both runs make together.
+	phase  string
+	pushes int
 }
 
 func crashPoints() map[string]crashPoint {
 	return map[string]crashPoint{
+		"while the remote refuses the push": {
+			crash: func(t *testing.T, s shipFlow) {
+				t.Helper()
+				s.refusePushes(t, true)
+			}, phase: "intent", pushes: 2,
+		},
 		"after the push, before the pushed record": {
-			crash: func(s shipFlow) { s.failWritesOf(`"phase": "pushed"`) }, phase: "intent",
+			crash: func(_ *testing.T, s shipFlow) { s.failWritesOf(`"phase": "pushed"`) }, phase: "intent", pushes: 1,
 		},
 		"after the pushed record, before the pull request": {
-			crash: func(s shipFlow) { s.scripts.failBeforeCreate = true }, phase: "pushed",
+			crash: func(_ *testing.T, s shipFlow) { s.scripts.failBeforeCreate = true }, phase: "pushed", pushes: 1,
 		},
 		"after the pull request was opened, before it is recorded": {
-			crash: func(s shipFlow) { s.scripts.crashAfterCreate = true }, phase: "pushed",
+			crash: func(_ *testing.T, s shipFlow) { s.scripts.crashAfterCreate = true }, phase: "pushed", pushes: 1,
 		},
 		"after the pull request was linked, before the linked record": {
-			crash: func(s shipFlow) { s.failWritesOf(`"phase": "linked"`) }, phase: "pushed",
+			crash: func(_ *testing.T, s shipFlow) { s.failWritesOf(`"phase": "linked"`) }, phase: "pushed", pushes: 1,
 		},
 	}
 }
@@ -629,14 +636,30 @@ func crashPoints() map[string]crashPoint {
 // crashRun runs publish until it dies at the crash point, then clears the cause as a restart would.
 func (s shipFlow) crashRun(t *testing.T, c crashPoint) {
 	t.Helper()
-	c.crash(s)
+	c.crash(t, s)
 	if first := s.publish(); first.code == 0 {
 		t.Fatalf("the crashed run succeeded: %s", first.stdout)
 	}
 	s.w.store.OnWrite(nil)
+	s.refusePushes(t, false)
 	s.scripts.failBeforeCreate, s.scripts.crashAfterCreate = false, false
 	if st := s.stateOf(t); st.Publish == nil || st.Publish.Phase != c.phase {
 		t.Fatalf("after the crash the record is %+v, want phase %s", st.Publish, c.phase)
+	}
+}
+
+// refusePushes makes origin reject every push, or accept them again.
+func (s shipFlow) refusePushes(t *testing.T, refuse bool) {
+	t.Helper()
+	hook := filepath.Join(gitIn(t, s.shared, "remote", "get-url", "origin"), "hooks", "pre-receive")
+	if !refuse {
+		if err := os.Remove(hook); err != nil && !errors.Is(err, os.ErrNotExist) {
+			t.Fatal(err)
+		}
+		return
+	}
+	if err := os.WriteFile(hook, []byte("#!/bin/sh\necho refused >&2\nexit 1\n"), 0o700); err != nil { //nolint:gosec // G306: a hook must be executable.
+		t.Fatal(err)
 	}
 }
 
@@ -660,8 +683,11 @@ func TestPushToPRResumeAfterACrashEndsWithExactlyOneLinkedPR(t *testing.T) {
 			if s.board.count() != 1 {
 				t.Errorf("pull requests = %d, want exactly one", s.board.count())
 			}
-			if n := len(s.pushes()); n != 1 || s.checks.count() != 1 {
-				t.Errorf("pushes in total = %d and checks = %d, want the first run's only", n, s.checks.count())
+			if s.scripts.created() != 1 {
+				t.Errorf("pull requests created = %d, want exactly one", s.scripts.created())
+			}
+			if n := len(s.pushes()); n != c.pushes || s.checks.count() != 1 {
+				t.Errorf("push attempts = %d and checks = %d, want %d and the first run's only", n, s.checks.count(), c.pushes)
 			}
 			if rem := s.remoteHead(t); rem != s.approved {
 				t.Errorf("origin holds %s", rem)
