@@ -541,6 +541,18 @@ expect_usage() {
   expect_park secrets leak.txt
 }
 
+@test "parks a secret even when the caller's environment changes how Git reads paths" {
+  local variable
+  commit_file cfg.txt "$(github_token)"
+  for variable in GIT_LITERAL_PATHSPECS GIT_GLOB_PATHSPECS GIT_NOGLOB_PATHSPECS GIT_ICASE_PATHSPECS; do
+    export "${variable}=1"
+    gate_push
+    echo "variable: ${variable}" >&2
+    unset "${variable}"
+    expect_park secrets cfg.txt
+  done
+}
+
 @test "refuses when Git is configured to push more than the verified commit" {
   local setting
   commit_file src.txt fix
