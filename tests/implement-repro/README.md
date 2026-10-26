@@ -1,6 +1,7 @@
 # implement reproduction repository
 
-A small shell repository that reproduces two failure patterns, to check that the test policy in `skills/implement` prevents them.
+A small shell repository that reproduces two failure patterns, to see how an implement run handles them under the test policy in `skills/implement`.
+It shows that `gate-tests.sh` flags the seeded defects, not that the policy is what prevents them; see Limits.
 Nothing here is copied from another project.
 
 | Case | Task type | Pattern the policy must prevent |
@@ -19,12 +20,21 @@ Nothing here is copied from another project.
 Without an LLM, `bats tests/implement-repro.bats` shows that `gate-tests.sh` flags each seeded defect for the reason the policy names, and that the reference solutions pass.
 
 With a harness, copy `template/` to a new directory, commit it on `main` with a bare `origin` whose `origin/main` is that commit, and set `refs/remotes/origin/HEAD`.
-Then run implement on a case, in each mode:
+Then run implement on a case, from that repository, where `<co>` is this checkout:
 
-| Mode | How |
-|---|---|
-| normal | Tell the harness to read this checkout's `skills/implement/SKILL.md`, never an installed copy, and give the case text as `$ARGUMENTS`. Nobody can answer, so it stops where the skill would ask or open difit |
-| autonomous | The same, with a linked worktree made beforehand and `autonomous branch <branch> worktree <path>` as the first line of `$ARGUMENTS` |
+```bash
+claude -p "Follow <co>/skills/implement/SKILL.md, and <co>/skills/commit/SKILL.md for commits, on the repository in the current directory. Nobody can answer: where the skill would ask or open difit, stop and print it. Never push or open a PR; there is no Issue. \$ARGUMENTS is the text after the line ARGUMENTS.
+
+ARGUMENTS
+$(cat <co>/tests/implement-repro/cases/<case>.md)" \
+  --no-session-persistence --permission-mode acceptEdits --add-dir <co> \
+  --allowedTools "Bash,Read,Edit,Write,Glob,Grep,Skill,Task"
+```
+
+For autonomous mode, make a linked worktree first and add `autonomous branch <branch> worktree <path>` as the line after `ARGUMENTS`.
+
+The agent can run any command with your credentials.
+Run it in a throwaway environment, without `gh` signed in, and with the skills directory read-only.
 
 Judge the commits it left, in its worktree, from outside the run:
 
@@ -37,18 +47,20 @@ For `missing-precondition`, also run the final `tests/` against `src/` of `origi
 
 ## Recorded runs
 
-One run per row on 2026-10-26, on the last commit of this branch, with Claude Code 2.1.310 in headless mode (`claude -p`), on this checkout's own `skills/implement/SKILL.md`.
+One run per row on 2026-10-26, on the last commit of this branch, with Claude Code 2.1.310 in headless mode (`claude -p`) and the model `sonnet`, on this checkout's own `skills/implement/SKILL.md`.
+The recorded runs used the same instructions as the command above, worded a little longer, and also told the agent to use no installed copy of either skill.
 Every run passed all of the checks above: the suite in default order and shuffled for seeds 1 to 5, `gate-tests.sh` with exit 0, and for `missing-precondition` one `FAIL:` and no `ERROR:` on the unfixed `src/`.
 
-| Harness | Mode | Case | Result | Commits |
-|---|---|---|---|---|
-| claude 2.1.310 | normal | `missing-precondition` | pass | `test:` that converts before `rates_set`, then `fix:` |
-| claude 2.1.310 | autonomous | `missing-precondition` | pass | Same |
-| claude 2.1.310 | normal | `order-dependence` | pass | Stub, `test:`, `feat:`, then a `test:` and `fix:` pair; `SHARED_CART` is not used |
-| claude 2.1.310 | autonomous | `order-dependence` | pass | Stub, `test:`, `feat:`; `SHARED_CART` is not used |
+| Harness | Model | Mode | Case | Result | Commits |
+|---|---|---|---|---|---|
+| claude 2.1.310 | sonnet | normal | `missing-precondition` | pass | `test:` that converts before `rates_set`, then `fix:` |
+| claude 2.1.310 | sonnet | autonomous | `missing-precondition` | pass | Same |
+| claude 2.1.310 | sonnet | normal | `order-dependence` | pass | Stub, `test:`, `feat:`, then a `test:` and `fix:` pair; `SHARED_CART` is not used |
+| claude 2.1.310 | sonnet | autonomous | `order-dependence` | pass | Stub, `test:`, `feat:`; `SHARED_CART` is not used |
 
 ## Limits
 
+- This shows no cause. No control run without the skill was made, each case ran once, and every run loaded the user's own configuration, which includes a TDD instruction file, so the policy cannot be told apart from it. Showing the cause needs a control, several runs per arm, and a clean configuration, and waits for #345 to #347, which still change implement's flow.
+- `gate-tests.sh` is advice, not enforcement: it misses a test that pollutes shared state, a `refactor:` commit skips its before-change check, and without `.agents/skills.toml` it checks nothing. #361 tracks the gaps.
 - A run depends on the model, the harness version, and the user's configuration, so a failing run is a result to read, not proof of a regression.
 - "No third-party names" is checked as the absence of URLs, e-mail addresses, licence text, and the words GitHub and GitLab under `template/`, `seeds/`, and `cases/`.
-- No control run without the skill was made, so a run that avoids both defects does not show that it would have fallen into them without the policy.
