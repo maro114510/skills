@@ -153,64 +153,80 @@ What follows from these rules.
 
 ## Gate
 
-The gate runs before every push and prints one verdict with a reason. A verdict it cannot determine is `refuse`. `skills/babysit/scripts/gate.sh` implements it.
+The gate judges one push and prints one verdict. It refuses when it cannot tell.
 
 ```
 gate.sh push <owner/repo> <pr> --session <token> --worktree <path> --start <sha> -- git push origin <sha>:refs/heads/<branch>
 ```
 
-| Verdict | Exit | Meaning | Drive does |
-|---|---|---|---|
-| `allow` | 0 | Every allow condition holds | Push |
-| `park` | 10 | A hard stop matched | Do not push, park, and notify |
-| `refuse` | 11 | An allow condition failed or was unreadable | Do not push, and resync if the remote head moved |
-| none | 2 | Usage error | Fix the call |
-| none | 3 | The lock belongs to another session | Stop without touching the lock |
+```mermaid
+flowchart LR
+  A["allow conditions"] -->|"one fails"| R["refuse"]
+  A -->|"all hold"| H["hard stops"]
+  H -->|"one matches"| P["park"]
+  H -->|"none match"| L["allow"]
+```
 
-- Output is one JSON line. An allow carries `head`, `branch`, and `start`, and a park also carries `matches`, the category and path of each hard stop.
-- Any exit but 0 means do not push. A gate that stops before a verdict prints `refuse`.
-- `<sha>` is the `HEAD` the gate verified, so a commit made after the check cannot go out unchecked. A refusal names the command it expects.
+| Verdict | Exit | Drive does |
+|---|---|---|
+| allow | 0 | Push |
+| park | 10 | Do not push, park, notify |
+| refuse | 11 | Do not push, resync if the remote head moved |
+| none | 2 | Fix the call |
+| none | 3 | Stop, another session holds the lock |
 
-Allow conditions follow, and the first that fails is the reason.
+- Output is one JSON line with the reason
+- An allow also carries head, branch, and start
+- A park also carries matches with the category and path of each hard stop
+- Any exit but 0 means do not push
+- The sha in the command is the HEAD the gate checked
+- A refusal prints the command it expects
 
-1. The viewer is the PR author.
-2. `isCrossRepository` is false.
-3. The PR is open.
-4. The head branch is not the repository's default branch, since a push there would reach the default branch without review.
-5. `origin`, for fetching and pushing and after URL rewrite rules, resolves to the PR's repository.
-6. The remote head equals the worktree's start SHA, and `HEAD` descends from it and adds a commit.
-7. The push is exactly `git push origin <sha>:refs/heads/<branch>`: no force flag, no `+` refspec, no other target.
-8. No hard stop matches.
+## Allow conditions
 
-A plain push is a fast-forward by Git itself, and condition 6 keeps it one. A branch deleted between the check and the push is recreated, which is accepted, since the PR is already gone.
+The first one that fails is the reason.
 
-| Hard stop | Inspects |
+| Condition |
+|---|
+| The viewer is the author |
+| The branch is in the same repository |
+| The pull request is open |
+| The head branch is not the default branch |
+| origin is the pull request repository for fetch and push |
+| The remote head is the start commit |
+| HEAD descends from the start commit and adds a commit |
+| The command is exactly git push origin sha:refs/heads/branch |
+
+- The push is a plain fast-forward
+- A branch deleted before the push is recreated, which is accepted
+
+## Hard stops
+
+| Category | Inspects |
 |---|---|
-| CI and execution config | Changed paths including deletions, such as `.github/**`, other CI configs, `Makefile`, `*.mk`, `Dockerfile`, hook configs like `prek.toml` and `.husky/**`, `.envrc`, and agent config such as `.claude/**` and `AGENTS.md` |
-| Dependencies | Changed paths such as manifests, lockfiles, `go.mod`, `go.sum`, `.gitmodules`, and `vendor/**`, and any moved submodule pointer, even when `.gitmodules` says to ignore it |
-| Secrets and outbound network | Added lines only, for key headers, known token prefixes, literals assigned to `*KEY`, `*TOKEN`, or `*SECRET`, new URLs, and network calls like `curl`, `wget`, `fetch`, and HTTP clients. Also files named like a secret, and commit messages |
-| Test weakening | Deleted test files, and added lines that skip or focus tests or lower coverage thresholds |
-| Unreadable | A binary change, which the heuristics cannot read, so a person does |
+| CI and execution config | Changed and deleted paths such as the workflow directory, CI files, Makefile, Dockerfile, hook config, and agent config |
+| Dependencies | Manifests, lockfiles, vendor, and every submodule pointer even when ignored |
+| Secrets and outbound network | Added lines for keys, tokens, assigned literals, URLs, and network calls, plus secret file names and commit messages |
+| Test weakening | Deleted test files and added lines that skip tests or lower coverage |
+| Unreadable | Binary changes |
 
-The line heuristics lean toward parking, because a park costs a person a look and a miss costs a leak. They read every added line of every file, so a new link in a doc, a prose word like `ssh`, or a bare `fit(` in application code parks the push.
+- Line patterns lean toward parking, so a new link in a doc also parks
+- Each commit is read against its parents and a root commit against the empty tree
+- Git reads with replace refs off, renames off, and no ignored submodules
+- A merge of the base is read like any other commit
 
-Diff range rules follow.
+## Not covered
 
-- The push is inspected commit by commit, each against its parents, and a root commit against the empty tree, because a secret that one commit adds and the next removes still lands in the remote history. Every git read must succeed, since a diff that failed to print would otherwise look empty.
-- Git reads with replace refs off, rename detection off, and no submodule ignored, so the bytes inspected are the bytes pushed.
-- A merge of the base is inspected like any other commit, so a base that changed a workflow or a lockfile parks the merge. Relaxing that needs the merge-tree comparison of the automatic merge and is left for a later Issue.
-
-Not covered, and accepted for now.
-
-| Gap | Why it is accepted |
+| Gap | Reason |
 |---|---|
-| A reply is not gated | The Issue asks for a push gate. Drive posts replies, and a reply gate can reuse the secrets patterns when drive needs it |
-| A protected head branch that is not the default | GitHub rejects the push itself |
-| `push.followTags` and `push.recurseSubmodules` | They would push tags or submodule commits beyond the verified sha, and need the user to have set them |
-| Test cases removed from a test file | Only whole-file deletion and added skips are detected |
-| A mode-only change, such as `chmod +x` | No hunk, so no line is read |
-| Anything that goes around the gate | A script cannot stop the model from calling `git push` itself, so drive's permission rules must |
-| The gate's own environment | `BABYSIT_PR_STATE` and `BABYSIT_REMOTE_BASE` replace the pull request snapshot and add an accepted origin, as `BABYSIT_PR_STATE` does for the other scripts. Whoever controls the environment controls the gate, and tests are the only intended user |
+| Replies | The gate covers pushes only |
+| Base merge handling | A merge that brings in a base workflow parks, which is safe |
+| Protected head branch | GitHub rejects the push |
+| Push settings for tags and submodules | They need a user setting |
+| Removed test cases | Only deleted files and added skips are read |
+| Mode-only changes | No line changes |
+| Calls that bypass the gate | Drive permission rules must block a direct push |
+| The gate environment | Test hooks replace the snapshot and the accepted origin |
 
 ## Decisions
 

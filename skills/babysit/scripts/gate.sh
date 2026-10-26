@@ -1,23 +1,17 @@
 #!/usr/bin/env bash
-# The pre-push gate. It decides, with no LLM judgment, whether a push may go out, and prints one verdict
-# with its reason as a single JSON line. A verdict it cannot determine is `refuse`.
-# Usage: gate.sh push <owner/repo> <pr> --session <token> --worktree <path> --start <sha> -- <push command>
-# The push command must be exactly `git push origin <sha>:refs/heads/<branch>`, where <sha> is the HEAD
-# the gate verified and <branch> is the pull request's head branch. The gate prints both, and pushing
-# that sha instead of HEAD keeps a commit made after the check from going out unchecked.
-# Output: {"verdict":"allow|park|refuse","reason":"...", ...}. An allow also carries head, branch, and
-# start, and a park also carries matches, the category and path of each hard stop it hit.
-# Exit: 0 allow, 10 park, 11 refuse, 2 usage error, 3 the lock belongs to another session.
-# Anything but 0 means "do not push". Exit 2 and 3 print no verdict.
-# BABYSIT_PR_STATE replaces pr-state.sh, and BABYSIT_REMOTE_BASE adds one accepted origin prefix; tests use both.
+# Pre-push gate. Prints one verdict as a JSON line.
+# gate.sh push <owner/repo> <pr> --session <token> --worktree <path> --start <sha> -- git push origin <sha>:refs/heads/<branch>
+# The command after -- must match exactly, and the sha is the HEAD this gate checked.
+# Exit 0 allow, 10 park, 11 refuse, 2 usage error, 3 lock lost. Anything but 0 means do not push.
+# Test hooks BABYSIT_PR_STATE and BABYSIT_REMOTE_BASE.
 set -uo pipefail
-# GIT_NO_REPLACE_OBJECTS: a refs/replace entry would show the gate other bytes than the push sends.
+# GIT_NO_REPLACE_OBJECTS makes git read the objects that get pushed.
 export LC_ALL=C GIT_TERMINAL_PROMPT=0 GIT_OPTIONAL_LOCKS=0 GIT_NO_REPLACE_OBJECTS=1
-# The caller's pathspec settings would change what ":(literal)<path>" matches, and an empty patch looks clean.
+# Caller pathspec settings would change how a literal path matches.
 unset GIT_LITERAL_PATHSPECS GIT_GLOB_PATHSPECS GIT_NOGLOB_PATHSPECS GIT_ICASE_PATHSPECS
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source-path=SCRIPTDIR disable=SC1091 # CI runs shellcheck without -x, so it cannot follow this.
+# shellcheck source-path=SCRIPTDIR disable=SC1091 # CI does not follow sources.
 source "${script_dir}/common.sh"
 
 PR_STATE="${BABYSIT_PR_STATE:-${script_dir}/pr-state.sh}"
@@ -25,8 +19,8 @@ PR_STATE="${BABYSIT_PR_STATE:-${script_dir}/pr-state.sh}"
 printed=0
 work=""
 
-# Any exit without a verdict, such as a failed command nobody checked, is a refusal.
-# shellcheck disable=SC2329 # Invoked by the EXIT trap below.
+# No verdict means refuse.
+# shellcheck disable=SC2329 # Called by the EXIT trap.
 on_exit() {
   [[ -z "${work}" ]] || rm -rf "${work}"
   if ((printed == 0)); then
@@ -49,7 +43,7 @@ lost() {
   exit 3
 }
 
-# Prints the verdict $1 with reason $2 and the JSON object $3 merged in, then exits with its code.
+# Prints verdict $1 with reason $2 and extra JSON $3, then exits with its code.
 emit() {
   local code extra="${3:-}"
   case "$1" in
@@ -108,11 +102,10 @@ ncmd=${#cmd[@]}
 ((ncmd > 0)) || usage "The push command must follow --"
 cd "${worktree}" || usage "Cannot enter the worktree"
 [[ "$(git rev-parse --is-inside-work-tree 2>/dev/null)" == true ]] || usage "Not a Git worktree: ${worktree}"
-# Git prints paths from the root of the checkout, so every later command runs from there, whichever
-# directory of it was given. A pathspec read from a subdirectory would match nothing.
+# Git prints paths from the checkout root, so run from there.
 cd "$(git rev-parse --show-toplevel)" || usage "Cannot enter the worktree"
 
-# The lock is how the gate knows this session still owns the pull request.
+# The lock shows this session owns the pull request.
 ledger_path="$(babysit_ledger_path "${repo}" "${pr}")" || usage "Not inside a Git repository"
 ledger="$(babysit_ledger_read "${ledger_path}")" || refuse "the ledger cannot be read"
 [[ "$(jq -r '.lock.token // ""' <<<"${ledger}")" == "${session}" ]] || lost "Lock is not held by this session"
@@ -126,22 +119,22 @@ lower() {
   printf '%s' "$1" | tr '[:upper:]' '[:lower:]'
 }
 
-# 0. The snapshot must describe the pull request that was asked about.
+# Snapshot is for the requested pull request
 [[ "$(lower "$(pf '.repo // ""')")" == "$(lower "${repo}")" && "$(pf '.number // 0')" == "${pr}" ]] ||
   refuse "the snapshot describes another pull request"
 
-# 1. The viewer is the author.
+# Viewer is the author
 viewer="$(lower "$(pf '.viewer // ""')")"
 author="$(lower "$(pf '.author // ""')")"
 [[ -n "${viewer}" && "${viewer}" == "${author}" ]] || refuse "the viewer is not the pull request author"
 
-# 2. The branch lives in this repository.
+# Head branch is in this repository
 [[ "$(pf '.isCrossRepository')" == false ]] || refuse "the pull request comes from a fork or its origin is unknown"
 
-# 3. The pull request is open.
+# Pull request is open
 [[ "$(pf '.state // ""')" == OPEN ]] || refuse "the pull request is not open"
 
-# 4. The head branch is not the default branch, where a push would reach the repository without review.
+# Head branch is not the default branch
 branch="$(pf '.headRef // ""')"
 if [[ -z "${branch}" || "${branch}" == -* ]] || ! git check-ref-format "refs/heads/${branch}"; then
   refuse "the head branch name is unusable"
@@ -151,7 +144,7 @@ default_branch="$(jq -r '.default_branch // ""' <<<"${repo_json}" 2>/dev/null)"
 [[ -n "${default_branch}" ]] || refuse "could not read the default branch from GitHub"
 [[ "${branch}" != "${default_branch}" ]] || refuse "the head branch is the default branch"
 
-# 5. origin, for fetching and pushing, is the pull request's repository.
+# origin is the pull request repository
 norm_url() {
   lower "$1" | sed -E -e 's#^[^/@:]+@([^:/]+):#ssh://\1/#' -e 's#^([a-z+]+://)[^/@]*@#\1#' -e 's#/+$##' -e 's#\.git$##'
 }
@@ -172,18 +165,18 @@ check_origin() {
 check_origin
 check_origin --push
 
-# 6. The remote branch still sits on the start commit, so the push is a fast-forward of it.
+# Remote branch is still at the start commit
 remote_out="$(git ls-remote --heads origin "refs/heads/${branch}" 2>/dev/null)" || refuse "could not read the remote branch"
 remote_head="$(awk -v ref="refs/heads/${branch}" '$2 == ref {print $1}' <<<"${remote_out}")"
 [[ "${remote_head}" == "${start}" ]] || refuse "the remote branch moved or was deleted since the start commit"
 
-# 7. HEAD descends from the start commit and adds something.
+# HEAD descends from the start commit and adds one
 head="$(git rev-parse --verify -q 'HEAD^{commit}')" || refuse "HEAD cannot be read"
 git cat-file -e "${start}^{commit}" 2>/dev/null || refuse "the start commit is not in the worktree"
 [[ "${head}" != "${start}" ]] || refuse "nothing to push: HEAD is the start commit"
 git merge-base --is-ancestor "${start}" "${head}" || refuse "HEAD does not descend from the start commit"
 
-# 8. The push command is exactly the verified one: no force flag, no + refspec, no other target.
+# Push command matches exactly
 want=(git push origin "${head}:refs/heads/${branch}")
 same=1
 ((ncmd == ${#want[@]})) || same=0
@@ -192,9 +185,7 @@ for ((i = 0; same == 1 && i < ncmd; i++)); do
 done
 ((same == 1)) || refuse "the push command differs from the verified one: ${want[*]}"
 
-# 9. No hard stop matches. Paths and added lines are inspected commit by commit, because a secret that one
-# commit adds and the next removes still lands in the remote history. Every git read must succeed, since a
-# diff that failed to print would otherwise look like a diff with nothing in it.
+# Hard stops are read one commit at a time, because a removed secret stays in history, and every git read must succeed.
 work="$(mktemp -d)" || refuse "could not create a work directory"
 findings="${work}/findings"
 : >"${findings}"
@@ -203,15 +194,14 @@ note() {
   printf '%s\t%s\n' "$1" "$2" >>"${findings}"
 }
 
-# Paths, in lower case: a CI or execution config, a dependency manifest or lockfile, a test file, and a
-# file that is named like a secret.
+# Path patterns, matched in lower case
 RE_CI='^\.github/|^\.gitlab-ci\.ya?ml$|^\.gitlab/|^\.circleci/|^\.buildkite/|^\.travis\.ya?ml$|^\.drone\.ya?ml$|^\.woodpecker|^\.?appveyor\.ya?ml$|^azure-pipelines|^\.azure-pipelines/|^bitbucket-pipelines\.ya?ml$|^cloudbuild\.ya?ml$|^\.?codecov\.ya?ml$|(^|/)jenkinsfile|(^|/)(gnu)?makefile$|\.mk$|(^|/)dockerfile|\.dockerfile$|(^|/)(docker-)?compose[^/]*\.ya?ml$|(^|/)justfile$|(^|/)taskfile\.ya?ml$|(^|/)prek\.toml$|(^|/)\.pre-commit-config\.ya?ml$|(^|/)lefthook[^/]*\.ya?ml$|^\.husky/|^\.githooks/|(^|/)\.envrc$|^\.devcontainer/|^\.claude/|^\.codex/|^\.opencode/|^\.cursor/|^\.agents/|^\.mcp\.json$|(^|/)(agents|claude)\.md$|(^|/)tox\.ini$|(^|/)noxfile\.py$|(^|/)\.?mise\.toml$|(^|/)\.tool-versions$'
 RE_DEPS='(^|/)(package(-lock)?\.json|npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.ya?ml|pnpm-workspace\.ya?ml|bun\.lockb?|\.yarnrc(\.ya?ml)?|\.npmrc|\.pypirc|pip\.conf|go\.(mod|sum|work|work\.sum)|cargo\.(toml|lock)|pyproject\.toml|poetry\.lock|uv\.lock|pipfile(\.lock)?|setup\.(py|cfg)|gemfile(\.lock)?|composer\.(json|lock)|pom\.xml|build\.gradle(\.kts)?|settings\.gradle(\.kts)?|gradle\.properties|gradle-wrapper\.(properties|jar)|mix\.(exs|lock)|package\.swift|package\.resolved|podfile(\.lock)?|cartfile(\.resolved)?|pubspec\.(ya?ml|lock)|flake\.(nix|lock)|deno\.(jsonc?|lock)|brewfile(\.lock\.json)?|renovate\.json5?|nuget\.config|directory\.(packages|build)\.(props|targets)|packages\.lock\.json|\.gitmodules)$|(^|/)requirements[^/]*\.(txt|in)$|(^|/)constraints[^/]*\.txt$|\.(gemspec|csproj|fsproj|vbproj)$|^vendor/|/vendor/|(^|/)node_modules/|^third_party/'
 RE_TESTFILE='(^|/)(tests?|__tests__|specs?|e2e|spec_helper)/|(^|/)[^/]*[._-](test|spec)\.[a-z0-9]+$|(^|/)test_[^/]*\.[a-z0-9]+$|_test\.[a-z0-9]+$|\.bats$|(^|/)[^/]*tests?\.(java|kt|cs|scala|swift)$|(^|/)conftest\.py$'
 RE_SECRETFILE='(^|/)\.env(\..+)?$|(^|/)\.netrc$|(^|/)\.git-credentials$|(^|/)id_(rsa|dsa|ecdsa|ed25519)$|(^|/)credentials(\.json)?$|\.(pem|key|p12|pfx|jks|keystore|kdbx)$|(^|/)secrets?\.(ya?ml|json|toml|env)$'
 RE_SECRETFILE_OK='\.env\.(example|sample|template|dist)$'
 
-# Added lines, matched with grep -E. A quote class is built from variables to keep the patterns readable.
+# Line patterns for grep -E
 dq='"'
 sq="'"
 bt='`'
@@ -226,7 +216,7 @@ RE_SKIP='(^|[^[:alnum:]_])(it|test|describe|context|suite|specify|scenario)\.(sk
 RE_SKIP_BATS='^[[:space:]]*skip([[:space:]]|$)'
 RE_COVERAGE='fail[_-]?under|coverage[_-]?threshold|(minimum|min|required)[_-]?coverage'
 
-# Succeeds when grep with the options $1 finds the pattern $2 in file $3; any grep error is a refusal.
+# Returns the grep status, and refuses on a grep error.
 has() {
   local rc
   grep "$1" -e "$2" "$3" >/dev/null 2>&1
@@ -235,22 +225,20 @@ has() {
   return "${rc}"
 }
 
-# Records the secrets in the text file $2 as found in $1, which is what the finding names.
+# Notes secrets found in file $2 under the name $1.
 scan_secrets() {
   has -Eq "${RE_KEYHDR}" "$2" && note secrets "$1"
   has -Eq "${RE_TOKEN}" "$2" && note secrets "$1"
   has -Eiq "${RE_ASSIGN}" "$2" && note secrets "$1"
 }
 
-# Every diff the gate reads. No rename detection, so a rename is a deletion and an addition. No external
-# or text-converting driver, so the lines read are the lines pushed. No submodule is ignored, because a
-# submodule that .gitmodules declares as ignored would otherwise drop out of the diff altogether.
+# Diff flags. No renames, no external or text drivers, no ignored submodules.
 DIFF_FLAGS=(--no-color --no-renames --no-ext-diff --no-textconv --ignore-submodules=none)
 
-# Git knows this tree without storing it, and with a sha256 repository the empty tree has another name.
+# Empty tree id of this repository.
 EMPTY_TREE="$(git hash-object -t tree /dev/null 2>/dev/null)" || refuse "could not name the empty tree"
 
-# Records every hard stop that the change from $1 to $2 hits.
+# Notes every hard stop in the change from $1 to $2.
 scan_diff() {
   local old="$1" new="$2" raw="${work}/raw" patch="${work}/patch" added="${work}/added"
   local meta path lower_path oldmode newmode status rc
@@ -304,7 +292,7 @@ scan_diff() {
 git rev-list --parents --reverse "${start}..${head}" >"${work}/commits" 2>/dev/null || refuse "could not list the new commits"
 while read -r commit parents; do
   [[ -n "${commit}" ]] || continue
-  # A root commit, such as unrelated history that a merge brought in, is diffed against the empty tree.
+  # A root commit is compared with the empty tree.
   [[ -n "${parents}" ]] || parents="${EMPTY_TREE}"
   for parent in ${parents}; do
     scan_diff "${parent}" "${commit}"

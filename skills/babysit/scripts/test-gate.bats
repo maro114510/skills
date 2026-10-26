@@ -1,8 +1,6 @@
 #!/usr/bin/env bats
-# Tests for gate.sh. Each case builds a bare "GitHub" repository and a clone under a temp directory,
-# serves the pull request from a stub pr-state, and answers the gate's two REST reads from a stub gh,
-# so no test calls GitHub. A secret-like fixture is assembled at run time so no literal one is committed.
-# shellcheck disable=SC2292 # bats fails a test on a mid-test `[[ ]]` only under bash 4.1+; `[ ]` works on every bash.
+# Tests for gate.sh. No test calls GitHub. Secret-like fixtures are built at run time.
+# shellcheck disable=SC2292 # Use [ ] so bats fails on every bash.
 
 setup() {
   scripts="${BATS_TEST_DIRNAME}"
@@ -10,7 +8,7 @@ setup() {
   tmp="${BATS_TEST_TMPDIR}"
   token="tok-1"
 
-  # Keep the developer's own Git configuration out of every case.
+  # Ignore the user Git configuration
   export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
   export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.invalid
   export BABYSIT_REMOTE_BASE="file://${tmp}/srv"
@@ -33,14 +31,14 @@ setup() {
   git push -q origin feat/x
   start="$(git rev-parse HEAD)"
 
-  # The pull request as pr-state would print it.
+  # The pull request as pr-state prints it
   clean='{"repo":"o/r","number":7,"url":"https://github.com/o/r/pull/7","state":"OPEN","isDraft":false,
     "author":"me","viewer":"me","isCrossRepository":false,"baseRef":"main","headRef":"feat/x","head":"aaa"}'
   set_snap '.'
   printf '#!/usr/bin/env bash\n[ -e "%s/pr-state-fails" ] && exit 1\ncat "%s/snap.json"\n' "${tmp}" "${tmp}" >"${tmp}/pr-state"
   chmod +x "${tmp}/pr-state"
 
-  # gh serves the repository, whose default branch the gate reads.
+  # gh serves the default branch
   printf '{"default_branch":"main"}\n' >"${tmp}/repo.json"
   printf '#!/usr/bin/env bash\n[ -e "%s/gh-fails" ] && exit 1\ncat "%s/repo.json"\n' "${tmp}" "${tmp}" >"${tmp}/bin/gh"
   chmod +x "${tmp}/bin/gh"
@@ -49,12 +47,12 @@ setup() {
   bash "${scripts}/ledger.sh" start o/r 7 "${token}" >/dev/null
 }
 
-# Writes the clean pull request after the jq edit $1.
+# Writes the pull request after the jq edit $1.
 set_snap() {
   jq -c "$1" <<<"${clean}" >"${tmp}/snap.json"
 }
 
-# Commits a file with the content $2 and message $3 in the clone.
+# Commits file $1 with content $2 and message $3.
 commit_file() {
   mkdir -p "$(dirname "$1")"
   printf '%s\n' "$2" >"$1"
@@ -62,12 +60,12 @@ commit_file() {
   git commit -q -m "${3:-change}"
 }
 
-# Runs the gate for a push whose command is the one it would verify for HEAD.
+# Runs the gate with the exact command for HEAD.
 gate_push() {
   run_gate git push origin "$(git rev-parse HEAD):refs/heads/feat/x"
 }
 
-# Runs the gate for a push with the command given as arguments.
+# Runs the gate with the command given.
 run_gate() {
   run bash "${gate}" push o/r 7 --session "${token}" --worktree "${tmp}/wt" --start "${start}" -- "$@"
 }
@@ -83,7 +81,7 @@ expect() {
   fi
 }
 
-# Expects a refuse verdict whose reason contains $1.
+# Expects refuse with $1 in the reason.
 expect_refuse() {
   expect "${status}" 11
   expect "$(field .verdict)" refuse
@@ -93,13 +91,13 @@ expect_refuse() {
   }
 }
 
-# Pushes HEAD to the remote branch and makes it the new start, as a session that began from it would.
+# Pushes HEAD and makes it the new start.
 publish() {
   git push -q origin HEAD:refs/heads/feat/x
   start="$(git rev-parse HEAD)"
 }
 
-# Expects a park verdict with a match of category $1, and of path $2 when given.
+# Expects park with a match for category $1 and path $2.
 expect_park() {
   expect "${status}" 10
   expect "$(field .verdict)" park
@@ -110,7 +108,7 @@ expect_park() {
   }
 }
 
-# Strings that look like secrets, assembled here so no literal one is committed.
+# Secret-like strings built at run time.
 github_token() {
   printf 'gh%s%s' 'p_' "$(printf 'A%.0s' $(seq 1 36))"
 }
@@ -118,7 +116,7 @@ aws_key() {
   printf 'AK%s%s' 'IA' "$(printf 'B%.0s' $(seq 1 16))"
 }
 
-# Commits a file to the base branch, publishes it, and returns to the feature branch.
+# Commits file $1 to the base branch and returns.
 base_commit() {
   git switch -q main
   commit_file "$1" "$2" "base change"
@@ -126,7 +124,7 @@ base_commit() {
   git switch -q feat/x
 }
 
-# Expects exit 2 with a usage message for the gate arguments given.
+# Expects exit 2 and a usage message.
 expect_usage() {
   run bash "${gate}" "$@"
   expect "${status}" 2
@@ -320,7 +318,7 @@ expect_usage() {
     "git push origin"
   )
   for variant in "${variants[@]}"; do
-    # shellcheck disable=SC2086 # the variant is split into words on purpose.
+    # shellcheck disable=SC2086 # Split into words on purpose.
     run_gate ${variant}
     echo "variant: ${variant}" >&2
     expect_refuse "command"
