@@ -394,6 +394,18 @@ expect_usage() {
   expect_park deps sub
 }
 
+@test "parks a moved submodule pointer even when the submodule file tells Git to ignore it" {
+  git update-index --add --cacheinfo "160000,${start},sub"
+  printf '[submodule "sub"]\n\tpath = sub\n\turl = https://example.invalid/x.git\n\tignore = all\n' >.gitmodules
+  git add -- .gitmodules
+  git commit -q -m "add sub"
+  publish
+  git update-index --cacheinfo "160000,$(git rev-parse main),sub"
+  git commit -q -m "move only the pointer"
+  gate_push
+  expect_park deps sub
+}
+
 @test "parks the deletion of a test file" {
   commit_file tests/login_test.go "func TestLogin() {}"
   publish
