@@ -518,6 +518,15 @@ expect_usage() {
   done
 }
 
+@test "parks a secret when the worktree given is a subdirectory of the checkout" {
+  commit_file docs/guide.md "Run the tests."
+  publish
+  commit_file docs/secret-note.txt "$(github_token)"
+  run bash "${gate}" push o/r 7 --session "${token}" --worktree "${tmp}/wt/docs" --start "${start}" -- \
+    git push origin "$(git rev-parse HEAD):refs/heads/feat/x"
+  expect_park secrets docs/secret-note.txt
+}
+
 @test "refuses before parking when an allow condition fails" {
   commit_file .github/workflows/ci.yml "name: ci"
   set_snap '.isCrossRepository = true'
