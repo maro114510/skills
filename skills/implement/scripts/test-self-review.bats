@@ -323,6 +323,25 @@ run_range_stub() {
   has_line "ARGS: -p /code-review ${mb}..HEAD --permission-mode plan --no-session-persistence"
 }
 
+@test "a base at the first pass's HEAD narrows the review to the fix delta" {
+  local repo bin first
+  repo="$(new_range_repo)"
+  first="$(git -C "${repo}" rev-parse HEAD)"
+  echo fix >>"${repo}/tracked.txt"
+  git -C "${repo}" -c core.hooksPath=/dev/null -c user.name=t -c user.email=t@t commit -q -am fix
+  bin="$(mktemp -d "${work}/bin.XXXXXX")"
+  # shellcheck disable=SC2016 # expanded by the stub, not here
+  printf '#!/bin/sh\necho "ARGS: $*"\n' >"${bin}/claude"
+  chmod +x "${bin}/claude"
+  run env TMPDIR="${work}" PATH="${bin}:${PATH}" bash "${target}" claude "${repo}" "${first}"
+  [ "${status}" -eq 0 ]
+  has_line "ARGS: -p /code-review ${first}..HEAD --permission-mode plan --no-session-persistence"
+  # The first pass over the same repo still starts at the merge base with main.
+  run env TMPDIR="${work}" PATH="${bin}:${PATH}" bash "${target}" claude "${repo}" main
+  [ "${status}" -eq 0 ]
+  has_line "ARGS: -p /code-review $(git -C "${repo}" merge-base main HEAD)..HEAD --permission-mode plan --no-session-persistence"
+}
+
 @test "codex reviews against the merge base instead of the uncommitted changes" {
   # Codex writes its review to the -o file, so the stub echoes its argv there.
   # shellcheck disable=SC2016 # expanded by the stub, not here
