@@ -2,10 +2,10 @@ package coord
 
 import "github.com/maro114510/skills/oe/internal/state"
 
-// RecordPublishIntent records, before the push, the pair about to be published.
-// It needs an approval bound to exactly that pair, so nothing unreviewed is ever recorded for pushing.
-// An earlier publish of any phase is replaced and its pull request kept, so a repaired head or a pair
-// that went stale after a crash re-publishes over it.
+// RecordPublishIntent records the pair about to be published, before the push.
+// It needs an approval bound to exactly that pair, so nothing unreviewed is recorded for pushing.
+// An earlier publish of any phase is replaced and its pull request kept.
+// So a repaired head, or a pair that went stale after a crash, publishes over it.
 type RecordPublishIntent struct {
 	// SHA and Base are the approval's reviewed_sha and verified_base.
 	SHA  string
@@ -37,8 +37,8 @@ func (t RecordPublishIntent) apply(in applyInput) (*state.Issue, error) {
 	return st, nil
 }
 
-// RecordPublished moves a publish forward after the push: to pushed, then to linked once the
-// pull request is known.
+// RecordPublished moves a publish forward after the push.
+// It goes to pushed first, then to linked once the pull request is known.
 type RecordPublished struct {
 	// PR is the pull request number, or 0 to record only that the push landed.
 	PR int

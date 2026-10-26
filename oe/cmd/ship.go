@@ -12,8 +12,8 @@ import (
 	"github.com/maro114510/skills/oe/internal/ship"
 )
 
-// The ship subcommand publishes an approved Issue, contract §18. Like every coordination
-// subcommand it refuses --snapshot before any call, takes the Epic's lock, and confirms the lease.
+// The ship subcommand publishes an approved Issue, contract §18.
+// Like every coordination subcommand it refuses --snapshot before any call, takes the Epic's lock, and confirms the lease.
 // It is one of the only two subcommands that may push or open a pull request.
 
 func newShipCmd(env Env, g *globals) *cobra.Command {

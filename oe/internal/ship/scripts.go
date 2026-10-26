@@ -26,8 +26,8 @@ type Scripts struct {
 	Refs   string
 }
 
-// ResolveScripts finds both scripts in the create-pr skill's scripts directory. The directory is
-// an absolute path, since the scripts run from the worktree.
+// ResolveScripts finds both scripts in the create-pr skill's scripts directory.
+// The directory is an absolute path, since the scripts run from the worktree.
 func ResolveScripts(dir string) (Scripts, error) {
 	if !filepath.IsAbs(dir) {
 		return Scripts{Create: "", Refs: ""}, exitcode.New(exitcode.Refused, "--create-pr-scripts must be the absolute path of the create-pr skill's scripts directory")

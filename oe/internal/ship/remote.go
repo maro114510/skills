@@ -20,9 +20,9 @@ const (
 	RemoteExternal Remote = "external"
 )
 
-// Expect classifies the remote head against the recorded publish, contract §8. An empty remote
-// means no branch.
-//   - With no record, only an absent branch is expected: any other is an external push.
+// Expect classifies the remote head against the recorded publish, contract §8.
+// An empty remote means no branch.
+//   - With no record only an absent branch is expected, and any other is an external push.
 //   - A publish in intent explains its sha, its prev_sha, and an absent branch when it recorded none.
 //   - A pushed or linked publish explains only its sha, since the push it names landed.
 func Expect(p *state.Publish, remote string) Remote {

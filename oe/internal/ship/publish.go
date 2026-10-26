@@ -41,7 +41,8 @@ type Result struct {
 	Pushed  bool `json:"pushed"`
 	Created bool `json:"created"`
 	Resumed bool `json:"resumed"`
-	// Link is ok or failed when this run linked the pull request to its Issues, and empty when it did not, as for a pair already published.
+	// Link is ok or failed when this run linked the pull request to its Issues.
+	// It is empty when this run did not, as for a pair already published.
 	Link     string             `json:"link"`
 	Findings []scan.Finding     `json:"findings"`
 	Notes    []coord.NoteResult `json:"notes"`
@@ -82,7 +83,7 @@ type Request struct {
 	Nits   string
 }
 
-// flow is one publish: the Issue, the approval it ships, and what the run has learned so far.
+// flow is one publish, with the Issue, the approval it ships, and what the run has learned so far.
 type flow struct {
 	d   Deps
 	r   Request
@@ -94,7 +95,8 @@ type flow struct {
 	title, body string
 	// resuming says an earlier run recorded an intent for exactly this pair.
 	resuming bool
-	// inFlight says an intent is recorded for this pair by now, whether this run or an earlier one recorded it, so a failure leaves a publish in flight.
+	// inFlight says an intent is recorded for this pair, by this run or an earlier one.
+	// A failure then leaves a publish in flight.
 	inFlight bool
 }
 
@@ -145,7 +147,7 @@ func (f *flow) refused(format string, args ...any) error {
 	return exitcode.New(exitcode.Refused, fmt.Sprintf(format, args...))
 }
 
-// enter checks what the run starts from: an approval, the worker report of this dispatch, and a standing freeze check.
+// enter checks what the run starts from, which is an approval, the worker report of this dispatch, and the freeze check.
 // A pair already linked has nothing left to publish and ends here.
 func (f *flow) enter(ctx context.Context) (bool, error) {
 	n, st := f.r.Issue, f.st
@@ -182,7 +184,8 @@ func (f *flow) base(ctx context.Context) (string, error) {
 	return integrate.Rev(ctx, f.d.Client, f.r.Worktree, "refs/remotes/origin/"+f.d.In.DefaultBranch)
 }
 
-// fresh is the verdict freshness gate: the worktree is at reviewed_sha and the default branch at verified_base.
+// fresh is the verdict freshness gate.
+// The worktree must be at reviewed_sha and the default branch at verified_base.
 func (f *flow) fresh(ctx context.Context) error {
 	head, err := f.head(ctx)
 	if err != nil {

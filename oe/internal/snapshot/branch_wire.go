@@ -15,10 +15,9 @@ const branchPullsQuery = `query($owner: String!, $name: String!, $branch: String
   }
 }`
 
-// ReadBranchPRs reads every pull request whose head is the branch of this repository, in any
-// state. A pull request from a fork that happens to use the same branch name is not one.
-// The listing is complete or it is an error, so a caller never opens a second pull request on a
-// page it could not read.
+// ReadBranchPRs reads every pull request whose head is the branch of this repository, in any state.
+// A pull request from a fork that uses the same branch name is not one.
+// The listing is complete or it is an error, so a caller never opens a second pull request on a page it could not read.
 func ReadBranchPRs(ctx context.Context, c *gh.Client, repo, branch string) ([]PR, error) {
 	out := []PR{}
 	err := eachPage("the pull requests of "+branch, func(after string) (PageInfo, bool, error) {
