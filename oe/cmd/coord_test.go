@@ -75,6 +75,7 @@ func (w *coordWorld) put(t *testing.T, issue int, s protocol.State) {
 func coordCommands(token string) map[string][]string {
 	tok := []string{"--lease-token", token}
 	implement, _ := filepath.Abs("../../skills/implement/SKILL.md")
+	createPR, _ := filepath.Abs("../../skills/create-pr/scripts")
 	return map[string][]string{
 		"lease end":           append([]string{"lease", "end"}, tok...),
 		"note post":           append([]string{"note", "post", "--on", "7", "--key", "start:7:feat/issue-7"}, tok...),
@@ -96,6 +97,8 @@ func coordCommands(token string) map[string][]string {
 			"--checks-set", "testdata/checks-set.json"}, tok...),
 		"review verdict": append([]string{"review", "verdict", "--issue", "7", "--worktree", "/w",
 			"--checks-set", "testdata/checks-set.json"}, tok...),
+		"ship publish": append([]string{"ship", "publish", "--issue", "7", "--worktree", "/w", "--checks-set", "testdata/checks-set.json",
+			"--title", "Add w.txt", "--report-file", "testdata/worker-done.md", "--create-pr-scripts", createPR}, tok...),
 	}
 }
 
