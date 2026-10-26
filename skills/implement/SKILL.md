@@ -202,10 +202,10 @@ Never split for any of these:
 - A test from the code it drives.
 - A new API from its first usage.
 
-The plan lists the units in the order structure change, then behavior change, then cleanup. Each unit takes one line:
+The plan lists the units in the order structure change, then behavior change, then cleanup, and a unit never precedes one it depends on. Each unit takes one line:
 
 ```
-<n>. <one sentence: what changes> | depends on: <unit numbers, or none> | separate because: <reason number and why>
+<n>. <one sentence: what changes> | depends on: <unit numbers, or none> | separate because: <every reason number that applies, and why>
 ```
 
 A change with no reason to split is one unit and needs only the sentence.
