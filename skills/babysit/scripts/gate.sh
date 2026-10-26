@@ -12,7 +12,8 @@
 # Anything but 0 means "do not push" or "do not post". Exit 2 and 3 print no verdict.
 # BABYSIT_PR_STATE replaces pr-state.sh, and BABYSIT_REMOTE_BASE adds one accepted origin prefix; tests use both.
 set -uo pipefail
-export LC_ALL=C GIT_TERMINAL_PROMPT=0 GIT_OPTIONAL_LOCKS=0
+# GIT_NO_REPLACE_OBJECTS: a refs/replace entry would show the gate other bytes than the push sends.
+export LC_ALL=C GIT_TERMINAL_PROMPT=0 GIT_OPTIONAL_LOCKS=0 GIT_NO_REPLACE_OBJECTS=1
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source-path=SCRIPTDIR disable=SC1091 # CI runs shellcheck without -x, so it cannot follow this.
@@ -353,6 +354,21 @@ check_origin() {
 }
 check_origin
 check_origin --push
+
+# 5b. Git itself must not be set to push more than the one verified commit. push.followTags sends tags,
+# which can start a release workflow, and push.recurseSubmodules sends submodule commits to their remotes.
+# The push command is checked exactly, so these settings are the only way left to widen it.
+follow_tags="$(git config --type=bool --get push.followTags 2>/dev/null)"
+rc=$?
+((rc <= 1)) || refuse "push.followTags cannot be read"
+[[ "${follow_tags:-false}" == false ]] || refuse "Git is configured to push tags with the branch (push.followTags)"
+recurse="$(git config --get push.recurseSubmodules 2>/dev/null)"
+rc=$?
+((rc <= 1)) || refuse "push.recurseSubmodules cannot be read"
+case "${recurse}" in
+"" | no | check) ;;
+*) refuse "Git is configured to push submodules with the branch (push.recurseSubmodules)" ;;
+esac
 
 # 6. The remote branch still sits on the start commit, so the push is a fast-forward of it.
 remote_out="$(git ls-remote --heads origin "refs/heads/${branch}" 2>/dev/null)" || refuse "could not read the remote branch"
