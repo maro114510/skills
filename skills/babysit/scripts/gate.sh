@@ -259,10 +259,10 @@ scan_diff() {
       note deps "${path}"
       continue
     fi
+    # A secret file is named for every status, a deleted one included.
+    [[ "${lower_path}" =~ ${RE_SECRETFILE} && ! "${lower_path}" =~ ${RE_SECRETFILE_OK} ]] && note secrets "${path}"
     if [[ "${status}" == D ]]; then
       [[ "${lower_path}" =~ ${RE_TESTFILE} ]] && note tests "${path}"
-    else
-      [[ "${lower_path}" =~ ${RE_SECRETFILE} && ! "${lower_path}" =~ ${RE_SECRETFILE_OK} ]] && note secrets "${path}"
     fi
 
     git diff -U0 "${DIFF_FLAGS[@]}" "${old}" "${new}" -- ":(literal)${path}" >"${patch}" </dev/null ||

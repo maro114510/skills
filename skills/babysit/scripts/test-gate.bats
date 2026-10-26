@@ -483,6 +483,29 @@ expect_usage() {
   done
 }
 
+@test "parks the deletion of a file that is named like a secret" {
+  local entry
+  for entry in "$(printf '.%s.production' env)" certs/server.pem config/credentials.json; do
+    git reset -q --hard "${start}"
+    commit_file "${entry}" "X=1"
+    publish
+    git rm -q "${entry}"
+    git commit -q -m "drop ${entry}"
+    gate_push
+    expect_park secrets "${entry}"
+  done
+}
+
+@test "allows the deletion of a template that is named like a secret file" {
+  commit_file "$(printf '.%s.example' env)" "X=1"
+  publish
+  git rm -q "$(printf '.%s.example' env)"
+  git commit -q -m "drop template"
+  gate_push
+  expect "${status}" 0
+  expect "$(field .verdict)" allow
+}
+
 @test "parks a secret that an earlier commit added and a later commit removed" {
   commit_file leak.txt "$(github_token)"
   git rm -q leak.txt
