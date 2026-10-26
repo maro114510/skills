@@ -6,6 +6,7 @@ on:
     paths:
       - '**.sh'
       - '**.bats'
+      - 'tests/implement-repro/**'
       - '.shellcheckrc'
       - '.github/workflows/lint-shell.yml'
       # The oe wrapper has no .sh extension.
@@ -20,6 +21,7 @@ on:
     paths:
       - '**.sh'
       - '**.bats'
+      - 'tests/implement-repro/**'
       - '.shellcheckrc'
       - '.github/workflows/lint-shell.yml'
       # The oe wrapper has no .sh extension.
