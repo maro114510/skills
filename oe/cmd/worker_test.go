@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -19,7 +20,7 @@ type mixed struct {
 }
 
 func (m mixed) Run(ctx context.Context, prog runner.Program, args []string) (runner.Result, error) {
-	if prog != runner.Git || len(args) < 2 || args[0] != "-C" && args[0] != "-c" {
+	if prog != runner.Git || len(args) < 2 || !slices.Contains(args, "-C") {
 		return m.fake.Run(ctx, prog, args)
 	}
 	if strings.Contains(strings.Join(args, " "), "remote get-url origin") {
