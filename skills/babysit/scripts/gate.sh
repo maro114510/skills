@@ -209,8 +209,8 @@ quote="[${dq}${sq}${bt}]"
 RE_KEYHDR='-----BEGIN [A-Z ]*PRIVATE KEY'
 RE_TOKEN='(^|[^[:alnum:]])(gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{22,}|AKIA[0-9A-Z]{16}|ASIA[0-9A-Z]{16}|xox[abprs]-[A-Za-z0-9-]{10,}|sk-[A-Za-z0-9_-]{20,}|[sr]k_live_[A-Za-z0-9]{16,}|AIza[0-9A-Za-z_-]{35}|glpat-[A-Za-z0-9_-]{20,}|npm_[A-Za-z0-9]{36}|SG\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}|eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})'
 RE_ASSIGN="(key|token|secret|passw(or)?d|credentials?)[A-Za-z0-9_]*${quote}?[[:space:]]*(:=|=|:)[[:space:]]*${quote}[^${dq}${sq}${bt}\$[:space:]{<(][^${dq}${sq}${bt}]{5,}${quote}"
-# An unquoted literal that ends the line, with punctuation allowed. A reference, a call, a bracketed value, and prose after the value do not match.
-RE_ASSIGN_BARE='(key|token|secret|passw(or)?d|credentials?)[A-Za-z0-9_]*[[:space:]]*(:=|=|:)[[:space:]]*[A-Za-z0-9+/_.~@!#%^&*?|:,-][A-Za-z0-9+/_.=~@!#%^&*?|:,-]{7,}[;]?[[:space:]]*$'
+# An unquoted literal that ends the line or a # comment, with punctuation allowed. A reference, a call, a bracketed value, and prose after the value do not match.
+RE_ASSIGN_BARE='(key|token|secret|passw(or)?d|credentials?)[A-Za-z0-9_]*[[:space:]]*(:=|=|:)[[:space:]]*[A-Za-z0-9+/_.~@!#%^&*?|:,-][A-Za-z0-9+/_.=~@!#%^&*?|:,-]{7,};?[[:space:]]*(#.*)?$'
 RE_URL='(https?|ftp|ssh|sftp|git|wss?)://|(^|[^[:alnum:]_.-])git@[A-Za-z0-9.-]+:'
 RE_NETCMD='(^|[^[:alnum:]_.-])(curl|wget|nc|ncat|netcat|telnet|ssh|scp|sftp|rsync)([^[:alnum:]_-]|$)'
 RE_NETAPI='(^|[^[:alnum:]_.])fetch[[:space:]]*\(|axios|XMLHttpRequest|requests\.(get|post|put|patch|delete|head|request|session)|urllib|httpx|aiohttp|http\.(Get|Post|Head|PostForm|NewRequest|DefaultClient)|net/http|HttpClient|Net::HTTP|URLSession|okhttp|reqwest|WebSocket|socket\.(connect|create_connection)|net\.Dial|Invoke-(WebRequest|RestMethod)'

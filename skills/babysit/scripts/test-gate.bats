@@ -456,7 +456,7 @@ expect_usage() {
   local entry path content
   for entry in "app.env.txt|AWS_SECRET_ACCESS_KEY=abcdefgh12345" "cfg.yml|password: hunter2hunter2" \
     "cfg.toml|api_token = abcdefgh12345" "run.sh|export DB_PASSWORD=abcdefgh12345;" \
-    "p.env.txt|PASSWORD=P@ssw0rd!" "q.env.txt|DB_SECRET=ab#cd%ef^gh&ij*kl"; do
+    "c.ini|client_secret = abcdefgh1234 # prod" "p.env.txt|PASSWORD=P@ssw0rd!" "q.env.txt|DB_SECRET=ab#cd%ef^gh&ij*kl"; do
     path="${entry%%|*}"
     content="${entry#*|}"
     git reset -q --hard "${start}"
