@@ -102,14 +102,24 @@ func TestForbiddenCombinationsNeverValidate(t *testing.T) {
 			st.ConsecutiveFailures = 2
 			return st
 		},
-		"publish intent without approval": func() *state.Issue {
+		"publish without a sha": func() *state.Issue {
 			st := newIssue()
-			st.Publish = &state.Publish{SHA: "h1", PrevSHA: "", Base: "b1", Branch: "feat/issue-7", PR: 0, Phase: coord.PublishIntent}
+			st.Publish = &state.Publish{SHA: "", PrevSHA: "", Base: "b1", Branch: "feat/issue-7", PR: 0, Phase: coord.PublishIntent}
 			return st
 		},
-		"publish pushed on another sha": func() *state.Issue {
+		"publish on another branch": func() *state.Issue {
 			st := approved("h1", "b1")
-			st.Publish = &state.Publish{SHA: "h0", PrevSHA: "", Base: "b1", Branch: "feat/issue-7", PR: 0, Phase: coord.PublishPushed}
+			st.Publish = &state.Publish{SHA: "h1", PrevSHA: "", Base: "b1", Branch: "feat/issue-9", PR: 0, Phase: coord.PublishPushed}
+			return st
+		},
+		"linked publish without a pr": func() *state.Issue {
+			st := newIssue()
+			st.Publish = &state.Publish{SHA: "h1", PrevSHA: "", Base: "b1", Branch: "feat/issue-7", PR: 0, Phase: coord.PublishLinked}
+			return st
+		},
+		"publish in an unknown phase": func() *state.Issue {
+			st := newIssue()
+			st.Publish = &state.Publish{SHA: "h1", PrevSHA: "", Base: "b1", Branch: "feat/issue-7", PR: 0, Phase: "sent"}
 			return st
 		},
 	}
@@ -122,6 +132,32 @@ func TestForbiddenCombinationsNeverValidate(t *testing.T) {
 	linked.Publish = &state.Publish{SHA: "h0", PrevSHA: "", Base: "b1", Branch: "feat/issue-7", PR: 9, Phase: coord.PublishLinked}
 	ok(t, coord.Validate(linked))
 	ok(t, coord.Validate(approved("h1", "b1")))
+}
+
+// TestAnInFlightPublishOutlivesItsApproval covers contract §5.1 item 8.
+// A publish in intent or pushed records what may have reached the remote, and permission to push is a live approval that `oe ship publish` checks.
+// So a staleness pass, a park, or a fix cycle may clear the approval, and a new approval may bind, while a publish is in flight.
+func TestAnInFlightPublishOutlivesItsApproval(t *testing.T) {
+	t.Parallel()
+
+	inFlight := map[string]*state.Issue{
+		"intent without an approval": func() *state.Issue {
+			st := newIssue()
+			st.Publish = &state.Publish{SHA: "h1", PrevSHA: "", Base: "b1", Branch: "feat/issue-7", PR: 0, Phase: coord.PublishIntent}
+			return st
+		}(),
+		"pushed beside an approval of a newer head": func() *state.Issue {
+			st := approved("h2", "b2")
+			st.Publish = &state.Publish{SHA: "h1", PrevSHA: "", Base: "b1", Branch: "feat/issue-7", PR: 0, Phase: coord.PublishPushed}
+			return st
+		}(),
+	}
+	for name, st := range inFlight {
+		ok(t, coord.Validate(st))
+		if t.Failed() {
+			t.Errorf("%s was refused", name)
+		}
+	}
 }
 
 func TestStartCreatesStateOnceWithTheWatermarkAtTheRead(t *testing.T) {
