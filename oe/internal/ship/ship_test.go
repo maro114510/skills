@@ -149,7 +149,7 @@ func TestExpectExplainsOnlyTheRemoteTheRecordAccountsFor(t *testing.T) {
 		"linked, branch at the sha":        {publish("s1", "", "b", "linked"), "s1", ship.RemoteAtPublished},
 		"linked, no branch":                {publish("s1", "", "b", "linked"), "", ship.RemoteExternal},
 		"linked, another sha":              {publish("s1", "", "b", "linked"), "x1", ship.RemoteExternal},
-		"pushed, branch still at prev":     {publish("s1", "p1", "b", "pushed"), "p1", ship.RemoteAtPrev},
+		"pushed, branch back at prev":      {publish("s1", "p1", "b", "pushed"), "p1", ship.RemoteExternal},
 	}
 	for name, c := range cases {
 		if got := ship.Expect(c.p, c.remote); got != c.want {
