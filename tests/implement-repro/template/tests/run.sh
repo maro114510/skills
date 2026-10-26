@@ -70,7 +70,7 @@ if [[ -n "${seed}" ]]; then
   shuffled=()
   while IFS= read -r name; do
     shuffled+=("${name}")
-  done < <(printf '%s\n' "${names[@]}" | awk -v seed="${seed}" 'BEGIN { srand(seed) } { print rand() "\t" $0 }' | sort -n | cut -f2-)
+  done < <(printf '%s\n' "${names[@]}" | awk -v seed="${seed}" 'BEGIN { srand(seed) } { printf "%.9f\t%s\n", rand(), $0 }' | sort -n | cut -f2-)
   names=("${shuffled[@]}")
 fi
 

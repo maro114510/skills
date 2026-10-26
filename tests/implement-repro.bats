@@ -110,7 +110,8 @@ EOF
   run bash tests/run.sh
   [ "${status}" -eq 0 ]
   broken=0
-  for seed in 1 2 3 4 5; do
+  # The order a seed gives depends on the awk in use, so many seeds keep a lucky run of orders from passing this.
+  for seed in $(seq 1 20); do
     bash tests/run.sh --seed "${seed}" >/dev/null 2>&1 || broken=$((broken + 1))
   done
   [ "${broken}" -ge 1 ]
