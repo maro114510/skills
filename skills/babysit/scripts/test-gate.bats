@@ -601,13 +601,18 @@ expect_usage() {
   expect "${status}" 0
 }
 
-@test "allows a merge of the base even when the base brings in a workflow and a lockfile" {
+@test "parks a merge of the base that brings in a workflow and a lockfile" {
   base_commit .github/workflows/ci.yml "name: base ci"
   base_commit package-lock.json "{}"
   git merge -q --no-ff -m "merge main" main
   gate_push
-  expect "${status}" 0
-  expect "$(field .verdict)" allow
+  expect_park ci .github/workflows/ci.yml
+  expect_park deps package-lock.json
+}
+
+@test "rejects a reply call, which the gate does not handle" {
+  printf 'Thanks.\n' >"${tmp}/body.txt"
+  expect_usage reply o/r 7 --session "${token}" --body-file "${tmp}/body.txt"
 }
 
 @test "allows a merge of the base when the base has moved on since the merge" {
