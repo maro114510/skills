@@ -108,6 +108,9 @@ ncmd=${#cmd[@]}
 ((ncmd > 0)) || usage "The push command must follow --"
 cd "${worktree}" || usage "Cannot enter the worktree"
 [[ "$(git rev-parse --is-inside-work-tree 2>/dev/null)" == true ]] || usage "Not a Git worktree: ${worktree}"
+# Git prints paths from the root of the checkout, so every later command runs from there, whichever
+# directory of it was given. A pathspec read from a subdirectory would match nothing.
+cd "$(git rev-parse --show-toplevel)" || usage "Cannot enter the worktree"
 
 # The lock is how the gate knows this session still owns the pull request.
 ledger_path="$(babysit_ledger_path "${repo}" "${pr}")" || usage "Not inside a Git repository"
