@@ -94,18 +94,18 @@ type flow struct {
 	title, body string
 	// resuming says an earlier run recorded an intent for exactly this pair.
 	resuming bool
-	// wrote says this run recorded an intent, so a failure after it leaves a publish in flight.
-	wrote bool
+	// inFlight says an intent is recorded for this pair by now, whether this run or an earlier one recorded it, so a failure leaves a publish in flight.
+	inFlight bool
 }
 
 // Publish pushes the approved head and opens or links its pull request, contract §18.
 // The order is fixed: freeze, secret scan, verdict freshness, checks, final gates, then the intent, the push, and the pull request.
 // Every step after the intent is idempotent, so a run that stopped anywhere resumes from the recorded phase.
 func Publish(ctx context.Context, d Deps, r Request) (Result, error) {
-	f := &flow{d: d, r: r, st: r.State, a: state.Approval{ReviewedSHA: "", VerifiedBase: "", ReviewEvidence: state.ReviewEvidence{BehaviorChange: false, Basis: "", Criteria: nil}}, res: NewResult(r.Issue), title: r.Title, body: "", resuming: false, wrote: false}
+	f := &flow{d: d, r: r, st: r.State, a: state.Approval{ReviewedSHA: "", VerifiedBase: "", ReviewEvidence: state.ReviewEvidence{BehaviorChange: false, Basis: "", Criteria: nil}}, res: NewResult(r.Issue), title: r.Title, body: "", resuming: false, inFlight: false}
 	err := f.run(ctx)
 	f.res.State = f.st
-	if err != nil && f.res.Route == "" && f.wrote {
+	if err != nil && f.res.Route == "" && f.inFlight {
 		f.res.Route, f.res.Reason = RouteInterrupted, err.Error()
 	}
 	return f.res, err
@@ -419,12 +419,12 @@ func (f *flow) intentAndPush(ctx context.Context) error {
 		return f.externalPush(ctx, remote)
 	}
 	if f.resuming {
-		f.res.Resumed = true
+		f.res.Resumed, f.inFlight = true, true
 	} else {
 		if err := f.update(ctx, coord.RecordPublishIntent{SHA: f.a.ReviewedSHA, Base: f.a.VerifiedBase, PrevSHA: remote}); err != nil {
 			return err
 		}
-		f.wrote = true
+		f.inFlight = true
 	}
 	if f.st.Publish.Phase != coord.PublishIntent {
 		return nil

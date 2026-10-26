@@ -615,6 +615,6 @@ The limit is per lease session rather than per round, as for the auto-answer of 
 - The body holds, in order: the worker's summary, the worker's checks, the reviewer's bound evidence in the reviewer's own line format with `BEHAVIOR_CHANGE`, the reviewed SHA and verified base, how each nit was resolved, the closing lines, and `Part of Epic #<n>`. The worker's criteria never appear.
 - A closing line comes from `issue-refs.sh`. An Issue it prints nothing for gets `Closes #<n>`, or `Related #<n>` when the report's SKIPPED names anything.
 - Exit 3 of `create-linked-pr.sh` after it opened the pull request, or any failure of `--link`, posts `link-failed:<n>:<pr>` and the publish still ends `linked`. The note says the link is missing; the round goes on.
-- A failure after the intent is recorded prints the payload with the route `INTERRUPTED` and the exit code of the failure. The next run resumes from the recorded phase.
+- A failure once an intent is recorded for the pair, by this run or an earlier one, and the final gates and the plan have passed, prints the payload with the route `INTERRUPTED` and the exit code of the failure. The next run resumes from the recorded phase.
 - A route of `PARKED` exits 0, so one Issue's failure never stops the others in the round.
 - Each of these is a recovery of §8 with a named test: `PublishFreezeRecheck` for step 6, `PushToPRResume` for steps 7 and 8.
