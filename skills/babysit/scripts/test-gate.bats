@@ -517,6 +517,40 @@ expect_usage() {
   expect_park network
 }
 
+@test "parks a commit that a replace ref disguises as a harmless one" {
+  local evil benign
+  commit_file .github/workflows/ci.yml "name: evil"
+  evil="$(git rev-parse HEAD)"
+  git reset -q --hard "${start}"
+  commit_file docs.md "doc"
+  benign="$(git rev-parse HEAD)"
+  git reset -q --hard "${evil}"
+  git replace "${evil}" "${benign}"
+  gate_push
+  expect_park ci .github/workflows/ci.yml
+}
+
+@test "refuses when Git is configured to push more than the verified commit" {
+  local setting
+  commit_file src.txt fix
+  for setting in "push.followTags true" "push.recurseSubmodules on-demand" "push.recurseSubmodules only"; do
+    # shellcheck disable=SC2086 # the setting is a key and a value.
+    git config ${setting}
+    gate_push
+    echo "setting: ${setting}" >&2
+    expect_refuse "configured"
+    git config --unset "${setting%% *}"
+  done
+}
+
+@test "allows a push when the push settings are explicitly off" {
+  commit_file src.txt fix
+  git config push.followTags false
+  git config push.recurseSubmodules no
+  gate_push
+  expect "${status}" 0
+}
+
 @test "refuses before parking when an allow condition fails" {
   commit_file .github/workflows/ci.yml "name: ci"
   set_snap '.isCrossRepository = true'
