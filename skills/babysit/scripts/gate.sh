@@ -14,6 +14,8 @@
 set -uo pipefail
 # GIT_NO_REPLACE_OBJECTS: a refs/replace entry would show the gate other bytes than the push sends.
 export LC_ALL=C GIT_TERMINAL_PROMPT=0 GIT_OPTIONAL_LOCKS=0 GIT_NO_REPLACE_OBJECTS=1
+# The caller's pathspec settings would change what ":(literal)<path>" matches, and an empty patch looks clean.
+unset GIT_LITERAL_PATHSPECS GIT_GLOB_PATHSPECS GIT_NOGLOB_PATHSPECS GIT_ICASE_PATHSPECS
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source-path=SCRIPTDIR disable=SC1091 # CI runs shellcheck without -x, so it cannot follow this.
