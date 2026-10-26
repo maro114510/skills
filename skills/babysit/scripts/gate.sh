@@ -219,13 +219,18 @@ path_rules() {
   return 0
 }
 
+# Every diff the gate reads. No rename detection, so a rename is a deletion and an addition. No external
+# or text-converting driver, so the lines read are the lines pushed. No submodule is ignored, because a
+# submodule that .gitmodules declares as ignored would otherwise drop out of the diff altogether.
+DIFF_FLAGS=(--no-color --no-renames --no-ext-diff --no-textconv --ignore-submodules=none)
+
 # Records every hard stop that the change from $1 to $2 hits. The paths after them, when given, restrict it.
 scan_diff() {
   local old="$1" new="$2" raw="${work}/raw" patch="${work}/patch" added="${work}/added" removed="${work}/removed"
   local meta path oldmode newmode status is_test rc na nr
   shift 2
   # The paths are names, not patterns: a name like a[1].txt must match itself and not a1.txt.
-  GIT_LITERAL_PATHSPECS=1 git diff --raw -z --no-renames --no-ext-diff --no-textconv --no-color "${old}" "${new}" -- "$@" \
+  GIT_LITERAL_PATHSPECS=1 git diff --raw -z "${DIFF_FLAGS[@]}" "${old}" "${new}" -- "$@" \
     >"${raw}" </dev/null || refuse "could not read the diff"
   while IFS= read -r -d '' meta && IFS= read -r -d '' path; do
     read -r oldmode newmode _ _ status <<<"${meta#:}"
@@ -246,7 +251,7 @@ scan_diff() {
     fi
     [[ "${path_lower}" =~ ${RE_SECRETFILE} && ! "${path_lower}" =~ ${RE_SECRETFILE_OK} ]] && note secrets "${path}"
 
-    git diff -U0 --no-color --no-ext-diff --no-textconv --no-renames "${old}" "${new}" -- ":(literal)${path}" \
+    git diff -U0 "${DIFF_FLAGS[@]}" "${old}" "${new}" -- ":(literal)${path}" \
       >"${patch}" </dev/null || refuse "could not read the diff"
     : >"${added}"
     : >"${removed}"
@@ -410,7 +415,7 @@ if ((base_merge == 1)); then
     done
   } <"${work}/merge-tree"
   [[ -n "${merged_tree:-}" ]] || refuse "could not recompute the merge of the base"
-  git diff --raw -z --no-renames --no-ext-diff --no-textconv --no-color "${merged_tree}" "${head}" >"${work}/resolution" </dev/null ||
+  git diff --raw -z "${DIFF_FLAGS[@]}" "${merged_tree}" "${head}" >"${work}/resolution" </dev/null ||
     refuse "could not compare the merge with the automatic merge"
   while IFS= read -r -d '' _ && IFS= read -r -d '' resolved; do
     touched+=("${resolved}")
