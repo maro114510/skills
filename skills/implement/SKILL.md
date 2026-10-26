@@ -175,44 +175,11 @@ Before any repository mutation, present a decision-complete implementation plan 
 - Relevant evidence about the current state
 - The implementation approach and affected interfaces or data flow
 - Failure, compatibility, migration, and operational behavior where applicable
-- The change units, as Change Units below describes
+- The change units, decided here before any code is written. Read `references/change-units.md` in full first and list the units as it defines
 - A test strategy mapped to the acceptance criteria
 - Explicit non-goals, risks, and the decision log
 
 Then proceed without waiting for approval, because approval gates the pushed range, not the plan.
-
-### Change Units
-
-Decide the split here, before any code is written, because splitting afterward means re-reviewing and re-running every piece.
-This skill owns the definition below. Other skills point here and never restate it.
-
-A unit is a group of commits that a reviewer verifies as one kind of thing, never a single commit. A test and the code it drives are one unit although their playbook commits them separately.
-
-A change is split into units only for one of these five reasons:
-
-| # | Reason | Split |
-|---|---|---|
-| 1 | Structure vs. behavior | A structure change from a behavior change or a bug fix |
-| 2 | Mechanical vs. hand-written | A mechanical bulk change, such as a rename or a format run, from hand-written logic |
-| 3 | Design vs. implementation | A design doc or ADR from the implementation it describes |
-| 4 | Independent | Changes that do not depend on each other |
-| 5 | Rollback unit | Changes that must be reverted separately |
-
-Never split for any of these:
-
-- Size alone. A large change with one reason for change is one unit.
-- A test from the code it drives.
-- A new API from its first usage.
-
-The plan lists the units in the order structure change, then behavior change, then cleanup, and a unit never precedes one it depends on. Each unit takes one line:
-
-```
-<n>. <one sentence: what changes> | depends on: <unit numbers, or none> | separate because: <every reason number that applies, and why>
-```
-
-A change with no reason to split is one unit and needs only the sentence.
-
-Decide the split yourself and record it in the decision log. Ask only when a Phase 2 trigger fires, as for any other open item.
 
 If new information, repository drift, or a scope change raises a Phase 2 trigger later, stop, raise it as Phase 2 describes, and update the plan before continuing.
 
