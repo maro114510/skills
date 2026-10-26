@@ -206,8 +206,8 @@ The first one that fails is the reason.
 |---|---|
 | CI and execution config | Changed and deleted paths such as the workflow directory, CI files, Makefile, Dockerfile, hook config, and agent config |
 | Dependencies | Manifests, lockfiles, vendor, and every submodule pointer even when ignored |
-| Secrets and outbound network | Added lines for keys, tokens, assigned literals, URLs, and network calls, plus secret file names and commit messages |
-| Test weakening | Deleted test files and added lines that skip tests or lower coverage |
+| Secrets and outbound network | Added lines for keys, tokens, assigned literals quoted or not, URLs, and network calls, plus secret file names and commit messages |
+| Test weakening | Deleted test files, added lines that skip tests or set coverage, and removed lines that held a coverage setting |
 | Unreadable | Binary changes |
 
 - Line patterns lean toward parking, so a new link in a doc also parks

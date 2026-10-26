@@ -146,7 +146,7 @@ default_branch="$(jq -r '.default_branch // ""' <<<"${repo_json}" 2>/dev/null)"
 
 # origin is the pull request repository
 norm_url() {
-  lower "$1" | sed -E -e 's#^[^/@:]+@([^:/]+):#ssh://\1/#' -e 's#^([a-z+]+://)[^/@]*@#\1#' -e 's#/+$##' -e 's#\.git$##'
+  lower "$1" | sed -E -e 's#^[^/@:]+@([^:/]+):#ssh://\1/#' -e 's#^([a-z+]+://)[^/@\#?]*@#\1#' -e 's#/+$##' -e 's#\.git$##'
 }
 want_https="https://github.com/$(lower "${repo}")"
 want_ssh="ssh://github.com/$(lower "${repo}")"
@@ -209,6 +209,8 @@ quote="[${dq}${sq}${bt}]"
 RE_KEYHDR='-----BEGIN [A-Z ]*PRIVATE KEY'
 RE_TOKEN='(^|[^[:alnum:]])(gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{22,}|AKIA[0-9A-Z]{16}|ASIA[0-9A-Z]{16}|xox[abprs]-[A-Za-z0-9-]{10,}|sk-[A-Za-z0-9_-]{20,}|[sr]k_live_[A-Za-z0-9]{16,}|AIza[0-9A-Za-z_-]{35}|glpat-[A-Za-z0-9_-]{20,}|npm_[A-Za-z0-9]{36}|SG\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}|eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})'
 RE_ASSIGN="(key|token|secret|passw(or)?d|credentials?)[A-Za-z0-9_]*${quote}?[[:space:]]*(:=|=|:)[[:space:]]*${quote}[^${dq}${sq}${bt}\$[:space:]{<(][^${dq}${sq}${bt}]{5,}${quote}"
+# An unquoted literal that ends the line. A reference, a call, and prose after the value do not match.
+RE_ASSIGN_BARE='(key|token|secret|passw(or)?d|credentials?)[A-Za-z0-9_]*[[:space:]]*(:=|=|:)[[:space:]]*[A-Za-z0-9+/_.~-][A-Za-z0-9+/_.=~-]{7,}[,;]?[[:space:]]*$'
 RE_URL='(https?|ftp|ssh|sftp|git|wss?)://|(^|[^[:alnum:]_.-])git@[A-Za-z0-9.-]+:'
 RE_NETCMD='(^|[^[:alnum:]_.-])(curl|wget|nc|ncat|netcat|telnet|ssh|scp|sftp|rsync)([^[:alnum:]_-]|$)'
 RE_NETAPI='(^|[^[:alnum:]_.])fetch[[:space:]]*\(|axios|XMLHttpRequest|requests\.(get|post|put|patch|delete|head|request|session)|urllib|httpx|aiohttp|http\.(Get|Post|Head|PostForm|NewRequest|DefaultClient)|net/http|HttpClient|Net::HTTP|URLSession|okhttp|reqwest|WebSocket|socket\.(connect|create_connection)|net\.Dial|Invoke-(WebRequest|RestMethod)'
@@ -230,6 +232,7 @@ scan_secrets() {
   has -Eq "${RE_KEYHDR}" "$2" && note secrets "$1"
   has -Eq "${RE_TOKEN}" "$2" && note secrets "$1"
   has -Eiq "${RE_ASSIGN}" "$2" && note secrets "$1"
+  has -Eiq "${RE_ASSIGN_BARE}" "$2" && note secrets "$1"
 }
 
 # Diff flags. No renames, no external or text drivers, no ignored submodules.
@@ -240,7 +243,7 @@ EMPTY_TREE="$(git hash-object -t tree /dev/null 2>/dev/null)" || refuse "could n
 
 # Notes every hard stop in the change from $1 to $2.
 scan_diff() {
-  local old="$1" new="$2" raw="${work}/raw" patch="${work}/patch" added="${work}/added"
+  local old="$1" new="$2" raw="${work}/raw" patch="${work}/patch" added="${work}/added" removed="${work}/removed"
   local meta path lower_path oldmode newmode status rc
   git diff --raw -z "${DIFF_FLAGS[@]}" "${old}" "${new}" >"${raw}" </dev/null || refuse "could not read the diff"
   while IFS= read -r -d '' meta && IFS= read -r -d '' path; do
@@ -258,24 +261,31 @@ scan_diff() {
     fi
     if [[ "${status}" == D ]]; then
       [[ "${lower_path}" =~ ${RE_TESTFILE} ]] && note tests "${path}"
-      continue
+    else
+      [[ "${lower_path}" =~ ${RE_SECRETFILE} && ! "${lower_path}" =~ ${RE_SECRETFILE_OK} ]] && note secrets "${path}"
     fi
-    [[ "${lower_path}" =~ ${RE_SECRETFILE} && ! "${lower_path}" =~ ${RE_SECRETFILE_OK} ]] && note secrets "${path}"
 
     git diff -U0 "${DIFF_FLAGS[@]}" "${old}" "${new}" -- ":(literal)${path}" >"${patch}" </dev/null ||
       refuse "could not read the diff"
     : >"${added}"
-    awk -v a="${added}" '
+    : >"${removed}"
+    awk -v a="${added}" -v r="${removed}" '
       /^@@/ { hunk = 1; next }
       !hunk && /^Binary files / { bin = 1 }
       hunk && /^\+/ { print substr($0, 2) >> a }
+      hunk && /^-/ { print substr($0, 2) >> r }
       END { exit bin ? 7 : 0 }' "${patch}"
     rc=$?
     if ((rc == 7)); then
-      note binary "${path}"
+      # A deleted binary file holds no text to weigh, as before.
+      [[ "${status}" == D ]] || note binary "${path}"
       continue
     fi
     ((rc == 0)) || refuse "could not read the added lines"
+
+    # A removed coverage setting weakens the tests as much as an added one.
+    has -Eiq "${RE_COVERAGE}" "${removed}" && note tests "${path}"
+    [[ "${status}" != D ]] || continue
 
     scan_secrets "${path}" "${added}"
     has -Eq "${RE_URL}" "${added}" && note network "${path}"

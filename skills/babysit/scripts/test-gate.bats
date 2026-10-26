@@ -302,6 +302,16 @@ expect_usage() {
   expect_refuse origin
 }
 
+@test "refuses an origin whose host hides behind a fragment or query that looks like userinfo" {
+  local url
+  commit_file src.txt fix
+  for url in 'https://evil.example#@github.com/o/r' 'https://evil.example?x=@github.com/o/r'; do
+    git remote set-url origin "${url}"
+    gate_push
+    expect_refuse origin
+  done
+}
+
 @test "refuses a push command that differs from the verified one" {
   commit_file src.txt fix
   head="$(git rev-parse HEAD)"
@@ -412,6 +422,23 @@ expect_usage() {
   expect_park tests .coveragerc
 }
 
+@test "parks a removed coverage threshold" {
+  commit_file .coveragerc "fail_under = 90"
+  publish
+  commit_file .coveragerc "[run]"
+  gate_push
+  expect_park tests .coveragerc
+}
+
+@test "parks the deletion of a coverage configuration file" {
+  commit_file .coveragerc "fail_under = 90"
+  publish
+  git rm -q .coveragerc
+  git commit -q -m "drop coverage config"
+  gate_push
+  expect_park tests .coveragerc
+}
+
 @test "parks a secret in added text" {
   local entry path content
   for entry in "key.txt|-----BEGIN RSA ""PRIVATE KEY-----" "gh.txt|$(github_token)" "aws.txt|$(aws_key)" \
@@ -423,6 +450,26 @@ expect_usage() {
     gate_push
     expect_park secrets "${path}"
   done
+}
+
+@test "parks an unquoted secret assignment" {
+  local entry path content
+  for entry in "app.env.txt|AWS_SECRET_ACCESS_KEY=abcdefgh12345" "cfg.yml|password: hunter2hunter2" \
+    "cfg.toml|api_token = abcdefgh12345" "run.sh|export DB_PASSWORD=abcdefgh12345;"; do
+    path="${entry%%|*}"
+    content="${entry#*|}"
+    git reset -q --hard "${start}"
+    commit_file "${path}" "${content}"
+    gate_push
+    expect_park secrets "${path}"
+  done
+}
+
+@test "allows an assignment whose value is a reference or a call, not a literal" {
+  commit_file run.sh $'PASSWORD=$DB_PASSWORD\nTOKEN=${TOKEN_VALUE}\nsecret=read_secret(name)\nkey=short'
+  gate_push
+  expect "${status}" 0
+  expect "$(field .verdict)" allow
 }
 
 @test "parks a file that is named like a secret" {
