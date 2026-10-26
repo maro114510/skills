@@ -187,7 +187,7 @@ func newShipFlow(t *testing.T, skipped string) shipFlow {
 	board := &prBoard{}
 	f.w.r.On(ghfake.PullsByHead, board.listing)
 	report := "STATUS: DONE\nISSUE: #7\nBRANCH: feat/issue-7\nWORKTREE: " + f.wt + "\nHEAD_SHA: " + f.head +
-		"\nCHECKS: go test ./... -> exit 0\nSKIPPED: " + skipped + "\nSUMMARY: adds w.txt\n"
+		"\nCHECKS: go test ./... -> exit 0\nCRITERIA: WORKER-ONLY claim -> [behavior] unchecked\nSKIPPED: " + skipped + "\nSUMMARY: adds w.txt\n"
 	path := filepath.Join(t.TempDir(), "report.md")
 	if err := os.WriteFile(path, []byte(report), 0o600); err != nil {
 		t.Fatal(err)
@@ -374,6 +374,9 @@ func (s shipFlow) wantBody(t *testing.T, closing string) {
 	if len(s.scripts.bodies) != 1 {
 		t.Fatalf("bodies = %d, want one", len(s.scripts.bodies))
 	}
+	if strings.Contains(s.scripts.bodies[0], "WORKER-ONLY") {
+		t.Errorf("the body carries the worker's criteria:\n%s", s.scripts.bodies[0])
+	}
 	for _, want := range []string{
 		"## Summary\nadds w.txt\n", "go test ./... -> exit 0", "BEHAVIOR_CHANGE: yes — adds w.txt",
 		"1. w.txt exists -> verified [behavior] — cat w.txt printed worker", "- reviewed_sha: " + s.approved, "- verified_base: " + s.base,
@@ -381,6 +384,16 @@ func (s shipFlow) wantBody(t *testing.T, closing string) {
 	} {
 		if !strings.Contains(s.scripts.bodies[0], want) {
 			t.Errorf("body lacks %q:\n%s", want, s.scripts.bodies[0])
+		}
+	}
+}
+
+// wantNoDirectPRCommand checks that oe never ran a gh pr command itself, since the create-pr scripts are the only way a pull request opens.
+func (s shipFlow) wantNoDirectPRCommand(t *testing.T) {
+	t.Helper()
+	for _, c := range s.w.r.Calls() {
+		if len(c) > 2 && c[0] == "gh" && c[1] == "pr" {
+			t.Errorf("oe called gh directly: %v", c)
 		}
 	}
 }
@@ -400,6 +413,7 @@ func TestPublishPushesTheApprovedHeadOnceAndOpensOneLinkedPR(t *testing.T) {
 	}
 	s.wantPushedExactly(t)
 	s.wantBody(t, "Closes #7")
+	s.wantNoDirectPRCommand(t)
 	if p := got.State.Publish; p.SHA != s.approved || p.Base != s.base || p.PrevSHA != "" {
 		t.Errorf("publish record = %+v", p)
 	}
@@ -842,5 +856,56 @@ func TestPublishOfAnAlreadyLinkedPairChangesNothing(t *testing.T) {
 	}
 	if n := len(s.pushes()); n != 1 || s.board.count() != 1 || s.checks.count() != 1 || s.w.r.Mutations() != mutations {
 		t.Errorf("pushes %d, pull requests %d, checks %d, mutations %d", n, s.board.count(), s.checks.count(), s.w.r.Mutations()-mutations)
+	}
+}
+
+// TestPublishFinalGatesStopAHeadOrBaseThatMovedWhileTheChecksRan shows that the base and the HEAD are read again after the checks, like the freeze.
+// Nothing is pushed and no intent is recorded.
+func TestPublishFinalGatesStopAHeadOrBaseThatMovedWhileTheChecksRan(t *testing.T) {
+	t.Parallel()
+
+	moves := map[string]func(t *testing.T, s shipFlow){
+		"the worktree HEAD moved": func(t *testing.T, s shipFlow) {
+			t.Helper()
+			commitIn(t, s.wt, "late.txt", "unreviewed\n")
+		},
+		"the default branch advanced": func(t *testing.T, s shipFlow) {
+			t.Helper()
+			s.advanceBase(t)
+		},
+	}
+	for name, move := range moves {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			s := newShipFlow(t, "")
+			s.checks.during = func() { move(t, s) }
+			if r := s.publish(); r.code != 3 {
+				t.Fatalf("exit %d, stdout %q", r.code, r.stdout)
+			}
+			s.wantNothingPublished(t)
+			if s.checks.count() != 1 {
+				t.Errorf("checks ran %d times, want the one during which the pair moved", s.checks.count())
+			}
+		})
+	}
+}
+
+// TestPublishIgnoresEditsInTheSharedCheckout shows that oe pushes exactly the reviewed SHA from the Issue's worktree.
+// A person's own dirty work in the shared checkout neither blocks the ship nor rides along.
+func TestPublishIgnoresEditsInTheSharedCheckout(t *testing.T) {
+	t.Parallel()
+
+	s := newShipFlow(t, "")
+	if err := os.WriteFile(filepath.Join(s.shared, "a.txt"), []byte("my own unfinished edit\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(s.shared, "notes.txt"), []byte("key = AKIA"+strings.Repeat("X", 16)+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r := s.publish()
+	wantPublished(t, r, decode[shipped](t, r))
+	s.wantPushedExactly(t)
+	if tree := gitIn(t, s.shared, "ls-tree", "-r", "--name-only", s.approved); strings.Contains(tree, "notes.txt") {
+		t.Errorf("the pushed tree holds the shared checkout's file:\n%s", tree)
 	}
 }
