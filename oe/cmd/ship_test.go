@@ -910,3 +910,24 @@ func TestPublishIgnoresEditsInTheSharedCheckout(t *testing.T) {
 		t.Errorf("the pushed tree holds the shared checkout's file:\n%s", tree)
 	}
 }
+
+// TestAResumedRunThatFailsAgainStillReportsTheRecordedPublish shows that a failure after the gates is reported with the publish in flight, whether this run recorded the intent or an earlier one did.
+func TestAResumedRunThatFailsAgainStillReportsTheRecordedPublish(t *testing.T) {
+	t.Parallel()
+
+	s := newShipFlow(t, "")
+	s.scripts.failBeforeCreate = true
+	for run := range 2 {
+		r := s.publish()
+		got := decode[shipped](t, r)
+		if r.code == 0 || got.Route != "INTERRUPTED" || got.State.Publish == nil || got.State.Publish.Phase != "pushed" || got.Resumed != (run == 1) {
+			t.Fatalf("run %d: exit %d, publish = %+v", run, r.code, got)
+		}
+	}
+	s.scripts.failBeforeCreate = false
+	r := s.publish()
+	wantPublished(t, r, decode[shipped](t, r))
+	if s.board.count() != 1 || len(s.pushes()) != 1 {
+		t.Errorf("pull requests %d, pushes %d, want one each", s.board.count(), len(s.pushes()))
+	}
+}
