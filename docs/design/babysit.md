@@ -70,7 +70,7 @@ Lock rules follow.
 - Another session refuses to start while the heartbeat is under 70 minutes old and takes over once it is older.
 - `wait` and the gate exit 3 when the token is no longer theirs, and the skill then stops without touching the lock.
 - Every other stop clears the lock.
-- The skill rechecks the token right before `git push`, and the push leases the start SHA, so a former owner that pushes after a takeover lands only while the remote head still equals its start, which the new owner sees as a foreign head change.
+- The skill rechecks the token right before `git push`, and the push is a plain fast-forward of the start SHA, so a former owner that pushes after a takeover lands only while the remote head still equals its start, which the new owner sees as a foreign head change.
 
 | Item | Key | Raised again when |
 |---|---|---|
@@ -153,46 +153,63 @@ What follows from these rules.
 
 ## Gate
 
-The gate runs before every push and every reply and prints one verdict with a reason. A verdict it cannot determine is `refuse`.
+The gate runs before every push and every reply and prints one verdict with a reason. A verdict it cannot determine is `refuse`. `skills/babysit/scripts/gate.sh` implements it.
 
-| Verdict | Meaning | Drive does |
-|---|---|---|
-| `allow` | Every allow condition holds | Push or post |
-| `park` | A hard stop matched | Do not push, park, and notify |
-| `refuse` | An allow condition failed or was unreadable | Do not push, and resync if the remote head moved |
+```
+gate.sh push  <owner/repo> <pr> --session <token> --worktree <path> --start <sha> -- git push origin <sha>:refs/heads/<branch>
+gate.sh reply <owner/repo> <pr> --session <token> --body-file <file|->
+```
 
-Allow conditions follow.
+| Verdict | Exit | Meaning | Drive does |
+|---|---|---|---|
+| `allow` | 0 | Every allow condition holds | Push or post |
+| `park` | 10 | A hard stop matched | Do not push, park, and notify |
+| `refuse` | 11 | An allow condition failed or was unreadable | Do not push, and resync if the remote head moved |
+| none | 2 | Usage error | Fix the call |
+| none | 3 | The lock belongs to another session | Stop without touching the lock |
+
+- Output is one JSON line. An allow for a push carries `head`, `branch`, and `start`, and a park carries `matches`, the category and path of each hard stop.
+- Any exit but 0 means do not push or post. A gate that stops before a verdict prints `refuse`.
+- `<sha>` is the `HEAD` the gate verified, so a commit made after the check cannot go out unchecked. A refusal names the command it expects.
+
+Allow conditions follow, and the first that fails is the reason.
 
 1. The viewer is the PR author.
 2. `isCrossRepository` is false.
 3. The PR is open.
-4. The remote head equals the worktree's start SHA, and `HEAD` descends from it.
-5. The push is exactly `git push --force-with-lease=refs/heads/<branch>:<start> origin HEAD:refs/heads/<branch>`, and `origin` resolves to the PR's repository.
+4. The head branch is neither the repository's default branch nor protected, since a push there would reach the default branch without review.
+5. `origin`, for fetching and pushing and after URL rewrite rules, resolves to the PR's repository.
+6. The remote head equals the worktree's start SHA, and `HEAD` descends from it and adds a commit.
+7. The push is exactly `git push origin <sha>:refs/heads/<branch>`: no force flag, no `+` refspec, no other target.
+8. Git is not set to push more than that. `push.followTags` can send tags that start a release workflow, and `push.recurseSubmodules` sends submodule commits, so either one set to push makes the gate refuse.
+9. No hard stop matches.
 
-The lease makes the push a compare-and-swap on `<start>`, so a branch deleted or reset after condition 4 was read rejects the push instead of being recreated or advanced. Condition 4 keeps it a fast-forward. The gate refuses `--force`, `+` refspecs, and a lease without an explicit expected SHA.
-6. No hard stop matches.
+A plain push is a fast-forward by Git itself, and condition 6 keeps it one. A branch deleted between the check and the push is recreated, which is accepted, since the PR is already gone.
 
 | Hard stop | Inspects |
 |---|---|
-| CI and execution config | Changed paths including deletions, such as `.github/**`, other CI configs, `Makefile`, `*.mk`, `Dockerfile`, hook configs like `prek.toml` and `.husky/**`, and `.envrc` |
-| Dependencies | Changed paths such as manifests, lockfiles, `go.mod`, `go.sum`, `.gitmodules`, and `vendor/**` |
-| Secrets and outbound network | Added lines only, for key headers, known token prefixes, literals assigned to `*KEY`, `*TOKEN`, or `*SECRET`, new URLs, and network calls like `curl`, `wget`, `fetch`, and HTTP clients |
-| Test weakening | Deleted test files, and added lines that skip or focus tests or lower coverage thresholds |
+| CI and execution config | Changed paths including deletions, such as `.github/**`, other CI configs, `Makefile`, `*.mk`, `Dockerfile`, hook configs like `prek.toml` and `.husky/**`, `.envrc`, and agent config such as `.claude/**` and `AGENTS.md` |
+| Dependencies | Changed paths such as manifests, lockfiles, `go.mod`, `go.sum`, `.gitmodules`, and `vendor/**`, and any moved submodule pointer, even when `.gitmodules` says to ignore it |
+| Secrets and outbound network | Added lines only, for key headers, known token prefixes, literals assigned to `*KEY`, `*TOKEN`, or `*SECRET`, new URLs, and network calls like `curl`, `wget`, `fetch`, and HTTP clients. Also files named like a secret, and commit messages |
+| Test weakening | Deleted test files, a test file with fewer test declarations than before, and added lines that skip or focus tests or lower coverage thresholds |
+| Unreadable | A binary change and a path with a control character, which the heuristics cannot read, so a person does |
 
 Diff range rules follow.
 
-- An ordinary push is inspected as `<start>..HEAD`.
-- A base merge must be the only new commit, with `<start>` as its first parent and the fetched base tip as its second.
-- The gate recomputes the automatic merge with `git merge-tree --write-tree <start> <base tip>`.
-- Conflicted paths and paths where `HEAD` differs from that result go through the hard stops as whole paths.
+- An ordinary push is inspected commit by commit, each against its parents, because a secret that one commit adds and the next removes still lands in the remote history. Every git read must succeed, since a diff that failed to print would otherwise look empty.
+- Git reads with replace refs off, rename detection off, and no submodule ignored, so the bytes inspected are the bytes pushed.
+- A base merge is the one commit the base's history does not already hold, with `<start>` as its first parent and a commit of that history as its second. The gate fetches the base tip and accepts a second parent that is the tip or an ancestor of it, so a base that moved on after the merge does not refuse it.
+- The gate recomputes the automatic merge with `git merge-tree --write-tree <start> <second parent>`.
+- Conflicted paths and paths where `HEAD` differs from that result go through the hard stops as whole paths, including a path that now equals `<start>` again.
 - Base changes therefore never park a fix, and a resolution that drops a base change is still inspected.
-- A reply is checked against allow conditions 1 to 3 and the secrets heuristic on its body.
+- A base merge followed by another commit is no base merge, and the whole range is inspected.
+- A reply is checked against allow conditions 1 to 3, and its body against the secrets heuristic and for images, whose address GitHub fetches and so can carry data out.
 
 ## Decisions
 
 | Topic | Decision |
 |---|---|
-| Autonomous push | Drive only, for CI failures, review feedback, and conflicts, always a gated fast-forward leased on the start SHA, never a force push or merge |
+| Autonomous push | Drive only, for CI failures, review feedback, and conflicts, always a gated plain fast-forward of the start SHA, never a force push or merge |
 | Eligible PRs | Drive takes PRs the viewer authored from a branch in the same repository, and check and watch take any readable PR |
 | Comment input | Comments from anyone are accepted and checked against the code before acting |
 | Accepted risk | On a public repository a third party can steer a fix outside every hard stop, and its local verification runs on the user's machine |
