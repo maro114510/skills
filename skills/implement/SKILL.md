@@ -186,6 +186,8 @@ Then proceed without waiting for approval, because approval gates the pushed ran
 Decide the split here, before any code is written, because splitting afterward means re-reviewing and re-running every piece.
 This skill owns the definition below. Other skills point here and never restate it.
 
+A unit is a group of commits that a reviewer verifies as one kind of thing, never a single commit. A test and the code it drives are one unit although their playbook commits them separately.
+
 A change is split into units only for one of these five reasons:
 
 | # | Reason | Split |
