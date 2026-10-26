@@ -651,8 +651,9 @@ func crashPoints() map[string]crashPoint {
 func (s shipFlow) crashRun(t *testing.T, c crashPoint) {
 	t.Helper()
 	c.crash(t, s)
-	if first := s.publish(); first.code == 0 {
-		t.Fatalf("the crashed run succeeded: %s", first.stdout)
+	first := s.publish()
+	if first.code == 0 || strings.Contains(first.stdout, `"route":"PUBLISHED"`) {
+		t.Fatalf("the crashed run reported success: exit %d, %s", first.code, first.stdout)
 	}
 	s.w.store.OnWrite(nil)
 	s.refusePushes(t, false)
@@ -851,8 +852,8 @@ func TestPublishOfAnAlreadyLinkedPairChangesNothing(t *testing.T) {
 	r := s.publish()
 	got := decode[shipped](t, r)
 	wantPublished(t, r, got)
-	if got.Pushed || got.Created {
-		t.Errorf("publish = %+v, want nothing done", got)
+	if got.Pushed || got.Created || got.Link != "" {
+		t.Errorf("publish = %+v, want nothing done and no link outcome claimed", got)
 	}
 	if n := len(s.pushes()); n != 1 || s.board.count() != 1 || s.checks.count() != 1 || s.w.r.Mutations() != mutations {
 		t.Errorf("pushes %d, pull requests %d, checks %d, mutations %d", n, s.board.count(), s.checks.count(), s.w.r.Mutations()-mutations)
