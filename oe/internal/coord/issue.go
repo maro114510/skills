@@ -419,22 +419,31 @@ func validCriterion(i int, c state.Criterion) error {
 	return nil
 }
 
+// validPublish checks only the shape of the publish record.
+// A publish in intent or pushed records what may have reached the remote, so it outlives the approval it was recorded under.
+// Permission to push is a live approval on the pair, which record_publish_intent and `oe ship publish` check.
+// Were the record tied to the approval, a staleness pass after a crash could never clear the approval and the Issue could not resume.
 func validPublish(st *state.Issue) error {
 	p := st.Publish
 	if p == nil {
 		return nil
 	}
+	switch {
+	case p.SHA == "" || p.Base == "":
+		return refused("state %s: a publish records no SHA or base", st.Key)
+	case p.Branch != st.Branch:
+		return refused("state %s: the publish names branch %q, not %q", st.Key, p.Branch, st.Branch)
+	}
 	switch p.Phase {
 	case PublishLinked:
-		return nil
-	case PublishIntent, PublishPushed:
-		if st.Approval == nil || p.SHA != st.Approval.ReviewedSHA {
-			return refused("state %s: a publish in %s needs an approval on its SHA", st.Key, p.Phase)
+		if p.PR <= 0 {
+			return refused("state %s: a linked publish needs its pull request", st.Key)
 		}
-		return nil
+	case PublishIntent, PublishPushed:
 	default:
 		return refused("state %s: unknown publish phase %q", st.Key, p.Phase)
 	}
+	return nil
 }
 
 // Update applies one transition to Issue n after a full read of its comments, validates the

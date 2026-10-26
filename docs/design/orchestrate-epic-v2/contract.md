@@ -151,7 +151,7 @@ The Go types make these unrepresentable, or the writer rejects them before any r
 5. Pending findings and blockers at once
 6. `cycle` above 2, or `begin_fix` at 2
 7. A redo branch that already has a merged or closed PR
-8. Publish in `intent` or `pushed` without approval, or with `sha` other than `reviewed_sha`. A `linked` publish is history, not permission
+8. A publish with no `sha` or `base`, a `branch` other than the Issue's, an unknown `phase`, or a `linked` phase without its `pr`. A publish record is history of what may have reached the remote, never permission: permission is a live approval on its pair, checked by `record_publish_intent` and `oe ship publish`. So a publish in `intent` or `pushed` outlives its approval, and a staleness pass can clear the approval after a crash instead of leaving the Issue unable to resume
 9. A watermark lower than the one it replaces
 10. Ledger `used` above `bound`, a reservation while frozen, or a second freeze
 11. A post-merge `record_intent` while the record is `intent` or `unknown`; §8 reconciles those first
