@@ -12,8 +12,8 @@ import (
 	"github.com/maro114510/skills/oe/internal/state"
 )
 
-func publish(sha, prev, base string, phase string) *state.Publish {
-	return &state.Publish{SHA: sha, PrevSHA: prev, Base: base, Branch: "feat/issue-7", PR: 0, Phase: phase}
+func publish(prev, phase string) *state.Publish {
+	return &state.Publish{SHA: "s1", PrevSHA: prev, Base: "b", Branch: "feat/issue-7", PR: 0, Phase: phase}
 }
 
 // TestBodyCarriesTheReviewersEvidenceAndTheBoundPair shows what a pull request body holds.
@@ -139,17 +139,17 @@ func TestExpectExplainsOnlyTheRemoteTheRecordAccountsFor(t *testing.T) {
 	}{
 		"no record, no branch":             {nil, "", ship.RemoteAbsent},
 		"no record, a branch":              {nil, "x1", ship.RemoteExternal},
-		"intent, branch at the sha":        {publish("s1", "", "b", "intent"), "s1", ship.RemoteAtPublished},
-		"intent, no branch, none recorded": {publish("s1", "", "b", "intent"), "", ship.RemoteAbsent},
-		"intent, branch at prev":           {publish("s1", "p1", "b", "intent"), "p1", ship.RemoteAtPrev},
-		"intent, prev recorded, no branch": {publish("s1", "p1", "b", "intent"), "", ship.RemoteExternal},
-		"intent, another sha":              {publish("s1", "p1", "b", "intent"), "x1", ship.RemoteExternal},
-		"pushed, branch at the sha":        {publish("s1", "", "b", "pushed"), "s1", ship.RemoteAtPublished},
-		"pushed, no branch":                {publish("s1", "", "b", "pushed"), "", ship.RemoteExternal},
-		"linked, branch at the sha":        {publish("s1", "", "b", "linked"), "s1", ship.RemoteAtPublished},
-		"linked, no branch":                {publish("s1", "", "b", "linked"), "", ship.RemoteExternal},
-		"linked, another sha":              {publish("s1", "", "b", "linked"), "x1", ship.RemoteExternal},
-		"pushed, branch back at prev":      {publish("s1", "p1", "b", "pushed"), "p1", ship.RemoteExternal},
+		"intent, branch at the sha":        {publish("", "intent"), "s1", ship.RemoteAtPublished},
+		"intent, no branch, none recorded": {publish("", "intent"), "", ship.RemoteAbsent},
+		"intent, branch at prev":           {publish("p1", "intent"), "p1", ship.RemoteAtPrev},
+		"intent, prev recorded, no branch": {publish("p1", "intent"), "", ship.RemoteExternal},
+		"intent, another sha":              {publish("p1", "intent"), "x1", ship.RemoteExternal},
+		"pushed, branch at the sha":        {publish("", "pushed"), "s1", ship.RemoteAtPublished},
+		"pushed, no branch":                {publish("", "pushed"), "", ship.RemoteExternal},
+		"linked, branch at the sha":        {publish("", "linked"), "s1", ship.RemoteAtPublished},
+		"linked, no branch":                {publish("", "linked"), "", ship.RemoteExternal},
+		"linked, another sha":              {publish("", "linked"), "x1", ship.RemoteExternal},
+		"pushed, branch back at prev":      {publish("p1", "pushed"), "p1", ship.RemoteExternal},
 	}
 	for name, c := range cases {
 		if got := ship.Expect(c.p, c.remote); got != c.want {
@@ -205,7 +205,7 @@ func TestResolveScriptsNeedsBothScriptsAtAnAbsolutePath(t *testing.T) {
 
 // TestExecRunsTheScriptWithBashInItsDirectory shows the real runner: arguments reach the script, the working directory is the one named, and a non-zero exit is a result.
 // GH_HOST is pinned to github.com whatever the caller's environment says.
-func TestExecRunsTheScriptWithBashInItsDirectory(t *testing.T) { //nolint:paralleltest // t.Setenv cannot run in parallel.
+func TestExecRunsTheScriptWithBashInItsDirectory(t *testing.T) {
 	dir := t.TempDir()
 	script := filepath.Join(t.TempDir(), "probe.sh")
 	body := "#!/usr/bin/env bash\npwd -P\nprintf '%s|' \"$@\"\necho \"host=$GH_HOST\"\necho oops >&2\nexit 3\n"
