@@ -225,6 +225,9 @@ path_rules() {
 # submodule that .gitmodules declares as ignored would otherwise drop out of the diff altogether.
 DIFF_FLAGS=(--no-color --no-renames --no-ext-diff --no-textconv --ignore-submodules=none)
 
+# Git knows this tree without storing it, and with a sha256 repository the empty tree has another name.
+EMPTY_TREE="$(git hash-object -t tree /dev/null 2>/dev/null)" || refuse "could not name the empty tree"
+
 # Records every hard stop that the change from $1 to $2 hits. The paths after them, when given, restrict it.
 scan_diff() {
   local old="$1" new="$2" raw="${work}/raw" patch="${work}/patch" added="${work}/added" removed="${work}/removed"
@@ -445,6 +448,8 @@ if ((base_merge == 1)); then
 else
   while read -r commit parents; do
     [[ -n "${commit}" ]] || continue
+    # A root commit, such as unrelated history that a merge brought in, is diffed against the empty tree.
+    [[ -n "${parents}" ]] || parents="${EMPTY_TREE}"
     for parent in ${parents}; do
       scan_diff "${parent}" "${commit}"
     done
