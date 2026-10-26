@@ -56,6 +56,9 @@ jobs:
       - name: Run the push-approval hook suite
         run: bats tests/require-user-approval.bats
 
+      - name: Run the implement reproduction repository suite
+        run: bats tests/implement-repro.bats
+
       - name: Install git-cliff
         env:
           GIT_CLIFF_VERSION: 2.14.2
