@@ -101,6 +101,31 @@ expect_refuse() {
   }
 }
 
+# Pushes HEAD to the remote branch and makes it the new start, as a session that began from it would.
+publish() {
+  git push -q origin HEAD:refs/heads/feat/x
+  start="$(git rev-parse HEAD)"
+}
+
+# Expects a park verdict with a match of category $1, and of path $2 when given.
+expect_park() {
+  expect "${status}" 10
+  expect "$(field .verdict)" park
+  jq -e --arg c "$1" --arg p "${2:-}" \
+    '.matches | any(.category == $c and ($p == "" or .path == $p))' <<<"${output}" >/dev/null || {
+    echo "no [$1] match for [${2:-any path}]; output: ${output}" >&2
+    return 1
+  }
+}
+
+# Strings that look like secrets, assembled here so no literal one is committed.
+github_token() {
+  printf 'gh%s%s' 'p_' "$(printf 'A%.0s' $(seq 1 36))"
+}
+aws_key() {
+  printf 'AK%s%s' 'IA' "$(printf 'B%.0s' $(seq 1 16))"
+}
+
 # Expects exit 2 with a usage message for the gate arguments given.
 expect_usage() {
   run bash "${gate}" "$@"
@@ -315,4 +340,180 @@ expect_usage() {
   gate_push
   expect "$(wc -l <<<"${output}" | tr -d ' ')" 1
   jq -e 'has("verdict") and has("reason")' <<<"${output}" >/dev/null
+}
+
+@test "parks a change to CI and execution configuration" {
+  local entry
+  for entry in .github/workflows/ci.yml .gitlab-ci.yml .circleci/config.yml Makefile rules.mk sub/Dockerfile \
+    compose.yaml prek.toml .husky/pre-commit .claude/settings.json AGENTS.md; do
+    git reset -q --hard "${start}"
+    commit_file "${entry}" "content"
+    gate_push
+    expect_park ci "${entry}"
+  done
+}
+
+@test "parks the deletion of a CI file" {
+  commit_file .github/workflows/ci.yml "name: ci"
+  publish
+  git rm -q .github/workflows/ci.yml
+  git commit -q -m "drop ci"
+  gate_push
+  expect_park ci .github/workflows/ci.yml
+}
+
+@test "parks a change to dependencies" {
+  local entry
+  for entry in package.json package-lock.json yarn.lock pnpm-lock.yaml go.mod go.sum Cargo.lock pyproject.toml \
+    requirements-dev.txt Gemfile.lock .gitmodules vendor/lib.go web/vendor/x.js; do
+    git reset -q --hard "${start}"
+    commit_file "${entry}" "content"
+    gate_push
+    expect_park deps "${entry}"
+  done
+}
+
+@test "parks a moved submodule pointer" {
+  git update-index --add --cacheinfo "160000,${start},sub"
+  git commit -q -m "bump sub"
+  gate_push
+  expect_park deps sub
+}
+
+@test "parks the deletion of a test file" {
+  commit_file tests/login_test.go "func TestLogin() {}"
+  publish
+  git rm -q tests/login_test.go
+  git commit -q -m "drop test"
+  gate_push
+  expect_park tests tests/login_test.go
+}
+
+@test "parks an added skip or focus in a test" {
+  local entry path line
+  for entry in "a.test.js|it.skip('x', () => {})" "a.test.js|describe.only('x', () => {})" \
+    "a.spec.ts|xit('x', () => {})" "a_test.py|@pytest.mark.skip" "a_test.py|pytest.skip('later')" \
+    "a_test.go|t.Skip(\"later\")" "a.bats|  skip" "a_spec.rb|  xit 'x' do" "A.java|@Disabled"; do
+    path="${entry%%|*}"
+    line="${entry#*|}"
+    git reset -q --hard "${start}"
+    commit_file "${path}" "${line}"
+    gate_push
+    expect_park tests "${path}"
+  done
+}
+
+@test "parks an added coverage threshold" {
+  commit_file .coveragerc "fail_under = 10"
+  gate_push
+  expect_park tests .coveragerc
+}
+
+@test "parks a test case that was removed from a test file" {
+  commit_file calc_test.py $'def test_add():\n    assert add(1, 1) == 2\n\ndef test_sub():\n    assert sub(2, 1) == 1'
+  publish
+  commit_file calc_test.py $'def test_add():\n    assert add(1, 1) == 2'
+  gate_push
+  expect_park tests calc_test.py
+}
+
+@test "parks a secret in added text" {
+  local entry path content
+  for entry in "key.txt|-----BEGIN RSA ""PRIVATE KEY-----" "gh.txt|$(github_token)" "aws.txt|$(aws_key)" \
+    "cfg.js|const API_TOKEN = 'abcdefgh12345'" "cfg.py|password: \"hunter2hunter2\""; do
+    path="${entry%%|*}"
+    content="${entry#*|}"
+    git reset -q --hard "${start}"
+    commit_file "${path}" "${content}"
+    gate_push
+    expect_park secrets "${path}"
+  done
+}
+
+@test "parks a file that is named like a secret" {
+  local entry
+  for entry in "$(printf '.%s' env)" "$(printf '.%s.production' env)" certs/server.pem id_rsa config/credentials.json; do
+    git reset -q --hard "${start}"
+    commit_file "${entry}" "X=1"
+    gate_push
+    expect_park secrets "${entry}"
+  done
+}
+
+@test "parks a secret that an earlier commit added and a later commit removed" {
+  commit_file leak.txt "$(github_token)"
+  git rm -q leak.txt
+  git commit -q -m "remove it again"
+  gate_push
+  expect_park secrets leak.txt
+}
+
+@test "parks a secret in a commit message" {
+  commit_file src.txt fix "fix with $(github_token)"
+  gate_push
+  expect_park secrets "commit message"
+}
+
+@test "parks outbound network access" {
+  local entry path line
+  for entry in "run.sh|curl -s example.invalid" "doc.md|see https://example.invalid/x" "a.js|fetch('/api')" \
+    "a.py|requests.get(url)" "a.go|http.Get(url)" "a.js|new XMLHttpRequest()"; do
+    path="${entry%%|*}"
+    line="${entry#*|}"
+    git reset -q --hard "${start}"
+    commit_file "${path}" "${line}"
+    gate_push
+    expect_park network "${path}"
+  done
+}
+
+@test "parks a binary file it cannot read" {
+  printf '\000\001\002' >image.bin
+  git add -- image.bin
+  git commit -q -m "add image"
+  gate_push
+  expect_park binary image.bin
+}
+
+@test "parks a path with a control character" {
+  commit_file $'odd\nname.txt' content
+  gate_push
+  expect_park path
+}
+
+@test "lists every matched category, each once" {
+  commit_file .github/workflows/ci.yml "name: ci"
+  commit_file package.json "{}"
+  commit_file run.sh "curl example.invalid"
+  gate_push
+  expect_park ci
+  expect_park deps
+  expect_park network
+}
+
+@test "refuses before parking when an allow condition fails" {
+  commit_file .github/workflows/ci.yml "name: ci"
+  set_snap '.isCrossRepository = true'
+  gate_push
+  expect_refuse fork
+}
+
+@test "allows a new test file, an edited test, a removed source file, and a docs change" {
+  commit_file calc_test.py $'def test_add():\n    assert add(1, 1) == 2'
+  publish
+  commit_file calc_test.py $'def test_add():\n    assert add(1, 1) == 2\n    assert add(2, 2) == 4\n\ndef test_sub():\n    assert sub(2, 1) == 1'
+  commit_file docs/guide.md "Run the tests with make test."
+  git rm -q feature.txt
+  git commit -q -m "drop unused file"
+  gate_push
+  expect "${status}" 0
+  expect "$(field .verdict)" allow
+}
+
+@test "allows an edit that replaces one test case with another" {
+  commit_file calc_test.py $'def test_add():\n    assert add(1, 1) == 2'
+  publish
+  commit_file calc_test.py $'def test_plus():\n    assert add(1, 1) == 2'
+  gate_push
+  expect "${status}" 0
 }
