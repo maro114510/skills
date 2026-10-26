@@ -37,15 +37,15 @@ For `missing-precondition`, also run the final `tests/` against `src/` of `origi
 
 ## Recorded runs
 
-One run per row on 2026-10-26, with Claude Code 2.1.310 in headless mode (`claude -p`), on this checkout's own `skills/implement/SKILL.md`.
+One run per row on 2026-10-26, on the last commit of this branch, with Claude Code 2.1.310 in headless mode (`claude -p`), on this checkout's own `skills/implement/SKILL.md`.
 Every run passed all of the checks above: the suite in default order and shuffled for seeds 1 to 5, `gate-tests.sh` with exit 0, and for `missing-precondition` one `FAIL:` and no `ERROR:` on the unfixed `src/`.
 
 | Harness | Mode | Case | Result | Commits |
 |---|---|---|---|---|
 | claude 2.1.310 | normal | `missing-precondition` | pass | `test:` that converts before `rates_set`, then `fix:` |
 | claude 2.1.310 | autonomous | `missing-precondition` | pass | Same |
-| claude 2.1.310 | normal | `order-dependence` | pass | Stub, `test:`, `feat:`; each test builds its own cart and `SHARED_CART` is not used |
-| claude 2.1.310 | autonomous | `order-dependence` | pass | Stub, then two `test:` and `feat:` pairs; `SHARED_CART` is not used |
+| claude 2.1.310 | normal | `order-dependence` | pass | Stub, `test:`, `feat:`, then a `test:` and `fix:` pair; `SHARED_CART` is not used |
+| claude 2.1.310 | autonomous | `order-dependence` | pass | Stub, `test:`, `feat:`; `SHARED_CART` is not used |
 
 ## Limits
 
