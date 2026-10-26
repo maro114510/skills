@@ -14,8 +14,8 @@ type RecordPublishIntent struct {
 // Name implements Transition.
 func (RecordPublishIntent) Name() string { return "record_publish_intent" }
 
-func (t RecordPublishIntent) apply(applyInput) (*state.Issue, error) {
-	return nil, refused("%s is not implemented", t.Name())
+func (RecordPublishIntent) apply(in applyInput) (*state.Issue, error) {
+	return stubbed(in), nil
 }
 
 // RecordPublished moves a publish forward after the push: to pushed, then to linked once the
@@ -28,6 +28,14 @@ type RecordPublished struct {
 // Name implements Transition.
 func (RecordPublished) Name() string { return "record_published" }
 
-func (t RecordPublished) apply(applyInput) (*state.Issue, error) {
-	return nil, refused("%s is not implemented", t.Name())
+func (RecordPublished) apply(in applyInput) (*state.Issue, error) {
+	return stubbed(in), nil
+}
+
+// stubbed changes nothing, so a refusal test fails at its assertion until the transition exists.
+func stubbed(in applyInput) *state.Issue {
+	if in.cur == nil {
+		return nil
+	}
+	return cloneIssue(in.cur)
 }
