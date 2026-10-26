@@ -175,6 +175,7 @@ Before any repository mutation, present a decision-complete implementation plan 
 - Relevant evidence about the current state
 - The implementation approach and affected interfaces or data flow
 - Failure, compatibility, migration, and operational behavior where applicable
+- The change units, decided here before any code is written. Read `references/change-units.md` in full first and list the units as it defines
 - A test strategy mapped to the acceptance criteria
 - Explicit non-goals, risks, and the decision log
 
