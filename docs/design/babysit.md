@@ -223,7 +223,9 @@ The first one that fails is the reason.
 | Base merge handling | A merge that brings in a base workflow parks, which is safe |
 | Protected head branch | GitHub rejects the push |
 | Push settings for tags and submodules | They need a user setting |
+| A remote head reset to an ancestor after the check | A plain push stays a fast-forward and restores the removed commits. A lease on the start commit would close it, but the lease flag is a force flag and the never force push rule stays absolute |
 | Removed test cases | Only deleted files and added skips are read |
+| Secret values with brackets, parentheses, or quotes | An unquoted value with those characters reads as a call or a reference, so it does not park |
 | Mode-only changes | No line changes |
 | Calls that bypass the gate | Drive permission rules must block a direct push |
 | The gate environment | Test hooks replace the snapshot and the accepted origin |
