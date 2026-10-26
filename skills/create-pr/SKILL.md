@@ -40,17 +40,6 @@ Before Step 1, state the resolved arguments to the user in one line, such as `Ar
 
 All PR titles, PR descriptions, and user-facing status messages produced by this skill must be written in `LANG`, following Step 3.1.
 
-## PR Unit
-
-This skill owns the definition of what one PR contains. Other skills point here and never restate it.
-
-- A PR changes at most 400 lines of production code, counting added plus deleted lines. There is no lower bound.
-- Tests, generated files, lockfiles, and deleted files are not counted. Tests stay in the same PR as the code change they drive, never in a different one.
-- Design docs and ADRs land in their own PR, before the code they describe.
-- Docs that describe a changed behavior land in the same stack as that change and merge with it. Docs are reported separately and never count toward the 400 lines.
-
-`scripts/pr-size.sh` checks this mechanically, and its header lists how each file is categorized. Categories come from the `[paths]` section of the target repository's `.agents/skills.toml`, with the keys `tests`, `generated`, and `design_docs`, and from the `linguist-generated` and `linguist-documentation` attributes in `.gitattributes`.
-
 ## Step 1. Collect Context and Detect the PR Template
 
 Run the following checks in parallel:
@@ -93,16 +82,6 @@ Stop and report the issue to the user if any of the following is true:
 - The current branch is the base branch itself, so a PR cannot be created. Suggest creating a feature branch.
 - There are no commits on the branch. Ask whether commits are missing.
 - There are uncommitted changes. Invoke the `commit` skill to handle them — it decides on its own whether to commit automatically or ask first. Afterward, re-check `git status --short`: only re-run 1.3 and continue if the worktree is now clean. If uncommitted changes remain — for example the user declined, or a suspected secret was excluded — stop and report that instead of continuing.
-
-**1.5 Check the PR unit**
-
-Once 1.4 passes, run `bash <skill-dir>/scripts/pr-size.sh <base>`. `<skill-dir>` is the directory containing this SKILL.md.
-
-| Exit | Action |
-|---|---|
-| 0 | Continue |
-| 1 | Show the output verbatim and stop. Suggest splitting the branch along the PR Unit rules. Continue only if the user explicitly says to open the PR anyway, and then name each `fail:` line under Concerns |
-| 2 | Show the error verbatim and stop |
 
 ## Step 2. Analyze the Change
 
