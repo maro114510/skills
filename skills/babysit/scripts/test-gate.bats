@@ -530,6 +530,17 @@ expect_usage() {
   expect_park ci .github/workflows/ci.yml
 }
 
+@test "parks a secret in the root commit of an unrelated history that a merge then drops" {
+  git switch -q --orphan unrelated
+  commit_file leak.txt "$(github_token)"
+  git switch -q feat/x
+  git merge -q --allow-unrelated-histories --no-commit --no-ff unrelated
+  git rm -q -f leak.txt
+  git commit -q -m "merge, without the file"
+  gate_push
+  expect_park secrets leak.txt
+}
+
 @test "refuses when Git is configured to push more than the verified commit" {
   local setting
   commit_file src.txt fix
