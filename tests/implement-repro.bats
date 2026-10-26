@@ -1,12 +1,12 @@
 #!/usr/bin/env bats
 # Tests for the implement reproduction repository under tests/implement-repro: its shell template and the seeded
 # defects that skills/implement/scripts/gate-tests.sh must flag.
-# shellcheck disable=SC2119,SC2120 # build takes seeds, and some tests build none
 # shellcheck disable=SC2292 # bats fails a test on a mid-test `[[ ]]` only under bash 4.1+; `[ ]` works on every bash.
 
 setup() {
   repro="${BATS_TEST_DIRNAME}/implement-repro"
   repo="${BATS_TEST_TMPDIR}/repo"
+  gate="${BATS_TEST_DIRNAME}/../skills/implement/scripts/gate-tests.sh"
   unset GATE_TESTS_SEED
 }
 
@@ -65,8 +65,53 @@ EOF
   [[ "${output}" == *"ERROR: test_calls_a_missing_command"* ]]
 }
 
-@test "the template names no project and holds no URL, e-mail address, or licence text" {
-  [ -d "${repro}/template" ]
-  run grep -rniE 'https?://|www\.|[a-z0-9_.]+@[a-z0-9-]+\.|github|gitlab|copyright|licen[sc]e' "${repro}/template"
+@test "the template, the seeds, and the cases name no project and hold no URL, e-mail address, or licence text" {
+  [ -d "${repro}/cases" ]
+  run grep -rniE 'https?://|www\.|[a-z0-9_.]+@[a-z0-9-]+\.|github|gitlab|copyright|licen[sc]e' "${repro}/template" "${repro}/seeds" "${repro}/cases"
   [ "${status}" -eq 1 ]
+}
+
+@test "gate-tests flags a regression test that passes on the code without the fix" {
+  build rates-naive-test rates-cache-fix
+  run bash "${gate}" origin/main
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"test_convert_uses_the_rate_set_by_rates_set: passed on the parent"* ]]
+  [[ "${output}" == *"before-change: fail"* ]]
+}
+
+@test "a regression test that fills the cache first passes gate-tests" {
+  build rates-regression-test rates-cache-fix
+  run bash "${gate}" origin/main
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"failed on the parent"* ]]
+  [[ "${output}" == *"before-change: pass"* ]]
+}
+
+@test "gate-tests flags a test that passes in default order but fails when run alone" {
+  build cart-remove-stub cart-remove-tests-shared cart-remove
+  run bash "${gate}" origin/main
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"test_remove_2_removing_the_last_pen_empties_the_pen_line: failed when run alone"* ]]
+  [[ "${output}" == *"isolation: fail"* ]]
+}
+
+@test "tests that build their own cart pass gate-tests and the whole suite in default and shuffled order" {
+  build cart-remove-stub cart-remove-tests cart-remove
+  run bash "${gate}" origin/main
+  [ "${status}" -eq 0 ]
+  for seed in "" 1 2 3 4 5; do
+    run bash tests/run.sh ${seed:+--seed "${seed}"}
+    [ "${status}" -eq 0 ]
+  done
+}
+
+@test "tests that share a cart fixture break the whole suite in a shuffled order" {
+  build cart-remove-stub cart-remove-tests-shared cart-remove
+  run bash tests/run.sh
+  [ "${status}" -eq 0 ]
+  broken=0
+  for seed in 1 2 3 4 5; do
+    bash tests/run.sh --seed "${seed}" >/dev/null 2>&1 || broken=$((broken + 1))
+  done
+  [ "${broken}" -ge 1 ]
 }
