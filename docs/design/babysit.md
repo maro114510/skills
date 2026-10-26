@@ -210,6 +210,7 @@ Not covered, and accepted for now.
 | Test cases removed from a test file | Only whole-file deletion and added skips are detected |
 | A mode-only change, such as `chmod +x` | No hunk, so no line is read |
 | Anything that goes around the gate | A script cannot stop the model from calling `git push` itself, so drive's permission rules must |
+| The gate's own environment | `BABYSIT_PR_STATE` and `BABYSIT_REMOTE_BASE` replace the pull request snapshot and add an accepted origin, as `BABYSIT_PR_STATE` does for the other scripts. Whoever controls the environment controls the gate, and tests are the only intended user |
 
 ## Decisions
 
