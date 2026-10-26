@@ -126,6 +126,20 @@ aws_key() {
   printf 'AK%s%s' 'IA' "$(printf 'B%.0s' $(seq 1 16))"
 }
 
+# Commits a file to the base branch, publishes it, and returns to the feature branch.
+base_commit() {
+  git switch -q main
+  commit_file "$1" "$2" "base change"
+  git push -q origin main
+  git switch -q feat/x
+}
+
+# Runs the gate for a reply with the body $1.
+gate_reply() {
+  printf '%s\n' "$1" >"${tmp}/body.txt"
+  run bash "${gate}" reply o/r 7 --session "${token}" --body-file "${tmp}/body.txt"
+}
+
 # Expects exit 2 with a usage message for the gate arguments given.
 expect_usage() {
   run bash "${gate}" "$@"
@@ -516,4 +530,148 @@ expect_usage() {
   commit_file calc_test.py $'def test_plus():\n    assert add(1, 1) == 2'
   gate_push
   expect "${status}" 0
+}
+
+@test "allows a merge of the base even when the base brings in a workflow and a lockfile" {
+  base_commit .github/workflows/ci.yml "name: base ci"
+  base_commit package-lock.json "{}"
+  git merge -q --no-ff -m "merge main" main
+  gate_push
+  expect "${status}" 0
+  expect "$(field .verdict)" allow
+}
+
+@test "allows a merge of the base when the base has moved on since the merge" {
+  base_commit .github/workflows/ci.yml "name: base ci"
+  git merge -q --no-ff -m "merge main" main
+  base_commit docs.md "later"
+  gate_push
+  expect "${status}" 0
+}
+
+@test "inspects a merge of a branch other than the base in full" {
+  git switch -q -c other main
+  commit_file .github/workflows/ci.yml "name: other ci"
+  git switch -q feat/x
+  git merge -q --no-ff -m "merge other" other
+  gate_push
+  expect_park ci .github/workflows/ci.yml
+}
+
+@test "inspects a merge of the base followed by another commit in full" {
+  base_commit .github/workflows/ci.yml "name: base ci"
+  git merge -q --no-ff -m "merge main" main
+  commit_file src.txt fix
+  gate_push
+  expect_park ci .github/workflows/ci.yml
+}
+
+@test "parks a merge of the base whose conflict is in a hard-stop path" {
+  commit_file package.json '{"feat":1}'
+  publish
+  base_commit package.json '{"base":2}'
+  git merge -q --no-ff main || true
+  printf '{"both":3}\n' >package.json
+  git add -- package.json
+  git commit -q -m "merge main"
+  gate_push
+  expect_park deps package.json
+}
+
+@test "allows a merge of the base whose conflict is in an ordinary file" {
+  commit_file conf.txt "feat"
+  publish
+  base_commit conf.txt "base"
+  git merge -q --no-ff main || true
+  printf 'resolved\n' >conf.txt
+  git add -- conf.txt
+  git commit -q -m "merge main"
+  gate_push
+  expect "${status}" 0
+}
+
+@test "parks a merge of the base that folds a workflow edit into the merge commit" {
+  base_commit docs.md "from base"
+  git merge -q --no-commit --no-ff main
+  mkdir -p .github/workflows
+  printf 'name: sneaky\n' >.github/workflows/x.yml
+  git add -- .github/workflows/x.yml
+  git commit -q -m "merge main"
+  gate_push
+  expect_park ci .github/workflows/x.yml
+}
+
+@test "parks a merge of the base that drops a base change to a hard-stop path" {
+  base_commit .github/workflows/ci.yml "name: one"
+  git merge -q --no-ff -m "merge main" main
+  publish
+  base_commit .github/workflows/ci.yml "name: two"
+  git merge -q --no-commit --no-ff main
+  git checkout -q HEAD -- .github/workflows/ci.yml
+  git commit -q -m "merge main, keep ours"
+  gate_push
+  expect_park ci .github/workflows/ci.yml
+}
+
+@test "parks a secret in the message of a merge of the base" {
+  base_commit docs.md "from base"
+  git merge -q --no-ff -m "merge main $(github_token)" main
+  gate_push
+  expect_park secrets "commit message"
+}
+
+@test "allows a reply that links to GitHub" {
+  gate_reply "Fixed in the latest commit. See https://github.com/o/r/pull/7 for the cause."
+  expect "${status}" 0
+  expect "$(field .verdict)" allow
+}
+
+@test "parks a reply that holds a secret" {
+  local body
+  for body in "token $(github_token)" "key $(aws_key)" "-----BEGIN RSA ""PRIVATE KEY-----" \
+    "API_TOKEN = 'abcdefgh12345'"; do
+    gate_reply "${body}"
+    expect_park secrets "reply body"
+  done
+}
+
+@test "parks a reply that would load an outside image" {
+  local body
+  for body in '![x](https://example.invalid/p.png?d=1)' '<img src="https://example.invalid/p.png">'; do
+    gate_reply "${body}"
+    expect_park network "reply body"
+  done
+}
+
+@test "refuses a reply on a pull request that is not the viewer's open, same-repository one" {
+  local edit
+  for edit in '.isCrossRepository = true' '.author = "mallory"' '.state = "CLOSED"'; do
+    set_snap "${edit}"
+    gate_reply "Thanks."
+    expect "${status}" 11
+    expect "$(field .verdict)" refuse
+  done
+}
+
+@test "exits 3 for a reply when another session holds the lock" {
+  printf 'Thanks.\n' >"${tmp}/body.txt"
+  run bash "${gate}" reply o/r 7 --session other-session --body-file "${tmp}/body.txt"
+  [ "${status}" -eq 3 ]
+}
+
+@test "reads a reply from standard input and needs no GitHub branch lookup" {
+  : >"${tmp}/gh-fails"
+  run bash -c 'printf "Thanks.\n" | bash "$0" reply o/r 7 --session tok-1 --body-file -' "${gate}"
+  expect "${status}" 0
+  expect "$(field .verdict)" allow
+}
+
+@test "rejects a reply call with the wrong arguments" {
+  gate_reply "Thanks."
+  expect "${status}" 0
+  expect_usage reply o/r 7 --session "${token}"
+  expect_usage reply o/r 7 --session "${token}" --body-file "${tmp}/missing.txt"
+  expect_usage reply o/r 7 --session "${token}" --body-file "${tmp}/body.txt" --start "${start}"
+  expect_usage reply o/r 7 --session "${token}" --body-file "${tmp}/body.txt" --worktree "${tmp}/wt"
+  expect_usage push o/r 7 --session "${token}" --worktree "${tmp}/wt" --start "${start}" --body-file "${tmp}/body.txt" -- git push
 }
