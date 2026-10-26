@@ -41,7 +41,7 @@ type Result struct {
 	Pushed  bool `json:"pushed"`
 	Created bool `json:"created"`
 	Resumed bool `json:"resumed"`
-	// Link is ok or failed once the pull request is linked to its Issues, and empty before.
+	// Link is ok or failed when this run linked the pull request to its Issues, and empty when it did not, as for a pair already published.
 	Link     string             `json:"link"`
 	Findings []scan.Finding     `json:"findings"`
 	Notes    []coord.NoteResult `json:"notes"`
@@ -130,6 +130,17 @@ func (f *flow) run(ctx context.Context) error {
 	return nil
 }
 
+// update applies a transition and keeps the state it returns only when the write landed.
+// A failed write returns the zero state, which must never replace the one this run read.
+func (f *flow) update(ctx context.Context, t coord.Transition) error {
+	next, err := f.d.S.Update(ctx, f.r.Issue, t)
+	if err != nil {
+		return err
+	}
+	f.st = next
+	return nil
+}
+
 func (f *flow) refused(format string, args ...any) error {
 	return exitcode.New(exitcode.Refused, fmt.Sprintf(format, args...))
 }
@@ -157,8 +168,8 @@ func (f *flow) enter(ctx context.Context) (bool, error) {
 		f.resuming = true
 		return false, nil
 	}
-	f.res.Route, f.res.Next, f.res.PR, f.res.Link = RoutePublished, NextLand, p.PR, "ok"
-	f.res.Reason = "this pair is already published and linked; nothing was done"
+	f.res.Route, f.res.Next, f.res.PR = RoutePublished, NextLand, p.PR
+	f.res.Reason = "this pair is already published and linked; nothing was done, and the link is not checked again"
 	return true, nil
 }
 
@@ -384,11 +395,12 @@ func (f *flow) parkSecret(ctx context.Context, what string, findings []scan.Find
 }
 
 func (f *flow) parked(ctx context.Context, blocker string) error {
-	next, err := f.d.S.Update(ctx, f.r.Issue, coord.Park{Blockers: []string{blocker}, Head: ""})
-	f.st = next
+	if err := f.update(ctx, coord.Park{Blockers: []string{blocker}, Head: ""}); err != nil {
+		return err
+	}
 	f.res.Route, f.res.Next = coord.RouteParked, coord.NextParked
 	f.res.Reason = "nothing was pushed: " + blocker
-	return err
+	return nil
 }
 
 func firstLine(text string) string {
@@ -409,11 +421,10 @@ func (f *flow) intentAndPush(ctx context.Context) error {
 	if f.resuming {
 		f.res.Resumed = true
 	} else {
-		next, err := f.d.S.Update(ctx, f.r.Issue, coord.RecordPublishIntent{SHA: f.a.ReviewedSHA, Base: f.a.VerifiedBase, PrevSHA: remote})
-		if err != nil {
+		if err := f.update(ctx, coord.RecordPublishIntent{SHA: f.a.ReviewedSHA, Base: f.a.VerifiedBase, PrevSHA: remote}); err != nil {
 			return err
 		}
-		f.st, f.wrote = next, true
+		f.wrote = true
 	}
 	if f.st.Publish.Phase != coord.PublishIntent {
 		return nil
@@ -423,9 +434,7 @@ func (f *flow) intentAndPush(ctx context.Context) error {
 			return err
 		}
 	}
-	next, err := f.d.S.Update(ctx, f.r.Issue, coord.RecordPublished{PR: 0})
-	f.st = next
-	return err
+	return f.update(ctx, coord.RecordPublished{PR: 0})
 }
 
 // push sends exactly the approved SHA to the Issue's branch. It never forces, deletes, or runs a hook.
@@ -456,11 +465,12 @@ func (f *flow) openPullRequest(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	next, err := f.d.S.Update(ctx, f.r.Issue, coord.RecordPublished{PR: pr})
-	f.st = next
+	if err := f.update(ctx, coord.RecordPublished{PR: pr}); err != nil {
+		return err
+	}
 	f.res.Route, f.res.Next, f.res.PR = RoutePublished, NextLand, pr
 	f.res.Reason = "the approved head is on origin and its pull request is linked"
-	return err
+	return nil
 }
 
 // link ties an existing pull request to its Issues. A failure is noted on the Issue and never stops the round.
