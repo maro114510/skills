@@ -9,7 +9,7 @@ description: >
   Trigger on requests like
   「これを実装して」「機能を追加して」「バグを修正して」「変更して」「これを作って」
   「リファクタリングして」「対応して」 and similar implementation requests.
-  Works in a worktree, commits as it goes, and before push self-reviews the whole branch range once,
+  Works in a worktree, commits as it goes, and before push self-reviews the whole branch range on the first pass and only the fix delta on a second,
   then asks for user approval via difit over that range when the commit skill's classifier requires it.
   Claims an Issue locally first, so a second session handed the same Issue stops and asks instead of duplicating the work.
   Does not create a PR until the user explicitly requests it.
