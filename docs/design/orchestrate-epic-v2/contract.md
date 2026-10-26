@@ -128,8 +128,8 @@ Each transition writes the whole object after a full read. The writer exits 7 if
 | `mark_stale` | A staleness pass | Clears approval and records this session in `stale_pass` |
 | `park` | Blockers | Sets blockers, empties pending findings, clears approval. A head the worker committed before it stopped sets `head_sha` |
 | `apply_signals` | A full read of the window, §6 | Advances the watermark, appends context, applies the decision |
-| `record_publish_intent` | Approval bound; `sha` and `base` equal the pair; any earlier publish is `linked` or null | New intent with `prev_sha`, keeping an earlier `pr`. A repaired head re-publishes this way |
-| `record_published` | Publish `intent` or `pushed` | Moves to `pushed`, then `linked` with `pr` |
+| `record_publish_intent` | Approval bound; `sha` and `base` equal the pair; an earlier publish of any phase is replaced | New intent with `prev_sha`, keeping an earlier `pr`. A repaired head, or a pair that went stale after a crash, re-publishes this way |
+| `record_published` | Publish `intent` or `pushed` | Moves to `pushed` with no `pr`, then to `linked` with `pr` |
 
 | Decision | Applies to | Effect |
 |---|---|---|
