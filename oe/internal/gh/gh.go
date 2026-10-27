@@ -37,6 +37,8 @@ var ErrRateLimited = errors.New("rate limit")
 type Client struct {
 	r        runner.Runner
 	snapshot bool
+	// readOnly refuses every write, as a probe does.
+	readOnly bool
 
 	mu     sync.Mutex
 	failed error
@@ -44,7 +46,7 @@ type Client struct {
 
 // New returns a client. With snapshot set, every Write refuses.
 func New(r runner.Runner, snapshot bool) *Client {
-	return &Client{r: r, snapshot: snapshot, mu: sync.Mutex{}, failed: nil}
+	return &Client{r: r, snapshot: snapshot, readOnly: false, mu: sync.Mutex{}, failed: nil}
 }
 
 // Err returns the first read failure, or nil while every read so far was full.
@@ -114,8 +116,8 @@ func (c *Client) Git(ctx context.Context, args ...string) ([]byte, error) {
 // Like Write, it refuses in snapshot mode and after any failed read, and it never taints the
 // client: a failed change is the caller's to report, not a partial read.
 func (c *Client) GitWrite(ctx context.Context, args ...string) ([]byte, error) {
-	if c.snapshot {
-		return nil, exitcode.New(exitcode.Refused, "--snapshot disables every mutation: "+describe(runner.Git, args))
+	if err := c.refuseWrite(describe(runner.Git, args)); err != nil {
+		return nil, err
 	}
 	if err := c.Err(); err != nil {
 		return nil, exitcode.Wrap(exitcode.Unreadable, err, "an earlier read failed or was partial, so no write is authorized")
@@ -132,8 +134,8 @@ func (c *Client) GitWrite(ctx context.Context, args ...string) ([]byte, error) {
 
 // Write runs a mutating gh command. It refuses in snapshot mode and after any failed read.
 func (c *Client) Write(ctx context.Context, args ...string) ([]byte, error) {
-	if c.snapshot {
-		return nil, exitcode.New(exitcode.Refused, "--snapshot disables every mutation: "+describe(runner.GH, args))
+	if err := c.refuseWrite(describe(runner.GH, args)); err != nil {
+		return nil, err
 	}
 	if err := c.Err(); err != nil {
 		return nil, exitcode.Wrap(exitcode.Unreadable, err, "an earlier read failed or was partial, so no write is authorized")
@@ -156,7 +158,18 @@ func (c *Client) Write(ctx context.Context, args ...string) ([]byte, error) {
 // that cannot be read after a merge request got no response. It gives the same reads as the client it came from.
 // A failure taints only the probe, so the caller can still record that answer, and every write through it is refused.
 func (c *Client) Probe() *Client {
-	return c
+	return &Client{r: c.r, snapshot: c.snapshot, readOnly: true, mu: sync.Mutex{}, failed: nil}
+}
+
+// refuseWrite says why a write may not run on this client at all, or returns nil.
+func (c *Client) refuseWrite(what string) error {
+	switch {
+	case c.snapshot:
+		return exitcode.New(exitcode.Refused, "--snapshot disables every mutation: "+what)
+	case c.readOnly:
+		return exitcode.New(exitcode.Refused, "a probe is read-only: "+what)
+	}
+	return nil
 }
 
 // Response is the HTTP answer to a write.
@@ -177,8 +190,8 @@ func (c *Client) WriteHTTP(ctx context.Context, args ...string) (Response, error
 	if len(args) == 0 || args[0] != apiCmd {
 		return none, exitcode.New(exitcode.Refused, "WriteHTTP carries a gh api call only")
 	}
-	if c.snapshot {
-		return none, exitcode.New(exitcode.Refused, "--snapshot disables every mutation: "+describe(runner.GH, args))
+	if err := c.refuseWrite(describe(runner.GH, args)); err != nil {
+		return none, err
 	}
 	if err := c.Err(); err != nil {
 		return none, exitcode.Wrap(exitcode.Unreadable, err, "an earlier read failed or was partial, so no write is authorized")
