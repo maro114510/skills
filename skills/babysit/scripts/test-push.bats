@@ -164,3 +164,15 @@ expect() {
   expect "$(ledger .rounds)" 0
   expect "$(ledger '.repairs | length')" 0
 }
+
+@test "a lock lost during the push exits 3 and still says the push went out" {
+  commit_file fix.txt fix
+  head="$(git rev-parse HEAD)"
+  printf '#!/usr/bin/env bash\nbash "%s/ledger.sh" stop o/r 7 %s\n' "${scripts}" "${token}" >.git/hooks/pre-push
+  chmod +x .git/hooks/pre-push
+  push --check "${check_key}"
+  [ "${status}" -eq 3 ]
+  expect "$(field .pushed)" true
+  expect "$(field .sha)" "${head}"
+  expect "$(remote_head)" "${head}"
+}

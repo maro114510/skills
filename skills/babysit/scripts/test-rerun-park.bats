@@ -141,3 +141,19 @@ expect() {
   expect "$(calls osascript)" 1
   grep -q 'pwned2).* second line' "${tmp}/osascript-calls"
 }
+
+@test "rerun that GitHub accepted but could not be recorded exits 3, not the refusal code" {
+  printf '#!/usr/bin/env bash\nbash "%s/ledger.sh" stop o/r 7 %s\nexit 0\n' "${scripts}" "${token}" >"${tmp}/gh-losing"
+  chmod +x "${tmp}/gh-losing"
+  export BABYSIT_GH="${tmp}/gh-losing"
+  rerun
+  [ "${status}" -eq 3 ]
+}
+
+@test "park cuts a long reason at 200 characters, not bytes, whatever the locale" {
+  reason="$(printf 'あ%.0s' $(seq 1 250))"
+  LC_ALL=C park c:IC1 "${reason}" --hash h1
+  [ "${status}" -eq 0 ]
+  expect "$(ledger '.items["c:IC1"].reason | length')" 200
+  expect "$(ledger '.items["c:IC1"].reason | contains("\ufffd")')" false
+}

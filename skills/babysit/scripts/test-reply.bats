@@ -162,3 +162,13 @@ expect() {
   [ "${status}" -eq 0 ]
   expect "$(ledger '.own.replies[0].hash')" "$(jq -r '.comments[0].bodyHash' <<<"${output}")"
 }
+
+@test "a lock lost while posting exits 3 and still says the reply was posted" {
+  printf '#!/usr/bin/env bash\nbash "%s/ledger.sh" stop o/r 7 %s\nexec "%s" "$@"\n' "${scripts}" "${token}" "${tmp}/gh" >"${tmp}/gh-losing"
+  chmod +x "${tmp}/gh-losing"
+  export BABYSIT_GH="${tmp}/gh-losing"
+  reply --thread T1
+  [ "${status}" -eq 3 ]
+  expect "$(jq -r .posted <<<"${output}")" true
+  expect "$(jq -r .id <<<"${output}")" PRRC_1
+}
