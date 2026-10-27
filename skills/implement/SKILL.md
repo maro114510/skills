@@ -9,7 +9,7 @@ description: >
   Trigger on requests like
   「これを実装して」「機能を追加して」「バグを修正して」「変更して」「これを作って」
   「リファクタリングして」「対応して」 and similar implementation requests.
-  Implements only the first planned change unit per run, listing the rest as deferred.
+  In normal mode implements only the first planned change unit per run, listing the rest as deferred.
   Works in a worktree, commits as it goes, and before push self-reviews the whole branch range on the first pass and only the fix delta on a second,
   then asks for user approval via difit over that range when the commit skill's classifier requires it.
   Claims an Issue locally first, so a second session handed the same Issue stops and asks instead of duplicating the work.
@@ -189,7 +189,7 @@ If new information, repository drift, or a scope change raises a Phase 2 trigger
 
 ### Run One Unit
 
-Normal mode implements only the first unit of the plan, the first one listed with `depends on: none`, so each unit is reviewed and merged before a dependent one starts and no unit's code is written on top of an unreviewed unit. Autonomous mode never splits and implements the whole Issue as one unit.
+Normal mode implements only the first unit of the plan, the first one listed with `depends on: none`, so each unit is reviewed and merged before a dependent one starts and no unit's code is written on top of an unreviewed unit. A change the base branch already contains is done and is not planned again, so a later run starts at the next unit. Autonomous mode never splits: it implements every unit in order, as one run.
 
 - A unit ends only at a green commit that closes a complete playbook cycle, never between a test commit and the commit that makes it pass. Phase 6 then shows HEAD green.
 - Every other unit is deferred. Make no edit for it in this run, and report it as Phase 6.9 describes.
@@ -281,7 +281,7 @@ Deferred, not satisfied: <criterion> -> <what was done instead, and why>
 No evidence: <criterion>
 ```
 
-Each unit Run One Unit deferred is one more `Deferred, not satisfied` entry of 5 to 10 lines: the first line names the unit, and its acceptance criteria that no earlier unit satisfies, and the lines under it give the goal, the dependency, the expected files, and the constraints. It uses no new field.
+Each unit Run One Unit deferred is one more `Deferred, not satisfied` entry of 5 to 10 lines: the first line names the unit, and its acceptance criteria that no earlier unit satisfies, and the lines under it give the goal, the dependency, the expected files, and the constraints. It uses no new field, and only normal mode writes it, because autonomous mode defers no unit.
 
 ```
 Deferred, not satisfied: unit <n>, <its one sentence> -> not done in this run: <why it is separate>
