@@ -173,17 +173,19 @@ func (f *landFlow) wantNoBypass(t *testing.T) {
 }
 
 type landed struct {
-	Issue        int    `json:"issue"`
-	PR           int    `json:"pr"`
-	Route        string `json:"route"`
-	Reason       string `json:"reason"`
-	Next         string `json:"next"`
-	Method       string `json:"method"`
-	ReviewedSHA  string `json:"reviewed_sha"`
-	VerifiedBase string `json:"verified_base"`
-	MergeSHA     string `json:"merge_sha"`
-	Result       string `json:"result"`
-	Repair       []string
+	Issue        int      `json:"issue"`
+	PR           int      `json:"pr"`
+	Route        string   `json:"route"`
+	Reason       string   `json:"reason"`
+	Next         string   `json:"next"`
+	Method       string   `json:"method"`
+	ReviewedSHA  string   `json:"reviewed_sha"`
+	VerifiedBase string   `json:"verified_base"`
+	MergeSHA     string   `json:"merge_sha"`
+	Result       string   `json:"result"`
+	Repair       []string `json:"repair"`
+	Findings     []string `json:"findings"`
+	Since        int64    `json:"since"`
 	Reconciled   *struct {
 		PR     int    `json:"pr"`
 		Issue  int    `json:"issue"`
