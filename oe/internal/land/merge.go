@@ -154,6 +154,9 @@ func (f *flow) health(ctx context.Context) error {
 		reason := fmt.Sprintf("post-merge default-branch checks %s on %s (PR #%d): %s", h.Status, h.Merge, h.PR, h.Reason)
 		lr, err := f.d.S.Freeze(ctx, reason, h.Merge, string(h.Status))
 		f.res.Freeze = lr.Freeze
+		if lr.Freeze != nil {
+			f.res.Route, f.res.Next, f.res.Reason = RouteFrozen, NextStop, reason
+		}
 		return err
 	case health.NextHold:
 		return exitcode.New(exitcode.Stop, "post-merge health is unreadable, so every merge is held: "+h.Reason)

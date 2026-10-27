@@ -660,7 +660,7 @@ The order is fixed, and every step before the intent writes nothing but a note.
 
 - The request is never `gh pr merge`, never `--admin`, and never sent twice for one intent.
 - A pull request read that fails after the request is the answer to record as `unknown`, so it goes through a read-only probe whose failure forbids no write.
-- Routes are `MERGED`, `MERGED_UNVERIFIED_BASE`, `HEAD_MOVED`, `REJECTED`, `UNKNOWN`, `RECONCILED`, and `HELD`. A merge ends the pass with `next` rescan.
+- Routes are `MERGED`, `MERGED_UNVERIFIED_BASE`, `HEAD_MOVED`, `REJECTED`, `UNKNOWN`, `RECONCILED`, `HELD`, and `FROZEN`, which reports the freeze the health step wrote and exits 4. A merge ends the pass with `next` rescan.
 - The merge hold is `merge-hold:<pr>:<head>:<digest>` with the reason in its text, and the result note is `merge-result:<pr>:<reviewed_sha>:<result>`.
 
 ### 19.2 Repair
