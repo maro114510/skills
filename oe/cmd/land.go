@@ -73,8 +73,12 @@ func newRepairCmd(env Env, g *globals) *cobra.Command {
 			if err := needIssue(a.n); err != nil {
 				return err
 			}
-			return g.coordinate(c, env, a.token, false, func(context.Context, session) error {
-				return exitcode.New(exitcode.Refused, "oe land repair is not built yet")
+			return g.coordinate(c, env, a.token, false, func(ctx context.Context, ss session) error {
+				res, err := land.Repair(ctx, land.Deps{S: ss.s, Client: ss.client, In: ss.in}, a.n)
+				if res.Route == "" {
+					return err
+				}
+				return emit(c, res, err)
 			})
 		},
 	}

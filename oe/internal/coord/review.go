@@ -121,6 +121,16 @@ func (s *Session) Stale(ctx context.Context, n int, head, base, reason string, r
 //   - At the cap the findings park the Issue.
 //   - Otherwise a fix cycle is reserved on the ledger first, so a frozen or exhausted Epic starts none, and begin_fix hands the findings to a fresh worker.
 func (s *Session) RouteFindings(ctx context.Context, n int, findings []string, kinds []handoff.ShipClass, head string, res *ReviewResult) error {
+	return s.routeFindings(ctx, n, findings, kinds, head, nil, res)
+}
+
+// RouteRepair hands a pull request's repair findings down the same fix-cycle path as a review's, and records the repair it is.
+// A repair has no bounds of its own: it counts against the Issue's cap and the Epic's budget, and a secret in its input parks the Issue.
+func (s *Session) RouteRepair(ctx context.Context, n int, findings []string, repair state.Repair, res *ReviewResult) error {
+	return s.routeFindings(ctx, n, findings, nil, repair.Head, &repair, res)
+}
+
+func (s *Session) routeFindings(ctx context.Context, n int, findings []string, kinds []handoff.ShipClass, head string, repair *state.Repair, res *ReviewResult) error {
 	if len(findings) == 0 && len(kinds) == 0 {
 		return exitcode.New(exitcode.Refused, "no finding to route")
 	}
@@ -141,12 +151,12 @@ func (s *Session) RouteFindings(ctx context.Context, n int, findings []string, k
 	if err != nil {
 		return err
 	}
-	return s.fixOrPark(ctx, n, st, findings, head, res)
+	return s.fixOrPark(ctx, n, st, findings, head, repair, res)
 }
 
 // fixOrPark hands findings to a fix cycle or parks the Issue at the cap.
 // A replay of the fix cycle already in flight is charged nothing.
-func (s *Session) fixOrPark(ctx context.Context, n int, st state.Issue, findings []string, head string, res *ReviewResult) error {
+func (s *Session) fixOrPark(ctx context.Context, n int, st state.Issue, findings []string, head string, repair *state.Repair, res *ReviewResult) error {
 	if head != "" && deref(st.HeadSHA) == head && slices.Equal(st.PendingFindings, findings) {
 		// No worker has reported since begin_fix, so this is a replay such as a resumed session, and nothing is charged.
 		res.Route, res.Next, res.State = RouteFix, NextRedispatch, st
@@ -166,7 +176,7 @@ func (s *Session) fixOrPark(ctx context.Context, n int, st state.Issue, findings
 	if err != nil {
 		return err
 	}
-	next, err := s.Update(ctx, n, BeginFix{Findings: findings, Grant: grant, Repair: nil})
+	next, err := s.Update(ctx, n, BeginFix{Findings: findings, Grant: grant, Repair: repair})
 	res.Route, res.Next, res.State = RouteFix, NextRedispatch, next
 	return err
 }

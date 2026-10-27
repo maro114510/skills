@@ -54,3 +54,13 @@ func MergeResultNote(pr int, reviewed, base, method, result, detail string) stri
 		"- expected SHA (reviewed_sha): %s\n- verified_base: %s\n- 方式: %s\n- 詳細: %s\n\n%s\n",
 		pr, result, reviewed, base, method, oneLine(detail), meaning(result))
 }
+
+// RepairNote records that a pull request's repair was handed to a worker, so the same head and window are never handed over twice.
+// A resumed repair does not know its kinds, and the line is left out.
+func RepairNote(pr int, head string, kinds []string, since int64) string {
+	what := ""
+	if len(kinds) > 0 {
+		what = fmt.Sprintf("（種類: %s）", strings.Join(kinds, ", "))
+	}
+	return fmt.Sprintf("PR #%d の修復を worker に依頼しました%s。\n\nHEAD: %s\n指摘の既読位置（since）: %d\n", pr, what, head, since)
+}

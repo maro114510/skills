@@ -75,7 +75,7 @@ func (f *flow) enter(ctx context.Context) error {
 	}
 	f.st = st
 	if st.Approval == nil {
-		return f.refused("#%d has no approval, so nothing may be merged; run oe review pin and verdict first", f.n)
+		return f.refused("#%d has no approval, so nothing may be landed; run oe review pin and verdict first", f.n)
 	}
 	f.a = *st.Approval
 	p := st.Publish
