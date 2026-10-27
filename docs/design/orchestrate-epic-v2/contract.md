@@ -310,7 +310,7 @@ Every subcommand that needs the run inputs resolves them one way, in this order,
 - `--snapshot` with an empty value exits 2; it never falls back to real calls.
 - `--snapshot <file>` replays recorded `{argv, stdout, stderr, exit_code}` calls and never starts a process. A call missing from the file exits 1. Read-only subcommands give identical output on every run over one file.
 - `oe checks derive` reads workflow files at the base and ref through `git`, and emits CHECKS_SET: every runnable and requires-runner entry in file, job, and step order. `oe checks run` executes each runnable entry with the captured shell, working directory, and env in its own process, and never executes a requires-runner entry; it reports the exit status and any worktree or index change. A set whose revision no longer matches the ref is refused as stale rather than run. Under `--snapshot`, `oe checks run` exits 8 before any call, because replaying a captured process is not possible.
-- `oe lease`, `oe note post`, `oe ledger`, `oe state`, `oe gate`, `oe worker report`, `oe review pin`, `oe review verdict`, `oe ship publish`, `oe land merge`, and `oe land repair` are the only subcommands that write loop comments, each through the single writer of §5 and §7. `oe worker worktree` and `oe worker brief` write no comment but are coordination subcommands too, so only the lease holder dispatches. `oe review pin` also makes the integration merge, the only commit the loop makes. Under `--snapshot` they all exit 8 before any call. Each takes the lock of §4.1, and all but `lease acquire` confirm the lease first.
+- `oe lease`, `oe note post`, `oe ledger`, `oe state`, `oe gate`, `oe worker report`, `oe review pin`, `oe review verdict`, `oe ship publish`, `oe land merge`, `oe land repair`, `oe round notify`, and `oe round complete` are the only subcommands that write loop comments, each through the single writer of §5 and §7. `oe worker worktree` and `oe worker brief` write no comment but are coordination subcommands too, so only the lease holder dispatches. So are `oe round plan`, `defer`, `poll`, `next`, and `cleanup`, which write only host-local state or local git, §20. `oe review pin` also makes the integration merge, the only commit the loop makes. Under `--snapshot` they all exit 8 before any call. Each takes the lock of §4.1, and all but `lease acquire` confirm the lease first.
 - `oe ship publish` and `oe land merge` are the only subcommands that may push, open a PR, or merge. Under `--snapshot` they exit 8 before any call. `.claude/hooks/require-user-approval.sh` blocks both without the approval marker, whether they are run directly, by path, or through `skills/orchestrate-epic/scripts/oe`. The marker approves only the line it ends.
 
 ## 13. Classifiers
@@ -674,3 +674,89 @@ It needs `epic-approve` but not the merge grant, and acts only when readiness sa
 - A repair is a fix cycle under the same cap and budget, and its findings are scanned.
 - A repair whose marker was never posted is finished on the next run without a second charge, and one whose marker exists awaits its worker.
 - Routes are `REPAIR`, `PARKED`, and `HELD`.
+
+## 20. Rounds, Notifications, and Completion
+
+`oe round` decides what an invocation does between its landing passes. Every subcommand is a coordination subcommand of §12 and takes `--lease-token`. Each reads GitHub fresh, so nothing is remembered across invocations except what GitHub already holds.
+
+### 20.1 Invocation
+
+One lease session is one invocation. What it keeps lives in `<state dir>/sessions/<owner>-<repo>-<epic>-<digest of the lease token>.json`, mode 0600, written whole through a rename.
+
+| Field | Meaning |
+|---|---|
+| `polls` | Polls spent since the last merge |
+| `merges`, `rounds` | Merges seen and rounds begun |
+| `mark` | The latest merge seen, `<pr>:<merge sha>`. The first look only learns it, so a merge from before the session never counts |
+| `round` | The latest merge, and whether an Issue was verifying, when the round began |
+| `deferred` | Issues left for the next invocation, with `blocked`, `stale`, or `gave-up-turn` |
+| `no_checks` | Polls per pull request and head that reported no check |
+
+- A resumed session, with the same token, continues its counts, and a new token starts clean. This is the limit of the auto-answer of §16.3 and the staleness pass of §17.3: per lease session, never per round, so beginning a round resets nothing.
+- A missing file is a clean start. A file that cannot be read, is not one valid object, has an unknown field, or has another version exits 1 and nothing runs, so a damaged file never reads as a fresh invocation.
+- The file only narrows what a round does: a deferral removes a proposal and never adds one.
+
+### 20.2 Plan and Defer
+
+`oe round plan` classifies the board, prints the plan, and begins a round. `oe round defer --issue <n> --reason blocked|stale|gave-up-turn` records a deferral, and an Issue deferred stays out of every later round of the invocation: a BLOCKED worker with no documented answer, a verdict stale a second time, and a landing candidate that gave up its turn.
+
+| Field | Content |
+|---|---|
+| `signals`, `freeze` | The board's `apply_signals` Issues and proposed freeze, passed through |
+| `work` | At most `max-parallel` workers and reviewers together: the stale candidate's reviewer first, then every Issue in progress by number, then the ready Issues by number |
+| `left_out` | Every Issue the cap left out, which the next round or invocation starts |
+| `landing` | Candidates in ascending Issue number: fresh ones, and at most one stale |
+| `stale_waiting` | The stale candidates behind the one whose turn it is |
+| `deferred` | The proposed Issues a deferral removed |
+
+- One stale candidate is re-verified at a time, the lowest Issue number not deferred. The rest wait, so each spends its staleness pass only when it is next to land, and a candidate that gave up its turn yields to the next.
+- A stale candidate whose state holds pending findings is a fix a restart cut off. It is a dispatch with `fix_in_flight`, and neither a reviewer nor a landing candidate.
+- The board never proposes a parked Issue, so none is started. Overlap between Issues is never checked: overlapping Issues are started, reviewed, and shipped in parallel, and only landing is one at a time, §19.
+
+### 20.3 Poll
+
+`oe round poll` follows a landing pass. It reads the board, then each fresh candidate's pull request as `oe readiness` does, and prints a decision.
+
+| Decision | When |
+|---|---|
+| `stop` | The Epic is frozen, the latest merge's checks failed or cannot be read, the latest merge request is `intent` or `unknown`, or 30 polls were spent since the last merge. `waiting` lists what still waits |
+| `pass` | The record names a merge not seen before: the count starts over and landing runs again at once |
+| `sleep` | Something waits: the default branch's checks after the latest merge, a candidate readiness calls `wait`, or a stale candidate. One poll is spent, and the caller sleeps `sleep_seconds`, 60, in a call of its own |
+| `settled` | Nothing is left to merge, repair, or wait on. `human` lists the pull requests only a person moves |
+
+- A pull request whose only wait is `no checks reported on head` gets 5 polls from its latest push, counted per head. It then moves to `human`.
+- A read that fails exits 1 before a poll is counted. So does a pull request whose readiness has a missing signal, which `oe readiness` reports as a result and poll treats as a failed read. A merge that was recorded as `intent` or `unknown` is settled by `oe land merge` first, §19.1.
+
+### 20.4 Continuation
+
+`oe round next` prints `continue` only when all of these hold from one fresh read, and otherwise `end` with the failing ones named. A session whose first round never began exits 8, checked from the session before any read, so a failing read never hides it.
+
+| Condition | Meaning |
+|---|---|
+| `outdated` | A merge was recorded since the round began, or an Issue was verifying when it began |
+| `landing_not_stopped` | Health is not a freeze or unreadable, and no merge record is `intent` or `unknown` |
+| `health_passed` | The default branch's checks after the latest merge passed |
+| `freeze_clear` | No freeze holds the Epic |
+| `within_cap` | The rounds begun never exceed the merges seen plus two |
+
+Running out of polls does not by itself end the session: `health_passed` decides whether the last merge passed. A new round is a new `oe round plan`, which reads everything again and posts no second Run Plan.
+
+### 20.5 Notifications
+
+`oe round notify` posts each note the board proposes through the writer of §7: a dependency cycle, a leftover placeholder token, a rejected Issue, a merged pull request on an open Issue, and a dispatch whose branch is gone. The stale-verdict and freeze notes are posted where their state is written, and are skipped. The writer posts a key once, so a note proposed on every invocation exists once, and a note it refuses stops the rest with its exit code and the notes already posted printed.
+
+### 20.6 Completion
+
+`oe round complete` reads a fresh board and the comments of every leaf Issue, closed ones included, and posts the `completion` note once.
+
+- It completes only when the Epic has dispatchable Issues and every one is `done`, or `parked` or `rejected` with an applied `epic-drop`. A `verifying` Issue, a dropped Issue with a newer decision not applied to the state yet, and an empty board never complete.
+- It posts nothing when the note exists, and a read that fails exits 1 before any post.
+- The text is oe's own template: the merged Issues, every recorded assumption, the Issues a person dropped with why they never shipped, and the numbers oe has. Assumptions are read back from the loop's `report` notes, each section ending only at a heading the handoff package writes, the skipped entries and the decision-log lines of a DONE record, and from its `qa` notes, so every invocation's are carried. The numbers are the ledger's counters, the fix cycles each Issue used, and the dispatches whose branch was lost. The CI-failure attribution, wall-clock, and first-pass-APPROVE metrics are dropped, R6 to R8. No section lists more than 30 entries of 200 characters, and says how many it left out, so the comment stays under the writer's limits however large the Epic is.
+- The loop never closes the Epic, a container, or any Issue. The text names the Epic and the open containers whose sub-issues are all done, for a person to close.
+
+### 20.7 Cleanup
+
+`oe round cleanup --repo-dir <checkout>` takes the merged pull requests of loop branches of `done` Issues. For each branch it removes the worktree, then deletes the local branch.
+
+- A worktree with uncommitted or untracked files, or one git refuses to remove, is reported in `kept` and left in place. The shared checkout is never touched.
+- The branch is deleted with `git branch -d`, which refuses an unmerged branch; that refusal is reported in `kept`. No flag forces a removal or a deletion.
