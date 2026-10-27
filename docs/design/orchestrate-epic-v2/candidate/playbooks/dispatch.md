@@ -2,6 +2,8 @@
 
 `work` holds at most `max-parallel` items, each with `kind`, `issue`, `branch`, and `resume`. A `reverify` item has no worker: it goes to `review.md`. Every `dispatch` item goes through the steps below. Do steps 1 to 4 serially, then spawn every worker of the batch in one message, so that they run in parallel.
 
+A fresh worker for an Issue whose `next` is `redispatch` joins the same batch from step 2, in the same round. `oe` reserved the fix cycle already, but it never reserves a worker spawn: step 4 does, for every worker, a first dispatch and a re-dispatch alike. A worker is never spawned without it.
+
 1. Make sure the Issue has a state, which only this command creates. An Issue that already has one is refused with exit 8 and the words "already has a state": that is fine, go on. Any other refusal means the Issue is not ready to dispatch: skip it.
 
 ```bash

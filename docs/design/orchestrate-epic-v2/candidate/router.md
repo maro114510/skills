@@ -62,7 +62,7 @@ When the exit is 0, the payload's `next` says what follows:
 | `next` | Comes from | You |
 |---|---|---|
 | `review` | Worker report | `playbooks/review.md` |
-| `redispatch` | Worker report, verdict, repair | Spawn a fresh worker for the Issue: `playbooks/dispatch.md` from its step 3 |
+| `redispatch` | Worker report, verdict, repair | A fresh worker for the Issue: `playbooks/dispatch.md` from its step 2. It still needs the worker reservation of step 4 |
 | `await-human` | Worker report | `oe round defer --issue <N> --reason blocked`. The question is already on the Issue |
 | `parked` | Any command | Nothing more. A person decides; report it with Escalation |
 | `ship` | Review | `playbooks/ship.md` |
