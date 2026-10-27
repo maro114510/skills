@@ -131,6 +131,7 @@ func newRoot(env Env) *cobra.Command {
 		newReviewCmd(env, g),
 		newShipCmd(env, g),
 		newLandCmd(env, g),
+		newRoundCmd(env, g),
 	)
 	return root
 }
