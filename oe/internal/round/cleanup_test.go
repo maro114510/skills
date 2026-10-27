@@ -292,3 +292,31 @@ func TestTargetsAreTheMergedBranchesOfDoneIssuesAndNothingElse(t *testing.T) {
 		t.Errorf("targets = %+v, want %+v: Issue 8's PR closed unmerged, 9 is parked, 10 is still verifying, 12 is not in the Epic", got, want)
 	}
 }
+
+func TestAnEditThatAnIndexFlagHidesFromStatusIsNeverRemoved(t *testing.T) {
+	t.Parallel()
+
+	for _, flag := range []string{"--assume-unchanged", "--skip-worktree"} {
+		c := newCheckout(t)
+		path := c.issueWorktree("feat/issue-7")
+		c.merged("feat/issue-7")
+		tracked := filepath.Join(path, "work-issue-7.txt")
+		git(t, path, "update-index", flag, "work-issue-7.txt")
+		c.write(path, "work-issue-7.txt", "an edit that status no longer shows")
+		if status := git(t, path, "status", "--porcelain", "--untracked-files=all"); status != "" {
+			t.Fatalf("%s: status = %q, want the edit hidden, or this proves nothing", flag, status)
+		}
+
+		res, err := round.Cleanup(t.Context(), newRecordingGit(), c.shared, []round.Target{{Issue: 7, Branch: "feat/issue-7"}})
+
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !exists(tracked) || !c.hasBranch("feat/issue-7") {
+			t.Errorf("%s: the worktree or its branch was taken away with an unsaved edit", flag)
+		}
+		if len(res.Kept) != 1 || !strings.Contains(res.Kept[0].Reason, "index") || len(res.Removed) != 0 {
+			t.Errorf("%s: result = %+v, want the worktree kept because an index flag hides its edits", flag, res)
+		}
+	}
+}
