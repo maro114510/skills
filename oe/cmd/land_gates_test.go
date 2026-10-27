@@ -388,3 +388,60 @@ func TestLandMergeReadsTheBaseAgainAfterRecordingTheIntent(t *testing.T) {
 		t.Errorf("want one merge-result note saying nothing was requested")
 	}
 }
+
+// stealLease replaces the Epic's lease with another session's, as a second Publisher taking over would.
+func (f *landFlow) stealLease(t *testing.T) {
+	t.Helper()
+	for _, c := range f.w.store.Comments(277) {
+		if strings.HasPrefix(c.Body, "<!-- oe:v2 state lease -->") {
+			f.w.store.Delete(c.ID)
+		}
+	}
+	var l state.Lease
+	l.Entity, l.Key = state.EntityLease, state.KeyLease
+	l.Token, l.Host, l.PID, l.StartedAt, l.RenewedAt = "theirs", "host-b", 1, "2026-10-19T00:04:00Z", "2026-10-19T00:04:30Z"
+	f.w.put(t, 277, &l)
+}
+
+// TestLandMergeChecksTheLeaseAgainRightBeforeTheRequest: the request is sent by a direct call that passes no per-write lease check,
+// so a lease lost during the intent's calls would otherwise let the former holder merge after another Publisher took the Epic.
+func TestLandMergeChecksTheLeaseAgainRightBeforeTheRequest(t *testing.T) {
+	t.Parallel()
+
+	f := newLandFlow(t)
+	f.base = func(n int) string {
+		if n == 3 {
+			f.stealLease(t)
+		}
+		return landBase
+	}
+	r := f.merge()
+	if r.code != 7 {
+		t.Errorf("exit %d, stdout %q; want 7, the lease lost", r.code, r.stdout)
+	}
+	f.wantNoRequest(t)
+}
+
+// TestLandMergeChecksThePullRequestTargetAgainRightBeforeTheRequest: the expected SHA pins only the head, so a pull request
+// retargeted after the first check would be merged into another branch, which freezing afterwards cannot undo.
+func TestLandMergeChecksThePullRequestTargetAgainRightBeforeTheRequest(t *testing.T) {
+	t.Parallel()
+
+	f := newLandFlow(t)
+	var listings atomic.Int32
+	f.w.r.On(ghfake.PullsByHead, func(map[string]string) string {
+		base := "main"
+		if listings.Add(1) >= 2 {
+			base = "release"
+		}
+		return ghfake.PullPage("["+ghfake.PullNodeOnBase(landPR, "OPEN", "feat/issue-7", base, "Closes #7", "2026-10-05T00:00:00Z", false)+"]", false, "")
+	})
+	r := f.merge()
+	if r.code != 8 {
+		t.Errorf("exit %d, stdout %q; want 8, the target changed", r.code, r.stdout)
+	}
+	f.wantNoRequest(t)
+	if pm := f.record(); pm == nil || pm.Phase != state.PhaseNotMerged {
+		t.Errorf("record = %+v, want the intent resolved as not-merged", pm)
+	}
+}

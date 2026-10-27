@@ -176,3 +176,21 @@ func TestLandMergeNeverWritesWhenTheRecordIsUnreadable(t *testing.T) {
 	}
 	f.wantNoRequest(t)
 }
+
+// TestLandMergeResultKeyCarriesTheHeadAndTheResult guards LC-09: an earlier rejected result, or a result of another head,
+// never suppresses the note of a later merge, so the key must hold both.
+func TestLandMergeResultKeyCarriesTheHeadAndTheResult(t *testing.T) {
+	t.Parallel()
+
+	f := newLandFlow(t)
+	f.pending(t, state.PhaseIntent)
+	f.w.store.Add(7, "loop", "OWNER", fmt.Sprintf("<!-- oe:v2 note merge-result:%d:%s:rejected -->\nan earlier attempt was rejected", landPR, landReviewed))
+	f.w.store.Add(7, "loop", "OWNER", fmt.Sprintf("<!-- oe:v2 note merge-result:%d:otherhead:merged -->\nan earlier head merged", landPR))
+	r := f.merge()
+	if r.code != 0 {
+		t.Fatalf("exit %d, stdout %q", r.code, r.stdout)
+	}
+	if got := f.notes(fmt.Sprintf("merge-result:%d:%s:merged -->", landPR, landReviewed)); got != 1 {
+		t.Errorf("merge-result notes for this head and result = %d, want the new one posted despite the others", got)
+	}
+}
