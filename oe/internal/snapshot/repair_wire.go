@@ -16,11 +16,10 @@ type Feedback struct {
 	Body    string
 }
 
-// FeedbackThread is one unresolved review thread. Total is the number of comments it holds, of which Comments are the first ones read.
+// FeedbackThread is one unresolved review thread with every comment it holds.
 type FeedbackThread struct {
 	Path     string
 	Line     int
-	Total    int
 	Comments []Feedback
 }
 
@@ -125,9 +124,12 @@ func ReadRepairInput(ctx context.Context, c *gh.Client, repo string, num int) (R
 	if pr.Number != num {
 		return RepairRead{}, unreadable("the response is for pull request #%d, not #%d", pr.Number, num)
 	}
+	if pr.HeadRefOid == "" {
+		return RepairRead{}, unreadable("pull request #%d has no head commit", num)
+	}
 	out := RepairRead{Number: num, Head: pr.HeadRefOid, Failed: nil, Threads: nil, Reviews: nil}
 	var err error
-	if out.Failed, err = failedChecks(pr.Commits); err != nil {
+	if out.Failed, err = failedChecks(pr.Commits, pr.HeadRefOid); err != nil {
 		return RepairRead{}, err
 	}
 	if out.Threads, err = unresolvedThreads(pr.ReviewThreads); err != nil {
@@ -139,9 +141,13 @@ func ReadRepairInput(ctx context.Context, c *gh.Client, repo string, num int) (R
 	return out, nil
 }
 
-func failedChecks(commits *Commits) ([]FailedCheck, error) {
+// failedChecks lists the checks of the head commit that did not pass, and fails when the commit read is not the head.
+func failedChecks(commits *Commits, head string) ([]FailedCheck, error) {
 	if commits == nil || len(commits.Nodes) == 0 || commits.Nodes[0].Commit == nil {
 		return nil, unreadable("the head commit was not read")
+	}
+	if commits.Nodes[0].Commit.OID != head {
+		return nil, unreadable("the checks were read at %s, not the head %s", commits.Nodes[0].Commit.OID, head)
 	}
 	rollup := commits.Nodes[0].Commit.StatusCheckRollup
 	if rollup == nil {
@@ -185,7 +191,10 @@ func (t threadNode) thread() (FeedbackThread, error) {
 	if t.Comments == nil || t.Comments.TotalCount == nil || t.Comments.Nodes == nil {
 		return FeedbackThread{}, unreadable("the comments of a review thread on %s were not read", t.Path)
 	}
-	th := FeedbackThread{Path: t.Path, Line: 0, Total: *t.Comments.TotalCount, Comments: nil}
+	if *t.Comments.TotalCount > len(*t.Comments.Nodes) {
+		return FeedbackThread{}, unreadable("the thread on %s holds %d comments and only %d were read", t.Path, *t.Comments.TotalCount, len(*t.Comments.Nodes))
+	}
+	th := FeedbackThread{Path: t.Path, Line: 0, Comments: nil}
 	if t.Line != nil {
 		th.Line = *t.Line
 	}

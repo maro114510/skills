@@ -193,7 +193,8 @@ func (c *Client) WriteHTTP(ctx context.Context, args ...string) (Response, error
 	pinned = append([]string{apiCmd, "-i"}, pinned[1:]...)
 	res, err := c.r.Run(ctx, runner.GH, pinned)
 	if err != nil {
-		return none, exitcode.Wrap(exitcode.Unreadable, fmt.Errorf("%w: %w", ErrNoResponse, err), describe(runner.GH, pinned)+" failed")
+		// The runner returns an error only when it could not start gh, so nothing was sent.
+		return none, exitcode.Wrap(exitcode.Unreadable, err, describe(runner.GH, pinned)+" failed")
 	}
 	status, body, ok := splitHTTP(res.Stdout)
 	if !ok {
