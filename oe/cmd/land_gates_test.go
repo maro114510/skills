@@ -274,3 +274,43 @@ func TestLandMergeNeverRequestsWhenTheIntentCannotBeRecorded(t *testing.T) {
 	}
 	f.wantNoRequest(t)
 }
+
+// TestLandMergeReadsTheGrantAgainRightBeforeTheRequest guards MA-02: a revoke that lands while the pull request is being
+// classified stops the merge, since the grant read at the start of the pass is not permission for the request at its end.
+func TestLandMergeReadsTheGrantAgainRightBeforeTheRequest(t *testing.T) {
+	t.Parallel()
+
+	f := newLandFlow(t)
+	f.w.r.On(ghfake.Readiness, func(map[string]string) string {
+		f.w.store.Add(277, "alice", "MEMBER", "epic-revoke-auto-merge")
+		return pullBody(readyPull(landReviewed))
+	})
+	r := f.merge()
+	if r.code != 8 {
+		t.Errorf("exit %d, stdout %q; want 8, the grant withdrawn", r.code, r.stdout)
+	}
+	f.wantNoRequest(t)
+	if f.record() != nil {
+		t.Errorf("a post-merge record exists: %+v", f.record())
+	}
+}
+
+// TestLandMergeChecksTheFreezeAgainRightBeforeTheRequest guards FZ-01: a freeze posted while the pull request is being
+// classified, by this session or another, stops every merge not yet requested.
+func TestLandMergeChecksTheFreezeAgainRightBeforeTheRequest(t *testing.T) {
+	t.Parallel()
+
+	f := newLandFlow(t)
+	f.w.r.On(ghfake.Readiness, func(map[string]string) string {
+		f.freezeEpic(t)
+		return pullBody(readyPull(landReviewed))
+	})
+	r := f.merge()
+	if r.code != 4 {
+		t.Errorf("exit %d, stdout %q; want 4, the Epic frozen", r.code, r.stdout)
+	}
+	f.wantNoRequest(t)
+	if f.record() != nil {
+		t.Errorf("a post-merge record exists: %+v", f.record())
+	}
+}
