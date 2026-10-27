@@ -275,13 +275,14 @@ func (f *flow) request(ctx context.Context) error {
 	if _, err := f.d.S.RecordMergeIntent(ctx, coord.MergeIntent{PR: t.pr, Issue: t.issue, ReviewedSHA: t.reviewed, VerifiedBase: t.base}); err != nil {
 		return err
 	}
-	// The intent took several calls and the expected SHA pins only the head, so the base is read once more, as v1 did.
-	// A request is never sent past a moved base. The intent is then resolved as not merged, since nothing was requested.
-	if err := f.baseUnmoved(ctx); err != nil {
-		if exitcode.CodeOf(err) != exitcode.Stale {
+	// The intent took several calls and the expected SHA pins only the head, so what the request depends on is read once more.
+	// A request is never sent past a moved base, a retargeted pull request, or a lost lease.
+	// The first two resolve the intent as not merged, since nothing was requested. A lost lease cannot write, so the next pass settles it.
+	if err := f.beforeRequest(ctx); err != nil {
+		if code := exitcode.CodeOf(err); code != exitcode.Stale && code != exitcode.Refused {
 			return err
 		}
-		if _, cerr := f.conclude(ctx, t, outcome{phase: state.PhaseNotMerged, mergeSHA: "", detail: "the default branch moved after the intent, so nothing was requested"}); cerr != nil {
+		if _, cerr := f.conclude(ctx, t, outcome{phase: state.PhaseNotMerged, mergeSHA: "", detail: "the pair changed after the intent, so nothing was requested: " + err.Error()}); cerr != nil {
 			return cerr
 		}
 		return err
@@ -295,6 +296,18 @@ func (f *flow) request(ctx context.Context) error {
 		return err
 	}
 	return f.report(ctx, t, o, false)
+}
+
+// beforeRequest reads the base, the pull request's target, and the lease once more, right before the request.
+// The request goes out by a direct call that no per-write lease check guards, so the lease is checked here.
+func (f *flow) beforeRequest(ctx context.Context) error {
+	if err := f.baseUnmoved(ctx); err != nil {
+		return err
+	}
+	if err := f.openPR(ctx); err != nil {
+		return err
+	}
+	return f.d.S.Verify(ctx)
 }
 
 // send is the merge request, as REST and never as gh pr merge, which turns on auto-merge or enqueues the pull request when requirements are unmet.
