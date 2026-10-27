@@ -94,6 +94,10 @@ Fields: `pr`, `issue`, `reviewed_sha`, `verified_base`, `phase`, `merge_sha`, `r
 
 `phase` is one of `intent`, `merged`, `merged-unverified-base`, `head-moved`, `rejected`, `unknown`, `not-merged`.
 
+- `requested_at` is GitHub's clock at the intent.
+- Only the two merged phases carry `merge_sha`.
+- A result resolves only an intent or an unknown record for the same pull request and head, and a repeat writes nothing.
+
 ### 4.4 Issue State
 
 | Field | Meaning |
@@ -225,6 +229,7 @@ Duplicate notes are harmless and never deleted. Duplicate states exit 6.
 | PR link | Open PR exists | Idempotent. A failure posts `link-failed` and the round goes on | Stop the round for it | #289 |
 | Merge request | Health proceeds, grant read fresh, `READY` on `reviewed_sha`, freeze `CLEAR`, base re-read equals `verified_base`, then `record_intent` | A record at `intent` or `unknown` is reconciled from the PR first, now or next invocation. Merged with first parent `verified_base` is `merged`. Merged with any other or an unreadable first parent is `merged-unverified-base`, and the ledger freeze is written before the result note or any further merge. Not merged is `not-merged`. An unreadable PR stays `unknown` and stops landing | Blind retry, `gh pr merge`, `--admin`, rebase, revert | #290 |
 | Merge result | Request answered or reconciled | Result note, then `record_result`; either failing stops every further merge | Merge again before both | #290 |
+| Repair | Freeze `CLEAR`, fresh pair, readiness `repair`, input scanned | Reserve, then `begin_fix`, then the note `repair:<pr>:<head>:<since>`, and a failed note hands nothing over | Repair beyond the cap or budget, untrusted feedback to a worker | #290 |
 | Freeze | Ledger `CLEAR` | Ledger write, then note `freeze:<seq>`; a missing note is posted on the next read | Notify twice | #285 |
 
 Local steps follow the same rule. The integration merge runs without hooks, signing, or editor, and a leftover `MERGE_HEAD` is aborted and redone, §17. Worktrees come from a pinned ref without touching the shared checkout, in #287.
@@ -303,7 +308,7 @@ Every subcommand that needs the run inputs resolves them one way, in this order,
 - `--snapshot` with an empty value exits 2; it never falls back to real calls.
 - `--snapshot <file>` replays recorded `{argv, stdout, stderr, exit_code}` calls and never starts a process. A call missing from the file exits 1. Read-only subcommands give identical output on every run over one file.
 - `oe checks derive` reads workflow files at the base and ref through `git`, and emits CHECKS_SET: every runnable and requires-runner entry in file, job, and step order. `oe checks run` executes each runnable entry with the captured shell, working directory, and env in its own process, and never executes a requires-runner entry; it reports the exit status and any worktree or index change. A set whose revision no longer matches the ref is refused as stale rather than run. Under `--snapshot`, `oe checks run` exits 8 before any call, because replaying a captured process is not possible.
-- `oe lease`, `oe note post`, `oe ledger`, `oe state`, `oe gate`, `oe worker report`, `oe review pin`, `oe review verdict`, and `oe ship publish` are the only subcommands that write loop comments, each through the single writer of §5 and §7. `oe worker worktree` and `oe worker brief` write no comment but are coordination subcommands too, so only the lease holder dispatches. `oe review pin` also makes the integration merge, the only commit the loop makes. Under `--snapshot` they all exit 8 before any call. Each takes the lock of §4.1, and all but `lease acquire` confirm the lease first.
+- `oe lease`, `oe note post`, `oe ledger`, `oe state`, `oe gate`, `oe worker report`, `oe review pin`, `oe review verdict`, `oe ship publish`, `oe land merge`, and `oe land repair` are the only subcommands that write loop comments, each through the single writer of §5 and §7. `oe worker worktree` and `oe worker brief` write no comment but are coordination subcommands too, so only the lease holder dispatches. `oe review pin` also makes the integration merge, the only commit the loop makes. Under `--snapshot` they all exit 8 before any call. Each takes the lock of §4.1, and all but `lease acquire` confirm the lease first.
 - `oe ship publish` and `oe land merge` are the only subcommands that may push, open a PR, or merge. Under `--snapshot` they exit 8 before any call. `.claude/hooks/require-user-approval.sh` blocks both without the approval marker, whether they are run directly, by path, or through `skills/orchestrate-epic/scripts/oe`. The marker approves only the line it ends.
 
 ## 13. Classifiers
@@ -622,3 +627,45 @@ Flags beyond those of `oe review pin` are `--title`, `--report-file` for the wor
 - A failed link posts `link-failed` and the publish still ends `linked`.
 - `PARKED` exits 0, so one Issue's failure never stops the others in the round.
 - A failure after an intent is recorded prints `INTERRUPTED`, and the next run resumes from the recorded phase.
+
+## 19. Landing and Repair
+
+Both subcommands take `--issue` and `--lease-token`, need no worktree, and read the base from GitHub.
+
+### 19.1 Merge
+
+```mermaid
+flowchart LR
+  settle --> enter --> freeze --> health --> grant --> readiness --> final[final gates] --> intent --> request --> result
+  settle -->|settled| stop[end of pass]
+```
+
+Frozen exits 4, a moved base or head exits 3, pending exits 5, and a missing grant exits 8.
+
+| Answer to the request | Result | Exit |
+|---|---|---|
+| 200 on the verified base | `merged` | 0 |
+| 200 on another base, or an unreadable first parent | `merged-unverified-base` after the freeze | 4 |
+| 409 | `head-moved` with next `reverify` | 3 |
+| Any other 4xx | `rejected`, held for a person | 0 |
+| No answer, a 5xx, or a 200 without a merge commit | `merged` or `unknown`, read from the pull request | 0 or 4 |
+
+- A record left at `intent` or `unknown` is settled first, which ends the pass.
+- The request is one `PUT` with `sha=<reviewed_sha>`, never `gh pr merge`, never `--admin`, and never repeated.
+- The method is a merge commit, else squash, never rebase.
+- Routes are `MERGED`, `MERGED_UNVERIFIED_BASE`, `HEAD_MOVED`, `REJECTED`, `UNKNOWN`, `RECONCILED`, `HELD`, and `FROZEN`.
+
+### 19.2 Repair
+
+It needs `epic-approve` but not the merge grant, and acts only when readiness says `repair`.
+
+| Kind | Input | Counts when |
+|---|---|---|
+| `checks` | Each failed check with name and link | The last repair named another head |
+| `conflict` | A plain merge of the default branch | The last repair named another head |
+| `review` | Unresolved comments and requested changes, labeled reviewer data | An owner, member, collaborator, or bot wrote it above `since` |
+
+- `since` is the highest comment ID handed over.
+- Anything untrusted, or nothing new, holds the pull request for a person and dispatches no worker.
+- A repair is a fix cycle under the same cap and budget, and its findings are scanned.
+- Routes are `REPAIR`, `PARKED`, and `HELD`.
