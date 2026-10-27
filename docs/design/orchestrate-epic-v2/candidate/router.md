@@ -1,6 +1,6 @@
 # orchestrate-epic v2: router
 
-Status: candidate. It is not a skill and no harness discovers it. `../contract.md` is the contract.
+Status: candidate. It is not a skill and no harness discovers it. `../DEV.md` says how to run it, and `../contract.md` is the contract.
 
 `oe` owns every deterministic decision and every GitHub or git mutation. This package holds only the roles, the invariants, the order of the loop, and the judgment `oe` leaves to you.
 

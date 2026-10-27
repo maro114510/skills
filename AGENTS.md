@@ -23,6 +23,8 @@ Repository instructions for coding agents.
 | `.github/workflows/test-plugin-install.yml` | CI: `validate` then `test-install`, on push to `main` and every PR |
 | `.github/workflows/release.yml` | Creates a GitHub Release on a `v*` tag push after checking the tag matches both manifests |
 | `cliff.toml` | `git-cliff` config used by `make release` |
+| `docs/design/orchestrate-epic-v2/candidate/` | The v2 prompt package: router, playbooks, templates, agents. Outside skill discovery and never named `SKILL.md`; `tests/check-candidate.sh` guards it |
+| `docs/design/orchestrate-epic-v2/DEV.md` | How to run the candidate on Claude Code, Codex, and OpenCode, and its Claude Code permissions |
 | `oe/` | Go source of the `oe` CLI used by orchestrate-epic |
 | `.github/workflows/oe-release.yml` | Builds and publishes the `oe` binaries on an `oe-v*` tag push |
 | `skills/orchestrate-epic/scripts/oe` | Wrapper that downloads, verifies, caches, and runs the pinned `oe` binary |
@@ -130,6 +132,9 @@ Every other section is named after the skill that reads it.
 ```bash
 # Validate manifests; requires the claude CLI
 claude plugin validate .
+
+# Guard the orchestrate-epic v2 candidate, and check the rule inventory
+make check-candidate check-rule-inventory
 
 # Test the full installation flow
 claude plugin marketplace add ./
