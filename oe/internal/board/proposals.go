@@ -129,7 +129,7 @@ func (w *world) tokenNotes() []Notification {
 			return
 		}
 		sum := sha256.Sum256([]byte(strings.Join(tokens, ",")))
-		n := newNote(NoteLeftoverToken, fmt.Sprintf("leftover-token:%d:%s", issue, hex.EncodeToString(sum[:])[:digestLen]), issue)
+		n := newNote(NoteLeftoverToken, fmt.Sprintf("leftover-placeholder:%d:%s", issue, hex.EncodeToString(sum[:])[:digestLen]), issue)
 		n.Tokens = tokens
 		out = append(out, n)
 	}

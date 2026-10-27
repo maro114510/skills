@@ -195,7 +195,7 @@ A digest is the first 12 hex characters of a sha256.
 |---|---|---|
 | Run Plan | Epic | `run-plan` |
 | Dependency cycle | Epic | `dep-cycle:<sorted issues>` |
-| Leftover token | Epic or container | `leftover-token:<issue>:<digest>` |
+| Leftover placeholder | Epic or container | `leftover-placeholder:<issue>:<digest>` |
 | Freeze | Epic | `freeze:<seq>` |
 | Completion | Epic | `completion` |
 | Dispatch started | Issue | `start:<n>:<branch>` |
@@ -215,6 +215,8 @@ A digest is the first 12 hex characters of a sha256.
 | Merge result | Issue | `merge-result:<pr>:<reviewed_sha>:<result>` |
 
 Duplicate notes are harmless and never deleted. Duplicate states exit 6.
+
+A key never ends a word the secret scan reads as a credential name, such as `token`, before a long mixed value: the writer scans the marker line with the text, so `leftover-token:<issue>:<digest>` was refused and the note could never be posted.
 
 ## 8. Irreversible Operations
 
