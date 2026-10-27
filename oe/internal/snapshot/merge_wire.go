@@ -3,6 +3,8 @@ package snapshot
 import (
 	"context"
 	"encoding/json"
+	"net/url"
+	"strings"
 
 	"github.com/maro114510/skills/oe/internal/gh"
 )
@@ -39,7 +41,7 @@ func ReadMergeSettings(ctx context.Context, c *gh.Client, repo string) (MergeSet
 
 // ReadBranchHead reads the commit a branch of the repository points at, from GitHub and not from a local ref.
 func ReadBranchHead(ctx context.Context, c *gh.Client, repo, branch string) (string, error) {
-	out, err := c.Read(ctx, "api", "repos/"+repo+"/git/ref/heads/"+branch)
+	out, err := c.Read(ctx, "api", "repos/"+repo+"/git/ref/heads/"+escapeRef(branch))
 	if err != nil {
 		return "", err
 	}
@@ -69,4 +71,13 @@ func ReadFirstParent(ctx context.Context, c *gh.Client, repo, sha string) (strin
 		return "", unreadable("the first parent of %s was not read", sha)
 	}
 	return commit.Parents[0].SHA, nil
+}
+
+// escapeRef escapes each segment of a ref name for use in an endpoint path, and keeps the slashes between them.
+func escapeRef(ref string) string {
+	parts := strings.Split(ref, "/")
+	for i, p := range parts {
+		parts[i] = url.PathEscape(p)
+	}
+	return strings.Join(parts, "/")
 }
