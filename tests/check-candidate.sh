@@ -14,6 +14,7 @@
 #   git fetch origin <branch>      updates a remote-tracking ref only
 #   sleep <seconds>                waits between polls
 #   mktemp                         makes a file for a report
+#   cat >"$file" <<'TAG'           writes the report, and only that form of cat is allowed
 #   gh issue view ...              reads an Issue
 #   gh api repos/... ...           reads, and fails when a flag makes it write
 # A line may redirect, and may open a heredoc whose body is data and is never judged. It may not chain a
@@ -65,6 +66,7 @@ function judge(t,   s) {
   if (t ~ /^git fetch origin( |$)/) return
   if (t ~ /^sleep [0-9]+$/) return
   if (t ~ /^mktemp( |$)/) return
+  if (t ~ /^cat >"\$[A-Za-z_][A-Za-z0-9_]*" <<[\047"]?[A-Za-z_][A-Za-z0-9_]*[\047"]?$/) return
   if (t ~ /^gh issue view( |$)/) return
   if (t ~ /^gh api repos\// && t !~ / (-X|--method|-f|-F|--field|--raw-field|--input)( |=|$)/) return
   violation("is not an oe call or an allowed read: " substr(t, 1, 60))
