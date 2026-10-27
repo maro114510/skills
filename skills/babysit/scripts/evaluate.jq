@@ -1,7 +1,9 @@
 # Evaluates one normalized pr-state snapshot against the babysit ledger. docs/design/babysit.md is the spec.
 # Input: [snapshot, ledger] from `jq -s`. Args: $now (epoch seconds) and $mode (watch or drive).
 # Output: {ledger, status, event, blockers, pending, report}. ledger holds only the fields wait owns:
-# head and heads. event is the first matching row of the event table, or null when nothing fires,
+# head and heads. pending and report.pending list each unresolved item with the key, event, and where to look.
+# report.reasons maps each parked key to the reason it was parked with.
+# event is the first matching row of the event table, or null when nothing fires,
 # which wait turns into idle once --max expires.
 
 def no_ci_seconds: 600;
@@ -98,10 +100,15 @@ def relevant($head; $gen): select(startswith("c:") or endswith("@\($head)#\($gen
 | (($pending | length) == 0 and any($blocker_keys[]; ($items[.] // {}).disposition == "parked")) as $stalled
 
 | [$items | keys[] | relevant($s.head; $g)] as $keys
+| [ $pending[] | {key, event: (.event // "awaiting_rerun")}
+    + (if .comment then {author: .comment.author, url: .comment.url}
+       elif .check then {name: .check.name, url: .check.url} else {} end) ] as $pending_list
 | { parked: [$keys[] | select($items[.].disposition == "parked")],
     reported: [$keys[] | select($items[.].disposition == "reported")],
     handled: [$keys[] | select($items[.].disposition == "handled")],
-    unresolved: $blockers } as $report
+    unresolved: $blockers,
+    pending: $pending_list,
+    reasons: ([$keys[] | select($items[.].reason != null) | {key: ., value: $items[.].reason}] | from_entries) } as $report
 
 | {repo: $s.repo, pr: $s.number, head: $s.head, gen: $g} as $base
 | def stop($name): $base + {event: $name, report: $report};
@@ -120,5 +127,5 @@ def relevant($head; $gen): select(startswith("c:") or endswith("@\($head)#\($gen
       elif ($firing | length) > 0 then $base + ($firing[0] | del(.row))
       else null end),
     blockers: $blockers,
-    pending: [$pending[] | {key, event: (.event // "awaiting_rerun")}],
+    pending: $pending_list,
     report: $report }

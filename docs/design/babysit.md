@@ -19,8 +19,10 @@ flowchart LR
   P -->|"GraphQL"| G[(GitHub)]
   W <-->|"heads, failures, heartbeat"| L[("ledger")]
   S -->|"items, own actions, rounds"| L
-  S -->|"before every push"| X["gate"]
-  X -->|"allow, park, refuse"| S
+  S -->|"every push"| U["push"]
+  U -->|"asks first"| X["gate"]
+  X -->|"allow, park, refuse"| U
+  U -->|"counts a round"| L
 ```
 
 | Layer | Does | Never does |
@@ -29,6 +31,7 @@ flowchart LR
 | `wait <owner/repo> <pr> --max <min> --session <token>` | Polls `pr-state`, compares it with the ledger, and exits with one event line or `idle` | Repairs or marks items handled |
 | skill | Runs the action for each event and records the outcome | Wakes on a timer |
 | gate | Decides whether a push may go out | Uses LLM judgment |
+| `push` | Asks the gate about HEAD, lists the sha in the ledger, pushes it, and counts the round | Pushes a sha the gate has not judged |
 
 `pr-state` output covers these fields.
 
@@ -52,17 +55,17 @@ Path is `$(git rev-parse --path-format=absolute --git-common-dir)/babysit/<owner
 
 | Field | Writer | Purpose | Reset at session start |
 |---|---|---|---|
-| `started_at`, `rounds` | skill | Limits | Yes |
-| `repairs.<check key>` | skill | Repair pushes per check across heads | Yes |
-| `replies.<thread id>` | skill | Agent replies per review thread | Yes |
-| `replies.conversation` | skill | Agent replies to issue comments and review bodies, which share one top-level conversation | Yes |
+| `started_at`, `rounds` | skill, `push` | Limits, with one round added per push | Yes |
+| `repairs.<check key>` | `push` | Repair pushes per check across heads | Yes |
+| `replies.<thread id>` | `reply` | Agent replies per review thread | Yes |
+| `replies.conversation` | `reply` | Agent replies to issue comments and review bodies, which share one top-level conversation | Yes |
 | `api_failures` | `wait` | Consecutive API failures across re-arms | Yes |
 | `lock` | skill, `wait` | Session token and heartbeat | Replaced |
 | `heads.<sha>.first_seen` | `wait` | Start of the no-CI clock | No |
 | `head.sha`, `head.gen` | `wait` | Last observed head and a counter raised on every observed head change | No |
-| `own.pushes` | skill | SHA of each push, written before pushing | No |
-| `own.replies` | skill | Body hash written before posting, then the comment id | No |
-| `items.<key>` | skill | Disposition, re-run id and attempt, and handled body hash | No |
+| `own.pushes` | `push` | SHA of each push, written before pushing | No |
+| `own.replies` | `reply` | Body hash written before posting, then the comment id | No |
+| `items.<key>` | skill, `park` | Disposition, re-run id and attempt, handled body hash, and the reason for a park | No |
 
 Lock rules follow.
 
@@ -107,6 +110,17 @@ The first matching row wins.
 | Triage | Confirm the claim against the code, then pick one outcome among Repair, reply only, and park, and park instead of replying once its thread already holds 2 agent replies, where every issue comment and review body belongs to the one `conversation` thread |
 | Park | Record the item as parked, notify, and continue |
 
+| Drive script | Does | Exit |
+|---|---|---|
+| `worktree prepare` | Fetches the PR branch into a private ref, then creates or resets the worktree, with leftover work discarded | 0, 1 head moved or unreadable, 2, 3 |
+| `worktree remove` | Removes the worktree | 0, 1, 2, 3 |
+| `push` | Runs the gate, lists the sha, pushes `sha:refs/heads/<branch>` with the command the gate judged, then counts one round and one repair per `--check` | 0 pushed, 1 push failed, 10 park, 11 refuse, 2, 3 |
+| `reply` | Posts a thread reply or a conversation comment, refuses a third reply to one thread, and lists the hash and then the id | 0, 1 post failed, 10 cap reached, 2, 3 |
+| `rerun` | Re-runs the failed jobs of a workflow run and records the failed run id after GitHub accepts it | 0, 1 refused, 2, 3 |
+| `park` | Records the item as parked with a reason and shows one notification | 0, 2, 3 |
+
+An exit of 1 or 3 from `push` or `reply` with `pushed` or `posted` true in its JSON line means the action went out and only the ledger write failed, so the skill never repeats it.
+
 Event rules follow.
 
 - Only GitHub Actions check runs can be re-run, so other checks go straight to `check_confirmed`.
@@ -115,7 +129,7 @@ Event rules follow.
 - In watch, reported, handled, and parked all count as dispositions.
 - In drive, only handled and parked count, so drive still acts on items watch reported.
 - Only drive parks items, so `stalled` fires only in drive.
-- Every stop report lists all parked, reported, and unresolved items in every mode.
+- Every stop report lists all parked items with their reasons, and all reported, pending, and unresolved items, in every mode.
 - A bot that rewrites one comment on each push costs one triage per push, bounded by the round limit.
 - A bot that answers each reply is bounded by the 2-reply cap per thread, including a bot that answers with fresh top-level comments, since they all share the `conversation` thread.
 - `wait` exits nonzero when the API keeps failing, and the skill then stops and reports.
@@ -250,6 +264,9 @@ The first one that fails is the reason.
 | Concurrency | One session per PR through the lock |
 | Session | Operating rule is to run babysit in a dedicated session, because a background exit injects a turn into the session that started it |
 | Idle cost | Each wait is bounded, so an unchanged PR costs one turn per `--max` instead of zero |
+| Push path | Drive pushes only through `push`, which gates, lists, pushes, and counts in one call, so no step can be skipped and a rejected push never spends a round |
+| Reply cap | `reply` refuses a third agent reply to one thread, and the skill parks the item instead |
+| Notification | `park` hands comment text to `osascript` as an argument, never as script, and a failed notification never stops a park |
 | Reply scan | Not gated yet, see the gaps under Gate |
 
 ## Waiting adapters
