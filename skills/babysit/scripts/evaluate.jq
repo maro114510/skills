@@ -105,7 +105,8 @@ def relevant($head; $gen): select(startswith("c:") or endswith("@\($head)#\($gen
     reported: [$keys[] | select($items[.].disposition == "reported")],
     handled: [$keys[] | select($items[.].disposition == "handled")],
     unresolved: $blockers,
-    pending: $pending_list } as $report
+    pending: $pending_list,
+    reasons: ([$keys[] | select($items[.].reason != null) | {key: ., value: $items[.].reason}] | from_entries) } as $report
 
 | {repo: $s.repo, pr: $s.number, head: $s.head, gen: $g} as $base
 | def stop($name): $base + {event: $name, report: $report};

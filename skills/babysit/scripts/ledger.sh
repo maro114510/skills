@@ -3,7 +3,7 @@
 # wait.sh owns head, heads, and api_failures; every other field is written here.
 # Usage: ledger.sh path   <owner/repo> <pr>
 #        ledger.sh start  <owner/repo> <pr> <token>   take the lock and reset the session fields
-#        ledger.sh record <owner/repo> <pr> <token> <key> <reported|handled|parked|rerun> [--hash <h>] [--run-id <n>]
+#        ledger.sh record <owner/repo> <pr> <token> <key> <reported|handled|parked|rerun> [--hash <h>] [--run-id <n>] [--reason <text>]
 #        ledger.sh stop   <owner/repo> <pr> <token>   clear the lock
 #        ledger.sh show   <owner/repo> <pr>
 # Drive mode writes, each of which also refreshes the heartbeat:
@@ -104,11 +104,16 @@ record)
   shift 6
   hash=""
   run_id=""
+  reason=""
   while (($# > 0)); do
     case "$1" in
     --hash)
       hash="${2:-}"
       shift 2 || die "--hash needs a value"
+      ;;
+    --reason)
+      reason="${2:-}"
+      shift 2 || die "--reason needs a value"
       ;;
     --run-id)
       run_id="${2:-}"
@@ -122,9 +127,10 @@ record)
   # Without the body hash a comment item never counts as settled and would return on every call.
   [[ "${key}" != c:* || -n "${hash}" ]] || die "a comment key needs --hash"
   jq -c --arg key "${key}" --arg d "${disposition}" --arg hash "${hash}" --arg run "${run_id}" \
-    --argjson now "${now}" '
+    --arg reason "${reason}" --argjson now "${now}" '
     .items[$key] = ({disposition: $d, at: $now}
       + (if $hash != "" then {hash: $hash} else {} end)
+      + (if $reason != "" then {reason: $reason} else {} end)
       + (if $run != "" then {run_id: ($run | tonumber)} else {} end))
     | .lock.heartbeat = $now' <<<"${ledger}" | write
   ;;

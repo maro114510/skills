@@ -113,7 +113,8 @@ expect() {
   expect "$(ledger '.items["c:IC1"].hash')" h1
   expect "$(ledger '.items["c:IC1"].reason')" "asks for a schema change"
   expect "$(calls osascript)" 1
-  [[ "$(tr '\n' '|' <"${tmp}/osascript-calls")" == *"o/r#7"*"asks for a schema change"* ]]
+  grep -q 'o/r#7' "${tmp}/osascript-calls"
+  grep -q 'asks for a schema change' "${tmp}/osascript-calls"
 }
 
 @test "park still parks when osascript is missing or fails" {
@@ -138,5 +139,5 @@ expect() {
   [ ! -e "${tmp}/pwned2" ]
   # A new line in the text would end the notification early, so it becomes a space.
   expect "$(calls osascript)" 1
-  [[ "$(cat "${tmp}/osascript-calls")" == *"second line"* ]]
+  grep -q 'pwned2).* second line' "${tmp}/osascript-calls"
 }
