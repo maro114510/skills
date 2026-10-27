@@ -27,6 +27,10 @@ import (
 // sessionVersion is the version of the session file, which a file of any other version never reads as.
 const sessionVersion = 1
 
+// fileFields are the fields every session file holds. A file that lacks one is refused, because a
+// missing field would decode as zero and silently drop a count, a deferral, or the round.
+var fileFields = []string{"version", "known", "mark", "merges", "rounds", "polls", "round", "deferred", "no_checks"} //nolint:gochecknoglobals // A fixed table of the file format.
+
 // The permissions of the session directory and file: this user's only.
 const (
 	dirPerm  = 0o700
@@ -127,6 +131,9 @@ func Load(path string) (*Session, error) {
 	if err != nil {
 		return nil, exitcode.Wrap(exitcode.Unreadable, err, "the session file "+path+" cannot be read")
 	}
+	if err := requireFields(data); err != nil {
+		return nil, exitcode.Wrap(exitcode.Unreadable, err, "the session file "+path+" is damaged; delete it to start this invocation's counts over")
+	}
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
 	s := New()
@@ -146,7 +153,43 @@ func Load(path string) (*Session, error) {
 	if s.NoChecks == nil {
 		s.NoChecks = map[string]NoChecks{}
 	}
+	if err := validateSession(s); err != nil {
+		return nil, exitcode.Wrap(exitcode.Unreadable, err, "the session file "+path+" holds values no session wrote; delete it to start this invocation's counts over")
+	}
 	return s, nil
+}
+
+// requireFields checks that the file is one JSON object with every field of the format.
+func requireFields(data []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return fmt.Errorf("the file is not one JSON object: %w", err)
+	}
+	for _, f := range fileFields {
+		if _, ok := raw[f]; !ok {
+			return fmt.Errorf("the field %q is missing", f)
+		}
+	}
+	return nil
+}
+
+// validateSession refuses a value no session could have written: a negative count, an Issue below 1, or
+// a reason outside the closed set.
+func validateSession(s *Session) error {
+	if s.Merges < 0 || s.Rounds < 0 || s.Polls < 0 {
+		return errors.New("a count is negative")
+	}
+	for _, d := range s.Deferred {
+		if _, ok := ParseReason(string(d.Reason)); !ok || d.Issue < 1 {
+			return fmt.Errorf("the deferral of Issue %d for %q is not one a session records", d.Issue, d.Reason)
+		}
+	}
+	for pr, nc := range s.NoChecks {
+		if nc.Polls < 0 {
+			return fmt.Errorf("pull request %s has a negative no-checks count", pr)
+		}
+	}
+	return nil
 }
 
 // Save writes the session whole, through a temporary file and a rename.
@@ -164,8 +207,10 @@ func (s *Session) Save(path string) error {
 		return exitcode.Wrap(exitcode.Unreadable, err, "the session file cannot be created")
 	}
 	_, werr := tmp.Write(append(data, '\n'))
+	// The data is on disk before the rename, so a crash never leaves the new name on an empty file.
+	serr := tmp.Sync()
 	cerr := tmp.Close()
-	if err := errors.Join(werr, cerr); err != nil {
+	if err := errors.Join(werr, serr, cerr); err != nil {
 		_ = os.Remove(tmp.Name())
 		return exitcode.Wrap(exitcode.Unreadable, err, "the session file cannot be written")
 	}
@@ -176,6 +221,20 @@ func (s *Session) Save(path string) error {
 	if err := os.Rename(tmp.Name(), path); err != nil {
 		_ = os.Remove(tmp.Name())
 		return exitcode.Wrap(exitcode.Unreadable, err, "the session file cannot be replaced")
+	}
+	return syncDir(dir)
+}
+
+// syncDir makes the rename durable.
+func syncDir(dir string) error {
+	d, err := os.Open(dir) //nolint:gosec // G304: the directory is the session directory this package just wrote to.
+	if err != nil {
+		return exitcode.Wrap(exitcode.Unreadable, err, "the session directory cannot be opened to sync")
+	}
+	serr := d.Sync()
+	cerr := d.Close()
+	if err := errors.Join(serr, cerr); err != nil {
+		return exitcode.Wrap(exitcode.Unreadable, err, "the session directory cannot be synced")
 	}
 	return nil
 }

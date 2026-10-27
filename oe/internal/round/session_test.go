@@ -137,33 +137,46 @@ func TestOnlyAReasonOfTheClosedSetIsAccepted(t *testing.T) {
 // completeFile is a session file with every field, and the base the incomplete and invalid cases are cut from.
 const completeFile = `{"version":1,"known":true,"mark":"1:a","merges":1,"rounds":1,"polls":2,"round":{"mark":"1:a","verifying":false},"deferred":[{"issue":5,"reason":"blocked"}],"no_checks":{"12":{"head":"h1","polls":3}}}`
 
+// writeSession writes a session file with the body and returns its path.
+func writeSession(t *testing.T, body string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "s.json")
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+// withoutField is completeFile without one field.
+func withoutField(t *testing.T, field string) string {
+	t.Helper()
+	var doc map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(completeFile), &doc); err != nil {
+		t.Fatal(err)
+	}
+	delete(doc, field)
+	body, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(body)
+}
+
+func TestLoadReadsACompleteVersionOneFileAsWritten(t *testing.T) {
+	t.Parallel()
+
+	s, err := round.Load(writeSession(t, completeFile))
+
+	if err != nil || s.Polls != 2 || len(s.Deferred) != 1 || s.NoChecks["12"].Polls != 3 {
+		t.Errorf("Load = %+v, %v; want the file read as written", s, err)
+	}
+}
+
 func TestLoadRefusesAVersionOneFileThatLacksAField(t *testing.T) {
 	t.Parallel()
 
-	good := filepath.Join(t.TempDir(), "good.json")
-	if err := os.WriteFile(good, []byte(completeFile), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if s, err := round.Load(good); err != nil || s.Polls != 2 || len(s.Deferred) != 1 {
-		t.Fatalf("a complete file: Load = %+v, %v; want it read as written", s, err)
-	}
-
 	for _, field := range []string{"known", "mark", "merges", "rounds", "polls", "round", "deferred", "no_checks"} {
-		var doc map[string]json.RawMessage
-		if err := json.Unmarshal([]byte(completeFile), &doc); err != nil {
-			t.Fatal(err)
-		}
-		delete(doc, field)
-		body, err := json.Marshal(doc)
-		if err != nil {
-			t.Fatal(err)
-		}
-		path := filepath.Join(t.TempDir(), "s.json")
-		if err := os.WriteFile(path, body, 0o600); err != nil {
-			t.Fatal(err)
-		}
-
-		s, err := round.Load(path)
+		s, err := round.Load(writeSession(t, withoutField(t, field)))
 
 		if err == nil || exitcode.CodeOf(err) != exitcode.Unreadable || s != nil {
 			t.Errorf("without %q: Load = %+v, %v; want exit 1, since a missing field would read as zero and drop a count", field, s, err)
@@ -181,12 +194,7 @@ func TestLoadRefusesValuesNoSessionCouldHaveWritten(t *testing.T) {
 		"a reason outside the set":  {`"reason":"blocked"`, `"reason":"timeout"`},
 		"a negative no-checks poll": {`"polls":3`, `"polls":-3`},
 	} {
-		path := filepath.Join(t.TempDir(), "s.json")
-		if err := os.WriteFile(path, []byte(strings.Replace(completeFile, edit[0], edit[1], 1)), 0o600); err != nil {
-			t.Fatal(err)
-		}
-
-		s, err := round.Load(path)
+		s, err := round.Load(writeSession(t, strings.Replace(completeFile, edit[0], edit[1], 1)))
 
 		if err == nil || exitcode.CodeOf(err) != exitcode.Unreadable || s != nil {
 			t.Errorf("%s: Load = %+v, %v; want exit 1", name, s, err)

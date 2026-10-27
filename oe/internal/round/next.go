@@ -42,14 +42,17 @@ type NextResult struct {
 // RequireRound refuses a session whose first round never began, with exit 8. It needs no GitHub
 // state, so a command can refuse before it reads anything.
 func RequireRound(s *Session) error {
+	if s.Round == nil {
+		return exitcode.New(exitcode.Refused, "no round has begun in this session, so there is no reading to compare with; run oe round plan first")
+	}
 	return nil
 }
 
 // Next decides, from a fresh read only, whether the session goes on into a new round. A session
 // whose first round never began has no reading to compare with, and is refused with exit 8.
 func Next(s *Session, obs Observation) (NextResult, error) {
-	if s.Round == nil {
-		return NextResult{}, exitcode.New(exitcode.Refused, "no round has begun in this session, so there is no reading to compare with; run oe round plan first")
+	if err := RequireRound(s); err != nil {
+		return NextResult{}, err
 	}
 	observe(s, obs.Mark)
 	why := landingStopped(obs)
