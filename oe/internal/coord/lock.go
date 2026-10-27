@@ -24,16 +24,25 @@ type lock struct {
 	f *os.File
 }
 
-// LockDir is the directory of the host-wide locks: ${XDG_STATE_HOME:-$HOME/.local/state}/oe/locks.
-func LockDir(getenv func(string) string) (string, error) {
+// StateDir is where oe keeps what belongs to this host only: ${XDG_STATE_HOME:-$HOME/.local/state}/oe.
+func StateDir(getenv func(string) string) (string, error) {
 	if dir := getenv("XDG_STATE_HOME"); dir != "" {
-		return filepath.Join(dir, "oe", "locks"), nil
+		return filepath.Join(dir, "oe"), nil
 	}
 	home := getenv("HOME")
 	if home == "" {
-		return "", exitcode.New(exitcode.Refused, "neither XDG_STATE_HOME nor HOME is set, so the Epic lock has no place")
+		return "", exitcode.New(exitcode.Refused, "neither XDG_STATE_HOME nor HOME is set, so oe has no place for its host-local state")
 	}
-	return filepath.Join(home, ".local", "state", "oe", "locks"), nil
+	return filepath.Join(home, ".local", "state", "oe"), nil
+}
+
+// LockDir is the directory of the host-wide locks: <StateDir>/locks.
+func LockDir(getenv func(string) string) (string, error) {
+	dir, err := StateDir(getenv)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "locks"), nil
 }
 
 // LockPath is the lock file of one Epic: <owner>-<repo>-<epic>.lock.
