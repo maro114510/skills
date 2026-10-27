@@ -553,3 +553,61 @@ func TestWriteHTTPRefusesWhatIsNotAnAPICall(t *testing.T) {
 		t.Errorf("WriteHTTP(pr merge): code %d, calls %q; want Refused before any call", exitcode.CodeOf(err), s.calls)
 	}
 }
+
+// TestProbeFailureLeavesTheClientWritable: after a merge request got no response, an unreadable pull request is the answer
+// to record, so its failed read must not forbid the record the way an ordinary failed read forbids every write.
+func TestProbeFailureLeavesTheClientWritable(t *testing.T) {
+	t.Parallel()
+
+	s := newSpy(
+		runner.Call{Argv: []string{"gh", "api", "--hostname", "github.com", "repos/o/r/pulls/7"}, Stdout: "", Stderr: "boom", ExitCode: 1},
+		runner.Call{Argv: []string{"gh", "issue", "comment", "1"}, Stdout: "done", Stderr: "", ExitCode: 0},
+	)
+	c := gh.New(s, false)
+	if _, err := c.Probe().Read(t.Context(), "api", "repos/o/r/pulls/7"); exitcode.CodeOf(err) != exitcode.Unreadable {
+		t.Fatalf("Probe().Read() code = %d, want Unreadable; err = %v", exitcode.CodeOf(err), err)
+	}
+	if c.Err() != nil {
+		t.Errorf("Err() = %v; want the original client untainted by its probe", c.Err())
+	}
+	if out, err := c.Write(t.Context(), "issue", "comment", "1"); err != nil || string(out) != "done" {
+		t.Errorf("Write() = %q, %v; want done, nil", out, err)
+	}
+}
+
+// TestProbeKeepsTheReadRulesAndRefusesEveryWrite: a probe is a read-only view, so it can neither send a write
+// nor widen what Read allows.
+func TestProbeKeepsTheReadRulesAndRefusesEveryWrite(t *testing.T) {
+	t.Parallel()
+
+	s := newSpy(runner.Call{Argv: []string{"gh", "api", "--hostname", "github.com", "repos/o/r/pulls/7"}, Stdout: "{}", Stderr: "", ExitCode: 0})
+	p := gh.New(s, false).Probe()
+	if _, err := p.Read(t.Context(), "api", "repos/o/r/pulls/7"); err != nil {
+		t.Fatalf("Probe().Read() err = %v", err)
+	}
+	if _, err := p.Read(t.Context(), "api", "-X", "PUT", "repos/o/r/pulls/7/merge"); exitcode.CodeOf(err) != exitcode.Refused {
+		t.Errorf("Probe().Read(PUT) code = %d, want Refused", exitcode.CodeOf(err))
+	}
+	if _, err := p.Write(t.Context(), "api", "-X", "PUT", "repos/o/r/pulls/7/merge"); exitcode.CodeOf(err) != exitcode.Refused {
+		t.Errorf("Probe().Write() code = %d, want Refused", exitcode.CodeOf(err))
+	}
+	if _, err := p.WriteHTTP(t.Context(), mergeArgs...); exitcode.CodeOf(err) != exitcode.Refused {
+		t.Errorf("Probe().WriteHTTP() code = %d, want Refused", exitcode.CodeOf(err))
+	}
+	if _, err := p.GitWrite(t.Context(), "worktree", "add", "x"); exitcode.CodeOf(err) != exitcode.Refused {
+		t.Errorf("Probe().GitWrite() code = %d, want Refused", exitcode.CodeOf(err))
+	}
+	if len(s.calls) != 1 {
+		t.Errorf("calls = %q, want only the one read", s.calls)
+	}
+}
+
+// TestProbeInSnapshotModeReplaysReads: a probe of a snapshot client still never starts a process.
+func TestProbeInSnapshotModeReplaysReads(t *testing.T) {
+	t.Parallel()
+
+	s := newSpy(runner.Call{Argv: []string{"gh", "api", "--hostname", "github.com", "repos/o/r/pulls/7"}, Stdout: "{}", Stderr: "", ExitCode: 0})
+	if _, err := gh.New(s, true).Probe().Read(t.Context(), "api", "repos/o/r/pulls/7"); err != nil {
+		t.Errorf("Probe().Read() err = %v", err)
+	}
+}
