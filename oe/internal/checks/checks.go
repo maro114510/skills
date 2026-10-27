@@ -47,6 +47,8 @@ const (
 type Check struct {
 	Name  string
 	Class Class
+	// URL is the link of the latest run, or empty when it has none.
+	URL string
 }
 
 func (c Context) name() string {
@@ -57,6 +59,17 @@ func (c Context) name() string {
 		return *c.Context
 	default:
 		return UnnamedCheck
+	}
+}
+
+func (c Context) url() string {
+	switch {
+	case c.DetailsURL != nil:
+		return *c.DetailsURL
+	case c.TargetURL != nil:
+		return *c.TargetURL
+	default:
+		return ""
 	}
 }
 
@@ -179,7 +192,7 @@ func Latest(nodes []Context) []Check {
 	for _, g := range groups {
 		slices.SortStableFunc(g.runs, olderThan)
 		latest := g.runs[len(g.runs)-1]
-		out = append(out, Check{Name: latest.name(), Class: latest.class()})
+		out = append(out, Check{Name: latest.name(), Class: latest.class(), URL: latest.url()})
 	}
 	return out
 }

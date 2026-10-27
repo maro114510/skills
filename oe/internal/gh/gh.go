@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -36,6 +37,8 @@ var ErrRateLimited = errors.New("rate limit")
 type Client struct {
 	r        runner.Runner
 	snapshot bool
+	// readOnly refuses every write, as a probe does.
+	readOnly bool
 
 	mu     sync.Mutex
 	failed error
@@ -43,7 +46,7 @@ type Client struct {
 
 // New returns a client. With snapshot set, every Write refuses.
 func New(r runner.Runner, snapshot bool) *Client {
-	return &Client{r: r, snapshot: snapshot, mu: sync.Mutex{}, failed: nil}
+	return &Client{r: r, snapshot: snapshot, readOnly: false, mu: sync.Mutex{}, failed: nil}
 }
 
 // Err returns the first read failure, or nil while every read so far was full.
@@ -113,8 +116,8 @@ func (c *Client) Git(ctx context.Context, args ...string) ([]byte, error) {
 // Like Write, it refuses in snapshot mode and after any failed read, and it never taints the
 // client: a failed change is the caller's to report, not a partial read.
 func (c *Client) GitWrite(ctx context.Context, args ...string) ([]byte, error) {
-	if c.snapshot {
-		return nil, exitcode.New(exitcode.Refused, "--snapshot disables every mutation: "+describe(runner.Git, args))
+	if err := c.refuseWrite(describe(runner.Git, args)); err != nil {
+		return nil, err
 	}
 	if err := c.Err(); err != nil {
 		return nil, exitcode.Wrap(exitcode.Unreadable, err, "an earlier read failed or was partial, so no write is authorized")
@@ -131,8 +134,8 @@ func (c *Client) GitWrite(ctx context.Context, args ...string) ([]byte, error) {
 
 // Write runs a mutating gh command. It refuses in snapshot mode and after any failed read.
 func (c *Client) Write(ctx context.Context, args ...string) ([]byte, error) {
-	if c.snapshot {
-		return nil, exitcode.New(exitcode.Refused, "--snapshot disables every mutation: "+describe(runner.GH, args))
+	if err := c.refuseWrite(describe(runner.GH, args)); err != nil {
+		return nil, err
 	}
 	if err := c.Err(); err != nil {
 		return nil, exitcode.Wrap(exitcode.Unreadable, err, "an earlier read failed or was partial, so no write is authorized")
@@ -149,6 +152,73 @@ func (c *Client) Write(ctx context.Context, args ...string) ([]byte, error) {
 		return nil, failure(runner.GH, args, res)
 	}
 	return res.Stdout, nil
+}
+
+// Probe returns a client over the same runner for a read whose failure is itself the answer, such as a pull request
+// that cannot be read after a merge request got no response. It gives the same reads as the client it came from.
+// A failure taints only the probe, so the caller can still record that answer, and every write through it is refused.
+func (c *Client) Probe() *Client {
+	return &Client{r: c.r, snapshot: c.snapshot, readOnly: true, mu: sync.Mutex{}, failed: nil}
+}
+
+// Response is the HTTP answer to a write.
+type Response struct {
+	Status int
+	Body   []byte
+}
+
+// ErrNoResponse marks a write that was sent but got no HTTP answer, so it may or may not have landed.
+var ErrNoResponse = errors.New("no http response")
+
+// WriteHTTP runs a mutating `gh api` call and returns GitHub's HTTP answer, whatever its status.
+// A 4xx or 5xx is an answer, not an error, because the caller routes on it.
+// An error before the call is sent is returned as Write returns it.
+// An error after it, with no answer to read, wraps ErrNoResponse.
+func (c *Client) WriteHTTP(ctx context.Context, args ...string) (Response, error) {
+	none := Response{Status: 0, Body: nil}
+	if len(args) == 0 || args[0] != apiCmd {
+		return none, exitcode.New(exitcode.Refused, "WriteHTTP carries a gh api call only")
+	}
+	if err := c.refuseWrite(describe(runner.GH, args)); err != nil {
+		return none, err
+	}
+	if err := c.Err(); err != nil {
+		return none, exitcode.Wrap(exitcode.Unreadable, err, "an earlier read failed or was partial, so no write is authorized")
+	}
+	pinned, err := pinHost(args)
+	if err != nil {
+		return none, err
+	}
+	// -i puts the status line and headers on stdout, also for the 4xx and 5xx answers gh exits non-zero for.
+	pinned = append([]string{apiCmd, "-i"}, pinned[1:]...)
+	res, err := c.r.Run(ctx, runner.GH, pinned)
+	if err != nil {
+		// The runner returns an error only when it could not start gh, so nothing was sent.
+		return none, exitcode.Wrap(exitcode.Unreadable, err, describe(runner.GH, pinned)+" failed")
+	}
+	status, body, ok := splitHTTP(res.Stdout)
+	if !ok {
+		return none, exitcode.Wrap(exitcode.Unreadable, fmt.Errorf("%w: %s", ErrNoResponse, strings.TrimSpace(string(res.Stderr))), describe(runner.GH, pinned)+" returned no HTTP status")
+	}
+	return Response{Status: status, Body: body}, nil
+}
+
+var statusLineRe = regexp.MustCompile(`^HTTP/[0-9.]+ ([0-9]{3})\b`)
+
+// splitHTTP splits the output of `gh api -i` into the status code and the body after the headers.
+func splitHTTP(out []byte) (int, []byte, bool) {
+	text := strings.ReplaceAll(string(out), "\r\n", "\n")
+	line, _, _ := strings.Cut(text, "\n")
+	m := statusLineRe.FindStringSubmatch(line)
+	if m == nil {
+		return 0, nil, false
+	}
+	status, err := strconv.Atoi(m[1])
+	if err != nil {
+		return 0, nil, false
+	}
+	_, body, _ := strings.Cut(text, "\n\n")
+	return status, []byte(body), true
 }
 
 // GraphQL runs a query and decodes its data into out. A response with any error, data
@@ -172,6 +242,17 @@ func (c *Client) GraphQL(ctx context.Context, query string, vars []Var, out any)
 	}
 	if err := json.Unmarshal(data, out); err != nil {
 		return c.taint(exitcode.Wrap(exitcode.Unreadable, err, "decode graphql data"))
+	}
+	return nil
+}
+
+// refuseWrite says why a write may not run on this client at all, or returns nil.
+func (c *Client) refuseWrite(what string) error {
+	switch {
+	case c.snapshot:
+		return exitcode.New(exitcode.Refused, "--snapshot disables every mutation: "+what)
+	case c.readOnly:
+		return exitcode.New(exitcode.Refused, "a probe is read-only: "+what)
 	}
 	return nil
 }
