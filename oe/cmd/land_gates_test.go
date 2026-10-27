@@ -1,6 +1,7 @@
 package cmd_test
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -55,8 +56,20 @@ func TestLandMergeWaitsForTheLastMergesDefaultBranchChecks(t *testing.T) {
 			if tc.frozen && l.Freeze != nil && (l.Freeze.MergeSHA != "old01" || l.Freeze.Health != "FAIL") {
 				t.Errorf("freeze = %+v, want it to name merge old01 and status FAIL, so a release is not frozen again by the same result", l.Freeze)
 			}
+			if out := f.payloadOf(r); tc.frozen != (out.Route == "FROZEN" && out.Next == "stop" && out.Freeze != nil && out.Freeze.Seq == 1) {
+				t.Errorf("stdout %q; want the freeze reported as FROZEN with next stop = %v", r.stdout, tc.frozen)
+			}
 		})
 	}
+}
+
+// payloadOf reads the JSON payload a command printed, or an empty one when it printed only a verdict line.
+func (f *landFlow) payloadOf(r result) landed {
+	var out landed
+	if strings.HasPrefix(r.stdout, "{") {
+		_ = json.Unmarshal([]byte(strings.SplitN(r.stdout, "\n", 2)[0]), &out)
+	}
+	return out
 }
 
 // TestLandMergeProceedsOnceThePreviousMergePassed: a merge whose default-branch checks passed no longer holds the next one.
