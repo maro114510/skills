@@ -1,4 +1,4 @@
-#status: incomplete
+#status: complete
 # Rule inventory for Epic #277. Format and checks: tests/check-rule-inventory.sh. Contract: contract.md.
 # owner stays - until the Issue in `issue` takes the row over; retired rows point at contract.md section 11.
 id	source	quote	rule	disposition	issue	owner	reason
