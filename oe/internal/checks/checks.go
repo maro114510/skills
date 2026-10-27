@@ -62,6 +62,17 @@ func (c Context) name() string {
 	}
 }
 
+func (c Context) url() string {
+	switch {
+	case c.DetailsURL != nil:
+		return *c.DetailsURL
+	case c.TargetURL != nil:
+		return *c.TargetURL
+	default:
+		return ""
+	}
+}
+
 func (c Context) class() Class {
 	switch c.Typename {
 	case typeCheckRun:
@@ -181,7 +192,7 @@ func Latest(nodes []Context) []Check {
 	for _, g := range groups {
 		slices.SortStableFunc(g.runs, olderThan)
 		latest := g.runs[len(g.runs)-1]
-		out = append(out, Check{Name: latest.name(), Class: latest.class(), URL: ""})
+		out = append(out, Check{Name: latest.name(), Class: latest.class(), URL: latest.url()})
 	}
 	return out
 }
