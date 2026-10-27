@@ -650,7 +650,7 @@ Frozen exits 4, a moved base or head exits 3, pending exits 5, and a missing gra
 | Any other 4xx | `rejected`, held for a person | 0 |
 | No answer, a 5xx, or a 200 without a merge commit | `merged` or `unknown`, read from the pull request | 0 or 4 |
 
-- A record left at `intent` or `unknown` is settled first, which ends the pass.
+- A record left at `intent` or `unknown` is settled first, which ends the pass, and an open pull request settles as `not-merged` because the next request carries the expected SHA.
 - The request is one `PUT` with `sha=<reviewed_sha>`, never `gh pr merge`, never `--admin`, and never repeated.
 - The method is a merge commit, else squash, never rebase.
 - Routes are `MERGED`, `MERGED_UNVERIFIED_BASE`, `HEAD_MOVED`, `REJECTED`, `UNKNOWN`, `RECONCILED`, `HELD`, and `FROZEN`.
@@ -661,11 +661,12 @@ It needs `epic-approve` but not the merge grant, and acts only when readiness sa
 
 | Kind | Input | Counts when |
 |---|---|---|
-| `checks` | Each failed check with name and link | The last repair named another head |
+| `checks` | Each failed check with its name and, when it has one, its link | The last repair named another head |
 | `conflict` | A plain merge of the default branch | The last repair named another head |
 | `review` | Unresolved comments and requested changes, labeled reviewer data | An owner, member, collaborator, or bot wrote it above `since` |
 
 - `since` is the highest comment ID handed over.
-- Anything untrusted, or nothing new, holds the pull request for a person and dispatches no worker.
+- A thread no trusted person wrote, a request for changes from anyone else, or nothing new holds the pull request for a person and dispatches no worker.
+- A thread with trusted and untrusted comments hands over only the trusted ones.
 - A repair is a fix cycle under the same cap and budget, and its findings are scanned.
 - Routes are `REPAIR`, `PARKED`, and `HELD`.
