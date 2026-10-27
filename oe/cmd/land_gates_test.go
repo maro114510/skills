@@ -1,6 +1,7 @@
 package cmd_test
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -48,15 +49,31 @@ func TestLandMergeWaitsForTheLastMergesDefaultBranchChecks(t *testing.T) {
 				t.Errorf("exit %d, stdout %q; want exit %d", r.code, r.stdout, tc.code)
 			}
 			f.wantNoRequest(t)
-			l := f.ledger(t)
-			if tc.frozen != (l.Freeze != nil && !l.Freeze.Released) {
-				t.Errorf("ledger freeze = %+v, want frozen = %v", l.Freeze, tc.frozen)
-			}
-			if tc.frozen && l.Freeze != nil && (l.Freeze.MergeSHA != "old01" || l.Freeze.Health != "FAIL") {
-				t.Errorf("freeze = %+v, want it to name merge old01 and status FAIL, so a release is not frozen again by the same result", l.Freeze)
-			}
+			f.wantFrozenOnFailedChecks(t, r, tc.frozen)
 		})
 	}
+}
+
+// wantFrozenOnFailedChecks checks whether the Epic was frozen on the merge old01 and status FAIL, and the freeze reported as a payload.
+func (f *landFlow) wantFrozenOnFailedChecks(t *testing.T, r result, frozen bool) {
+	t.Helper()
+	fr := f.ledger(t).Freeze
+	if got := fr != nil && !fr.Released && fr.MergeSHA == "old01" && fr.Health == "FAIL"; got != frozen {
+		t.Errorf("ledger freeze = %+v, want frozen on merge old01 and status FAIL = %v, so a release is not frozen again by the same result", fr, frozen)
+	}
+	out := f.payloadOf(r)
+	if got := out.Route == "FROZEN" && out.Next == "stop" && out.Freeze != nil && out.Freeze.Seq == 1; got != frozen {
+		t.Errorf("stdout %q; want the freeze reported as FROZEN with next stop = %v", r.stdout, frozen)
+	}
+}
+
+// payloadOf reads the JSON payload a command printed, or an empty one when it printed only a verdict line.
+func (f *landFlow) payloadOf(r result) landed {
+	var out landed
+	if strings.HasPrefix(r.stdout, "{") {
+		_ = json.Unmarshal([]byte(strings.SplitN(r.stdout, "\n", 2)[0]), &out)
+	}
+	return out
 }
 
 // TestLandMergeProceedsOnceThePreviousMergePassed: a merge whose default-branch checks passed no longer holds the next one.
@@ -102,22 +119,22 @@ func TestLandMergeNeedsTheShippedPairAsItsApprovalAndPullRequest(t *testing.T) {
 			}
 		}, 3},
 		"the Issue has no approval": {func(f *landFlow) {
-			st := f.issue(landReviewed)
+			st := f.issue()
 			st.Approval = nil
 			f.replaceIssue(st)
 		}, 8},
 		"the pair shipped is not the pair approved": {func(f *landFlow) {
-			st := f.issue(landReviewed)
+			st := f.issue()
 			st.Publish.SHA = "olderhead"
 			f.replaceIssue(st)
 		}, 8},
 		"the shipped pull request is not linked yet": {func(f *landFlow) {
-			st := f.issue(landReviewed)
+			st := f.issue()
 			st.Publish.Phase, st.Publish.PR = "pushed", 0
 			f.replaceIssue(st)
 		}, 8},
 		"the Issue is parked": {func(f *landFlow) {
-			st := f.issue(landReviewed)
+			st := f.issue()
 			st.Approval, st.UnresolvedBlockers = nil, []string{"cap"}
 			f.replaceIssue(st)
 		}, 8},
@@ -214,12 +231,12 @@ func TestLandMergeHoldsWhatTheRepositoryHoldsAndNeverBypassesIt(t *testing.T) {
 				}
 			}
 			f.wantNoRequest(t)
-			if f.record() != nil || f.notes(7, "merge-hold:") != tc.hold {
-				t.Errorf("record %+v, merge holds %d; want no record and %d holds", f.record(), f.notes(7, "merge-hold:"), tc.hold)
+			if f.record() != nil || f.notes("merge-hold:") != tc.hold {
+				t.Errorf("record %+v, merge holds %d; want no record and %d holds", f.record(), f.notes("merge-hold:"), tc.hold)
 			}
 			// Asking again changes nothing: the hold is posted once per head and reason.
 			f.merge()
-			if got := f.notes(7, "merge-hold:"); got != tc.hold {
+			if got := f.notes("merge-hold:"); got != tc.hold {
 				t.Errorf("merge holds after a second pass = %d, want %d", got, tc.hold)
 			}
 		})
@@ -239,7 +256,7 @@ func TestLandMergeHoldIsPostedAgainForANewReasonOnTheSameHead(t *testing.T) {
 	blocked.mergeState = "BLOCKED"
 	f.w.r.On(ghfake.Readiness, func(map[string]string) string { return pullBody(blocked) })
 	f.merge()
-	if got := f.notes(7, fmt.Sprintf("merge-hold:%d:%s:", landPR, landReviewed)); got != 2 {
+	if got := f.notes(fmt.Sprintf("merge-hold:%d:%s:", landPR, landReviewed)); got != 2 {
 		t.Errorf("merge holds = %d, want one per reason", got)
 	}
 }
@@ -273,4 +290,44 @@ func TestLandMergeNeverRequestsWhenTheIntentCannotBeRecorded(t *testing.T) {
 		t.Errorf("exit 0, stdout %q; want a failure", r.stdout)
 	}
 	f.wantNoRequest(t)
+}
+
+// TestLandMergeReadsTheGrantAgainRightBeforeTheRequest guards MA-02: a revoke that lands while the pull request is being
+// classified stops the merge, since the grant read at the start of the pass is not permission for the request at its end.
+func TestLandMergeReadsTheGrantAgainRightBeforeTheRequest(t *testing.T) {
+	t.Parallel()
+
+	f := newLandFlow(t)
+	f.w.r.On(ghfake.Readiness, func(map[string]string) string {
+		f.w.store.Add(277, "alice", "MEMBER", "epic-revoke-auto-merge")
+		return pullBody(readyPull(landReviewed))
+	})
+	r := f.merge()
+	if r.code != 8 {
+		t.Errorf("exit %d, stdout %q; want 8, the grant withdrawn", r.code, r.stdout)
+	}
+	f.wantNoRequest(t)
+	if f.record() != nil {
+		t.Errorf("a post-merge record exists: %+v", f.record())
+	}
+}
+
+// TestLandMergeChecksTheFreezeAgainRightBeforeTheRequest guards FZ-01: a freeze posted while the pull request is being
+// classified, by this session or another, stops every merge not yet requested.
+func TestLandMergeChecksTheFreezeAgainRightBeforeTheRequest(t *testing.T) {
+	t.Parallel()
+
+	f := newLandFlow(t)
+	f.w.r.On(ghfake.Readiness, func(map[string]string) string {
+		f.freezeEpic(t)
+		return pullBody(readyPull(landReviewed))
+	})
+	r := f.merge()
+	if r.code != 4 {
+		t.Errorf("exit %d, stdout %q; want 4, the Epic frozen", r.code, r.stdout)
+	}
+	f.wantNoRequest(t)
+	if f.record() != nil {
+		t.Errorf("a post-merge record exists: %+v", f.record())
+	}
 }

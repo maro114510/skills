@@ -54,17 +54,8 @@ func TestLandMergeReconcilesAnUnresolvedRecordFromThePullRequestFirst(t *testing
 			f.pulls = tc.pull
 			f.w.r.On(ghfake.Commit, func(map[string]string) string { return ghfake.CommitReply(landMerge, tc.parent, landReviewed) })
 			r := f.merge()
-			out := parseLanded(t, r)
-			if r.code != tc.code || out.Route != "RECONCILED" || out.Result != tc.result || out.MergeSHA != tc.merge {
-				t.Errorf("exit %d, stdout %q; want exit %d, RECONCILED as %s", r.code, r.stdout, tc.code, tc.result)
-			}
+			f.wantConcluded(t, r, tc.code, "RECONCILED", tc.result, tc.merge)
 			f.wantNoRequest(t)
-			if pm := f.record(); pm == nil || pm.Phase != tc.result || pm.MergeSHA != tc.merge {
-				t.Errorf("record = %+v, want %s", pm, tc.result)
-			}
-			if f.notes(7, fmt.Sprintf("merge-result:%d:%s:%s -->", landPR, landReviewed, tc.result)) != 1 {
-				t.Errorf("want one merge-result note for %s", tc.result)
-			}
 			if l := f.ledger(t); tc.frozen != (l.Freeze != nil && !l.Freeze.Released) {
 				t.Errorf("ledger freeze = %+v, want frozen = %v", l.Freeze, tc.frozen)
 			}
@@ -127,7 +118,7 @@ func TestLandMergeResultIsNotedOncePerPullRequestHeadAndResult(t *testing.T) {
 	if r.code != 0 {
 		t.Fatalf("exit %d, stdout %q", r.code, r.stdout)
 	}
-	if n := f.notes(7, fmt.Sprintf("merge-result:%d:%s:merged -->", landPR, landReviewed)); n != 1 {
+	if n := f.notes(fmt.Sprintf("merge-result:%d:%s:merged -->", landPR, landReviewed)); n != 1 {
 		t.Errorf("merge-result notes = %d, want the earlier one only", n)
 	}
 	if pm := f.record(); pm == nil || pm.Phase != state.PhaseMerged {
