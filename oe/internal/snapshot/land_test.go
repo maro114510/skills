@@ -280,3 +280,24 @@ func TestReadRepairInputRefusesAThreadWhoseCommentsExceedWhatWasRead(t *testing.
 	_, err := readRepair(t, feedbackPull(conn(thread(false, "a.go", 1, 80, fcomment(5, "alice", "User", "MEMBER", "b"))), conn(), conn()))
 	wantCode(t, err, exitcode.Unreadable)
 }
+
+// TestReadBranchHeadEscapesTheBranchInTheEndpoint: git accepts a # in a branch name, which gh api would read as the start of
+// a URL fragment and so query another ref, while a slash must stay a path separator.
+func TestReadBranchHeadEscapesTheBranchInTheEndpoint(t *testing.T) {
+	t.Parallel()
+
+	for branch, want := range map[string]string{
+		"main#next": "repos/o/r/git/ref/heads/main%23next",
+		"release/1": "repos/o/r/git/ref/heads/release/1",
+		"a b?c":     "repos/o/r/git/ref/heads/a%20b%3Fc",
+	} {
+		r := ghfake.New()
+		r.On(ghfake.Ref, func(map[string]string) string { return ghfake.RefReply("base1") })
+		if _, err := snapshot.ReadBranchHead(t.Context(), gh.New(r, false), "o/r", branch); err != nil {
+			t.Fatalf("ReadBranchHead(%q) err = %v", branch, err)
+		}
+		if !strings.Contains(r.Queries(), want+"\n") {
+			t.Errorf("ReadBranchHead(%q) called %q, want %s", branch, r.Queries(), want)
+		}
+	}
+}
