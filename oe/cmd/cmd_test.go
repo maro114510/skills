@@ -216,9 +216,13 @@ func TestSnapshotUnrecordedCallIsUnreadable(t *testing.T) {
 
 func mutating() [][]string { return [][]string{{"ship", "publish"}, {"land", "merge"}} }
 
-// unbuilt are the mutating subcommands that stay a refusal until their Issue lands.
-// ship publish is a coordination subcommand now, covered with the others by coordCommands.
-func unbuilt() [][]string { return [][]string{{"land", "merge"}} }
+// landing are the land subcommands as a coordination run starts them, with the arguments they need before any call.
+func landing() [][]string {
+	return [][]string{
+		{"land", "merge", "--issue", "7", "--lease-token", "tok"},
+		{"land", "repair", "--issue", "7", "--lease-token", "tok"},
+	}
+}
 
 // TestMutatingRefusesUnderSnapshot: every mutating subcommand exits non-zero under
 // --snapshot without any call, even when the snapshot would answer every read.
@@ -241,7 +245,7 @@ func TestMutatingRefusesUnderSnapshot(t *testing.T) {
 func TestMutatingRefusesOnPartialGraphQL(t *testing.T) {
 	t.Parallel()
 
-	for _, sub := range unbuilt() {
+	for _, sub := range landing() {
 		s := newSpy(healthy(probePartial, 1))
 		r := run(s, append([]string{"--epic", "277"}, sub...)...)
 		wantOneLine(t, r, 1, "partial")
@@ -254,14 +258,5 @@ func TestMutatingRefusesOnPartialGraphQL(t *testing.T) {
 				t.Errorf("%v: call %q is not one of the resolution reads", sub, c)
 			}
 		}
-	}
-}
-
-func TestMutatingNotYetImplemented(t *testing.T) {
-	t.Parallel()
-
-	for _, sub := range unbuilt() {
-		r := run(newSpy(healthy(probeOK, 0)), append([]string{"--epic", "277"}, sub...)...)
-		wantOneLine(t, r, 8, "not implemented")
 	}
 }
