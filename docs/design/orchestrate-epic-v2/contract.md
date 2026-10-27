@@ -693,7 +693,7 @@ One lease session is one invocation. What it keeps lives in `<state dir>/session
 | `no_checks` | Polls per pull request and head that reported no check |
 
 - A resumed session, with the same token, continues its counts, and a new token starts clean. This is the limit of the auto-answer of §16.3 and the staleness pass of §17.3: per lease session, never per round, so beginning a round resets nothing.
-- A missing file is a clean start. A file that cannot be read, is not one valid object, lacks a field, has an unknown field, holds a value no session wrote, or has another version exits 1 and nothing runs, so a damaged file never reads as a fresh invocation. A save reaches disk before the rename and syncs the directory after it.
+- A missing file is a clean start. A file that cannot be read, is not one valid object, has an unknown field, or has another version exits 1 and nothing runs, so a damaged file never reads as a fresh invocation.
 - The file only narrows what a round does: a deferral removes a proposal and never adds one.
 
 ### 20.2 Plan and Defer
@@ -751,12 +751,12 @@ Running out of polls does not by itself end the session: `health_passed` decides
 
 - It completes only when the Epic has dispatchable Issues and every one is `done`, or `parked` or `rejected` with an applied `epic-drop`. A `verifying` Issue, a dropped Issue with a newer decision not applied to the state yet, and an empty board never complete.
 - It posts nothing when the note exists, and a read that fails exits 1 before any post.
-- The text is oe's own template: the merged Issues, every recorded assumption, the Issues a person dropped with why they never shipped, and the numbers oe has. Assumptions are read back from the loop's `report` notes, each section ending only at a heading the handoff package writes, the skipped entries and the decision-log lines of a DONE record, and from its `qa` notes, so every invocation's are carried. The numbers are the ledger's counters, the fix cycles each Issue used, and the dispatches whose branch was lost. The CI-failure attribution, wall-clock, and first-pass-APPROVE metrics are dropped, R6 to R8. A record whose text would pass 100000 bytes or 60000 characters steps down: assumptions and reasons are counted, then the Issues are listed by number, then only totals are given, which always fit, so the writer never refuses the completion as oversized.
+- The text is oe's own template: the merged Issues, every recorded assumption, the Issues a person dropped with why they never shipped, and the numbers oe has. Assumptions are read back from the loop's `report` notes, each section ending only at a heading the handoff package writes, the skipped entries and the decision-log lines of a DONE record, and from its `qa` notes, so every invocation's are carried. The numbers are the ledger's counters, the fix cycles each Issue used, and the dispatches whose branch was lost. The CI-failure attribution, wall-clock, and first-pass-APPROVE metrics are dropped, R6 to R8. No section lists more than 30 entries of 200 characters, and says how many it left out, so the comment stays under the writer's limits however large the Epic is.
 - The loop never closes the Epic, a container, or any Issue. The text names the Epic and the open containers whose sub-issues are all done, for a person to close.
 
 ### 20.7 Cleanup
 
 `oe round cleanup --repo-dir <checkout>` takes the merged pull requests of loop branches of `done` Issues. For each branch it removes the worktree, then deletes the local branch.
 
-- A worktree with uncommitted or untracked files, with a tracked file whose index flag hides its edits from `git status` (assume-unchanged, or skip-worktree such as a sparse checkout's), or one git refuses to remove, is reported in `kept` and left in place. The shared checkout is never touched.
+- A worktree with uncommitted or untracked files, or one git refuses to remove, is reported in `kept` and left in place. The shared checkout is never touched.
 - The branch is deleted with `git branch -d`, which refuses an unmerged branch; that refusal is reported in `kept`. No flag forces a removal or a deletion.
