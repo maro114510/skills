@@ -49,17 +49,21 @@ func TestLandMergeWaitsForTheLastMergesDefaultBranchChecks(t *testing.T) {
 				t.Errorf("exit %d, stdout %q; want exit %d", r.code, r.stdout, tc.code)
 			}
 			f.wantNoRequest(t)
-			l := f.ledger(t)
-			if tc.frozen != (l.Freeze != nil && !l.Freeze.Released) {
-				t.Errorf("ledger freeze = %+v, want frozen = %v", l.Freeze, tc.frozen)
-			}
-			if tc.frozen && l.Freeze != nil && (l.Freeze.MergeSHA != "old01" || l.Freeze.Health != "FAIL") {
-				t.Errorf("freeze = %+v, want it to name merge old01 and status FAIL, so a release is not frozen again by the same result", l.Freeze)
-			}
-			if out := f.payloadOf(r); tc.frozen != (out.Route == "FROZEN" && out.Next == "stop" && out.Freeze != nil && out.Freeze.Seq == 1) {
-				t.Errorf("stdout %q; want the freeze reported as FROZEN with next stop = %v", r.stdout, tc.frozen)
-			}
+			f.wantFrozenOnFailedChecks(t, r, tc.frozen)
 		})
+	}
+}
+
+// wantFrozenOnFailedChecks checks whether the Epic was frozen on the merge old01 and status FAIL, and the freeze reported as a payload.
+func (f *landFlow) wantFrozenOnFailedChecks(t *testing.T, r result, frozen bool) {
+	t.Helper()
+	fr := f.ledger(t).Freeze
+	if got := fr != nil && !fr.Released && fr.MergeSHA == "old01" && fr.Health == "FAIL"; got != frozen {
+		t.Errorf("ledger freeze = %+v, want frozen on merge old01 and status FAIL = %v, so a release is not frozen again by the same result", fr, frozen)
+	}
+	out := f.payloadOf(r)
+	if got := out.Route == "FROZEN" && out.Next == "stop" && out.Freeze != nil && out.Freeze.Seq == 1; got != frozen {
+		t.Errorf("stdout %q; want the freeze reported as FROZEN with next stop = %v", r.stdout, frozen)
 	}
 }
 
