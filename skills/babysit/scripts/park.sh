@@ -4,6 +4,7 @@
 # Usage: park.sh <owner/repo> <pr> --session <token> --key <item key> --reason <text> [--hash <body hash>]
 # A comment key needs its --hash, so the item returns only when the comment text changes.
 # The reason may hold comment text, so it reaches osascript as an argument and never as script.
+# The ledger stores the whole reason; the notification shows its first 200 characters.
 # Prints {"parked":true,"key":...,"notified":true|false}. Test hook BABYSIT_OSASCRIPT replaces osascript.
 # Exit: 0 parked, 2 usage error or an unwritable ledger, 3 the lock is not ours.
 set -uo pipefail
@@ -48,9 +49,11 @@ done
 [[ "${key}" != c:* || -n "${hash}" ]] || usage "a comment key needs --hash"
 [[ "${reason}" =~ [^[:space:]] ]] || usage "--reason is required"
 
-# One line, no control characters, and a bounded length, for both the ledger and the notification.
+# One line and no control characters. The ledger keeps the whole reason, since the stop report reads it
+# there and a gate result can name many paths; only the notification is cut to a bounded length.
 # jq slices by character in any locale, where cut -c would cut a multibyte character in the C locale.
-reason="$(printf '%s' "${reason}" | tr '[:cntrl:]' ' ' | jq -Rrs --argjson n "${MAX_REASON}" '.[0:$n]')"
+reason="$(printf '%s' "${reason}" | tr '[:cntrl:]' ' ')"
+notice="$(printf '%s' "${reason}" | jq -Rrs --argjson n "${MAX_REASON}" '.[0:$n]')"
 
 args=("${repo}" "${pr}" "${token}" "${key}" parked --reason "${reason}")
 [[ -z "${hash}" ]] || args+=(--hash "${hash}")
@@ -59,7 +62,7 @@ bash "${script_dir}/ledger.sh" record "${args[@]}" || exit $?
 notified=false
 if command -v "${OSASCRIPT}" >/dev/null 2>&1; then
   if "${OSASCRIPT}" -e 'on run argv' -e 'display notification (item 1 of argv) with title (item 2 of argv)' -e 'end run' \
-    "${reason}" "babysit parked ${repo}#${pr}" >/dev/null 2>&1 </dev/null; then
+    "${notice}" "babysit parked ${repo}#${pr}" >/dev/null 2>&1 </dev/null; then
     notified=true
   fi
 fi

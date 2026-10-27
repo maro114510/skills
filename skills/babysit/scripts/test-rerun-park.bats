@@ -150,10 +150,20 @@ expect() {
   [ "${status}" -eq 3 ]
 }
 
-@test "park cuts a long reason at 200 characters, not bytes, whatever the locale" {
+@test "park keeps the whole reason in the ledger and cuts only the notification at 200 characters, not bytes" {
   reason="$(printf 'あ%.0s' $(seq 1 250))"
   LC_ALL=C park c:IC1 "${reason}" --hash h1
   [ "${status}" -eq 0 ]
-  expect "$(ledger '.items["c:IC1"].reason | length')" 200
-  expect "$(ledger '.items["c:IC1"].reason | contains("\ufffd")')" false
+  expect "$(ledger '.items["c:IC1"].reason | length')" 250
+  # The notification argument is the one line that holds the text.
+  notice="$(grep 'あ' "${tmp}/osascript-calls")"
+  expect "$(jq -Rr 'length' <<<"${notice}")" 200
+  expect "$(jq -Rr 'contains("\ufffd")' <<<"${notice}")" false
+}
+
+@test "park keeps every path a long gate reason names" {
+  paths="$(printf 'skills/some/long/directory/name/file-%s.sh ' $(seq 1 12))"
+  park "${key}" "secret in ${paths}"
+  [ "${status}" -eq 0 ]
+  expect "$(ledger ".items[\"${key}\"].reason | contains(\"file-12.sh\")")" true
 }

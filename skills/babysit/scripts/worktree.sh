@@ -11,6 +11,10 @@
 # Exit: 0 done, 1 GitHub or the worktree could not be used, 2 usage error, 3 the lock is not ours.
 set -uo pipefail
 
+# This script runs Git against another worktree, so a repository selected by the caller's environment
+# (a hook or an alias exports GIT_DIR) must never reach it: reset --hard would move the caller's HEAD.
+unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_PREFIX
+
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source-path=SCRIPTDIR disable=SC1091 # CI runs shellcheck without -x, so it cannot follow this.
 source "${script_dir}/common.sh"
@@ -84,8 +88,9 @@ if [[ "${cmd}" == remove ]]; then
   exit 0
 fi
 
-# A private ref, so neither FETCH_HEAD nor a branch of the user's changes.
-ref="refs/babysit/${lowered}/${pr}"
+# A private ref, so neither FETCH_HEAD nor a branch of the user's changes. Git forbids a ref component that
+# starts with "." or ends in ".lock", and a repository can be named like that (owner/.github), so "." is encoded.
+ref="refs/babysit/${lowered//./%2e}/${pr}"
 git fetch --quiet origin "+refs/heads/${branch}:${ref}" || fail "cannot fetch ${branch} from origin"
 sha="$(git rev-parse --verify "${ref}^{commit}")" || fail "cannot read the fetched head"
 [[ -z "${expected}" || "${expected}" == "${sha}" ]] || fail "the head moved: origin has ${sha}, expected ${expected}"

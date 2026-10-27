@@ -11,6 +11,9 @@
 # means the push went out and the ledger count failed; every other exit but 0 means nothing went out.
 set -uo pipefail
 
+# The worktree decides the repository, never one the caller's environment names (a hook exports GIT_DIR).
+unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_PREFIX
+
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source-path=SCRIPTDIR disable=SC1091 # CI runs shellcheck without -x, so it cannot follow this.
 source "${script_dir}/common.sh"

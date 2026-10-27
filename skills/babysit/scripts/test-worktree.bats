@@ -4,6 +4,8 @@
 
 setup() {
   scripts="${BATS_TEST_DIRNAME}"
+  # A caller's own repository selection (a hook exports GIT_DIR) must not leak into the repositories built here.
+  unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_PREFIX
   export BABYSIT_NOW=1000000
   token="tok-1"
   origin="${BATS_TEST_TMPDIR}/origin.git"
@@ -174,4 +176,26 @@ expect() {
   [ ! -e "${wt}" ]
   expect "$(git -C "${repo}" worktree list --porcelain | grep -c '^worktree ')" 1
   expect "$(fingerprint)" "${before}"
+}
+
+@test "prepare works for a repository whose name Git would refuse in a ref" {
+  for name in .github foo.lock; do
+    bash "${scripts}/ledger.sh" start "o/${name}" 8 "${token}" >/dev/null
+    run bash "${scripts}/worktree.sh" prepare "o/${name}" 8 --session "${token}" --branch feat/x
+    [ "${status}" -eq 0 ]
+    expect "$(jq -r .sha <<<"${output}")" "${head}"
+    expect "$(git -C "$(jq -r .path <<<"${output}")" rev-parse HEAD)" "${head}"
+  done
+}
+
+@test "prepare ignores a GIT_DIR from the caller and never moves the caller's HEAD" {
+  prepare
+  [ "${status}" -eq 0 ]
+  echo leftover >"${wt}/stray.txt"
+  user_head="$(git -C "${repo}" rev-parse HEAD)"
+  GIT_DIR="${repo}/.git" prepare
+  [ "${status}" -eq 0 ]
+  expect "$(git -C "${repo}" rev-parse HEAD)" "${user_head}"
+  expect "$(git -C "${wt}" rev-parse HEAD)" "${head}"
+  [ ! -e "${wt}/stray.txt" ]
 }

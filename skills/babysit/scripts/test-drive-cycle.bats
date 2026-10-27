@@ -6,6 +6,8 @@
 
 setup() {
   scripts="${BATS_TEST_DIRNAME}"
+  # A caller's own repository selection (a hook exports GIT_DIR) must not leak into the repositories built here.
+  unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_PREFIX
   tmp="${BATS_TEST_TMPDIR}"
   token="tok-1"
   export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
