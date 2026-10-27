@@ -255,16 +255,15 @@ func (f *flow) hold(ctx context.Context, reason string) error {
 	return f.held(NextHuman, reason, []string{})
 }
 
-// finalGates read the freeze, the grant, and the base again, right before the intent, since each can change while the pass runs.
+// finalGates read the freeze, health, grant, and base again, right before the intent, since each can change while the pass runs.
 func (f *flow) finalGates(ctx context.Context) error {
 	if _, err := f.d.S.Check(ctx); err != nil {
 		return err
 	}
-	byIssue, err := snapshot.ReadComments(ctx, f.d.Client, f.d.In.Repo, []int{f.d.In.Epic})
-	if err != nil {
+	if err := f.health(ctx); err != nil {
 		return err
 	}
-	if err := f.authorized(byIssue[f.d.In.Epic]); err != nil {
+	if err := f.authorizedByBoard(ctx); err != nil {
 		return err
 	}
 	return f.baseUnmoved(ctx)
@@ -274,6 +273,17 @@ func (f *flow) finalGates(ctx context.Context) error {
 func (f *flow) request(ctx context.Context) error {
 	t := target{pr: f.pr, issue: f.n, reviewed: f.a.ReviewedSHA, base: f.a.VerifiedBase, method: f.method}
 	if _, err := f.d.S.RecordMergeIntent(ctx, coord.MergeIntent{PR: t.pr, Issue: t.issue, ReviewedSHA: t.reviewed, VerifiedBase: t.base}); err != nil {
+		return err
+	}
+	// The intent took several calls and the expected SHA pins only the head, so the base is read once more, as v1 did.
+	// A request is never sent past a moved base. The intent is then resolved as not merged, since nothing was requested.
+	if err := f.baseUnmoved(ctx); err != nil {
+		if exitcode.CodeOf(err) != exitcode.Stale {
+			return err
+		}
+		if _, cerr := f.conclude(ctx, t, outcome{phase: state.PhaseNotMerged, mergeSHA: "", detail: "the default branch moved after the intent, so nothing was requested"}); cerr != nil {
+			return cerr
+		}
 		return err
 	}
 	o, err := f.send(ctx, t)
