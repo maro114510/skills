@@ -9,6 +9,7 @@ description: >
   Trigger on requests like
   「これを実装して」「機能を追加して」「バグを修正して」「変更して」「これを作って」
   「リファクタリングして」「対応して」 and similar implementation requests.
+  Implements only the first planned change unit per run, listing the rest as deferred.
   Works in a worktree, commits as it goes, and before push self-reviews the whole branch range on the first pass and only the fix delta on a second,
   then asks for user approval via difit over that range when the commit skill's classifier requires it.
   Claims an Issue locally first, so a second session handed the same Issue stops and asks instead of duplicating the work.
@@ -43,7 +44,7 @@ The caller may pass `branch <name>` and `worktree <path>`. Phases not listed bel
 | Phase | Autonomous behavior |
 |---|---|
 | Before Phase 1 | Resolve and validate the worktree as described in Worktree Resolution. Take no Issue Claim, because the orchestrator owns the Issue |
-| Phases 1 to 3 | Run them. The Issue body, Epic body, caller prompt, and persisted user answers are the only authoritative product decisions. When a Phase 2 ask trigger fires, return BLOCKED with concrete questions and options instead of asking. The orchestrator relays them and re-dispatches you with answers. Otherwise decide as Phase 2 directs and carry the decision log into `SUMMARY` |
+| Phases 1 to 3 | Run them. The Issue body, Epic body, caller prompt, and persisted user answers are the only authoritative product decisions. When a Phase 2 ask trigger fires, return BLOCKED with concrete questions and options instead of asking. The orchestrator relays them and re-dispatches you with answers. Otherwise decide as Phase 2 directs and carry the decision log into `SUMMARY`. Do not stop at the first unit: Run One Unit does not apply, so implement every unit the plan lists, in order, defer none for being a later unit, and never return BLOCKED over the split |
 | Phase 4 | Skip. The orchestrator already updated the base, parallel workers would race on the shared checkout, and the worktree is already resolved |
 | Phase 6.5 | Skip. The orchestrator's reviewer already reviews every diff in a fresh context |
 | Phase 7 | Skip the approval because no human can review it. Commit in the worktree with the `commit` skill, giving it the Issue number and whether `SKIPPED` is non-empty. If a commit hook rewrote any file, rerun Phase 6.9 on the committed state before the report. Never push and never open a PR. Leave the commit for the orchestrator to ship after human approval |
@@ -186,6 +187,15 @@ If new information, repository drift, or a scope change raises a Phase 2 trigger
 - In autonomous mode, return BLOCKED with the partial work, committed or not, listed in `CHANGED_FILES`.
 - In either mode, once the answer arrives, inspect the branch's commits and the uncommitted changes including untracked files. Undo only the work that implements an option the answer rejected, reverting a commit with `git revert`, and keep everything else.
 
+### Run One Unit
+
+Normal mode implements only the first unit of the plan, the first one listed with `depends on: none`, so each unit is reviewed and merged before a dependent one starts and no unit's code is written on top of an unreviewed unit. Autonomous mode never splits and implements the whole Issue as one unit.
+
+- A unit ends only at a green commit that closes a complete playbook cycle, never between a test commit and the commit that makes it pass. Phase 6 then shows HEAD green.
+- Every other unit is deferred. Make no edit for it in this run, and report it as Phase 6.9 describes.
+- A deferred unit counts as deferred from the first commit, because the plan already knows it. A non-empty deferred list makes the `commit` skill write `Related #<N>` and not `Closes #<N>`.
+- Dependent units start only after the earlier unit is merged. Independent units may start at once in a new run. Use no stack and no `gh-stack`.
+
 ---
 
 ## Phase 4: Set Up the Worktree
@@ -220,7 +230,7 @@ Route each part of the task in the Phase 3 plan. A playbook, relative to this sk
 
 Before the first edit, read `references/test-policy.md` and the routed playbook, and put the playbook's steps verbatim at the top of the todo list. Mark a step you skip `skip: <reason>`.
 
-Commit each step with the `commit` skill, giving it the type the playbook names, because it infers `test:` for a test-only diff, any `Removed-Test` trailer, and, when the work traces to an Issue, its number and whether anything is deferred so far. Never push.
+Commit each step with the `commit` skill, giving it the type the playbook names, because it infers `test:` for a test-only diff, any `Removed-Test` trailer, and, when the work traces to an Issue, its number and whether anything is deferred so far, counting units Run One Unit deferred. Never push.
 
 A test that is hard to write is a signal to revisit the design. Touch nothing beyond what the task requires.
 
@@ -269,6 +279,16 @@ This phase runs in both modes. Phase 2's criteria live in context, and context d
 
 Deferred, not satisfied: <criterion> -> <what was done instead, and why>
 No evidence: <criterion>
+```
+
+Each unit Run One Unit deferred is one more `Deferred, not satisfied` entry of 5 to 10 lines: the first line names the unit, and its acceptance criteria that no earlier unit satisfies, and the lines under it give the goal, the dependency, the expected files, and the constraints. It uses no new field.
+
+```
+Deferred, not satisfied: unit <n>, <its one sentence> -> not done in this run: <why it is separate>
+  goal: <what the unit achieves>
+  depends on: <unit numbers, or none>
+  expected files: <paths>
+  constraints: <what the next run must keep>
 ```
 
 Lead with the last two lines whenever either has content. In autonomous mode, every table row becomes a `CRITERIA` line in the form references/evidence.md defines, with `-> none` for each `No evidence` criterion, and each `Deferred` line becomes a `SKIPPED` line. A deferred criterion stays in the table as `No evidence`, so it appears in both.
