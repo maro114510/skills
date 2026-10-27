@@ -194,7 +194,7 @@ Normal mode implements only the first unit of the plan, the first one listed wit
 - A unit ends only at a green commit that closes a complete playbook cycle, never between a test commit and the commit that makes it pass. Phase 6 then shows HEAD green.
 - Every other unit is deferred. Make no edit for it in this run, and report it as Phase 6.9 describes.
 - A deferred unit counts as deferred from the first commit, because the plan already knows it. A non-empty deferred list makes the `commit` skill write `Related #<N>` and not `Closes #<N>`.
-- Dependent units start only after the earlier unit is merged. Independent units may start at once in a new run. Use no stack and no `gh-stack`.
+- Start the next unit only after the earlier unit is merged and visible in the base, dependent or not. A run picks its unit from the base alone, so a second run begun earlier would pick the same unit again. Use no stack and no `gh-stack`.
 - A run that follows a merged unit starts on a new branch from the fetched base, never on the merged unit's branch, so its PR carries only its own unit. Phase 4 in `references/interactive.md` sets this up.
 
 ---
