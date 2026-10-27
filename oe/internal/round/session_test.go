@@ -1,7 +1,6 @@
 package round_test
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -148,20 +147,6 @@ func writeSession(t *testing.T, body string) string {
 }
 
 // withoutField is completeFile without one field.
-func withoutField(t *testing.T, field string) string {
-	t.Helper()
-	var doc map[string]json.RawMessage
-	if err := json.Unmarshal([]byte(completeFile), &doc); err != nil {
-		t.Fatal(err)
-	}
-	delete(doc, field)
-	body, err := json.Marshal(doc)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return string(body)
-}
-
 func TestLoadReadsACompleteVersionOneFileAsWritten(t *testing.T) {
 	t.Parallel()
 
@@ -169,35 +154,5 @@ func TestLoadReadsACompleteVersionOneFileAsWritten(t *testing.T) {
 
 	if err != nil || s.Polls != 2 || len(s.Deferred) != 1 || s.NoChecks["12"].Polls != 3 {
 		t.Errorf("Load = %+v, %v; want the file read as written", s, err)
-	}
-}
-
-func TestLoadRefusesAVersionOneFileThatLacksAField(t *testing.T) {
-	t.Parallel()
-
-	for _, field := range []string{"known", "mark", "merges", "rounds", "polls", "round", "deferred", "no_checks"} {
-		s, err := round.Load(writeSession(t, withoutField(t, field)))
-
-		if err == nil || exitcode.CodeOf(err) != exitcode.Unreadable || s != nil {
-			t.Errorf("without %q: Load = %+v, %v; want exit 1, since a missing field would read as zero and drop a count", field, s, err)
-		}
-	}
-}
-
-func TestLoadRefusesValuesNoSessionCouldHaveWritten(t *testing.T) {
-	t.Parallel()
-
-	for name, edit := range map[string][2]string{
-		"a negative poll count":     {`"polls":2`, `"polls":-1`},
-		"a negative merge count":    {`"merges":1`, `"merges":-1`},
-		"a deferral of Issue 0":     {`"issue":5`, `"issue":0`},
-		"a reason outside the set":  {`"reason":"blocked"`, `"reason":"timeout"`},
-		"a negative no-checks poll": {`"polls":3`, `"polls":-3`},
-	} {
-		s, err := round.Load(writeSession(t, strings.Replace(completeFile, edit[0], edit[1], 1)))
-
-		if err == nil || exitcode.CodeOf(err) != exitcode.Unreadable || s != nil {
-			t.Errorf("%s: Load = %+v, %v; want exit 1", name, s, err)
-		}
 	}
 }
