@@ -189,7 +189,7 @@ If new information, repository drift, or a scope change raises a Phase 2 trigger
 
 ### Run One Unit
 
-Normal mode implements only the first unit of the plan, the first one listed with `depends on: none`, so each unit is reviewed and merged before a dependent one starts and no unit's code is written on top of an unreviewed unit. A change the base branch already contains is done and is not planned again, so a later run starts at the next unit. Autonomous mode never splits: it implements every unit in order, as one run.
+Normal mode implements only the first unit of the plan, the first one listed with `depends on: none`, so each unit is reviewed and merged before a dependent one starts and no unit's code is written on top of an unreviewed unit. A change the base branch already contains is done and is not planned again, and a dependency on it counts as `none`, so a later run starts at the next unit. Autonomous mode never splits: it implements every unit in order, as one run. The rules below are for normal mode.
 
 - A unit ends only at a green commit that closes a complete playbook cycle, never between a test commit and the commit that makes it pass. Phase 6 then shows HEAD green.
 - Every other unit is deferred. Make no edit for it in this run, and report it as Phase 6.9 describes.
