@@ -2,6 +2,7 @@ package round_test
 
 import (
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -364,5 +365,73 @@ func TestAnAsciiRecordIsCountedBeforeItPassesTheWritersCharacterLimit(t *testing
 	}
 	if !strings.Contains(text, "250 件") {
 		t.Error("the compact completion does not count the assumptions")
+	}
+}
+
+func TestADroppedIssueWithANewerDecisionPendingIsUnfinished(t *testing.T) {
+	t.Parallel()
+
+	b := epicBoard(leafIssue(6, "OPEN", "capped"))
+	comments := map[int][]snapshot.Comment{6: {issueState(t, 10, 6, func(s *state.Issue) {
+		s.UnresolvedBlockers = []string{"fix cycle cap reached"}
+		s.Decision = &state.Decision{Command: "epic-drop", CommentID: 99, RedoBranch: ""}
+	})}}
+	parked := classified(6, board.Parked, "capped")
+	parked.PendingDecision = "epic-retry"
+
+	rep := assess(t, result(parked), b, comments)
+
+	if rep.Complete() || len(rep.Dropped) != 0 || len(rep.Unfinished) != 1 || rep.Unfinished[0].Issue != 6 {
+		t.Errorf("report = %+v, want Issue 6 unfinished: a person's newer retry has not been applied yet", rep)
+	}
+}
+
+func TestEveryRenderingOfALargeRecordFitsTheWritersLimits(t *testing.T) {
+	t.Parallel()
+
+	for name, unit := range map[string]string{"ASCII": strings.Repeat("a", 400), "Japanese": strings.Repeat("あ", 400)} {
+		var rep round.Report
+		rep.Epic, rep.Cycles = 277, map[int]int{}
+		for i := 1; i <= 4000; i++ {
+			rep.Merged = append(rep.Merged, classified(i, board.Done, unit))
+			rep.Dropped = append(rep.Dropped, round.Dropped{Issue: 10000 + i, Title: unit, Reasons: []string{unit, unit}})
+			rep.Cycles[i] = 2
+			rep.DoneContainers = append(rep.DoneContainers, 20000+i)
+		}
+
+		text := rep.Text()
+
+		if n := utf8.RuneCountInString(text); n > 60_000 || len(text) > 100_000 {
+			t.Errorf("%s: the completion is %d characters and %d bytes, over the limits the comment writer takes", name, n, len(text))
+		}
+		if !strings.Contains(text, "Epic #277") || !strings.Contains(text, "4000") {
+			t.Errorf("%s: the smallest completion lacks the Epic or the counts", name)
+		}
+	}
+}
+
+func TestAHeadingInsideFreeFormNoteTextDoesNotCutTheRecord(t *testing.T) {
+	t.Parallel()
+
+	done := handoff.DoneReportNote("abc1234", handoff.Report{
+		Status: handoff.StatusDone, Issue: 7, Branch: "feat/issue-7", Worktree: "/w", HeadSHA: "abc1234", ChangedFiles: "", Checks: "", Criteria: "",
+		Skipped:   "criterion 2 -> deferred\n### Notes\nthe CI hook is missing",
+		Summary:   "added the flag\n### Rationale\nuse stdout -> existing convention; rejected: stderr",
+		Found:     "",
+		Questions: "", Error: "",
+	})
+	b := epicBoard(leafIssue(7, "CLOSED", "seven"))
+	comments := map[int][]snapshot.Comment{7: {noteComment(1, "report:7:abc1234:aaaaaaaaaaaa", done)}}
+
+	rep := assess(t, result(classified(7, board.Done, "seven")), b, comments)
+
+	var texts []string
+	for _, a := range rep.Assumptions {
+		texts = append(texts, a.Text)
+	}
+	for _, want := range []string{"criterion 2 -> deferred", "### Notes", "the CI hook is missing", "use stdout -> existing convention; rejected: stderr"} {
+		if !slices.Contains(texts, want) {
+			t.Errorf("assumptions = %q lack %q: a heading inside free-form text ended its section early", texts, want)
+		}
 	}
 }
