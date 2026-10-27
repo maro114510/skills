@@ -131,6 +131,47 @@ shell_block() {
   [ "${status}" -eq 1 ]
 }
 
+@test "a gh api write flag fails in its attached form too" {
+  for line in 'gh api repos/o/r/issues/7/comments -XPOST' 'gh api repos/o/r/issues/7/comments -fbody=x' 'gh api repos/o/r/issues/7/comments -Fbody=x' \
+    'gh api repos/o/r/issues/7/comments --method=POST' 'gh api repos/o/r/issues/7/comments --field body=x'; do
+    printf '# Router\n' >"${cand}/router.md"
+    shell_block "${cand}/router.md" "${line}"
+    run bash "${target}" "${cand}"
+    [ "${status}" -eq 1 ] || {
+      echo "accepted: ${line}"
+      return 1
+    }
+  done
+}
+
+@test "a command chained on a continuation line fails" {
+  for line in '  && git push origin main' '  | sh' '  ; git push' '  $(git push)' '  `git push`'; do
+    printf '# Router\n' >"${cand}/router.md"
+    shell_block "${cand}/router.md" "oe worker brief --issue 7 \\" "${line}"
+    run bash "${target}" "${cand}"
+    [ "${status}" -eq 1 ] || {
+      echo "accepted: ${line}"
+      return 1
+    }
+    [[ "${output}" == *"router.md:5"* ]] || {
+      echo "no location for: ${line}: ${output}"
+      return 1
+    }
+  done
+}
+
+@test "the portability check of a given directory leaves skills alone" {
+  mkdir -p "${BATS_TEST_TMPDIR}/repo/tests" "${BATS_TEST_TMPDIR}/repo/skills/x"
+  cp "${BATS_TEST_DIRNAME}/validate-agent-portability.sh" "${BATS_TEST_TMPDIR}/repo/tests/"
+  printf 'see ~/.claude/skills\n' >"${BATS_TEST_TMPDIR}/repo/skills/x/SKILL.md"
+  run bash "${BATS_TEST_TMPDIR}/repo/tests/validate-agent-portability.sh" "${cand}/agents"
+  [ "${status}" -eq 0 ]
+  mkdir -p "${BATS_TEST_TMPDIR}/repo/agents"
+  run bash "${BATS_TEST_TMPDIR}/repo/tests/validate-agent-portability.sh"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"~/.claude"* ]]
+}
+
 @test "a fenced block that is not shell is never judged" {
   printf '\n```text\ngit push origin main\n```\n\n```\ngit commit\n```\n' >>"${cand}/router.md"
   run bash "${target}" "${cand}"
