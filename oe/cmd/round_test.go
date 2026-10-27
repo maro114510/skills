@@ -34,7 +34,7 @@ func newRoundWorld(t *testing.T) *roundWorld {
 	t.Helper()
 	w := &roundWorld{coordWorld: newCoordWorld(t), tok: "", readiness: nil, health: nil}
 	w.tok = w.acquire(t)
-	w.readiness = func() string { return pullBody(roundPull("IN_PROGRESS", "")) }
+	w.readiness = func() string { return pullBody(roundPull("IN_PROGRESS")) }
 	w.health = func() string { return mergedPullBody(11, oldRecord, "SUCCESS") }
 	w.put(t, 7, awaitingState())
 	w.r.On(ghfake.Pulls, func(map[string]string) string {
@@ -45,21 +45,14 @@ func newRoundWorld(t *testing.T) *roundWorld {
 	return w
 }
 
-// roundPull is pull request 12 with one check at the given status; an empty status means no check at all.
-func roundPull(status, conclusion string) pullOpts {
+// roundPull is pull request 12 with one unfinished check at the given status; an empty status means no check at all.
+func roundPull(status string) pullOpts {
 	o := readyPull(roundHead)
 	o.contexts = `{"totalCount":0,"nodes":[]}`
 	if status != "" {
-		o.contexts = `{"totalCount":1,"nodes":[{"__typename":"CheckRun","name":"build","status":"` + status + `","conclusion":` + quoted(conclusion) + `}]}`
+		o.contexts = `{"totalCount":1,"nodes":[{"__typename":"CheckRun","name":"build","status":"` + status + `","conclusion":null}]}`
 	}
 	return o
-}
-
-func quoted(s string) string {
-	if s == "" {
-		return "null"
-	}
-	return `"` + s + `"`
 }
 
 // awaitingState is Issue 7's state: approved at the pull request's head on the current base, published as pull request 12.
@@ -185,7 +178,7 @@ func TestRoundPollGivesAHeadThatReportsNoChecksFivePollsAndThenNeedsAPerson(t *t
 	t.Parallel()
 
 	w := newRoundWorld(t)
-	w.readiness = func() string { return pullBody(roundPull("", "")) }
+	w.readiness = func() string { return pullBody(roundPull("")) }
 
 	for i := 1; i <= 5; i++ {
 		if out := w.poll(t); out.Decision != "sleep" {
@@ -750,7 +743,7 @@ func TestRoundPollExitsWith1WhenAReadinessSignalIsMissingAndNeverCountsThePoll(t
 
 	w := newRoundWorld(t)
 	w.readiness = func() string {
-		return strings.Replace(pullBody(roundPull("IN_PROGRESS", "")), `"mergeable":"MERGEABLE",`, "", 1)
+		return strings.Replace(pullBody(roundPull("IN_PROGRESS")), `"mergeable":"MERGEABLE",`, "", 1)
 	}
 
 	r := w.round("poll")
@@ -758,7 +751,7 @@ func TestRoundPollExitsWith1WhenAReadinessSignalIsMissingAndNeverCountsThePoll(t
 	if r.code != 1 {
 		t.Fatalf("exit %d, stdout %q; want 1: a pull request whose readiness cannot be read is a failed read, not a settled one", r.code, r.stdout)
 	}
-	w.readiness = func() string { return pullBody(roundPull("IN_PROGRESS", "")) }
+	w.readiness = func() string { return pullBody(roundPull("IN_PROGRESS")) }
 	if out := w.poll(t); out.Polls != 1 {
 		t.Errorf("the next poll = %+v, want 1 poll spent: the failed read must not have been counted", out)
 	}

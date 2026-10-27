@@ -3,6 +3,7 @@ package cmd
 import (
 	"cmp"
 	"context"
+	"fmt"
 
 	"github.com/spf13/cobra"
 
@@ -146,6 +147,10 @@ func waiters(ctx context.Context, ss session, res board.Result, plan round.Plan)
 			return nil, err
 		}
 		rd := readiness.Classify(req)
+		if rd.Unreadable {
+			// Classify reports a signal it cannot read as a result, which is a failed read here, never a wait or a hold.
+			return nil, exitcode.New(exitcode.Unreadable, fmt.Sprintf("pull request #%d cannot be read, so nothing is polled: %s", c.PR, rd.Reason))
+		}
 		out = append(out, round.Waiter{Issue: c.Issue, PR: c.PR, Head: cmp.Or(rd.Head, c.Head), Stale: false, Readiness: rd})
 	}
 	for _, n := range plan.StaleWaiting {
@@ -182,6 +187,10 @@ func newRoundNextCmd(env Env, g *globals) *cobra.Command {
 		func(ctx context.Context, c *cobra.Command, ss session) error {
 			rs, err := loadRound(env, ss)
 			if err != nil {
+				return err
+			}
+			// The session alone shows whether a round began, so refuse before a read can fail first.
+			if err := round.RequireRound(rs.s); err != nil {
 				return err
 			}
 			res, b, err := classifyBoard(ctx, ss)
