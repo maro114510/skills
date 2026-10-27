@@ -169,6 +169,6 @@ expect() {
   export BABYSIT_GH="${tmp}/gh-losing"
   reply --thread T1
   [ "${status}" -eq 3 ]
-  expect "$(jq -r .posted <<<"${output}")" true
-  expect "$(jq -r .id <<<"${output}")" PRRC_1
+  expect "$(tail -n 1 <<<"${output}" | jq -r .posted)" true
+  expect "$(tail -n 1 <<<"${output}" | jq -r .id)" PRRC_1
 }

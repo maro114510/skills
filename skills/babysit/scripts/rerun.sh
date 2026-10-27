@@ -4,7 +4,8 @@
 # Usage: rerun.sh <owner/repo> <pr> --session <token> --key <item key> --workflow-run <id> --run-id <failed check run id>
 # The ids come from the check_failed event: check.workflowRunId and check.runId. Test hook BABYSIT_GH replaces gh.
 # GitHub refusing the re-run records nothing, and the caller then repairs the check as if it had been confirmed.
-# Exit: 0 re-run and recorded, 1 GitHub refused or the record failed, 2 usage error, 3 the lock is not ours.
+# Exit: 0 re-run and recorded, 1 GitHub refused, 2 usage error or an unwritable ledger, 3 the lock is not ours.
+# Only an exit of 1 means nothing was re-run, so only it sends the caller to a repair.
 set -uo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -51,4 +52,4 @@ bash "${script_dir}/ledger.sh" touch "${repo}" "${pr}" "${token}" || exit $?
   exit 1
 }
 # Recording comes after, so a crash in between shows the failure again and re-runs once more instead of waiting for nothing.
-bash "${script_dir}/ledger.sh" record "${repo}" "${pr}" "${token}" "${key}" rerun --run-id "${run_id}" || exit 1
+bash "${script_dir}/ledger.sh" record "${repo}" "${pr}" "${token}" "${key}" rerun --run-id "${run_id}" || exit $?

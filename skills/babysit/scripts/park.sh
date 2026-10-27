@@ -49,7 +49,8 @@ done
 [[ "${reason}" =~ [^[:space:]] ]] || usage "--reason is required"
 
 # One line, no control characters, and a bounded length, for both the ledger and the notification.
-reason="$(printf '%s' "${reason}" | tr '[:cntrl:]' ' ' | cut -c "1-${MAX_REASON}")"
+# jq slices by character in any locale, where cut -c would cut a multibyte character in the C locale.
+reason="$(printf '%s' "${reason}" | tr '[:cntrl:]' ' ' | jq -Rrs --argjson n "${MAX_REASON}" '.[0:$n]')"
 
 args=("${repo}" "${pr}" "${token}" "${key}" parked --reason "${reason}")
 [[ -z "${hash}" ]] || args+=(--hash "${hash}")

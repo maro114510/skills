@@ -7,7 +7,8 @@
 # Never forces, and never pushes anything the gate has not judged: the command it runs is the command it gave the gate.
 # Test hooks BABYSIT_PR_STATE and BABYSIT_REMOTE_BASE reach the gate.
 # Exit: 0 pushed, 1 the push failed, 2 usage error, 3 the lock is not ours,
-# 10 the gate parked it, 11 the gate refused it. Anything but 0 means nothing went out.
+# 10 the gate parked it, 11 the gate refused it. Only an exit of 1 or 3 with "pushed":true in the JSON line
+# means the push went out and the ledger count failed; every other exit but 0 means nothing went out.
 set -uo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -73,9 +74,13 @@ if ! "${cmd[@]}" >&2; then
 fi
 
 # The check keys follow the checks array; with none, the call counts the round alone.
-if ! bash "${script_dir}/ledger.sh" count-push "${repo}" "${pr}" "${token}" ${checks[@]+"${checks[@]}"}; then
+bash "${script_dir}/ledger.sh" count-push "${repo}" "${pr}" "${token}" ${checks[@]+"${checks[@]}"}
+count_code=$?
+if ((count_code != 0)); then
+  # The push is out, so the caller must not read this as a failed push; 3 still means the lock is gone.
   jq -nc --arg sha "${sha}" --arg branch "${branch}" \
     '{pushed: true, sha: $sha, branch: $branch, error: "the push went out but the ledger count failed"}'
+  ((count_code == 3)) && exit 3
   exit 1
 fi
 rounds="$(bash "${script_dir}/ledger.sh" show "${repo}" "${pr}" | jq -r '.rounds // 0')"

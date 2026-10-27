@@ -6,6 +6,7 @@
 # It only ever replies: nothing here resolves or unresolves a thread.
 # Prints one JSON line. Test hook BABYSIT_GH replaces gh.
 # Exit: 0 posted, 1 the post failed, 2 usage error, 3 the lock is not ours, 10 the thread already holds 2 replies.
+# An exit of 1 or 3 with "posted":true in the JSON line means the reply is out and only the ledger write failed.
 set -uo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -99,9 +100,13 @@ if ((post_status != 0)) || [[ -z "${id}" || "${id}" == null ]]; then
   exit 1
 fi
 
-if ! bash "${script_dir}/ledger.sh" reply-done "${repo}" "${pr}" "${token}" "${target}" --hash "${hash}" --id "${id}"; then
+bash "${script_dir}/ledger.sh" reply-done "${repo}" "${pr}" "${token}" "${target}" --hash "${hash}" --id "${id}"
+done_code=$?
+if ((done_code != 0)); then
+  # The reply is out, so the caller must not read this as a failed post; 3 still means the lock is gone.
   jq -nc --arg id "${id}" --arg target "${target}" \
     '{posted: true, id: $id, target: $target, error: "the reply was posted but the ledger write failed"}'
+  ((done_code == 3)) && exit 3
   exit 1
 fi
 replies="$(bash "${script_dir}/ledger.sh" replies "${repo}" "${pr}" "${target}")"

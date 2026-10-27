@@ -119,6 +119,8 @@ The first matching row wins.
 | `rerun` | Re-runs the failed jobs of a workflow run and records the failed run id after GitHub accepts it | 0, 1 refused, 2, 3 |
 | `park` | Records the item as parked with a reason and shows one notification | 0, 2, 3 |
 
+An exit of 1 or 3 from `push` or `reply` with `pushed` or `posted` true in its JSON line means the action went out and only the ledger write failed, so the skill never repeats it.
+
 Event rules follow.
 
 - Only GitHub Actions check runs can be re-run, so other checks go straight to `check_confirmed`.
