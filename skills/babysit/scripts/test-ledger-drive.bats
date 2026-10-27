@@ -127,3 +127,12 @@ expect() {
   expect "$(ledger '.own.pushes | length')" 1
   expect "$(ledger '.own.replies | length')" 1
 }
+
+@test "record keeps the reason a park was given" {
+  run ledger_cmd record c:IC1 parked --hash h1 --reason "needs a product decision"
+  [ "${status}" -eq 0 ]
+  expect "$(ledger '.items["c:IC1"].reason')" "needs a product decision"
+  expect "$(ledger '.items["c:IC1"].disposition')" parked
+  run ledger_cmd record c:IC2 reported --hash h2
+  expect "$(ledger '.items["c:IC2"].reason // "none"')" none
+}

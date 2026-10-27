@@ -315,6 +315,14 @@ waiting='.reviewRequests = [{reviewer: "dave", type: "User"}]'
   expect "$(field '.report.parked[0]')" c:TC1
 }
 
+@test "a stop report gives the reason of each parked item" {
+  set_snap "${waiting} | .threads = [{id: \"T1\", isResolved: false, path: \"a\", line: 1, comments: [\$comment | .id = \"TC1\"]}]"
+  record c:TC1 parked --hash h1 --reason "asks for a schema change"
+  poll --mode drive
+  expect "$(event)" stalled
+  expect "$(field '.report.reasons["c:TC1"]')" "asks for a schema change"
+}
+
 @test "a re-run check waits for a newer run, which confirms a failure" {
   set_snap "${waiting} | .checks[0].status = \"failed\""
   poll --mode drive
