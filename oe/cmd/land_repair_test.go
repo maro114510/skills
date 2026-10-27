@@ -152,8 +152,8 @@ func TestLandRepairHandsAConflictAsAMergeOfTheDefaultBranch(t *testing.T) {
 	out := parseLanded(t, r)
 	text := joined(out.Findings)
 	if r.code != 0 || out.Route != "REPAIR" || len(out.Repair) != 1 || out.Repair[0] != "conflict" ||
-		!strings.Contains(text, "main") || !strings.Contains(text, "feat/issue-7") || !strings.Contains(text, "never a rebase") {
-		t.Errorf("exit %d, stdout %q; want a finding to merge main into feat/issue-7, never a rebase", r.code, r.stdout)
+		!strings.Contains(text, "origin/main") || !strings.Contains(text, landBase) || !strings.Contains(text, "feat/issue-7") || !strings.Contains(text, "never a rebase") {
+		t.Errorf("exit %d, stdout %q; want a finding to merge origin/main at the verified base into feat/issue-7, never a rebase", r.code, r.stdout)
 	}
 }
 
@@ -518,5 +518,26 @@ func TestLandRepairResumesAMarkerThatWasNeverPosted(t *testing.T) {
 	if f.notes(fmt.Sprintf("repair:%d:%s:0 -->", landPR, landReviewed)) != 1 || st.Cycle != 1 || f.ledger(t).Counters.FixCycles.Used != 1 {
 		t.Errorf("marker notes %d, cycle %d, reserved %d; want the marker posted once and one cycle charged",
 			f.notes(fmt.Sprintf("repair:%d:%s:0 -->", landPR, landReviewed)), st.Cycle, f.ledger(t).Counters.FixCycles.Used)
+	}
+}
+
+// TestLandRepairWhileItsWorkerIsPendingDispatchesNoSecondWorker: a second call while the first repair's worker is still running finds the
+// findings pending and the marker posted, so it must not tell the caller to spawn another worker onto the same worktree.
+func TestLandRepairWhileItsWorkerIsPendingDispatchesNoSecondWorker(t *testing.T) {
+	t.Parallel()
+
+	f := newLandFlow(t)
+	f.blockedBy(failingChecks())
+	f.feedbackIs(fbConn(), fbConn(), fbConn(failedBuild))
+	if r := f.repair(); r.code != 0 {
+		t.Fatalf("first run: exit %d, stdout %q", r.code, r.stdout)
+	}
+	r := f.repair()
+	out := parseLanded(t, r)
+	if r.code != 0 || out.Route != "HELD" || out.Next != "await-worker" {
+		t.Errorf("second run: exit %d, stdout %q; want HELD with next await-worker", r.code, r.stdout)
+	}
+	if st := f.issueState(t); st.Cycle != 1 || f.ledger(t).Counters.FixCycles.Used != 1 || f.notes("repair:") != 1 {
+		t.Errorf("cycle %d, reserved %d, repair notes %d; want one cycle, one reservation, one marker", st.Cycle, f.ledger(t).Counters.FixCycles.Used, f.notes("repair:"))
 	}
 }
