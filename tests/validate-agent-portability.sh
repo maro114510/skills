@@ -6,7 +6,12 @@ GUIDANCE='portable agents may only use: description, name'
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "${script_dir}/.." && pwd)"
-agents_dir="${repo_root}/agents"
+# Without arguments it checks the shipped agents and the candidate's; each argument names a directory of agents instead.
+if [[ "$#" -gt 0 ]]; then
+  agent_dirs=("$@")
+else
+  agent_dirs=("${repo_root}/agents" "${repo_root}/docs/design/orchestrate-epic-v2/candidate/agents")
+fi
 
 extract_keys() {
   awk '
@@ -34,15 +39,16 @@ extract_keys() {
 
 status=0
 count=0
-for agent_path in "${agents_dir}"/*.md; do
-  [[ -f "${agent_path}" ]] || continue
-  count=$((count + 1))
-  agent_name="${agent_path##*/}"
-  for key in $(extract_keys "${agent_path}"); do
-    if [[ " ${ALLOWED_AGENT_KEYS} " != *" ${key} "* ]]; then
-      printf 'agents/%s: non-portable frontmatter key "%s"\n' "${agent_name}" "${key}" >&2
-      status=1
-    fi
+for agents_dir in "${agent_dirs[@]}"; do
+  for agent_path in "${agents_dir}"/*.md; do
+    [[ -f "${agent_path}" ]] || continue
+    count=$((count + 1))
+    for key in $(extract_keys "${agent_path}"); do
+      if [[ " ${ALLOWED_AGENT_KEYS} " != *" ${key} "* ]]; then
+        printf '%s: non-portable frontmatter key "%s"\n' "${agent_path#"${repo_root}"/}" "${key}" >&2
+        status=1
+      fi
+    done
   done
 done
 
