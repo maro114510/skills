@@ -2,6 +2,7 @@ package snapshot_test
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -182,6 +183,8 @@ func TestReadRepairInputReadsWhatAWorkerIsHandedAndNothingElse(t *testing.T) {
 	if err != nil || got.Number != 7 || got.Head != "abc123" {
 		t.Fatalf("ReadRepairInput() = %+v, %v; want PR 7 at abc123", got, err)
 	}
+	// The order of the checks is the classifier's, which this test does not pin.
+	slices.SortFunc(got.Failed, func(a, b snapshot.FailedCheck) int { return strings.Compare(a.Name, b.Name) })
 	if len(got.Failed) != 2 || got.Failed[0] != (snapshot.FailedCheck{Name: "build", URL: "https://github.com/o/r/actions/runs/1/job/10"}) ||
 		got.Failed[1] != (snapshot.FailedCheck{Name: "ci/legacy", URL: "https://ci.example/legacy/9"}) {
 		t.Errorf("Failed = %+v, want build and ci/legacy with their links, never the passing or pending checks", got.Failed)
