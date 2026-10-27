@@ -472,3 +472,21 @@ func TestLandRepairWithAnUnpostableMarkHandsNothingToAWorker(t *testing.T) {
 		t.Errorf("exit %d, stdout %q; want a failure that hands nothing over", r.code, r.stdout)
 	}
 }
+
+// TestLandRepairNoteIsKeyedByTheExactPullRequestNumber guards LC-02: the repair note of pull request 123 never stands in for
+// the one of pull request 12, as a prefix match on the marker would.
+func TestLandRepairNoteIsKeyedByTheExactPullRequestNumber(t *testing.T) {
+	t.Parallel()
+
+	f := newLandFlow(t)
+	f.w.store.Add(7, "loop", "OWNER", fmt.Sprintf("<!-- oe:v2 note repair:123:%s:0 -->\nan earlier repair of another pull request", landReviewed))
+	f.blockedBy(failingChecks())
+	f.feedbackIs(fbConn(), fbConn(), fbConn(failedBuild))
+	r := f.repair()
+	if out := parseLanded(t, r); r.code != 0 || out.Route != "REPAIR" {
+		t.Fatalf("exit %d, stdout %q; want REPAIR", r.code, r.stdout)
+	}
+	if mine, theirs := f.notes(fmt.Sprintf("repair:%d:%s:0 -->", landPR, landReviewed)), f.notes("repair:123:"); mine != 1 || theirs != 1 {
+		t.Errorf("repair notes for 12 = %d and for 123 = %d; want one each", mine, theirs)
+	}
+}
