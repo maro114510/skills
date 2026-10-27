@@ -86,6 +86,24 @@ shell_block() {
   [ "${status}" -eq 1 ]
 }
 
+@test "a report may be written to a temporary file with cat and a heredoc" {
+  shell_block "${cand}/router.md" 'f="$(mktemp)"' "cat >\"\$f\" <<'REPORT'" 'git push origin main' 'REPORT' 'oe worker report --issue 7 --file "$f"'
+  run bash "${target}" "${cand}"
+  [ "${status}" -eq 0 ]
+}
+
+@test "cat is allowed only to write a variable-named file from a heredoc" {
+  for line in 'cat /etc/passwd' 'cat "$f"' "cat >/tmp/x <<'EOF'" "cat >>\"\$f\" <<'EOF'" "cat >\"\$f\" <<'EOF' && git push"; do
+    printf '# Router\n' >"${cand}/router.md"
+    shell_block "${cand}/router.md" "${line}"
+    run bash "${target}" "${cand}"
+    [ "${status}" -eq 1 ] || {
+      echo "accepted: ${line}"
+      return 1
+    }
+  done
+}
+
 @test "a continuation line belongs to its command" {
   shell_block "${cand}/router.md" "oe worker brief --issue 7 \\" '  --lease-token t'
   run bash "${target}" "${cand}"
