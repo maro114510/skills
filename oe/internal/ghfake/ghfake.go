@@ -37,8 +37,10 @@ const (
 	CommentsName = "comments"
 	MoreComments = "moreComments"
 	MergePull    = "mergePull"
-	Readiness    = "readiness"
-	Git          = "git"
+	// PullsByHead is the listing of the pull requests of one head branch, in every state.
+	PullsByHead = "pullsByHead"
+	Readiness   = "readiness"
+	Git         = "git"
 	// Protection is the REST read of the default branch's protection.
 	Protection = "protection"
 )
@@ -49,6 +51,7 @@ var phrases = map[string]string{ //nolint:gochecknoglobals // A fixed table of t
 	Tree:         "defaultBranchRef { name target",
 	Blockers:     "node(id: $id)",
 	Pulls:        "pullRequests(first: 100",
+	PullsByHead:  "headRefName: $branch",
 	Refs:         "refs(refPrefix",
 	CommentsName: "comments(first: 100) { totalCount",
 	MoreComments: "comments(first: 100, after: $after)",
@@ -61,7 +64,7 @@ func phrase(name string) string { return phrases[name] }
 
 // queryOrder is the order queries are told apart in: a query is the first whose phrase it holds.
 func queryOrder() []string {
-	return []string{CommentsName, MoreComments, Blockers, MergePull, Readiness, Tree, Pulls, Refs, Protection}
+	return []string{CommentsName, MoreComments, Blockers, MergePull, Readiness, Tree, PullsByHead, Pulls, Refs, Protection}
 }
 
 const probePhrase = "subIssues(first:0)"
@@ -78,6 +81,7 @@ func New() *Router {
 	r.Stderr(Protection, "gh: Branch not protected (HTTP 404)")
 	r.On(Tree, func(map[string]string) string { return EpicTree("", "[]", 0, false, "") })
 	r.On(Pulls, func(map[string]string) string { return PullPage("[]", false, "") })
+	r.On(PullsByHead, func(map[string]string) string { return PullPage("[]", false, "") })
 	r.On(Refs, func(map[string]string) string { return RefPage(false, "") })
 	r.On(Git, func(map[string]string) string { return "" })
 	return r
@@ -298,12 +302,17 @@ func PullPage(nodes string, more bool, cursor string) string {
 
 // PullNode is one pull request in the listing.
 func PullNode(n int, state, branch, created string, merged bool) string {
+	return PullNodeOnBase(n, state, branch, "main", "", created, merged)
+}
+
+// PullNodeOnBase is a pull request of the branch that targets the base branch, with the body.
+func PullNodeOnBase(n int, state, branch, base, body, created string, merged bool) string {
 	mergedAt := "null"
 	if merged {
 		mergedAt = `"2026-10-10T00:00:00Z"`
 	}
-	return fmt.Sprintf(`{"number":%d,"state":%q,"mergedAt":%s,"createdAt":%q,"headRefName":%q,"headRefOid":"sha%d","isCrossRepository":false}`,
-		n, state, mergedAt, created, branch, n)
+	return fmt.Sprintf(`{"number":%d,"state":%q,"mergedAt":%s,"createdAt":%q,"headRefName":%q,"baseRefName":%q,"body":%q,"headRefOid":"sha%d","isCrossRepository":false}`,
+		n, state, mergedAt, created, branch, base, body, n)
 }
 
 // ForkPullNode is a pull request whose head branch is in another repository.

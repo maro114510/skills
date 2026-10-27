@@ -315,6 +315,8 @@ type pullNode struct {
 	MergedAt          *string `json:"mergedAt"`
 	CreatedAt         string  `json:"createdAt"`
 	HeadRefName       string  `json:"headRefName"`
+	BaseRefName       string  `json:"baseRefName"`
+	Body              string  `json:"body"`
 	HeadRefOid        string  `json:"headRefOid"`
 	IsCrossRepository *bool   `json:"isCrossRepository"`
 }

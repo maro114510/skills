@@ -20,5 +20,7 @@ func main() {
 		Version:  version,
 		Getenv:   os.Getenv,
 		Hostname: os.Hostname,
+		Checks:   nil,
+		Scripts:  nil,
 	}))
 }

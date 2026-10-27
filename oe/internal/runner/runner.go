@@ -73,6 +73,10 @@ func (Exec) Run(ctx context.Context, prog Program, args []string) (Result, error
 	return res, nil
 }
 
+// Environ is the environment for a child process oe starts itself, such as a script: the process's
+// own with GH_HOST and GH_REPO dropped and the host pinned, as for every gh and git call.
+func Environ() []string { return childEnv(os.Environ()) }
+
 // childEnv is the environment for every child process. An inherited GH_HOST or GH_REPO could
 // point a gh command at another host or repository, so both are dropped and the host is pinned.
 func childEnv(parent []string) []string {

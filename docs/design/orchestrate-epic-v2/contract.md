@@ -128,8 +128,8 @@ Each transition writes the whole object after a full read. The writer exits 7 if
 | `mark_stale` | A staleness pass | Clears approval and records this session in `stale_pass` |
 | `park` | Blockers | Sets blockers, empties pending findings, clears approval. A head the worker committed before it stopped sets `head_sha` |
 | `apply_signals` | A full read of the window, §6 | Advances the watermark, appends context, applies the decision |
-| `record_publish_intent` | Approval bound; `sha` and `base` equal the pair; any earlier publish is `linked` or null | New intent with `prev_sha`, keeping an earlier `pr`. A repaired head re-publishes this way |
-| `record_published` | Publish `intent` or `pushed` | Moves to `pushed`, then `linked` with `pr` |
+| `record_publish_intent` | Approval bound; `sha` and `base` equal the pair | New intent with `prev_sha`, replacing any earlier publish and keeping its `pr` |
+| `record_published` | Publish `intent` or `pushed` | `pushed`, then `linked` with `pr` |
 
 | Decision | Applies to | Effect |
 |---|---|---|
@@ -151,7 +151,7 @@ The Go types make these unrepresentable, or the writer rejects them before any r
 5. Pending findings and blockers at once
 6. `cycle` above 2, or `begin_fix` at 2
 7. A redo branch that already has a merged or closed PR
-8. Publish in `intent` or `pushed` without approval, or with `sha` other than `reviewed_sha`. A `linked` publish is history, not permission
+8. A publish with no `sha` or `base`, another branch than the Issue's, an unknown `phase`, or `linked` without `pr`. An `intent` or `pushed` publish may outlive its approval, since permission is a live approval that `oe ship publish` checks
 9. A watermark lower than the one it replaces
 10. Ledger `used` above `bound`, a reservation while frozen, or a second freeze
 11. A post-merge `record_intent` while the record is `intent` or `unknown`; §8 reconciles those first
@@ -220,9 +220,9 @@ Duplicate notes are harmless and never deleted. Duplicate states exit 6.
 | State create | Full read, no state | Re-read by key: one is done, two exit 6 | A second state for a key | #285 |
 | State edit | Full read, same `revision` | Re-read: intended object stored is done, else redo from fresh state | A partial object | #285 |
 | Reserve, then spawn | Freeze `CLEAR`, reservation fits | A write that may have landed counts as landed; a failed write spawns nothing | Spawn before the write is confirmed | #285 |
-| Push | Final freeze, base, and HEAD gates, then the intent | Remote equals `sha`: pushed. Equals `prev_sha`, or absent with none recorded: re-gate and push. Anything else: stop. A remote branch with no intent ever: external push note | Force-push, or any SHA but `sha` | #289 `PushToPRResume` |
-| PR create | Publish `pushed`, then fresh freeze, base, and HEAD gates, also on resume | List PRs by head in any state: link an open one, route a closed unmerged one to rejected, else create | A second PR for a branch | #289 `PushToPRResume` |
-| PR link | Open PR exists | Idempotent; a failure posts `link-failed` and the round goes on | Stop the round for it | #289 |
+| Push | Final freeze, base, and HEAD gates, then the intent | Remote at `sha` is pushed. At `prev_sha`, or absent with none recorded, re-gate and push. Anything else stops with an `external-push` note | Force, delete, or any SHA but `sha` | #289 `PushToPRResume` |
+| PR create | Publish `pushed`, then fresh freeze, base, and HEAD gates, also on resume | List by head in any state. Link an open one, stop on closed or merged with none open, else create | A second PR for a branch | #289 `PushToPRResume` |
+| PR link | Open PR exists | Idempotent. A failure posts `link-failed` and the round goes on | Stop the round for it | #289 |
 | Merge request | Health proceeds, grant read fresh, `READY` on `reviewed_sha`, freeze `CLEAR`, base re-read equals `verified_base`, then `record_intent` | A record at `intent` or `unknown` is reconciled from the PR first, now or next invocation. Merged with first parent `verified_base` is `merged`. Merged with any other or an unreadable first parent is `merged-unverified-base`, and the ledger freeze is written before the result note or any further merge. Not merged is `not-merged`. An unreadable PR stays `unknown` and stops landing | Blind retry, `gh pr merge`, `--admin`, rebase, revert | #290 |
 | Merge result | Request answered or reconciled | Result note, then `record_result`; either failing stops every further merge | Merge again before both | #290 |
 | Freeze | Ledger `CLEAR` | Ledger write, then note `freeze:<seq>`; a missing note is posted on the next read | Notify twice | #285 |
@@ -303,7 +303,7 @@ Every subcommand that needs the run inputs resolves them one way, in this order,
 - `--snapshot` with an empty value exits 2; it never falls back to real calls.
 - `--snapshot <file>` replays recorded `{argv, stdout, stderr, exit_code}` calls and never starts a process. A call missing from the file exits 1. Read-only subcommands give identical output on every run over one file.
 - `oe checks derive` reads workflow files at the base and ref through `git`, and emits CHECKS_SET: every runnable and requires-runner entry in file, job, and step order. `oe checks run` executes each runnable entry with the captured shell, working directory, and env in its own process, and never executes a requires-runner entry; it reports the exit status and any worktree or index change. A set whose revision no longer matches the ref is refused as stale rather than run. Under `--snapshot`, `oe checks run` exits 8 before any call, because replaying a captured process is not possible.
-- `oe lease`, `oe note post`, `oe ledger`, `oe state`, `oe gate`, `oe worker report`, `oe review pin`, and `oe review verdict` are the only subcommands that write loop comments, each through the single writer of §5 and §7. `oe worker worktree` and `oe worker brief` write no comment but are coordination subcommands too, so only the lease holder dispatches. `oe review pin` also makes the integration merge, the only commit the loop makes. Under `--snapshot` they all exit 8 before any call. Each takes the lock of §4.1, and all but `lease acquire` confirm the lease first.
+- `oe lease`, `oe note post`, `oe ledger`, `oe state`, `oe gate`, `oe worker report`, `oe review pin`, `oe review verdict`, and `oe ship publish` are the only subcommands that write loop comments, each through the single writer of §5 and §7. `oe worker worktree` and `oe worker brief` write no comment but are coordination subcommands too, so only the lease holder dispatches. `oe review pin` also makes the integration merge, the only commit the loop makes. Under `--snapshot` they all exit 8 before any call. Each takes the lock of §4.1, and all but `lease acquire` confirm the lease first.
 - `oe ship publish` and `oe land merge` are the only subcommands that may push, open a PR, or merge. Under `--snapshot` they exit 8 before any call. `.claude/hooks/require-user-approval.sh` blocks both without the approval marker, whether they are run directly, by path, or through `skills/orchestrate-epic/scripts/oe`. The marker approves only the line it ends.
 
 ## 13. Classifiers
@@ -587,3 +587,38 @@ The limit is per lease session rather than per round, as for the auto-answer of 
 | `pending_findings` already equals the findings on the same head | Nothing, since no worker has reported since `begin_fix` and a replay is never charged twice | `redispatch` |
 | `cycle` at 2 | `parked:<n>:cap:<digest>`, then `park` with the findings as blockers and nothing reserved | `parked` |
 | Otherwise | One `fix_cycles` reserved, where a freeze exits 4 and writes nothing, then `begin_fix` | `redispatch` |
+
+## 18. Shipping
+
+`oe ship publish` runs the whole sequence itself, so the model cannot skip or reorder a step.
+
+```mermaid
+flowchart LR
+  enter --> scan --> freshness --> plan --> checks --> gates[final gates] --> push --> pr[pull request]
+  enter -->|frozen| exit4[exit 4]
+  gates -->|frozen| exit4
+  scan -->|secret or refs conflict| parked
+  checks -->|red or dirty| parked
+  freshness -->|moved| exit3[exit 3]
+  gates -->|moved| exit3
+  plan -->|unexplained remote| exit8[exit 8]
+```
+
+| Step | Rule | Failure |
+|---|---|---|
+| enter | A bound approval. A pair already linked ends here | 8, 4 |
+| scan | Outgoing commits, the worktree, and the composed title and body | `PARKED` as ship-class secret |
+| freshness | The worktree is at `reviewed_sha` and the default branch at `verified_base` | 3 |
+| plan | Reads the remote head and the branch's pull requests | 8 for an unexplained remote or an unusable pull request |
+| checks | Runs CHECKS_SET once, skipped on resume | `PARKED` when red or dirty, 3 for a stale set |
+| final gates | The freeze and freshness checks again | 4, 3 |
+| push | Records the intent with `prev_sha`, pushes `reviewed_sha`, records `pushed` | 1 when origin refuses |
+| pull request | Gates again, links or creates, records `linked` | 1, 8 |
+
+Flags beyond those of `oe review pin` are `--title`, `--report-file` for the worker DONE report, `--nits-file`, and `--create-pr-scripts`.
+
+- The push sends exactly `reviewed_sha` with hooks disabled, never forced and never a deletion.
+- The body holds the reviewer evidence and the pair, never the worker criteria. Its closing line comes from `issue-refs.sh`, else `Closes`, or `Related` when the report skipped anything.
+- A failed link posts `link-failed` and the publish still ends `linked`.
+- `PARKED` exits 0, so one Issue's failure never stops the others in the round.
+- A failure after an intent is recorded prints `INTERRUPTED`, and the next run resumes from the recorded phase.

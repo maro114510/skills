@@ -10,10 +10,12 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/maro114510/skills/oe/internal/checks"
 	"github.com/maro114510/skills/oe/internal/exitcode"
 	"github.com/maro114510/skills/oe/internal/gh"
 	"github.com/maro114510/skills/oe/internal/inputs"
 	"github.com/maro114510/skills/oe/internal/runner"
+	"github.com/maro114510/skills/oe/internal/ship"
 )
 
 // Env is what the process gives oe: streams, the runner for real calls, and the build version.
@@ -27,6 +29,23 @@ type Env struct {
 	// Getenv and Hostname default to the process's own; tests replace them.
 	Getenv   func(string) string
 	Hostname func() (string, error)
+	// Checks runs CHECKS_SET's commands and Scripts runs the create-pr scripts. Nil runs real processes; tests replace them.
+	Checks  checks.CommandRunner
+	Scripts ship.ScriptRunner
+}
+
+func (env Env) checks() checks.CommandRunner {
+	if env.Checks != nil {
+		return env.Checks
+	}
+	return checks.Exec{}
+}
+
+func (env Env) scripts() ship.ScriptRunner {
+	if env.Scripts != nil {
+		return env.Scripts
+	}
+	return ship.Exec{}
 }
 
 type globals struct {
@@ -110,7 +129,7 @@ func newRoot(env Env) *cobra.Command {
 		newGateCmd(env, g),
 		newWorkerCmd(env, g),
 		newReviewCmd(env, g),
-		newGroup("ship", "Ship approved work", newMutatingCmd(env, g, "publish", "Push the approved head and open its PR", "#289")),
+		newShipCmd(env, g),
 		newGroup("land", "Land shipped PRs", newMutatingCmd(env, g, "merge", "Merge one PR at its reviewed head", "#290")),
 	)
 	return root

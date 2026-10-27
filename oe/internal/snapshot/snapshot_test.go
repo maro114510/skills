@@ -586,3 +586,57 @@ func TestNow(t *testing.T) {
 		t.Errorf("Now() = %v, %v", got, err)
 	}
 }
+
+// TestReadBranchPRsListsEveryStateOfOneBranch shows that a branch's open, closed, and merged pull requests are all read, so a publish can link the open one and refuse a second.
+// A pull request from a fork that uses the same branch name is not the branch's.
+func TestReadBranchPRsListsEveryStateOfOneBranch(t *testing.T) {
+	t.Parallel()
+
+	r := ghfake.New()
+	var asked []string
+	r.On(ghfake.PullsByHead, func(v map[string]string) string {
+		asked = append(asked, v["owner"]+"/"+v["name"]+"@"+v["branch"])
+		return ghfake.PullPage("["+ghfake.PullNode(20, "OPEN", "feat/issue-7", "2026-10-05T00:00:00Z", false)+","+
+			ghfake.PullNode(19, "CLOSED", "feat/issue-7", "2026-10-04T00:00:00Z", false)+","+
+			ghfake.PullNode(18, "CLOSED", "feat/issue-7", "2026-10-03T00:00:00Z", true)+","+
+			ghfake.ForkPullNode(21, "OPEN", "feat/issue-7", "2026-10-06T00:00:00Z", false)+"]", false, "")
+	})
+	got, err := snapshot.ReadBranchPRs(t.Context(), gh.New(r, false), "o/r", "feat/issue-7")
+	if err != nil {
+		t.Fatal(err)
+	}
+	summary := make([]string, 0, len(got))
+	for _, pr := range got {
+		summary = append(summary, fmt.Sprintf("%d:%s:%s", pr.Number, pr.State, pr.HeadSHA))
+	}
+	if want := "[20:OPEN:sha20 19:CLOSED:sha19 18:MERGED:sha18]"; fmt.Sprint(summary) != want {
+		t.Errorf("pull requests = %v, want %s", summary, want)
+	}
+	if fmt.Sprint(asked) != "[o/r@feat/issue-7]" {
+		t.Errorf("asked = %v, want one query for o/r@feat/issue-7", asked)
+	}
+}
+
+// TestReadBranchPRsFollowsPagesAndRefusesATruncatedListing shows that a listing is complete or it is an error, so a publish never creates a second pull request on a page it could not read.
+func TestReadBranchPRsFollowsPagesAndRefusesATruncatedListing(t *testing.T) {
+	t.Parallel()
+
+	paged := ghfake.New()
+	paged.On(ghfake.PullsByHead, func(v map[string]string) string {
+		if v["after"] == "" {
+			return ghfake.PullPage("["+ghfake.PullNode(20, "CLOSED", "feat/issue-7", "2026-10-05T00:00:00Z", false)+"]", true, "c1")
+		}
+		return ghfake.PullPage("["+ghfake.PullNode(21, "OPEN", "feat/issue-7", "2026-10-06T00:00:00Z", false)+"]", false, "")
+	})
+	got, err := snapshot.ReadBranchPRs(t.Context(), gh.New(paged, false), "o/r", "feat/issue-7")
+	if err != nil || len(got) != 2 || got[1].Number != 21 {
+		t.Errorf("paged listing = %+v, %v; want both pages", got, err)
+	}
+
+	cut := ghfake.New()
+	cut.On(ghfake.PullsByHead, func(map[string]string) string {
+		return ghfake.PullPage("["+ghfake.PullNode(20, "OPEN", "feat/issue-7", "2026-10-05T00:00:00Z", false)+"]", true, "")
+	})
+	_, err = snapshot.ReadBranchPRs(t.Context(), gh.New(cut, false), "o/r", "feat/issue-7")
+	wantCode(t, err, exitcode.Unreadable)
+}
