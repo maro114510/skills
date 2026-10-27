@@ -287,6 +287,19 @@ waiting='.reviewRequests = [{reviewer: "dave", type: "User"}]'
   expect "$(event)" limit
 }
 
+@test "a limit stop lists every pending item with the key, who, and where to look" {
+  ledger_path="$(bash "${scripts}/ledger.sh" path o/r 7)"
+  jq '.rounds = 5' "${ledger_path}" >"${ledger_path}.new"
+  mv "${ledger_path}.new" "${ledger_path}"
+  set_snap "${waiting} | .comments = [\$comment] | .checks[0].status = \"failed\""
+  poll
+  expect "$(event)" limit
+  expect "$(field '.report.pending | length')" 2
+  expect "$(field '.report.pending[] | select(.event == "comment") | [.key, .author, .url] | join(" ")')" "c:IC1 carol u"
+  expect "$(field '.report.pending[] | select(.event == "check_failed") | [.name, .url] | join(" ")')" \
+    "test https://example.invalid/run/100"
+}
+
 @test "drive acts on items watch only reported, and stalls once only parked blockers remain" {
   set_snap "${waiting} | .threads = [{id: \"T1\", isResolved: false, path: \"a\", line: 1, comments: [\$comment | .id = \"TC1\"]}]"
   poll
