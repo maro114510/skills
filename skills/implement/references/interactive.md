@@ -75,8 +75,11 @@ Operational stops keep their own handling and are not Phase 2 triggers:
    ```
 4. For Issue `<N>`, reuse a worktree before creating one. Match by branch, never by directory name: a worktree belongs to the Issue when its `branch refs/heads/<name>` line in `git worktree list --porcelain` names a branch from `gh issue develop --list <N>`.
 
+   A branch whose PR is merged is spent: `gh pr list --head <branch> --state merged` lists one. A squash merge leaves the branch's commits outside the updated base, so reusing it makes `create-pr`'s `<base>...HEAD` review include the earlier unit again. Drop spent branches from the match below, even when the user chose to resume one in Issue Claim. Reuse a branch only when it has no merged PR.
+
    | State | Action |
    |---|---|
+   | Every matching branch is spent, as when an earlier unit of this Issue merged | Start from the fetched base: create `<type>/issue-<N>-<slug>` as in the "No linked branch exists" row, suffixed with `-2`, or the next number free both locally and on the remote |
    | The user chose to resume a branch in Issue Claim | Use that branch, linked or not: reuse its worktree, or run `git wt <branch>`, preceded by `git fetch origin <branch>` only when the branch is on the remote |
    | The user chose a separate branch in Issue Claim | Treat it as no linked branch, and suffix the name with `-2`, or the next number free both locally and on the remote |
    | A worktree for a linked branch exists | Reuse it |
