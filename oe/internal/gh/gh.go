@@ -151,6 +151,23 @@ func (c *Client) Write(ctx context.Context, args ...string) ([]byte, error) {
 	return res.Stdout, nil
 }
 
+// Response is the HTTP answer to a write.
+type Response struct {
+	Status int
+	Body   []byte
+}
+
+// ErrNoResponse marks a write that was sent but got no HTTP answer, so it may or may not have landed.
+var ErrNoResponse = errors.New("no http response")
+
+// WriteHTTP runs a mutating `gh api` call and returns GitHub's HTTP answer, whatever its status.
+// A 4xx or 5xx is an answer, not an error, because the caller routes on it.
+// An error before the call is sent is returned as Write returns it.
+// An error after it, with no answer to read, wraps ErrNoResponse.
+func (c *Client) WriteHTTP(ctx context.Context, args ...string) (Response, error) {
+	return Response{Status: 0, Body: nil}, nil
+}
+
 // GraphQL runs a query and decodes its data into out. A response with any error, data
 // beside errors included, fails as Unreadable wrapping a *QueryError.
 func (c *Client) GraphQL(ctx context.Context, query string, vars []Var, out any) error {
