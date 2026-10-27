@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/maro114510/skills/oe/internal/ghfake"
@@ -329,5 +330,61 @@ func TestLandMergeChecksTheFreezeAgainRightBeforeTheRequest(t *testing.T) {
 	f.wantNoRequest(t)
 	if f.record() != nil {
 		t.Errorf("a post-merge record exists: %+v", f.record())
+	}
+}
+
+// TestLandMergeReadsHealthAgainRightBeforeTheRequest guards PH-01: checks on the last merge that start failing while the pull request
+// is being classified stop the merge, since health read at the start of the pass is not health at its end.
+func TestLandMergeReadsHealthAgainRightBeforeTheRequest(t *testing.T) {
+	t.Parallel()
+
+	f := newLandFlow(t)
+	f.putRecord(t, state.PhaseMerged, "old01")
+	var failing atomic.Bool
+	f.pulls = func(num string) string {
+		if num == "11" && failing.Load() {
+			return mergedPullBody(11, "old01", "FAILURE")
+		}
+		if num == "11" {
+			return mergedPullBody(11, "old01", "SUCCESS")
+		}
+		return mergedPullBody(landPR, landMerge, "SUCCESS")
+	}
+	f.w.r.On(ghfake.Readiness, func(map[string]string) string {
+		failing.Store(true)
+		return pullBody(readyPull(landReviewed))
+	})
+	r := f.merge()
+	if r.code != 4 {
+		t.Errorf("exit %d, stdout %q; want 4, the Epic frozen on the failed checks", r.code, r.stdout)
+	}
+	f.wantNoRequest(t)
+	if pm := f.record(); pm == nil || pm.PR != 11 {
+		t.Errorf("record = %+v, want the earlier merge's record untouched", pm)
+	}
+}
+
+// TestLandMergeReadsTheBaseAgainAfterRecordingTheIntent: the intent takes several GitHub calls, and the expected SHA pins only the head,
+// so a base that advanced meanwhile must stop the request. Nothing was requested, so the intent is resolved as not merged.
+func TestLandMergeReadsTheBaseAgainAfterRecordingTheIntent(t *testing.T) {
+	t.Parallel()
+
+	f := newLandFlow(t)
+	f.base = func(n int) string {
+		if n <= 2 {
+			return landBase
+		}
+		return "moved01"
+	}
+	r := f.merge()
+	if r.code != 3 {
+		t.Errorf("exit %d, stdout %q; want 3, the base moved", r.code, r.stdout)
+	}
+	f.wantNoRequest(t)
+	if pm := f.record(); pm == nil || pm.Phase != state.PhaseNotMerged || pm.PR != landPR {
+		t.Errorf("record = %+v, want the intent resolved as not-merged", pm)
+	}
+	if f.notes(fmt.Sprintf("merge-result:%d:%s:not-merged -->", landPR, landReviewed)) != 1 {
+		t.Errorf("want one merge-result note saying nothing was requested")
 	}
 }
