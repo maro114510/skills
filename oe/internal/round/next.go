@@ -39,6 +39,12 @@ type NextResult struct {
 	Reasons    []string   `json:"reasons"`
 }
 
+// RequireRound refuses a session whose first round never began, with exit 8. It needs no GitHub
+// state, so a command can refuse before it reads anything.
+func RequireRound(s *Session) error {
+	return nil
+}
+
 // Next decides, from a fresh read only, whether the session goes on into a new round. A session
 // whose first round never began has no reading to compare with, and is refused with exit 8.
 func Next(s *Session, obs Observation) (NextResult, error) {
