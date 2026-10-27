@@ -116,6 +116,7 @@ shell_block() {
 
 @test "every violation is listed, not only the first" {
   printf '# Skill\n' >"${cand}/SKILL.md"
+  printf '# Router\n' >"${cand}/router.md"
   shell_block "${cand}/router.md" 'git push origin main' 'gh pr merge 7'
   run bash "${target}" "${cand}"
   [ "${status}" -eq 1 ]
