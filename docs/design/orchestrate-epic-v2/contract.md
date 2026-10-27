@@ -227,7 +227,7 @@ Duplicate notes are harmless and never deleted. Duplicate states exit 6.
 | Push | Final freeze, base, and HEAD gates, then the intent | Remote at `sha` is pushed. At `prev_sha`, or absent with none recorded, re-gate and push. Anything else stops with an `external-push` note | Force, delete, or any SHA but `sha` | #289 `PushToPRResume` |
 | PR create | Publish `pushed`, then fresh freeze, base, and HEAD gates, also on resume | List by head in any state. Link an open one, stop on closed or merged with none open, else create | A second PR for a branch | #289 `PushToPRResume` |
 | PR link | Open PR exists | Idempotent. A failure posts `link-failed` and the round goes on | Stop the round for it | #289 |
-| Merge request | Health proceeds, grant read fresh, `READY` on `reviewed_sha`, freeze `CLEAR`, base re-read equals `verified_base`, then `record_intent` | A record at `intent` or `unknown` is reconciled from the PR first, now or next invocation. Merged with first parent `verified_base` is `merged`. Merged with any other or an unreadable first parent is `merged-unverified-base`, and the ledger freeze is written before the result note or any further merge. Not merged is `not-merged`. An unreadable PR stays `unknown` and stops landing | Blind retry, `gh pr merge`, `--admin`, rebase, revert | #290 |
+| Merge request | Health proceeds, grant read fresh, `READY` on `reviewed_sha`, freeze `CLEAR`, health and base read again, then `record_intent`, then the base read once more equals `verified_base` | A record at `intent` or `unknown` is reconciled from the PR first, now or next invocation. Merged with first parent `verified_base` is `merged`. Merged with any other or an unreadable first parent is `merged-unverified-base`, and the ledger freeze is written before the result note or any further merge. Not merged is `not-merged`. An unreadable PR stays `unknown` and stops landing | Blind retry, `gh pr merge`, `--admin`, rebase, revert | #290 |
 | Merge result | Request answered or reconciled | Result note, then `record_result`; either failing stops every further merge | Merge again before both | #290 |
 | Repair | Freeze `CLEAR`, fresh pair, readiness `repair`, input scanned | Reserve, then `begin_fix`, then the note `repair:<pr>:<head>:<since>`, and a failed note hands nothing over | Repair beyond the cap or budget, untrusted feedback to a worker | #290 |
 | Freeze | Ledger `CLEAR` | Ledger write, then note `freeze:<seq>`; a missing note is posted on the next read | Notify twice | #285 |
@@ -651,6 +651,7 @@ Frozen exits 4, a moved base or head exits 3, pending exits 5, and a missing gra
 | No answer, a 5xx, or a 200 without a merge commit | `merged` or `unknown`, read from the pull request | 0 or 4 |
 
 - A record left at `intent` or `unknown` is settled first, which ends the pass, and an open pull request settles as `not-merged` because the next request carries the expected SHA.
+- The final gates read the freeze, health, grant, and base again, and the base is read once more after the intent, which a moved base resolves as `not-merged` with exit 3.
 - The request is one `PUT` with `sha=<reviewed_sha>`, never `gh pr merge`, never `--admin`, and never repeated.
 - The method is a merge commit, else squash, never rebase.
 - Routes are `MERGED`, `MERGED_UNVERIFIED_BASE`, `HEAD_MOVED`, `REJECTED`, `UNKNOWN`, `RECONCILED`, `HELD`, and `FROZEN`.
@@ -669,4 +670,5 @@ It needs `epic-approve` but not the merge grant, and acts only when readiness sa
 - A thread no trusted person wrote, a request for changes from anyone else, or nothing new holds the pull request for a person and dispatches no worker.
 - A thread with trusted and untrusted comments hands over only the trusted ones.
 - A repair is a fix cycle under the same cap and budget, and its findings are scanned.
+- A repair whose marker was never posted is finished on the next run without a second charge.
 - Routes are `REPAIR`, `PARKED`, and `HELD`.
