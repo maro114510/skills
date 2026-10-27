@@ -30,20 +30,19 @@ func TestLandMergeWaitsForTheLastMergesDefaultBranchChecks(t *testing.T) {
 		`{"__typename":"CheckRun","name":"test","status":"IN_PROGRESS"}]}}}}}}}`
 	tests := map[string]struct {
 		body   string
-		exit   int
 		code   int
 		frozen bool
 	}{
-		"a check is still pending":  {pending, 0, 5, false},
-		"a check failed":            {mergedPullBody(11, "old01", "FAILURE"), 0, 4, true},
-		"the checks cannot be read": {`{"message":"boom"}`, 1, 4, false},
+		"a check is still pending":  {pending, 5, false},
+		"a check failed":            {mergedPullBody(11, "old01", "FAILURE"), 4, true},
+		"the checks cannot be read": {unreadableBody, 4, false},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			f := newLandFlow(t)
 			f.putRecord(t, state.PhaseMerged, "old01")
-			f.pulls = func(string) (string, int) { return tc.body, tc.exit }
+			f.pulls = func(string) string { return tc.body }
 			r := f.merge()
 			if r.code != tc.code {
 				t.Errorf("exit %d, stdout %q; want exit %d", r.code, r.stdout, tc.code)
@@ -66,11 +65,11 @@ func TestLandMergeProceedsOnceThePreviousMergePassed(t *testing.T) {
 
 	f := newLandFlow(t)
 	f.putRecord(t, state.PhaseMerged, "old01")
-	f.pulls = func(num string) (string, int) {
+	f.pulls = func(num string) string {
 		if num == "11" {
-			return mergedPullBody(11, "old01", "SUCCESS"), 0
+			return mergedPullBody(11, "old01", "SUCCESS")
 		}
-		return mergedPullBody(landPR, landMerge, "SUCCESS"), 0
+		return mergedPullBody(landPR, landMerge, "SUCCESS")
 	}
 	r := f.merge()
 	if r.code != 0 || f.putCount() != 1 {

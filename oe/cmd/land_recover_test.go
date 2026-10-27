@@ -26,7 +26,7 @@ func TestLandMergeReconcilesAnUnresolvedRecordFromThePullRequestFirst(t *testing
 
 	tests := map[string]struct {
 		from   string
-		pull   func(string) (string, int)
+		pull   func(string) string
 		parent string
 		code   int
 		result string
@@ -34,16 +34,16 @@ func TestLandMergeReconcilesAnUnresolvedRecordFromThePullRequestFirst(t *testing
 		frozen bool
 	}{
 		"an intent whose pull request merged on the verified base": {
-			state.PhaseIntent, func(string) (string, int) { return mergedPullBody(landPR, landMerge, "SUCCESS"), 0 }, landBase, 0, "merged", landMerge, false,
+			state.PhaseIntent, func(string) string { return mergedPullBody(landPR, landMerge, "SUCCESS") }, landBase, 0, "merged", landMerge, false,
 		},
 		"an intent whose pull request merged on another base": {
-			state.PhaseIntent, func(string) (string, int) { return mergedPullBody(landPR, landMerge, "SUCCESS"), 0 }, "moved01", 4, "merged-unverified-base", landMerge, true,
+			state.PhaseIntent, func(string) string { return mergedPullBody(landPR, landMerge, "SUCCESS") }, "moved01", 4, "merged-unverified-base", landMerge, true,
 		},
 		"an intent whose pull request never merged": {
-			state.PhaseIntent, func(string) (string, int) { return openPullBody(landPR), 0 }, landBase, 0, "not-merged", "", false,
+			state.PhaseIntent, func(string) string { return openPullBody(landPR) }, landBase, 0, "not-merged", "", false,
 		},
 		"an unknown outcome that turns out merged": {
-			state.PhaseUnknown, func(string) (string, int) { return mergedPullBody(landPR, landMerge, "SUCCESS"), 0 }, landBase, 0, "merged", landMerge, false,
+			state.PhaseUnknown, func(string) string { return mergedPullBody(landPR, landMerge, "SUCCESS") }, landBase, 0, "merged", landMerge, false,
 		},
 	}
 	for name, tc := range tests {
@@ -79,12 +79,12 @@ func TestLandMergeRequestsAgainOnlyAfterANotMergedRecord(t *testing.T) {
 
 	f := newLandFlow(t)
 	f.pending(t, state.PhaseIntent)
-	f.pulls = func(string) (string, int) { return openPullBody(landPR), 0 }
+	f.pulls = func(string) string { return openPullBody(landPR) }
 	first := f.merge()
 	if first.code != 0 || f.putCount() != 0 {
 		t.Fatalf("first pass: exit %d, requests %d; want it to settle the record and send nothing", first.code, f.putCount())
 	}
-	f.pulls = func(string) (string, int) { return mergedPullBody(landPR, landMerge, "SUCCESS"), 0 }
+	f.pulls = func(string) string { return mergedPullBody(landPR, landMerge, "SUCCESS") }
 	second := f.merge()
 	if second.code != 0 || f.putCount() != 1 {
 		t.Errorf("second pass: exit %d, requests %d; want one merge", second.code, f.putCount())
@@ -101,7 +101,7 @@ func TestLandMergeStopsWhileTheOutcomeStaysUnknown(t *testing.T) {
 			t.Parallel()
 			f := newLandFlow(t)
 			f.pending(t, from)
-			f.pulls = func(string) (string, int) { return `{"message":"boom"}`, 1 }
+			f.pulls = func(string) string { return unreadableBody }
 			r := f.merge()
 			out := parseLanded(t, r)
 			if r.code != 4 || out.Route != "UNKNOWN" || out.Result != "unknown" {
