@@ -171,23 +171,32 @@ func unresolvedThreads(conn *Conn[threadNode]) ([]FeedbackThread, error) {
 		if *t.IsResolved {
 			continue
 		}
-		if t.Comments == nil || t.Comments.TotalCount == nil || t.Comments.Nodes == nil {
-			return nil, unreadable("the comments of a review thread on %s were not read", t.Path)
-		}
-		th := FeedbackThread{Path: t.Path, Line: 0, Total: *t.Comments.TotalCount, Comments: nil}
-		if t.Line != nil {
-			th.Line = *t.Line
-		}
-		for _, n := range *t.Comments.Nodes {
-			f, err := n.feedback()
-			if err != nil {
-				return nil, err
-			}
-			th.Comments = append(th.Comments, f)
+		th, err := t.thread()
+		if err != nil {
+			return nil, err
 		}
 		out = append(out, th)
 	}
 	return out, nil
+}
+
+// thread reads the comments of an unresolved thread, of which the query returns the first ones.
+func (t threadNode) thread() (FeedbackThread, error) {
+	if t.Comments == nil || t.Comments.TotalCount == nil || t.Comments.Nodes == nil {
+		return FeedbackThread{}, unreadable("the comments of a review thread on %s were not read", t.Path)
+	}
+	th := FeedbackThread{Path: t.Path, Line: 0, Total: *t.Comments.TotalCount, Comments: nil}
+	if t.Line != nil {
+		th.Line = *t.Line
+	}
+	for _, n := range *t.Comments.Nodes {
+		f, err := n.feedback()
+		if err != nil {
+			return FeedbackThread{}, err
+		}
+		th.Comments = append(th.Comments, f)
+	}
+	return th, nil
 }
 
 func requestedChanges(conn *Conn[reviewNode]) ([]Feedback, error) {

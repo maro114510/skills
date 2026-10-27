@@ -1,6 +1,7 @@
 package coord_test
 
 import (
+	"net/http"
 	"testing"
 
 	"github.com/maro114510/skills/oe/internal/coord"
@@ -45,13 +46,22 @@ func TestMergeIntentIsWrittenAsTheEpicsPostMergeRecord(t *testing.T) {
 	got, err := w.session(token).RecordMergeIntent(ctx(), intentFor(12))
 	ok(t, err)
 	pm, found := w.postMerge(t)
-	if !found || pm.PR != 12 || pm.Issue != child || pm.ReviewedSHA != reviewed || pm.VerifiedBase != verified ||
-		pm.Phase != state.PhaseIntent || pm.MergeSHA != "" || pm.RequestedAt != "2026-10-19T00:05:00Z" || pm.Revision != 1 {
-		t.Errorf("record = %+v, found %v", pm, found)
+	want := state.PostMerge{
+		Envelope: pm.Envelope, PR: 12, Issue: child, ReviewedSHA: reviewed, VerifiedBase: verified,
+		Phase: state.PhaseIntent, MergeSHA: "", RequestedAt: "2026-10-19T00:05:00Z",
 	}
-	if got.Phase != state.PhaseIntent || got.PR != 12 {
-		t.Errorf("returned %+v, want the intent that was written", got)
+	if !found || pm != want || pm.Revision != 1 || got != pm {
+		t.Errorf("record = %+v (found %v), returned %+v; want an intent for the pair at GitHub's time, revision 1", pm, found, got)
 	}
+}
+
+func TestLoadPostMergeReadsTheRecordBack(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld(t)
+	token := w.acquire(t)
+	_, err := w.session(token).RecordMergeIntent(ctx(), intentFor(12))
+	ok(t, err)
 	loaded, err := w.session(token).LoadPostMerge(ctx())
 	if err != nil || loaded == nil || loaded.PR != 12 {
 		t.Errorf("LoadPostMerge() = %+v, %v; want the record", loaded, err)
@@ -231,7 +241,7 @@ func TestMergeIntentWhoseWriteLandedButFailedCountsAsRecorded(t *testing.T) {
 	w := newWorld(t)
 	token := w.acquire(t)
 	w.store.OnWrite(func(_ *ghfake.Store, wr ghfake.Write) (int, bool) {
-		if wr.Method == "POST" && wr.Issue == epic {
+		if wr.Method == http.MethodPost && wr.Issue == epic {
 			return 1, true
 		}
 		return 0, true

@@ -161,17 +161,6 @@ func (c *Client) Probe() *Client {
 	return &Client{r: c.r, snapshot: c.snapshot, readOnly: true, mu: sync.Mutex{}, failed: nil}
 }
 
-// refuseWrite says why a write may not run on this client at all, or returns nil.
-func (c *Client) refuseWrite(what string) error {
-	switch {
-	case c.snapshot:
-		return exitcode.New(exitcode.Refused, "--snapshot disables every mutation: "+what)
-	case c.readOnly:
-		return exitcode.New(exitcode.Refused, "a probe is read-only: "+what)
-	}
-	return nil
-}
-
 // Response is the HTTP answer to a write.
 type Response struct {
 	Status int
@@ -252,6 +241,17 @@ func (c *Client) GraphQL(ctx context.Context, query string, vars []Var, out any)
 	}
 	if err := json.Unmarshal(data, out); err != nil {
 		return c.taint(exitcode.Wrap(exitcode.Unreadable, err, "decode graphql data"))
+	}
+	return nil
+}
+
+// refuseWrite says why a write may not run on this client at all, or returns nil.
+func (c *Client) refuseWrite(what string) error {
+	switch {
+	case c.snapshot:
+		return exitcode.New(exitcode.Refused, "--snapshot disables every mutation: "+what)
+	case c.readOnly:
+		return exitcode.New(exitcode.Refused, "a probe is read-only: "+what)
 	}
 	return nil
 }
