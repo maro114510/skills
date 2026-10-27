@@ -56,21 +56,25 @@ fi
 judge='
 function trim(s) { sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s); return s }
 function violation(msg) { printf "%s:%d: %s\n", rel, FNR, msg; bad = 1 }
-function judge(t,   s) {
-  if (t ~ /^[A-Za-z_][A-Za-z0-9_]*="[^"$`\\]*"$/) return
-  if (t ~ /^[A-Za-z_][A-Za-z0-9_]*="\$\(mktemp( [^)"]*)?\)"$/) return
-  if (t ~ /\$\(|`/) { violation("substitutes a command: " substr(t, 1, 60)); return }
+function chained(t,   s) {
+  if (t ~ /\$\(|`/) { violation("substitutes a command: " substr(t, 1, 60)); return 1 }
   s = t
   gsub(/\047[^\047]*\047/, "\047\047", s)
   gsub(/"[^"]*"/, "\"\"", s)
-  if (s ~ /[;|&]/) { violation("chains a second command: " substr(t, 1, 60)); return }
+  if (s ~ /[;|&]/) { violation("chains a second command: " substr(t, 1, 60)); return 1 }
+  return 0
+}
+function judge(t) {
+  if (t ~ /^[A-Za-z_][A-Za-z0-9_]*="[^"$`\\]*"$/) return
+  if (t ~ /^[A-Za-z_][A-Za-z0-9_]*="\$\(mktemp( [^)"]*)?\)"$/) return
+  if (chained(t)) return
   if (t ~ /^oe( |$)/) return
   if (t ~ /^git fetch origin( |$)/) return
   if (t ~ /^sleep [0-9]+$/) return
   if (t ~ /^mktemp( |$)/) return
   if (t ~ /^cat >"\$[A-Za-z_][A-Za-z0-9_]*" <<[\047"]?[A-Za-z_][A-Za-z0-9_]*[\047"]?$/) return
   if (t ~ /^gh issue view( |$)/) return
-  if (t ~ /^gh api repos\// && t !~ / (-X|--method|-f|-F|--field|--raw-field|--input)( |=|$)/) return
+  if (t ~ /^gh api repos\// && t !~ / -[XfF]/ && t !~ / --(method|field|raw-field|input)([ =]|$)/) return
   violation("is not an oe call or an allowed read: " substr(t, 1, 60))
 }
 FNR == 1 { infence = 0; judged = 0; hd = ""; cont = 0 }
@@ -86,7 +90,7 @@ FNR == 1 { infence = 0; judged = 0; hd = ""; cont = 0 }
   if (hd != "") { if (trim(line) == hd) hd = ""; next }
   t = trim(line)
   if (t == "" || t ~ /^#/) next
-  if (cont) { cont = (t ~ /\\$/); next }
+  if (cont) { cont = (t ~ /\\$/); chained(t); next }
   cont = (t ~ /\\$/)
   if (match(t, /<<-?[ \t]*[\047"]?[A-Za-z_][A-Za-z0-9_]*[\047"]?/)) {
     hd = substr(t, RSTART, RLENGTH)

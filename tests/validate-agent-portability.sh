@@ -57,9 +57,9 @@ if [[ "${status}" -ne 0 ]]; then
 fi
 
 # Skills must resolve their own files from the harness-provided base directory,
-# not from a Claude Code-only install location.
+# not from a Claude Code-only install location. Given agent directories to check, it checks only those.
 skills_dir="${repo_root}/skills"
-if [[ -d "${skills_dir}" ]]; then
+if [[ "$#" -eq 0 ]] && [[ -d "${skills_dir}" ]]; then
   grep_status=0
   # The patterns are literal text to match, not paths to expand.
   # shellcheck disable=SC2016,SC2088
