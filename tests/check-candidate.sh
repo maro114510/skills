@@ -14,6 +14,7 @@
 #   git fetch origin <branch>      updates a remote-tracking ref only
 #   sleep <seconds>                waits between polls
 #   mktemp                         makes a file for a report
+#   name="/literal/path"           names that file in a later call, since every call is its own shell
 #   cat >"$file" <<'TAG'           writes the report, and only that form of cat is allowed
 #   gh issue view ...              reads an Issue
 #   gh api repos/... ...           reads, and fails when a flag makes it write
@@ -56,6 +57,7 @@ judge='
 function trim(s) { sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s); return s }
 function violation(msg) { printf "%s:%d: %s\n", rel, FNR, msg; bad = 1 }
 function judge(t,   s) {
+  if (t ~ /^[A-Za-z_][A-Za-z0-9_]*="[^"$`\\]*"$/) return
   if (t ~ /^[A-Za-z_][A-Za-z0-9_]*="\$\(mktemp( [^)"]*)?\)"$/) return
   if (t ~ /\$\(|`/) { violation("substitutes a command: " substr(t, 1, 60)); return }
   s = t
