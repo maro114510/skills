@@ -29,12 +29,18 @@ type flow struct {
 	board  *snapshot.Board
 }
 
+func newFlow(d Deps, n int) *flow {
+	var st state.Issue
+	var a state.Approval
+	return &flow{d: d, n: n, res: NewResult(n), st: st, a: a, pr: 0, method: "", board: nil}
+}
+
 // Merge lands the Issue's pull request, contract §8.
 // The order is fixed: reconcile an unresolved record, then the approval and its pull request, the freeze, the base, health,
 // the grant, the merge method, readiness, the final freeze, grant, and base checks, the intent, and one request.
 // Nothing is retried, and a request whose outcome is uncertain is settled from the pull request.
 func Merge(ctx context.Context, d Deps, n int) (Result, error) {
-	f := &flow{d: d, n: n, res: NewResult(n), st: state.Issue{}, a: state.Approval{}, pr: 0, method: "", board: nil}
+	f := newFlow(d, n)
 	err := f.run(ctx)
 	return f.res, err
 }

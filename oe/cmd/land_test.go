@@ -50,7 +50,7 @@ func newLandFlow(t *testing.T) *landFlow {
 	w.store.Add(277, "loop", "OWNER", "<!-- oe:v2 note run-plan -->\nplan")
 	w.store.Add(277, "alice", "MEMBER", "epic-approve")
 	w.store.Add(277, "alice", "MEMBER", "epic-auto-merge")
-	w.put(t, 7, f.issue(landReviewed))
+	w.put(t, 7, f.issue())
 	w.r.On(ghfake.PullsByHead, func(map[string]string) string {
 		return ghfake.PullPage("["+ghfake.PullNodeOnBase(landPR, "OPEN", "feat/issue-7", "main", "Closes #7", "2026-10-05T00:00:00Z", false)+"]", false, "")
 	})
@@ -76,7 +76,8 @@ func newLandFlow(t *testing.T) *landFlow {
 }
 
 // issue is Issue 7's state: approved at head, shipped as pull request 12.
-func (f *landFlow) issue(head string) *state.Issue {
+func (f *landFlow) issue() *state.Issue {
+	head := landReviewed
 	var st state.Issue
 	st.Entity, st.Key = state.EntityIssue, state.IssueKey(7)
 	st.Branch = "feat/issue-7"
@@ -127,9 +128,8 @@ func (f *landFlow) ledger(t *testing.T) state.Ledger {
 	return state.Ledger{}
 }
 
-func (f *landFlow) merge(extra ...string) result {
-	args := append([]string{"--epic", "277", "land", "merge", "--issue", "7", "--lease-token", f.tok}, extra...)
-	return f.w.run(args...)
+func (f *landFlow) merge() result {
+	return f.w.run("--epic", "277", "land", "merge", "--issue", "7", "--lease-token", f.tok)
 }
 
 // putCount is how many merge requests the fake GitHub received.
@@ -139,8 +139,8 @@ func (f *landFlow) putCount() int {
 	return len(f.puts)
 }
 
-func (f *landFlow) notes(issue int, prefix string) int {
-	return countPrefix(f.w.store.Comments(issue), "<!-- oe:v2 note "+prefix)
+func (f *landFlow) notes(prefix string) int {
+	return countPrefix(f.w.store.Comments(7), "<!-- oe:v2 note "+prefix)
 }
 
 // writeIndex is the position among the store's writes of the first one whose body holds every text, or -1.
@@ -243,9 +243,9 @@ func openPullBody(num int) string {
 	return fmt.Sprintf(`{"data":{"repository":{"pullRequest":{"number":%d,"state":"OPEN","mergedAt":null,"mergeCommit":null}}}}`, num)
 }
 
-// TestLandMergeMergesTheReviewedHeadAndRecordsTheIntentFirst guards MQ-01, PH-02, and LC-07: the request names the reviewed head
-// as its expected SHA, the post-merge record already says intent when it arrives, and the result is recorded once.
-func TestLandMergeMergesTheReviewedHeadAndRecordsTheIntentFirst(t *testing.T) {
+// TestLandMergeMergesTheReviewedHeadWithItsExpectedSHA guards MQ-01, MQ-02, and MQ-03: the request names the reviewed head as its expected SHA,
+// is a plain merge by merge commit, and never goes through gh pr merge or --admin.
+func TestLandMergeMergesTheReviewedHeadWithItsExpectedSHA(t *testing.T) {
 	t.Parallel()
 
 	f := newLandFlow(t)
@@ -257,17 +257,38 @@ func TestLandMergeMergesTheReviewedHeadAndRecordsTheIntentFirst(t *testing.T) {
 	if len(f.puts) != 1 || f.puts[0]["sha"] != landReviewed || f.puts[0]["merge_method"] != "merge" {
 		t.Errorf("merge requests = %v, want one with sha=%s and merge_method=merge", f.puts, landReviewed)
 	}
+	f.wantNoBypass(t)
+}
+
+// TestLandMergeRecordsTheIntentBeforeTheRequest guards PH-02 and LC-07: the post-merge record already says intent when the request arrives,
+// so a session that dies right after the merge still finds what to check.
+func TestLandMergeRecordsTheIntentBeforeTheRequest(t *testing.T) {
+	t.Parallel()
+
+	f := newLandFlow(t)
+	if r := f.merge(); r.code != 0 {
+		t.Fatalf("exit %d, stdout %q", r.code, r.stdout)
+	}
 	if len(f.intentSeen) != 1 || f.intentSeen[0] != state.PhaseIntent {
 		t.Errorf("the record held %v when the request arrived, want intent", f.intentSeen)
+	}
+}
+
+// TestLandMergeRecordsTheResultOnce guards LC-09: the record names the merge commit, and the note is one per pull request, head, and result.
+func TestLandMergeRecordsTheResultOnce(t *testing.T) {
+	t.Parallel()
+
+	f := newLandFlow(t)
+	if r := f.merge(); r.code != 0 {
+		t.Fatalf("exit %d, stdout %q", r.code, r.stdout)
 	}
 	pm := f.record()
 	if pm == nil || pm.Phase != state.PhaseMerged || pm.MergeSHA != landMerge || pm.PR != landPR || pm.Issue != 7 || pm.ReviewedSHA != landReviewed || pm.VerifiedBase != landBase {
 		t.Errorf("record = %+v, want merged with %s for pull request %d", pm, landMerge, landPR)
 	}
-	if n := f.notes(7, fmt.Sprintf("merge-result:%d:%s:merged -->", landPR, landReviewed)); n != 1 {
+	if n := f.notes(fmt.Sprintf("merge-result:%d:%s:merged -->", landPR, landReviewed)); n != 1 {
 		t.Errorf("merge-result notes = %d, want one for the pull request, head, and result", n)
 	}
-	f.wantNoBypass(t)
 }
 
 // TestLandMergePrefersAMergeCommitThenSquashAndNeverRebases guards MQ-03 and MQ-04.
@@ -328,7 +349,7 @@ func TestLandMergeOnAMovedHeadRoutesToReverificationWithoutARetry(t *testing.T) 
 	if pm := f.record(); pm == nil || pm.Phase != state.PhaseHeadMoved || pm.MergeSHA != "" {
 		t.Errorf("record = %+v, want head-moved without a merge commit", pm)
 	}
-	if n := f.notes(7, fmt.Sprintf("merge-result:%d:%s:head-moved -->", landPR, landReviewed)); n != 1 {
+	if n := f.notes(fmt.Sprintf("merge-result:%d:%s:head-moved -->", landPR, landReviewed)); n != 1 {
 		t.Errorf("merge-result notes = %d, want one", n)
 	}
 }
@@ -352,8 +373,8 @@ func TestLandMergeRejectedByTheRepositoryIsRecordedAndHeldForAPerson(t *testing.
 	if r.code != 0 || out.Route != "REJECTED" || out.Next != "human" || out.Result != "rejected" {
 		t.Errorf("exit %d, stdout %q; want REJECTED for a person", r.code, r.stdout)
 	}
-	if f.putCount() != 1 || f.notes(7, "merge-hold:") != 1 {
-		t.Errorf("requests %d, merge holds %d; want one request and one hold naming the rejection", f.putCount(), f.notes(7, "merge-hold:"))
+	if f.putCount() != 1 || f.notes("merge-hold:") != 1 {
+		t.Errorf("requests %d, merge holds %d; want one request and one hold naming the rejection", f.putCount(), f.notes("merge-hold:"))
 	}
 	if pm := f.record(); pm == nil || pm.Phase != state.PhaseRejected {
 		t.Errorf("record = %+v, want rejected", pm)
@@ -365,18 +386,8 @@ func TestLandMergeRejectedByTheRepositoryIsRecordedAndHeldForAPerson(t *testing.
 func TestLandMergeWithoutAResponseIsReconciledFromThePullRequestAndNeverSentTwice(t *testing.T) {
 	t.Parallel()
 
-	noResponse := func(f *landFlow) {
-		f.w.r.On(ghfake.Merge, func(v map[string]string) string {
-			f.mu.Lock()
-			f.puts = append(f.puts, v)
-			f.mu.Unlock()
-			return ""
-		})
-		f.w.r.Exit(ghfake.Merge, 1)
-		f.w.r.Stderr(ghfake.Merge, "gh: error connecting to api.github.com")
-	}
 	tests := map[string]struct {
-		pulls  func(string) string
+		pull   func(string) string
 		code   int
 		route  string
 		result string
@@ -385,35 +396,47 @@ func TestLandMergeWithoutAResponseIsReconciledFromThePullRequestAndNeverSentTwic
 		"the pull request merged on the verified base": {
 			func(string) string { return mergedPullBody(landPR, landMerge, "SUCCESS") }, 0, "MERGED", "merged", landMerge,
 		},
-		"the pull request is still open": {
-			func(string) string { return openPullBody(landPR) }, 4, "UNKNOWN", "unknown", "",
-		},
-		"the pull request cannot be read": {
-			func(string) string { return unreadableBody }, 4, "UNKNOWN", "unknown", "",
-		},
+		"the pull request is still open":  {func(string) string { return openPullBody(landPR) }, 4, "UNKNOWN", "unknown", ""},
+		"the pull request cannot be read": {func(string) string { return unreadableBody }, 4, "UNKNOWN", "unknown", ""},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			f := newLandFlow(t)
-			noResponse(f)
-			// Health reads the pull request only once a record exists, so the answer applies from the reconciliation on.
-			f.pulls = tc.pulls
-			r := f.merge()
-			out := parseLanded(t, r)
-			if r.code != tc.code || out.Route != tc.route || out.Result != tc.result || out.MergeSHA != tc.merge {
-				t.Errorf("exit %d, stdout %q; want exit %d, %s, result %s", r.code, r.stdout, tc.code, tc.route, tc.result)
-			}
+			f.answerNothing()
+			f.pulls = tc.pull
+			f.wantConcluded(t, f.merge(), tc.code, tc.route, tc.result, tc.merge)
 			if f.putCount() != 1 {
 				t.Errorf("merge requests = %d, want exactly one, never a second", f.putCount())
 			}
-			if pm := f.record(); pm == nil || pm.Phase != tc.result || pm.MergeSHA != tc.merge {
-				t.Errorf("record = %+v, want %s", pm, tc.result)
-			}
-			if f.notes(7, fmt.Sprintf("merge-result:%d:%s:%s -->", landPR, landReviewed, tc.result)) != 1 {
-				t.Errorf("want one merge-result note for %s", tc.result)
-			}
 		})
+	}
+}
+
+// answerNothing makes the merge request go unanswered, as a connection lost after it was sent.
+func (f *landFlow) answerNothing() {
+	f.w.r.On(ghfake.Merge, func(v map[string]string) string {
+		f.mu.Lock()
+		f.puts = append(f.puts, v)
+		f.mu.Unlock()
+		return ""
+	})
+	f.w.r.Exit(ghfake.Merge, 1)
+	f.w.r.Stderr(ghfake.Merge, "gh: error connecting to api.github.com")
+}
+
+// wantConcluded checks the exit, the route, and that the result was recorded and noted once.
+func (f *landFlow) wantConcluded(t *testing.T, r result, code int, route, result, merge string) {
+	t.Helper()
+	out := parseLanded(t, r)
+	if r.code != code || out.Route != route || out.Result != result || out.MergeSHA != merge {
+		t.Errorf("exit %d, stdout %q; want exit %d, %s, result %s", r.code, r.stdout, code, route, result)
+	}
+	if pm := f.record(); pm == nil || pm.Phase != result || pm.MergeSHA != merge {
+		t.Errorf("record = %+v, want %s", pm, result)
+	}
+	if f.notes(fmt.Sprintf("merge-result:%d:%s:%s -->", landPR, landReviewed, result)) != 1 {
+		t.Errorf("want one merge-result note for %s", result)
 	}
 }
 
@@ -436,26 +459,30 @@ func TestLandMergeOnAnUnverifiedBaseFreezesTheEpicBeforeAnyOtherWrite(t *testing
 			f := newLandFlow(t)
 			setup(f)
 			r := f.merge()
-			out := parseLanded(t, r)
-			if r.code != 4 || out.Route != "MERGED_UNVERIFIED_BASE" || out.Result != "merged-unverified-base" || out.MergeSHA != landMerge || out.Freeze == nil {
+			if out := parseLanded(t, r); r.code != 4 || out.Route != "MERGED_UNVERIFIED_BASE" || out.Result != "merged-unverified-base" || out.MergeSHA != landMerge || out.Freeze == nil {
 				t.Fatalf("exit %d, stdout %q; want exit 4, MERGED_UNVERIFIED_BASE with the freeze", r.code, r.stdout)
 			}
-			freeze := f.writeIndex("<!-- oe:v2 state ledger -->", `"released": false`)
-			note := f.writeIndex("<!-- oe:v2 note merge-result:")
-			record := f.writeIndex("<!-- oe:v2 state post-merge -->", state.PhaseMergedUnverifiedBase)
-			if freeze < 0 || note < 0 || record < 0 || freeze > note || note > record {
-				t.Errorf("write order: freeze %d, result note %d, record %d; want the freeze first", freeze, note, record)
-			}
-			if l := f.ledger(t); l.Freeze == nil || l.Freeze.Released || !strings.Contains(l.Freeze.Reason, "PR #12 merged on an unverified base") {
-				t.Errorf("ledger freeze = %+v, want an active freeze naming the pull request", l.Freeze)
-			}
+			f.wantFrozenBeforeRecorded(t)
 			// A second pull request never merges on top of it.
 			before := f.putCount()
-			again := f.merge()
-			if again.code != 4 || f.putCount() != before {
+			if again := f.merge(); again.code != 4 || f.putCount() != before {
 				t.Errorf("second land: exit %d, requests %d -> %d; want the frozen Epic to stop it", again.code, before, f.putCount())
 			}
 		})
+	}
+}
+
+// wantFrozenBeforeRecorded checks the ledger's freeze was written before the result note and the record, and names the pull request.
+func (f *landFlow) wantFrozenBeforeRecorded(t *testing.T) {
+	t.Helper()
+	freeze := f.writeIndex("<!-- oe:v2 state ledger -->", `"released": false`)
+	note := f.writeIndex("<!-- oe:v2 note merge-result:")
+	record := f.writeIndex("<!-- oe:v2 state post-merge -->", state.PhaseMergedUnverifiedBase)
+	if freeze < 0 || note < 0 || record < 0 || freeze > note || note > record {
+		t.Errorf("write order: freeze %d, result note %d, record %d; want the freeze first", freeze, note, record)
+	}
+	if l := f.ledger(t); l.Freeze == nil || l.Freeze.Released || !strings.Contains(l.Freeze.Reason, "PR #12 merged on an unverified base") {
+		t.Errorf("ledger freeze = %+v, want an active freeze naming the pull request", l.Freeze)
 	}
 }
 
@@ -468,41 +495,15 @@ func TestLandMergeIsRefusedWithoutAGrantOrWhileFrozen(t *testing.T) {
 		setup func(f *landFlow)
 		code  int
 	}{
-		"the grant was revoked": {func(f *landFlow) { f.w.store.Add(277, "alice", "MEMBER", "epic-revoke-auto-merge") }, 8},
-		"the grant was never given": {func(f *landFlow) {
-			for _, c := range f.w.store.Comments(277) {
-				if c.Body == "epic-auto-merge" {
-					f.w.store.Delete(c.ID)
-				}
-			}
-		}, 8},
+		"the grant was revoked":     {func(f *landFlow) { f.w.store.Add(277, "alice", "MEMBER", "epic-revoke-auto-merge") }, 8},
+		"the grant was never given": {func(f *landFlow) { f.dropEpicComment("epic-auto-merge") }, 8},
 		"the grant is by a stranger": {func(f *landFlow) {
-			for _, c := range f.w.store.Comments(277) {
-				if c.Body == "epic-auto-merge" {
-					f.w.store.Delete(c.ID)
-				}
-			}
+			f.dropEpicComment("epic-auto-merge")
 			f.w.store.Add(277, "stranger", "NONE", "epic-auto-merge")
 		}, 8},
-		"the Epic was never approved": {func(f *landFlow) {
-			for _, c := range f.w.store.Comments(277) {
-				if c.Body == "epic-approve" {
-					f.w.store.Delete(c.ID)
-				}
-			}
-		}, 8},
-		"the comments cannot be read": {func(f *landFlow) {
-			f.w.r.Exit(ghfake.CommentsName, 1)
-		}, 1},
-		"the Epic is frozen": {func(f *landFlow) {
-			l := frozenLedger()
-			for _, c := range f.w.store.Comments(277) {
-				if strings.HasPrefix(c.Body, "<!-- oe:v2 state ledger -->") {
-					f.w.store.Delete(c.ID)
-				}
-			}
-			f.w.put(t, 277, &l)
-		}, 4},
+		"the Epic was never approved": {func(f *landFlow) { f.dropEpicComment("epic-approve") }, 8},
+		"the comments cannot be read": {func(f *landFlow) { f.w.r.Exit(ghfake.CommentsName, 1) }, 1},
+		"the Epic is frozen":          {func(f *landFlow) { f.freezeEpic(t) }, 4},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -524,4 +525,31 @@ func TestLandMergeIsRefusedWithoutAGrantOrWhileFrozen(t *testing.T) {
 			}
 		})
 	}
+}
+
+// dropEpicComment deletes the human comment with exactly this body from the Epic.
+func (f *landFlow) dropEpicComment(body string) {
+	for _, c := range f.w.store.Comments(277) {
+		if c.Body == body {
+			f.w.store.Delete(c.ID)
+		}
+	}
+}
+
+// freezeEpic replaces the Epic's ledger with a frozen one.
+func (f *landFlow) freezeEpic(t *testing.T) {
+	t.Helper()
+	l := frozenLedger()
+	f.replaceLedger(t, &l)
+}
+
+// replaceLedger overwrites the Epic's ledger with the one the test needs.
+func (f *landFlow) replaceLedger(t *testing.T, l *state.Ledger) {
+	t.Helper()
+	for _, c := range f.w.store.Comments(277) {
+		if strings.HasPrefix(c.Body, "<!-- oe:v2 state ledger -->") {
+			f.w.store.Delete(c.ID)
+		}
+	}
+	f.w.put(t, 277, l)
 }

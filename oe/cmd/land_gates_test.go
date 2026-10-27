@@ -102,22 +102,22 @@ func TestLandMergeNeedsTheShippedPairAsItsApprovalAndPullRequest(t *testing.T) {
 			}
 		}, 3},
 		"the Issue has no approval": {func(f *landFlow) {
-			st := f.issue(landReviewed)
+			st := f.issue()
 			st.Approval = nil
 			f.replaceIssue(st)
 		}, 8},
 		"the pair shipped is not the pair approved": {func(f *landFlow) {
-			st := f.issue(landReviewed)
+			st := f.issue()
 			st.Publish.SHA = "olderhead"
 			f.replaceIssue(st)
 		}, 8},
 		"the shipped pull request is not linked yet": {func(f *landFlow) {
-			st := f.issue(landReviewed)
+			st := f.issue()
 			st.Publish.Phase, st.Publish.PR = "pushed", 0
 			f.replaceIssue(st)
 		}, 8},
 		"the Issue is parked": {func(f *landFlow) {
-			st := f.issue(landReviewed)
+			st := f.issue()
 			st.Approval, st.UnresolvedBlockers = nil, []string{"cap"}
 			f.replaceIssue(st)
 		}, 8},
@@ -214,12 +214,12 @@ func TestLandMergeHoldsWhatTheRepositoryHoldsAndNeverBypassesIt(t *testing.T) {
 				}
 			}
 			f.wantNoRequest(t)
-			if f.record() != nil || f.notes(7, "merge-hold:") != tc.hold {
-				t.Errorf("record %+v, merge holds %d; want no record and %d holds", f.record(), f.notes(7, "merge-hold:"), tc.hold)
+			if f.record() != nil || f.notes("merge-hold:") != tc.hold {
+				t.Errorf("record %+v, merge holds %d; want no record and %d holds", f.record(), f.notes("merge-hold:"), tc.hold)
 			}
 			// Asking again changes nothing: the hold is posted once per head and reason.
 			f.merge()
-			if got := f.notes(7, "merge-hold:"); got != tc.hold {
+			if got := f.notes("merge-hold:"); got != tc.hold {
 				t.Errorf("merge holds after a second pass = %d, want %d", got, tc.hold)
 			}
 		})
@@ -239,7 +239,7 @@ func TestLandMergeHoldIsPostedAgainForANewReasonOnTheSameHead(t *testing.T) {
 	blocked.mergeState = "BLOCKED"
 	f.w.r.On(ghfake.Readiness, func(map[string]string) string { return pullBody(blocked) })
 	f.merge()
-	if got := f.notes(7, fmt.Sprintf("merge-hold:%d:%s:", landPR, landReviewed)); got != 2 {
+	if got := f.notes(fmt.Sprintf("merge-hold:%d:%s:", landPR, landReviewed)); got != 2 {
 		t.Errorf("merge holds = %d, want one per reason", got)
 	}
 }

@@ -446,7 +446,9 @@ func TestReadMissingRefusesWrites(t *testing.T) {
 	}
 }
 
-var mergeArgs = []string{"api", "-X", "PUT", "repos/o/r/pulls/7/merge", "-f", "sha=abc"}
+func mergeArgs() []string {
+	return []string{"api", "-X", "PUT", "repos/o/r/pulls/7/merge", "-f", "sha=abc"}
+}
 
 func mergeCall(stdout, stderr string, exit int) runner.Call {
 	argv := []string{"gh", "api", "-i", "--hostname", "github.com", "-X", "PUT", "repos/o/r/pulls/7/merge", "-f", "sha=abc"}
@@ -484,7 +486,7 @@ func TestWriteHTTPReturnsEveryAnswerWithItsStatus(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			resp, err := gh.New(newSpy(tc.call), false).WriteHTTP(t.Context(), mergeArgs...)
+			resp, err := gh.New(newSpy(tc.call), false).WriteHTTP(t.Context(), mergeArgs()...)
 			if err != nil || resp.Status != tc.status || string(resp.Body) != tc.body {
 				t.Errorf("WriteHTTP() = %d %q, %v; want %d %q, nil", resp.Status, resp.Body, err, tc.status, tc.body)
 			}
@@ -506,7 +508,7 @@ func TestWriteHTTPWithoutAnAnswerIsNoResponse(t *testing.T) {
 	for name, s := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			_, err := gh.New(s, false).WriteHTTP(t.Context(), mergeArgs...)
+			_, err := gh.New(s, false).WriteHTTP(t.Context(), mergeArgs()...)
 			if !errors.Is(err, gh.ErrNoResponse) || exitcode.CodeOf(err) != exitcode.Unreadable {
 				t.Errorf("WriteHTTP() err = %v, code %d; want ErrNoResponse and Unreadable", err, exitcode.CodeOf(err))
 			}
@@ -520,7 +522,7 @@ func TestWriteHTTPIsRefusedBeforeAnyCallLikeWrite(t *testing.T) {
 	t.Parallel()
 
 	snapshotted := newSpy(mergeCall("HTTP/2.0 200 OK\r\n\r\n{}", "", 0))
-	_, err := gh.New(snapshotted, true).WriteHTTP(t.Context(), mergeArgs...)
+	_, err := gh.New(snapshotted, true).WriteHTTP(t.Context(), mergeArgs()...)
 	if exitcode.CodeOf(err) != exitcode.Refused || errors.Is(err, gh.ErrNoResponse) || len(snapshotted.calls) != 0 {
 		t.Errorf("snapshot WriteHTTP: code %d, err %v, calls %q; want Refused, no calls", exitcode.CodeOf(err), err, snapshotted.calls)
 	}
@@ -537,7 +539,7 @@ func TestWriteHTTPIsRefusedBeforeAnyCallLikeWrite(t *testing.T) {
 	)
 	c := gh.New(tainted, false)
 	_, _ = c.Read(t.Context(), "api", "user")
-	_, err = c.WriteHTTP(t.Context(), mergeArgs...)
+	_, err = c.WriteHTTP(t.Context(), mergeArgs()...)
 	if exitcode.CodeOf(err) != exitcode.Unreadable || errors.Is(err, gh.ErrNoResponse) || len(tainted.calls) != 1 {
 		t.Errorf("tainted WriteHTTP: code %d, err %v, calls %d; want Unreadable without a request", exitcode.CodeOf(err), err, len(tainted.calls))
 	}
@@ -591,7 +593,7 @@ func TestProbeKeepsTheReadRulesAndRefusesEveryWrite(t *testing.T) {
 	if _, err := p.Write(t.Context(), "api", "-X", "PUT", "repos/o/r/pulls/7/merge"); exitcode.CodeOf(err) != exitcode.Refused {
 		t.Errorf("Probe().Write() code = %d, want Refused", exitcode.CodeOf(err))
 	}
-	if _, err := p.WriteHTTP(t.Context(), mergeArgs...); exitcode.CodeOf(err) != exitcode.Refused {
+	if _, err := p.WriteHTTP(t.Context(), mergeArgs()...); exitcode.CodeOf(err) != exitcode.Refused {
 		t.Errorf("Probe().WriteHTTP() code = %d, want Refused", exitcode.CodeOf(err))
 	}
 	if _, err := p.GitWrite(t.Context(), "worktree", "add", "x"); exitcode.CodeOf(err) != exitcode.Refused {

@@ -18,7 +18,7 @@ import (
 // A worker always makes the repair, since the loop never edits code, and the repair counts against the Issue's cap and the Epic's budget.
 // The cycle is reserved, then the findings are written to the Issue's state, then the repair is noted, and only then may a worker be spawned.
 func Repair(ctx context.Context, d Deps, n int) (Result, error) {
-	f := &flow{d: d, n: n, res: NewResult(n), st: state.Issue{}, a: state.Approval{}, pr: 0, method: "", board: nil}
+	f := newFlow(d, n)
 	err := f.runRepair(ctx)
 	return f.res, err
 }
