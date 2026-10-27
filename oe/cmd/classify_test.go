@@ -122,7 +122,7 @@ func TestBoardClassifiesAndProposes(t *testing.T) {
 		t.Errorf("dispatch = %v, want the resumed #12 first, then #10 and #52, none of the cycle", got)
 	}
 	keys := b.keys()
-	if len(keys) != 3 || keys[0] != "dep-cycle:8,9" || !strings.HasPrefix(keys[1], "leftover-token:277:") || keys[2] != "rejected:11:30" {
+	if len(keys) != 3 || keys[0] != "dep-cycle:8,9" || !strings.HasPrefix(keys[1], "leftover-placeholder:277:") || keys[2] != "rejected:11:30" {
 		t.Errorf("notes = %v, want one cycle note, one token note, and the rejection", keys)
 	}
 }

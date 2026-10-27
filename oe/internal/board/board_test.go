@@ -523,8 +523,8 @@ func TestLeftoverTokens(t *testing.T) {
 		if n.Kind != board.NoteLeftoverToken {
 			t.Errorf("note %+v, want a leftover-token note", n)
 		}
-		if parts := strings.Split(n.Key, ":"); len(parts) != 3 || parts[0] != "leftover-token" || len(parts[2]) != 12 {
-			t.Errorf("key = %q, want leftover-token:<issue>:<12 hex>", n.Key)
+		if parts := strings.Split(n.Key, ":"); len(parts) != 3 || parts[0] != "leftover-placeholder" || len(parts[2]) != 12 {
+			t.Errorf("key = %q, want leftover-placeholder:<issue>:<12 hex>", n.Key)
 		}
 	}
 	wantTokens(t, res, epic, []string{"{{T9}}"})
