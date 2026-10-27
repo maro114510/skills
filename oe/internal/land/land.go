@@ -27,6 +27,9 @@ const (
 	RouteReconciled = "RECONCILED"
 	// RouteFrozen is a merge held because the last merge's default-branch checks failed, which froze the Epic.
 	RouteFrozen = "FROZEN"
+	// RouteRepair is a repair handed to a fresh worker, and RouteParked an Issue parked instead.
+	RouteRepair = "REPAIR"
+	RouteParked = "PARKED"
 )
 
 // What the loop does next.
@@ -67,7 +70,10 @@ type Result struct {
 	MergeSHA string `json:"merge_sha"`
 	Result   string `json:"result"`
 	// Repair lists the kinds of repair a held pull request needs, when Next is repair.
-	Repair     []string           `json:"repair"`
+	Repair []string `json:"repair"`
+	// Findings are what a repair handed to the worker, and Since the highest comment ID it carried.
+	Findings   []string           `json:"findings"`
+	Since      int64              `json:"since"`
 	Reconciled *Reconciled        `json:"reconciled"`
 	Freeze     *state.Freeze      `json:"freeze"`
 	Notes      []coord.NoteResult `json:"notes"`
@@ -77,7 +83,7 @@ type Result struct {
 func NewResult(n int) Result {
 	return Result{
 		Issue: n, PR: 0, Route: "", Reason: "", Next: "", Method: "", ReviewedSHA: "", VerifiedBase: "", MergeSHA: "", Result: "",
-		Repair: []string{}, Reconciled: nil, Freeze: nil, Notes: []coord.NoteResult{},
+		Repair: []string{}, Findings: []string{}, Since: 0, Reconciled: nil, Freeze: nil, Notes: []coord.NoteResult{},
 	}
 }
 
