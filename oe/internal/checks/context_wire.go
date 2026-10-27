@@ -17,4 +17,7 @@ type Context struct {
 	Context    *string `json:"context"`
 	State      *string `json:"state"`
 	CreatedAt  *string `json:"createdAt"`
+	// DetailsURL is a check run's page, which for GitHub Actions names its job, and TargetURL a status's link.
+	DetailsURL *string `json:"detailsUrl"`
+	TargetURL  *string `json:"targetUrl"`
 }

@@ -6,6 +6,7 @@ package ghfake
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"regexp"
 	"strings"
 	"sync"
@@ -43,6 +44,15 @@ const (
 	Git         = "git"
 	// Protection is the REST read of the default branch's protection.
 	Protection = "protection"
+	// Feedback is the query of a pull request's failed checks, open review threads, and requested changes.
+	Feedback = "feedback"
+	// Settings is the query of the repository's allowed merge methods.
+	Settings = "settings"
+	// Ref is the REST read of a branch's head, and Commit the REST read of one commit.
+	Ref    = "ref"
+	Commit = "commit"
+	// Merge is the REST request that merges a pull request.
+	Merge = "merge"
 )
 
 // phrases are the texts only one query holds. The comments query is the only one with the
@@ -58,13 +68,18 @@ var phrases = map[string]string{ //nolint:gochecknoglobals // A fixed table of t
 	MergePull:    "mergeCommit { oid",
 	Readiness:    "reviewRequests(first: 100)",
 	Protection:   "/protection",
+	Feedback:     "comments(first: 50)",
+	Settings:     "mergeCommitAllowed",
+	Ref:          "/git/ref/heads/",
+	Commit:       "/commits/",
+	Merge:        "/merge",
 }
 
 func phrase(name string) string { return phrases[name] }
 
 // queryOrder is the order queries are told apart in: a query is the first whose phrase it holds.
 func queryOrder() []string {
-	return []string{CommentsName, MoreComments, Blockers, MergePull, Readiness, Tree, PullsByHead, Pulls, Refs, Protection}
+	return []string{CommentsName, MoreComments, Blockers, MergePull, Feedback, Readiness, Tree, PullsByHead, Pulls, Refs, Protection, Settings, Ref, Commit, Merge}
 }
 
 const probePhrase = "subIssues(first:0)"
@@ -358,4 +373,28 @@ func CommentsFor(numbers []string, byIssue map[string]string) string {
 func StateBody(key, entity, extra string) string {
 	return fmt.Sprintf("<!-- oe:v2 state %s -->\n```json\n{\"protocol_version\":2,\"entity\":%q,\"key\":%q,\"revision\":1,\"updated_by\":\"tok\"%s}\n```\n",
 		key, entity, key, extra)
+}
+
+// HTTP is the output of `gh api -i` for an answer with this status and body.
+func HTTP(status int, body string) string {
+	return fmt.Sprintf("HTTP/2.0 %d %s\r\nContent-Type: application/json\r\n\r\n%s", status, http.StatusText(status), body)
+}
+
+// SettingsReply answers the merge settings query with the two allowed methods.
+func SettingsReply(mergeCommit, squash bool) string {
+	return fmt.Sprintf(`{"data":{"repository":{"mergeCommitAllowed":%t,"squashMergeAllowed":%t}}}`, mergeCommit, squash)
+}
+
+// RefReply answers the REST read of a branch head.
+func RefReply(sha string) string {
+	return fmt.Sprintf(`{"ref":"refs/heads/main","object":{"sha":%q,"type":"commit"}}`, sha)
+}
+
+// CommitReply answers the REST read of a commit with its parents, first parent first.
+func CommitReply(sha string, parents ...string) string {
+	nodes := make([]string, 0, len(parents))
+	for _, p := range parents {
+		nodes = append(nodes, fmt.Sprintf(`{"sha":%q}`, p))
+	}
+	return fmt.Sprintf(`{"sha":%q,"parents":[%s]}`, sha, strings.Join(nodes, ","))
 }
