@@ -5,7 +5,6 @@ import (
 	"cmp"
 	"context"
 	"slices"
-	"strings"
 
 	"github.com/maro114510/skills/oe/internal/board"
 	"github.com/maro114510/skills/oe/internal/snapshot"
@@ -128,34 +127,10 @@ func removeWorktree(ctx context.Context, g worktree.Git, dir, path string) strin
 	if dirty {
 		return "the worktree has uncommitted changes or untracked files, so it is kept"
 	}
-	hidden, err := indexHidesEdits(ctx, g, path)
-	if err != nil {
-		return "the worktree's index could not be read: " + oneLine(err.Error())
-	}
-	if hidden {
-		return "an index flag, assume-unchanged or skip-worktree, can hide edits from git status, so the worktree is kept"
-	}
 	if _, err := g.GitWrite(ctx, "-C", dir, "worktree", "remove", path); err != nil {
 		return "git worktree remove refused: " + oneLine(err.Error())
 	}
 	return ""
-}
-
-// indexHidesEdits reports whether any tracked file carries an index flag that keeps git status from
-// showing its edits: a lower-case tag is assume-unchanged, and S is skip-worktree. Removing such a
-// worktree would delete an edit nobody could see. A sparse checkout's skipped files count too, so
-// the worktree is kept and a person decides.
-func indexHidesEdits(ctx context.Context, g worktree.Git, path string) (bool, error) {
-	out, err := g.Git(ctx, "-C", path, "ls-files", "-v")
-	if err != nil {
-		return false, err
-	}
-	for line := range strings.SplitSeq(string(out), "\n") {
-		if line != "" && (line[0] >= 'a' && line[0] <= 'z' || line[0] == 'S') {
-			return true, nil
-		}
-	}
-	return false, nil
 }
 
 // oneLine bounds a message from git to one line.
