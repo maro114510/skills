@@ -46,7 +46,7 @@ func noteComment(id int64, key, text string) snapshot.Comment {
 	return snapshot.Comment{ID: id, CreatedAt: "", Author: loopLogin, Association: "OWNER", Body: "<!-- oe:v2 note " + key + " -->\n" + text}
 }
 
-func issueState(t *testing.T, id int64, n int, edit func(*state.Issue)) snapshot.Comment {
+func issueState(t *testing.T, n int, edit func(*state.Issue)) snapshot.Comment {
 	t.Helper()
 	var st state.Issue
 	st.Entity, st.Key, st.Revision, st.UpdatedBy = state.EntityIssue, state.IssueKey(n), 1, "earlier"
@@ -57,7 +57,7 @@ func issueState(t *testing.T, id int64, n int, edit func(*state.Issue)) snapshot
 	if err != nil {
 		t.Fatal(err)
 	}
-	return snapshot.Comment{ID: id, CreatedAt: "", Author: loopLogin, Association: "OWNER", Body: body}
+	return snapshot.Comment{ID: 10, CreatedAt: "", Author: loopLogin, Association: "OWNER", Body: body}
 }
 
 func assess(t *testing.T, res board.Result, b *snapshot.Board, comments map[int][]snapshot.Comment) round.Report {
@@ -136,7 +136,7 @@ func TestAParkedIssueCountsOnlyOnceAnEpicDropWasApplied(t *testing.T) {
 		t.Fatal("complete with a drop that is not applied to the state yet")
 	}
 
-	comments := map[int][]snapshot.Comment{6: {issueState(t, 10, 6, func(s *state.Issue) {
+	comments := map[int][]snapshot.Comment{6: {issueState(t, 6, func(s *state.Issue) {
 		s.UnresolvedBlockers = []string{"fix cycle cap reached: a nit remains"}
 		s.Decision = &state.Decision{Command: "epic-drop", CommentID: 99, RedoBranch: ""}
 	})}}
@@ -157,7 +157,7 @@ func TestADroppedRejectedIssueWithNoBlockersGivesTheBoardsReason(t *testing.T) {
 	t.Parallel()
 
 	b := epicBoard(leafIssue(6, "OPEN", "closed pr"))
-	comments := map[int][]snapshot.Comment{6: {issueState(t, 10, 6, func(s *state.Issue) {
+	comments := map[int][]snapshot.Comment{6: {issueState(t, 6, func(s *state.Issue) {
 		s.Decision = &state.Decision{Command: "epic-drop", CommentID: 99, RedoBranch: ""}
 	})}}
 
@@ -267,7 +267,7 @@ func TestTheTextReportsOnlyWhatOeAlreadyHasLedgerCountsFixCyclesAndLostDispatche
 	}
 	b.Ledger = &ledger
 	comments := map[int][]snapshot.Comment{
-		7: {issueState(t, 10, 7, func(s *state.Issue) { s.Cycle = 2 })},
+		7: {issueState(t, 7, func(s *state.Issue) { s.Cycle = 2 })},
 		9: {noteComment(11, "stale-start:9:feat/issue-9", "lost")},
 	}
 
@@ -372,7 +372,7 @@ func TestADroppedIssueWithANewerDecisionPendingIsUnfinished(t *testing.T) {
 	t.Parallel()
 
 	b := epicBoard(leafIssue(6, "OPEN", "capped"))
-	comments := map[int][]snapshot.Comment{6: {issueState(t, 10, 6, func(s *state.Issue) {
+	comments := map[int][]snapshot.Comment{6: {issueState(t, 6, func(s *state.Issue) {
 		s.UnresolvedBlockers = []string{"fix cycle cap reached"}
 		s.Decision = &state.Decision{Command: "epic-drop", CommentID: 99, RedoBranch: ""}
 	})}}
@@ -425,7 +425,7 @@ func TestAHeadingInsideFreeFormNoteTextDoesNotCutTheRecord(t *testing.T) {
 
 	rep := assess(t, result(classified(7, board.Done, "seven")), b, comments)
 
-	var texts []string
+	texts := make([]string, 0, len(rep.Assumptions))
 	for _, a := range rep.Assumptions {
 		texts = append(texts, a.Text)
 	}

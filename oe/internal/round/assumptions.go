@@ -15,11 +15,18 @@ import (
 const (
 	headingSkipped  = "見送った項目"
 	headingDecision = "判断の記録"
+	headingFound    = "範囲外で見つけた不具合"
 	headingQuestion = "質問"
 	headingAnswer   = "回答"
 	noneText        = "なし"
 	decisionArrow   = " -> "
+	// autoAnswerMarker starts the line that ends an answer note.
+	autoAnswerMarker = "<!-- oe:auto-answer"
 )
+
+// knownHeadings are the headings the handoff package writes. A section ends only at one of them,
+// so a heading inside a worker's free-form text never cuts its record short.
+var knownHeadings = []string{headingSkipped, headingDecision, headingFound, headingQuestion, headingAnswer} //nolint:gochecknoglobals // A fixed table of the note format.
 
 // addNotes reads the assumptions and the lost dispatches out of one Issue's notes, in the order
 // the notes were posted. A FAILED record is no assumption.
@@ -83,14 +90,23 @@ func answerOf(text string) (question, answer string, ok bool) {
 	return question, answer, question != "" && answer != ""
 }
 
-// under is the text under a "### heading" up to the next heading, or "" when it is absent or says none.
+// under is the text under a "### heading" up to the next known heading, or "" when it is absent or says none.
 func under(text, heading string) string {
 	_, rest, found := strings.Cut(text, "### "+heading+"\n")
 	if !found {
 		return ""
 	}
-	body, _, _ := strings.Cut(rest, "\n### ")
-	if body = strings.TrimSpace(body); body == noneText {
+	end := len(rest)
+	for _, h := range knownHeadings {
+		if i := strings.Index(rest, "\n### "+h+"\n"); h != heading && i >= 0 && i < end {
+			end = i
+		}
+	}
+	if i := strings.Index(rest, "\n"+autoAnswerMarker); i >= 0 && i < end {
+		end = i
+	}
+	body := strings.TrimSpace(rest[:end])
+	if body == noneText {
 		return ""
 	}
 	return body
