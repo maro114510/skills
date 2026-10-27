@@ -159,6 +159,12 @@ func (f *landFlow) wantNoRequest(t *testing.T) {
 	if n := f.putCount(); n != 0 {
 		t.Errorf("%d merge requests were sent, want none", n)
 	}
+	f.wantNoBypass(t)
+}
+
+// wantNoBypass checks that no call went through gh pr, which can enable auto-merge, or used --admin.
+func (f *landFlow) wantNoBypass(t *testing.T) {
+	t.Helper()
 	for _, c := range f.w.r.Calls() {
 		if len(c) > 1 && c[1] == "pr" || slices.Contains(c, "--admin") {
 			t.Errorf("call %q uses gh pr or --admin", c)
@@ -259,7 +265,7 @@ func TestLandMergeMergesTheReviewedHeadAndRecordsTheIntentFirst(t *testing.T) {
 	if n := f.notes(7, fmt.Sprintf("merge-result:%d:%s:merged -->", landPR, landReviewed)); n != 1 {
 		t.Errorf("merge-result notes = %d, want one for the pull request, head, and result", n)
 	}
-	f.wantNoRequest(t)
+	f.wantNoBypass(t)
 }
 
 // TestLandMergePrefersAMergeCommitThenSquashAndNeverRebases guards MQ-03 and MQ-04.

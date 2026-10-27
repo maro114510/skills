@@ -130,7 +130,7 @@ func newRoot(env Env) *cobra.Command {
 		newWorkerCmd(env, g),
 		newReviewCmd(env, g),
 		newShipCmd(env, g),
-		newGroup("land", "Land shipped PRs", newMutatingCmd(env, g, "merge", "Merge one PR at its reviewed head", "#290")),
+		newLandCmd(env, g),
 	)
 	return root
 }
