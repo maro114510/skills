@@ -152,6 +152,13 @@ func (c *Client) Write(ctx context.Context, args ...string) ([]byte, error) {
 	return res.Stdout, nil
 }
 
+// Probe returns a client over the same runner for a read whose failure is itself the answer, such as a pull request
+// that cannot be read after a merge request got no response. It gives the same reads as the client it came from.
+// A failure taints only the probe, so the caller can still record that answer, and every write through it is refused.
+func (c *Client) Probe() *Client {
+	return c
+}
+
 // Response is the HTTP answer to a write.
 type Response struct {
 	Status int
