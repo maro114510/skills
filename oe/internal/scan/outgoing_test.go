@@ -32,13 +32,19 @@ func git(t *testing.T, dir string, args ...string) string {
 	return strings.TrimSpace(string(res.Stdout))
 }
 
+// write puts a file under dir through os.Root, which cannot leave dir, so no linter has to be told the name is safe.
 func write(t *testing.T, dir, name, body string) {
 	t.Helper()
-	path := filepath.Join(dir, filepath.FromSlash(name))
-	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+	root, err := os.OpenRoot(dir)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(path, []byte(body), 0o600); err != nil { //nolint:gosec // G703: a fixed name under t.TempDir.
+	defer func() { _ = root.Close() }()
+	rel := filepath.FromSlash(name)
+	if err := root.MkdirAll(filepath.Dir(rel), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := root.WriteFile(rel, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
 }
