@@ -44,6 +44,8 @@ const (
 	NextRepair = "repair"
 	// NextHuman is a hold only a person lifts.
 	NextHuman = "human"
+	// NextAwait is a repair already handed over, whose worker is running or is dispatched from the pending findings.
+	NextAwait = "await-worker"
 	// NextStop is to stop landing for this invocation.
 	NextStop = "stop"
 )

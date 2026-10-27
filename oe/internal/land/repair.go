@@ -40,10 +40,10 @@ func (f *flow) resume(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	r := st.Repair
-	if st.Approval != nil || len(st.PendingFindings) == 0 || r == nil || r.PR <= 0 || st.HeadSHA == nil || *st.HeadSHA != r.Head {
+	if !repairPending(st) {
 		return false, nil
 	}
+	r := st.Repair
 	if _, err := f.d.S.Check(ctx); err != nil {
 		return true, err
 	}
@@ -53,9 +53,25 @@ func (f *flow) resume(ctx context.Context) (bool, error) {
 	}
 	f.res.PR, f.res.Notes = r.PR, append(f.res.Notes, nr)
 	f.res.Findings, f.res.Since = st.PendingFindings, r.Since
+	if !nr.Posted {
+		// The marker exists, so the repair was handed over and its worker is running or is dispatched from the pending findings.
+		// Telling the caller to spawn one would put two workers on one worktree and charge a second dispatch.
+		f.res.Route, f.res.Next = RouteHeld, NextAwait
+		f.res.Reason = "the repair is already handed over and its findings are pending; its worker resumes from them"
+		return true, nil
+	}
 	f.res.Route, f.res.Next = RouteRepair, coord.NextRedispatch
 	f.res.Reason = "the repair was recorded but its marker was missing; the marker is posted now, so spawn a fresh worker with oe worker brief"
 	return true, nil
+}
+
+// repairPending reports whether a repair was recorded for the Issue's head and its findings are still pending, with no approval.
+func repairPending(st state.Issue) bool {
+	r := st.Repair
+	if st.Approval != nil || len(st.PendingFindings) == 0 || r == nil || r.PR <= 0 {
+		return false
+	}
+	return st.HeadSHA != nil && *st.HeadSHA == r.Head
 }
 
 // approvedByEpic requires the Epic's approval and nothing more: a repair is dispatch, review, and shipping, never a merge.
@@ -143,8 +159,8 @@ func (f *flow) build(in snapshot.RepairRead, rd readiness.Result) built {
 			}
 		case readiness.RepairConflict:
 			if rd.Head != prevHead {
-				b.findings = append(b.findings, fmt.Sprintf("[blocking] merge %s into %s with a plain merge commit, never a rebase, and resolve the conflicts GitHub reports on pull request #%d",
-					f.d.In.DefaultBranch, f.st.Branch, f.pr))
+				b.findings = append(b.findings, fmt.Sprintf("[blocking] merge origin/%s at %s into %s with a plain merge commit, never a rebase, and resolve the conflicts GitHub reports on pull request #%d",
+					f.d.In.DefaultBranch, f.a.VerifiedBase, f.st.Branch, f.pr))
 			}
 		case readiness.RepairReview:
 			f.reviewFindings(in, since, &b)
