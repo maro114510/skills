@@ -36,7 +36,7 @@ type landFlow struct {
 	// base answers the n-th read of the default branch's head, counting from 1.
 	base func(n int) string
 	// pulls answers the merged-pull query by pull request number.
-	pulls func(num string) (body string, exit int)
+	pulls func(num string) string
 }
 
 func newLandFlow(t *testing.T) *landFlow {
@@ -44,7 +44,7 @@ func newLandFlow(t *testing.T) *landFlow {
 	w := newCoordWorld(t)
 	f := &landFlow{w: w, tok: w.acquire(t), mu: sync.Mutex{}, puts: nil, refs: 0, intentSeen: nil,
 		base:  func(int) string { return landBase },
-		pulls: func(string) (string, int) { return mergedPullBody(landPR, landMerge, "SUCCESS"), 0 }}
+		pulls: func(string) string { return mergedPullBody(landPR, landMerge, "SUCCESS") }}
 	l := coord.NewLedger(1)
 	w.put(t, 277, &l)
 	w.store.Add(277, "loop", "OWNER", "<!-- oe:v2 note run-plan -->\nplan")
@@ -64,11 +64,7 @@ func newLandFlow(t *testing.T) *landFlow {
 		return ghfake.RefReply(f.base(n))
 	})
 	w.r.On(ghfake.Commit, func(map[string]string) string { return ghfake.CommitReply(landMerge, landBase, landReviewed) })
-	w.r.On(ghfake.MergePull, func(v map[string]string) string {
-		body, exit := f.pulls(v["num"])
-		w.r.Exit(ghfake.MergePull, exit)
-		return body
-	})
+	w.r.On(ghfake.MergePull, func(v map[string]string) string { return f.pulls(v["num"]) })
 	w.r.On(ghfake.Merge, func(v map[string]string) string {
 		f.mu.Lock()
 		f.puts = append(f.puts, v)
@@ -232,6 +228,9 @@ func mergedPullBody(num int, merge, conclusion string) string {
 		`{"__typename":"CheckRun","name":"test","status":"COMPLETED","conclusion":%q}]}}}}}}}`, num, merge, conclusion)
 }
 
+// unreadableBody is a GraphQL answer carrying only an error, which no read may act on.
+const unreadableBody = `{"errors":[{"message":"boom"}]}`
+
 func openPullBody(num int) string {
 	return fmt.Sprintf(`{"data":{"repository":{"pullRequest":{"number":%d,"state":"OPEN","mergedAt":null,"mergeCommit":null}}}}`, num)
 }
@@ -369,20 +368,20 @@ func TestLandMergeWithoutAResponseIsReconciledFromThePullRequestAndNeverSentTwic
 		f.w.r.Stderr(ghfake.Merge, "gh: error connecting to api.github.com")
 	}
 	tests := map[string]struct {
-		pulls  func(string) (string, int)
+		pulls  func(string) string
 		code   int
 		route  string
 		result string
 		merge  string
 	}{
 		"the pull request merged on the verified base": {
-			func(string) (string, int) { return mergedPullBody(landPR, landMerge, "SUCCESS"), 0 }, 0, "MERGED", "merged", landMerge,
+			func(string) string { return mergedPullBody(landPR, landMerge, "SUCCESS") }, 0, "MERGED", "merged", landMerge,
 		},
 		"the pull request is still open": {
-			func(string) (string, int) { return openPullBody(landPR), 0 }, 4, "UNKNOWN", "unknown", "",
+			func(string) string { return openPullBody(landPR) }, 4, "UNKNOWN", "unknown", "",
 		},
 		"the pull request cannot be read": {
-			func(string) (string, int) { return `{"message":"boom"}`, 1 }, 4, "UNKNOWN", "unknown", "",
+			func(string) string { return unreadableBody }, 4, "UNKNOWN", "unknown", "",
 		},
 	}
 	for name, tc := range tests {
@@ -391,11 +390,7 @@ func TestLandMergeWithoutAResponseIsReconciledFromThePullRequestAndNeverSentTwic
 			f := newLandFlow(t)
 			noResponse(f)
 			// Health reads the pull request only once a record exists, so the answer applies from the reconciliation on.
-			asked := 0
-			f.pulls = func(num string) (string, int) {
-				asked++
-				return tc.pulls(num)
-			}
+			f.pulls = tc.pulls
 			r := f.merge()
 			out := parseLanded(t, r)
 			if r.code != tc.code || out.Route != tc.route || out.Result != tc.result || out.MergeSHA != tc.merge {
