@@ -156,8 +156,8 @@ func (f *flow) reviewFindings(in snapshot.RepairRead, since int64, b *built) {
 				continue
 			}
 			b.since = max(b.since, c.ID)
-			b.findings = append(b.findings, fmt.Sprintf("[blocking] review feedback by %s on %s:%d (%s): %s%s",
-				c.Author, th.Path, th.Line, f.label(), strings.TrimSpace(c.Body), truncated(th)))
+			b.findings = append(b.findings, fmt.Sprintf("[blocking] review feedback by %s on %s:%d (%s): %s",
+				c.Author, th.Path, th.Line, f.label(), strings.TrimSpace(c.Body)))
 		}
 	}
 	for _, r := range in.Reviews {
@@ -174,13 +174,6 @@ func (f *flow) reviewFindings(in snapshot.RepairRead, since int64, b *built) {
 // anyTrusted reports whether a trusted person wrote any of the comments, so a thread with none is told from one with some.
 func anyTrusted(cs []snapshot.Feedback) bool {
 	return slices.ContainsFunc(cs, func(c snapshot.Feedback) bool { return c.Trusted })
-}
-
-func truncated(th snapshot.FeedbackThread) string {
-	if th.Total > len(th.Comments) {
-		return fmt.Sprintf(" (the thread holds %d comments and the first %d were read)", th.Total, len(th.Comments))
-	}
-	return ""
 }
 
 // startCycle reserves a fix cycle, writes the findings and the repair to the state, then notes the repair.
