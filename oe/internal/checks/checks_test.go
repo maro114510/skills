@@ -146,11 +146,37 @@ func TestLatestKeepsTheNewestRunOfACheck(t *testing.T) {
 func TestNamed(t *testing.T) {
 	t.Parallel()
 
-	all := []checks.Check{{Name: "a", Class: checks.Failed}, {Name: "b", Class: checks.Pass}, {Name: "c", Class: checks.Failed}}
+	all := []checks.Check{{Name: "a", Class: checks.Failed, URL: ""}, {Name: "b", Class: checks.Pass, URL: ""}, {Name: "c", Class: checks.Failed, URL: ""}}
 	if got := checks.Named(all, checks.Failed); !slices.Equal(got, []string{"a", "c"}) {
 		t.Errorf("Named() = %v, want [a c]", got)
 	}
 	if got := checks.Named(all, checks.Pending); got != nil {
 		t.Errorf("Named() = %v, want nil", got)
+	}
+}
+
+// TestLatestKeepsTheLinkOfTheLatestRun: a repair hands a worker the link of the failed run it must read the log of,
+// so a superseded run's link must never stand in for the re-run's.
+func TestLatestKeepsTheLinkOfTheLatestRun(t *testing.T) {
+	t.Parallel()
+
+	got := checks.Latest(nodes(t, `[
+		{"__typename":"CheckRun","name":"build","status":"COMPLETED","conclusion":"FAILURE","startedAt":"2026-10-01T00:00:00Z","checkSuite":{"databaseId":5},"detailsUrl":"https://github.com/o/r/actions/runs/1/job/10"},
+		{"__typename":"CheckRun","name":"build","status":"COMPLETED","conclusion":"FAILURE","startedAt":"2026-10-01T00:05:00Z","checkSuite":{"databaseId":5},"detailsUrl":"https://github.com/o/r/actions/runs/1/job/11"},
+		{"__typename":"StatusContext","context":"ci/legacy","state":"FAILURE","createdAt":"2026-10-01T00:00:00Z","targetUrl":"https://ci.example/legacy/9"},
+		{"__typename":"CheckRun","name":"lint","status":"COMPLETED","conclusion":"FAILURE","startedAt":"2026-10-01T00:00:00Z","checkSuite":{"databaseId":6}}
+	]`))
+	urls := map[string]string{}
+	for _, c := range got {
+		urls[c.Name] = c.URL
+	}
+	want := map[string]string{"build": "https://github.com/o/r/actions/runs/1/job/11", "ci/legacy": "https://ci.example/legacy/9", "lint": ""}
+	if len(urls) != len(want) {
+		t.Fatalf("Latest() = %v, want three checks", got)
+	}
+	for name, url := range want {
+		if urls[name] != url {
+			t.Errorf("URL of %s = %q, want %q", name, urls[name], url)
+		}
 	}
 }
