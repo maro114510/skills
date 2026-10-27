@@ -51,6 +51,11 @@ push() {
   run bash "${scripts}/push.sh" o/r 7 --session "${token}" --worktree "${tmp}/wt" --start "${start}" --branch feat/x "$@"
 }
 
+# Reads jq expression $1 from the result line, the last line, because git writes its own progress above it.
+field() {
+  tail -n 1 <<<"${output}" | jq -r "$1"
+}
+
 remote_head() {
   git --git-dir="${tmp}/srv/o/r.git" rev-parse refs/heads/feat/x
 }
@@ -97,9 +102,9 @@ expect() {
   head="$(git rev-parse HEAD)"
   push
   [ "${status}" -eq 0 ]
-  expect "$(jq -r .pushed <<<"${output}")" true
-  expect "$(jq -r .sha <<<"${output}")" "${head}"
-  expect "$(jq -r .rounds <<<"${output}")" 1
+  expect "$(field .pushed)" true
+  expect "$(field .sha)" "${head}"
+  expect "$(field .rounds)" 1
   expect "$(remote_head)" "${head}"
   expect "$(ledger '.own.pushes | join(",")')" "${head}"
   expect "$(ledger .rounds)" 1
@@ -129,8 +134,8 @@ expect() {
   commit_file .github/workflows/ci.yml "name: ci"
   push --check "${check_key}"
   [ "${status}" -eq 10 ]
-  expect "$(jq -r .verdict <<<"${output}")" park
-  expect "$(jq -r '.matches[0].path' <<<"${output}")" .github/workflows/ci.yml
+  expect "$(field .verdict)" park
+  expect "$(field '.matches[0].path')" .github/workflows/ci.yml
   expect "$(remote_head)" "${start}"
   expect "$(ledger '.own // "none"')" none
   expect "$(ledger .rounds)" 0
@@ -143,7 +148,7 @@ expect() {
   mv "${tmp}/snap.new" "${tmp}/snap.json"
   push
   [ "${status}" -eq 11 ]
-  expect "$(jq -r .verdict <<<"${output}")" refuse
+  expect "$(field .verdict)" refuse
   expect "$(remote_head)" "${start}"
   expect "$(ledger .rounds)" 0
 }
@@ -154,7 +159,7 @@ expect() {
   chmod +x .git/hooks/pre-push
   push --check "${check_key}"
   [ "${status}" -eq 1 ]
-  expect "$(jq -r .pushed <<<"${output}")" false
+  expect "$(field .pushed)" false
   expect "$(remote_head)" "${start}"
   expect "$(ledger .rounds)" 0
   expect "$(ledger '.repairs | length')" 0
