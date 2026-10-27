@@ -490,3 +490,33 @@ func TestLandRepairNoteIsKeyedByTheExactPullRequestNumber(t *testing.T) {
 		t.Errorf("repair notes for 12 = %d and for 123 = %d; want one each", mine, theirs)
 	}
 }
+
+// TestLandRepairResumesAMarkerThatWasNeverPosted guards LC-04: a failed marker leaves the cycle reserved and the findings pending
+// with the approval gone, so the next run must finish the marker instead of refusing for want of an approval, and must charge nothing twice.
+func TestLandRepairResumesAMarkerThatWasNeverPosted(t *testing.T) {
+	t.Parallel()
+
+	f := newLandFlow(t)
+	f.blockedBy(failingChecks())
+	f.feedbackIs(fbConn(), fbConn(), fbConn(failedBuild))
+	f.w.store.OnWrite(func(_ *ghfake.Store, w ghfake.Write) (int, bool) {
+		if strings.Contains(w.Body, "<!-- oe:v2 note repair:") {
+			return 1, false
+		}
+		return 0, true
+	})
+	if r := f.repair(); r.code == 0 {
+		t.Fatalf("first run: exit 0, stdout %q; want the unpostable marker to fail it", r.stdout)
+	}
+	f.w.store.OnWrite(nil)
+	r := f.repair()
+	out := parseLanded(t, r)
+	if r.code != 0 || out.Route != "REPAIR" || out.Next != "redispatch" || len(out.Findings) != 1 {
+		t.Fatalf("second run: exit %d, stdout %q; want REPAIR with the pending findings", r.code, r.stdout)
+	}
+	st := f.issueState(t)
+	if f.notes(fmt.Sprintf("repair:%d:%s:0 -->", landPR, landReviewed)) != 1 || st.Cycle != 1 || f.ledger(t).Counters.FixCycles.Used != 1 {
+		t.Errorf("marker notes %d, cycle %d, reserved %d; want the marker posted once and one cycle charged",
+			f.notes(fmt.Sprintf("repair:%d:%s:0 -->", landPR, landReviewed)), st.Cycle, f.ledger(t).Counters.FixCycles.Used)
+	}
+}
