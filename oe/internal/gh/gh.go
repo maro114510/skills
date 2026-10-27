@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -165,7 +166,49 @@ var ErrNoResponse = errors.New("no http response")
 // An error before the call is sent is returned as Write returns it.
 // An error after it, with no answer to read, wraps ErrNoResponse.
 func (c *Client) WriteHTTP(ctx context.Context, args ...string) (Response, error) {
-	return Response{Status: 0, Body: nil}, nil
+	none := Response{Status: 0, Body: nil}
+	if len(args) == 0 || args[0] != apiCmd {
+		return none, exitcode.New(exitcode.Refused, "WriteHTTP carries a gh api call only")
+	}
+	if c.snapshot {
+		return none, exitcode.New(exitcode.Refused, "--snapshot disables every mutation: "+describe(runner.GH, args))
+	}
+	if err := c.Err(); err != nil {
+		return none, exitcode.Wrap(exitcode.Unreadable, err, "an earlier read failed or was partial, so no write is authorized")
+	}
+	pinned, err := pinHost(args)
+	if err != nil {
+		return none, err
+	}
+	// -i puts the status line and headers on stdout, also for the 4xx and 5xx answers gh exits non-zero for.
+	pinned = append([]string{apiCmd, "-i"}, pinned[1:]...)
+	res, err := c.r.Run(ctx, runner.GH, pinned)
+	if err != nil {
+		return none, exitcode.Wrap(exitcode.Unreadable, fmt.Errorf("%w: %w", ErrNoResponse, err), describe(runner.GH, pinned)+" failed")
+	}
+	status, body, ok := splitHTTP(res.Stdout)
+	if !ok {
+		return none, exitcode.Wrap(exitcode.Unreadable, fmt.Errorf("%w: %s", ErrNoResponse, strings.TrimSpace(string(res.Stderr))), describe(runner.GH, pinned)+" returned no HTTP status")
+	}
+	return Response{Status: status, Body: body}, nil
+}
+
+var statusLineRe = regexp.MustCompile(`^HTTP/[0-9.]+ ([0-9]{3})\b`)
+
+// splitHTTP splits the output of `gh api -i` into the status code and the body after the headers.
+func splitHTTP(out []byte) (int, []byte, bool) {
+	text := strings.ReplaceAll(string(out), "\r\n", "\n")
+	line, _, _ := strings.Cut(text, "\n")
+	m := statusLineRe.FindStringSubmatch(line)
+	if m == nil {
+		return 0, nil, false
+	}
+	status, err := strconv.Atoi(m[1])
+	if err != nil {
+		return 0, nil, false
+	}
+	_, body, _ := strings.Cut(text, "\n\n")
+	return status, []byte(body), true
 }
 
 // GraphQL runs a query and decodes its data into out. A response with any error, data
