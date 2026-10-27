@@ -744,3 +744,35 @@ func TestRoundCompletePostsNothingWhenTheLookupFails(t *testing.T) {
 		t.Errorf("exit %d, stdout %q, %d completion comments; want exit 1 and nothing posted", r.code, r.stdout, completions(w))
 	}
 }
+
+func TestRoundPollExitsWith1WhenAReadinessSignalIsMissingAndNeverCountsThePoll(t *testing.T) {
+	t.Parallel()
+
+	w := newRoundWorld(t)
+	w.readiness = func() string {
+		return strings.Replace(pullBody(roundPull("IN_PROGRESS", "")), `"mergeable":"MERGEABLE",`, "", 1)
+	}
+
+	r := w.round("poll")
+
+	if r.code != 1 {
+		t.Fatalf("exit %d, stdout %q; want 1: a pull request whose readiness cannot be read is a failed read, not a settled one", r.code, r.stdout)
+	}
+	w.readiness = func() string { return pullBody(roundPull("IN_PROGRESS", "")) }
+	if out := w.poll(t); out.Polls != 1 {
+		t.Errorf("the next poll = %+v, want 1 poll spent: the failed read must not have been counted", out)
+	}
+}
+
+func TestRoundNextRefusesASessionWithNoRoundEvenWhenTheBoardCannotBeRead(t *testing.T) {
+	t.Parallel()
+
+	w := newRoundWorld(t)
+	w.r.On(ghfake.Tree, func(map[string]string) string { return unreadableBody })
+
+	r := w.round("next")
+
+	if r.code != 8 || !strings.Contains(r.stdout, "oe round plan") {
+		t.Errorf("exit %d, stdout %q; want exit 8 pointing at oe round plan, since the session alone shows no round began", r.code, r.stdout)
+	}
+}
