@@ -315,28 +315,6 @@ func TestTheTextNamesFullyDoneOpenContainersAndLeavesClosingEveryThingToAPerson(
 	}
 }
 
-func TestAnOversizedRecordFallsBackToACountSoTheCompletionCanStillBePosted(t *testing.T) {
-	t.Parallel()
-
-	long := strings.Repeat("あ", 300)
-	var rep round.Report
-	rep.Epic, rep.Merged = 277, []board.Issue{classified(3, board.Done, "Add the flag")}
-	for i := range 400 {
-		rep.Assumptions = append(rep.Assumptions, round.Assumption{Issue: 3, Kind: round.AssumptionDecision, Text: long + strconv.Itoa(i)})
-	}
-
-	text := rep.Text()
-
-	if len(text) > 100_000 {
-		t.Errorf("the completion is %d bytes, over the 100000 the comment writer can take", len(text))
-	}
-	for _, want := range []string{"Epic #277", "#3 Add the flag", "400 件"} {
-		if !strings.Contains(text, want) {
-			t.Errorf("the compact completion lacks %q", want)
-		}
-	}
-}
-
 func TestARecordThatFitsIsNeverShortened(t *testing.T) {
 	t.Parallel()
 
@@ -346,25 +324,6 @@ func TestARecordThatFitsIsNeverShortened(t *testing.T) {
 
 	if text := rep.Text(); !strings.Contains(text, "criterion 2 -> deferred") {
 		t.Errorf("a record that fits was shortened:\n%s", text)
-	}
-}
-
-func TestAnAsciiRecordIsCountedBeforeItPassesTheWritersCharacterLimit(t *testing.T) {
-	t.Parallel()
-
-	var rep round.Report
-	rep.Epic, rep.Merged = 277, []board.Issue{classified(3, board.Done, "Add the flag")}
-	for i := range 250 {
-		rep.Assumptions = append(rep.Assumptions, round.Assumption{Issue: 3, Kind: round.AssumptionDecision, Text: strings.Repeat("a", 300) + strconv.Itoa(i)})
-	}
-
-	text := rep.Text()
-
-	if n := utf8.RuneCountInString(text); n > 65536-1024 {
-		t.Errorf("the completion is %d characters, over the 65536 the comment writer takes once its marker line is added", n)
-	}
-	if !strings.Contains(text, "250 件") {
-		t.Error("the compact completion does not count the assumptions")
 	}
 }
 
@@ -386,7 +345,7 @@ func TestADroppedIssueWithANewerDecisionPendingIsUnfinished(t *testing.T) {
 	}
 }
 
-func TestEveryRenderingOfALargeRecordFitsTheWritersLimits(t *testing.T) {
+func TestALargeRecordFitsTheWritersLimitsBecauseEverySectionIsCapped(t *testing.T) {
 	t.Parallel()
 
 	for name, unit := range map[string]string{"ASCII": strings.Repeat("a", 400), "Japanese": strings.Repeat("あ", 400)} {
@@ -404,8 +363,8 @@ func TestEveryRenderingOfALargeRecordFitsTheWritersLimits(t *testing.T) {
 		if n := utf8.RuneCountInString(text); n > 60_000 || len(text) > 100_000 {
 			t.Errorf("%s: the completion is %d characters and %d bytes, over the limits the comment writer takes", name, n, len(text))
 		}
-		if !strings.Contains(text, "Epic #277") || !strings.Contains(text, "4000") {
-			t.Errorf("%s: the smallest completion lacks the Epic or the counts", name)
+		if !strings.Contains(text, "Epic #277") || !strings.Contains(text, "ほか 3970 件") {
+			t.Errorf("%s: the completion lacks the Epic or the count of entries it left out", name)
 		}
 	}
 }

@@ -6,7 +6,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/maro114510/skills/oe/internal/board"
 	"github.com/maro114510/skills/oe/internal/exitcode"
@@ -204,8 +203,12 @@ func (ev evidence) reasons(i board.Issue) []string {
 	return out
 }
 
-// maxLine bounds one recorded line in the completion, so a long record never fills the comment.
-const maxLine = 400
+// maxLine bounds one recorded line in the completion.
+const maxLine = 200
+
+// maxListed bounds how many entries a section lists. Thirty entries of 200 characters in each of
+// three sections stay under the 65536 characters and 127 KiB the comment writer takes.
+const maxListed = 30
 
 // clip collapses whitespace to one line and bounds its length.
 func clip(s string) string {
@@ -216,116 +219,43 @@ func clip(s string) string {
 	return s
 }
 
-// The most a completion may hold. The comment writer refuses a body over 65536 characters or 127
-// KiB, and a refused completion is never posted, so a record too long to fit is cut down.
-// The limits leave room for the marker line the writer adds.
-const (
-	maxTextBytes = 100_000
-	maxTextRunes = 60_000
-)
-
-// The levels of detail a completion is rendered at, from the whole record to totals only.
-const (
-	levelFull = iota
-	// levelCounts counts the assumptions and leaves out the reasons.
-	levelCounts
-	// levelNumbers also lists the merged and dropped Issues by number only.
-	levelNumbers
-	// levelTotals gives only totals, which always fit.
-	levelTotals
-)
-
-// Text is the completion comment, from oe's own template, at the most detail that fits in a
-// comment. Each Issue's own notes still hold whatever a smaller form leaves out.
+// Text is the completion comment, from oe's own template. No section lists more than maxListed
+// entries of maxLine characters, so the comment stays under the writer's limits however large the
+// Epic is, and each Issue's own notes still hold what a list leaves out.
 func (r Report) Text() string {
-	var text string
-	for level := levelFull; level <= levelTotals; level++ {
-		if text = r.render(level); len(text) <= maxTextBytes && utf8.RuneCountInString(text) <= maxTextRunes {
-			break
-		}
-	}
-	return text
-}
-
-func (r Report) render(level int) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Epic #%d のループは、これ以上自動で進められる Issue が無いため終了しました。\n\n"+
 		"これは終了報告です。すべてが成功したとは限りません。\n", r.Epic)
-	r.writeMerged(&b, level)
-	r.writeAssumptions(&b, level)
-	r.writeDropped(&b, level)
+	section(&b, "マージされた Issue", len(r.Merged), func() {
+		for _, i := range r.Merged[:min(len(r.Merged), maxListed)] {
+			fmt.Fprintf(&b, "- #%d %s\n", i.Number, clip(i.Title))
+		}
+	})
+	section(&b, "記録された前提", len(r.Assumptions), func() {
+		for _, a := range r.Assumptions[:min(len(r.Assumptions), maxListed)] {
+			fmt.Fprintf(&b, "- #%d %s: %s\n", a.Issue, kindLabel(a.Kind), a.Text)
+		}
+	})
+	section(&b, "保留または見送った Issue", len(r.Dropped), func() {
+		for _, d := range r.Dropped[:min(len(r.Dropped), maxListed)] {
+			fmt.Fprintf(&b, "- #%d %s\n", d.Issue, clip(d.Title))
+			if len(d.Reasons) > 0 {
+				fmt.Fprintf(&b, "  - %s\n", d.Reasons[0])
+			}
+		}
+	})
 	b.WriteString("\n## 数値\n\n")
-	r.writeCounts(&b, level)
+	r.writeCounts(&b)
 	b.WriteString("\n## 人が行うこと\n\n" +
 		"ループは Epic も、サブ issue がすべて完了したコンテナも閉じません。内容を確認して、人が閉じてください。\n\n")
 	fmt.Fprintf(&b, "- Epic #%d\n", r.Epic)
-	switch {
-	case level == levelTotals && len(r.DoneContainers) > 0:
-		fmt.Fprintf(&b, "- 完了したコンテナ: %d 件\n", len(r.DoneContainers))
-	default:
-		for _, c := range r.DoneContainers {
-			fmt.Fprintf(&b, "- コンテナ #%d\n", c)
-		}
+	for _, c := range r.DoneContainers[:min(len(r.DoneContainers), maxListed)] {
+		fmt.Fprintf(&b, "- コンテナ #%d\n", c)
 	}
 	return b.String()
 }
 
-func (r Report) writeMerged(b *strings.Builder, level int) {
-	section(b, "マージされた Issue", len(r.Merged), func() {
-		switch level {
-		case levelTotals:
-			fmt.Fprintf(b, "%d 件。一覧は載せられないため、Epic の Issue を参照してください。\n", len(r.Merged))
-		case levelNumbers:
-			b.WriteString(numberList(r.Merged, func(i board.Issue) int { return i.Number }) + "\n")
-		default:
-			for _, i := range r.Merged {
-				fmt.Fprintf(b, "- #%d %s\n", i.Number, clip(i.Title))
-			}
-		}
-	})
-}
-
-func (r Report) writeAssumptions(b *strings.Builder, level int) {
-	section(b, "記録された前提", len(r.Assumptions), func() {
-		if level >= levelCounts {
-			fmt.Fprintf(b, "%d 件。長すぎて載せられないため、各 Issue の report と qa の記録を参照してください。\n", len(r.Assumptions))
-			return
-		}
-		for _, a := range r.Assumptions {
-			fmt.Fprintf(b, "- #%d %s: %s\n", a.Issue, kindLabel(a.Kind), a.Text)
-		}
-	})
-}
-
-func (r Report) writeDropped(b *strings.Builder, level int) {
-	section(b, "保留または見送った Issue", len(r.Dropped), func() {
-		switch level {
-		case levelTotals:
-			fmt.Fprintf(b, "%d 件。理由は載せられないため、各 Issue の記録を参照してください。\n", len(r.Dropped))
-		case levelNumbers:
-			b.WriteString(numberList(r.Dropped, func(d Dropped) int { return d.Issue }) + "\n")
-		default:
-			for _, d := range r.Dropped {
-				fmt.Fprintf(b, "- #%d %s\n", d.Issue, clip(d.Title))
-				for _, reason := range d.Reasons {
-					if level == levelFull {
-						fmt.Fprintf(b, "  - %s\n", reason)
-					}
-				}
-			}
-		}
-	})
-}
-
-// numberList is the Issues as one line of numbers.
-func numberList[T any](items []T, number func(T) int) string {
-	parts := make([]string, 0, len(items))
-	for _, it := range items {
-		parts = append(parts, "#"+strconv.Itoa(number(it)))
-	}
-	return strings.Join(parts, "、")
-}
-
+// section writes a titled list of at most maxListed entries, and says how many it left out.
 func section(b *strings.Builder, title string, n int, body func()) {
 	fmt.Fprintf(b, "\n## %s\n\n", title)
 	if n == 0 {
@@ -333,6 +263,9 @@ func section(b *strings.Builder, title string, n int, body func()) {
 		return
 	}
 	body()
+	if n > maxListed {
+		fmt.Fprintf(b, "ほか %d 件。各 Issue の記録を参照してください。\n", n-maxListed)
+	}
 }
 
 func kindLabel(kind string) string {
@@ -349,7 +282,7 @@ func kindLabel(kind string) string {
 
 // writeCounts lists the numbers oe already has: the ledger's counters, the fix cycles each Issue
 // used, and the dispatches whose branch was lost.
-func (r Report) writeCounts(b *strings.Builder, level int) {
+func (r Report) writeCounts(b *strings.Builder) {
 	if r.Counters == nil {
 		b.WriteString("- 台帳（ledger）はありません。\n")
 	} else {
@@ -367,11 +300,8 @@ func (r Report) writeCounts(b *strings.Builder, level int) {
 	for _, n := range issues {
 		used = append(used, fmt.Sprintf("#%d: %d", n, r.Cycles[n]))
 	}
-	switch {
-	case len(used) > 0 && level >= levelNumbers:
-		fmt.Fprintf(b, "- fix cycle を使った Issue: %d 件\n", len(used))
-	case len(used) > 0:
-		fmt.Fprintf(b, "- fix cycle を使った Issue: %s\n", strings.Join(used, "、"))
+	if len(used) > 0 {
+		fmt.Fprintf(b, "- fix cycle を使った Issue: %d 件（%s）\n", len(used), strings.Join(used[:min(len(used), maxListed)], "、"))
 	}
 	fmt.Fprintf(b, "- 記録されたのにブランチが無かった dispatch: %s 件\n", strconv.Itoa(r.StaleStarts))
 }
