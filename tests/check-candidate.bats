@@ -92,6 +92,21 @@ shell_block() {
   [ "${status}" -eq 0 ]
 }
 
+@test "a variable may be set to a literal path and to nothing else" {
+  shell_block "${cand}/router.md" 'f="/tmp/tmp.abc123"' "cat >\"\$f\" <<'REPORT'" 'text' 'REPORT' 'oe worker report --issue 7 --file "$f"'
+  run bash "${target}" "${cand}"
+  [ "${status}" -eq 0 ]
+  for line in 'f="$HOME/x"' 'f="$(git push)"' 'f="`git push`"' 'f=/tmp/x' 'f="/tmp/x" git push'; do
+    printf '# Router\n' >"${cand}/router.md"
+    shell_block "${cand}/router.md" "${line}"
+    run bash "${target}" "${cand}"
+    [ "${status}" -eq 1 ] || {
+      echo "accepted: ${line}"
+      return 1
+    }
+  done
+}
+
 @test "cat is allowed only to write a variable-named file from a heredoc" {
   for line in 'cat /etc/passwd' 'cat "$f"' "cat >/tmp/x <<'EOF'" "cat >>\"\$f\" <<'EOF'" "cat >\"\$f\" <<'EOF' && git push"; do
     printf '# Router\n' >"${cand}/router.md"
