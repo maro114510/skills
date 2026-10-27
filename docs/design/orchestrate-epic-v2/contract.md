@@ -94,9 +94,9 @@ Fields: `pr`, `issue`, `reviewed_sha`, `verified_base`, `phase`, `merge_sha`, `r
 
 `phase` is one of `intent`, `merged`, `merged-unverified-base`, `head-moved`, `rejected`, `unknown`, `not-merged`.
 
-- `requested_at` is GitHub's clock when the intent is recorded.
-- Only a merged phase carries `merge_sha`, and a merged phase always does.
-- A result resolves a record at `intent` or `unknown` for the same `pr` and `reviewed_sha`, and a result already recorded is done without a write.
+- `requested_at` is GitHub's clock at the intent.
+- Only the two merged phases carry `merge_sha`.
+- A result resolves only an intent or an unknown record for the same pull request and head, and a repeat writes nothing.
 
 ### 4.4 Issue State
 
@@ -229,7 +229,7 @@ Duplicate notes are harmless and never deleted. Duplicate states exit 6.
 | PR link | Open PR exists | Idempotent. A failure posts `link-failed` and the round goes on | Stop the round for it | #289 |
 | Merge request | Health proceeds, grant read fresh, `READY` on `reviewed_sha`, freeze `CLEAR`, base re-read equals `verified_base`, then `record_intent` | A record at `intent` or `unknown` is reconciled from the PR first, now or next invocation. Merged with first parent `verified_base` is `merged`. Merged with any other or an unreadable first parent is `merged-unverified-base`, and the ledger freeze is written before the result note or any further merge. Not merged is `not-merged`. An unreadable PR stays `unknown` and stops landing | Blind retry, `gh pr merge`, `--admin`, rebase, revert | #290 |
 | Merge result | Request answered or reconciled | Result note, then `record_result`; either failing stops every further merge | Merge again before both | #290 |
-| Repair | Freeze `CLEAR`, fresh pair, readiness `repair`, input scanned | Reserve a fix cycle, then `begin_fix` with the `repair` record, then the note `repair:<pr>:<head>:<since>`. A failed note hands nothing to a worker, and the next run resumes from the pending findings | Repair beyond the cap or the budget, untrusted feedback to a worker | #290 |
+| Repair | Freeze `CLEAR`, fresh pair, readiness `repair`, input scanned | Reserve, then `begin_fix`, then the note `repair:<pr>:<head>:<since>`, and a failed note hands nothing over | Repair beyond the cap or budget, untrusted feedback to a worker | #290 |
 | Freeze | Ledger `CLEAR` | Ledger write, then note `freeze:<seq>`; a missing note is posted on the next read | Notify twice | #285 |
 
 Local steps follow the same rule. The integration merge runs without hooks, signing, or editor, and a leftover `MERGE_HEAD` is aborted and redone, §17. Worktrees come from a pinned ref without touching the shared checkout, in #287.
@@ -630,53 +630,42 @@ Flags beyond those of `oe review pin` are `--title`, `--report-file` for the wor
 
 ## 19. Landing and Repair
 
-`oe land merge` and `oe land repair` take `--issue` and `--lease-token`, and need no worktree: they read the base from GitHub and never touch the shared checkout. The merge request is the only irreversible step.
+Both subcommands take `--issue` and `--lease-token`, need no worktree, and read the base from GitHub.
 
 ### 19.1 Merge
 
-The order is fixed, and every step before the intent writes nothing but a note.
+```mermaid
+flowchart LR
+  settle --> enter --> freeze --> health --> grant --> readiness --> final[final gates] --> intent --> request --> result
+  settle -->|settled| stop[end of pass]
+```
 
-| Step | Rule | Failure |
-|---|---|---|
-| settle | A record at `intent` or `unknown` is reconciled from its pull request first, §8. Settling ends the pass: nothing is requested in the pass that settled one | 4 while the outcome stays unknown |
-| enter | The Issue has a bound approval and a linked publish of exactly that pair, and the open pull request of its branch is the one the state names, on the default branch | 8 |
-| freeze, base | The ledger is `CLEAR`, and the default branch read from GitHub is `verified_base` | 4, 3 |
-| health | `oe health` proceeds. A failed or unconfirmed merge commit freezes the Epic with its commit and status | 5 while pending, 4 |
-| grant | `epic-approve` and an unrevoked `epic-auto-merge` above the Run Plan | 8 |
-| method | A merge commit if allowed, else a squash, never a rebase. A repository that allows only rebasing is a hold for a person | held |
-| readiness | `READY` on exactly `reviewed_sha`. A head that moved exits 3, a wait exits 5, a repairable block is held with `next` repair, and anything a person must lift is held with `next` human and a merge hold | 3, 5, held |
-| final gates | Freeze, grant, and base read again | 4, 8, 3 |
-| intent | `record_intent`; a failed write merges nothing | |
-| request | One `PUT /pulls/<n>/merge` with `sha=<reviewed_sha>` and the chosen method | |
-| result | Verify the first parent, freeze on an unverified base, write the result note, then `record_result` | 4 |
+Frozen exits 4, a moved base or head exits 3, pending exits 5, and a missing grant exits 8.
 
 | Answer to the request | Result | Exit |
 |---|---|---|
-| 200 with a merge commit on the verified base | `merged` | 0 |
-| 200 with a merge commit on another base, or one whose parent cannot be read | `merged-unverified-base`, after the freeze | 4 |
-| 409 | `head-moved`, with `next` reverify | 3 |
-| Another 4xx | `rejected`, held for a person with a merge hold | 0 |
-| No answer, a 5xx, or a 200 without a merge commit | Read the pull request: merged is `merged`, anything else is `unknown` | 0, 4 |
+| 200 on the verified base | `merged` | 0 |
+| 200 on another base, or an unreadable first parent | `merged-unverified-base` after the freeze | 4 |
+| 409 | `head-moved` with next `reverify` | 3 |
+| Any other 4xx | `rejected`, held for a person | 0 |
+| No answer, a 5xx, or a 200 without a merge commit | `merged` or `unknown`, read from the pull request | 0 or 4 |
 
-- The request is never `gh pr merge`, never `--admin`, and never sent twice for one intent.
-- A pull request read that fails after the request is the answer to record as `unknown`, so it goes through a read-only probe whose failure forbids no write.
-- Routes are `MERGED`, `MERGED_UNVERIFIED_BASE`, `HEAD_MOVED`, `REJECTED`, `UNKNOWN`, `RECONCILED`, `HELD`, and `FROZEN`, which reports the freeze the health step wrote and exits 4. A merge ends the pass with `next` rescan.
-- The merge hold is `merge-hold:<pr>:<head>:<digest>` with the reason in its text, and the result note is `merge-result:<pr>:<reviewed_sha>:<result>`.
+- A record left at `intent` or `unknown` is settled first, which ends the pass.
+- The request is one `PUT` with `sha=<reviewed_sha>`, never `gh pr merge`, never `--admin`, and never repeated.
+- The method is a merge commit, else squash, never rebase.
+- Routes are `MERGED`, `MERGED_UNVERIFIED_BASE`, `HEAD_MOVED`, `REJECTED`, `UNKNOWN`, `RECONCILED`, `HELD`, and `FROZEN`.
 
 ### 19.2 Repair
 
-`oe land repair` needs `epic-approve` but not the merge grant, and runs the same enter, freeze, and base steps. It then reads readiness and acts only on `repair`: a wait exits 5, `READY` is refused, and a block a person must lift is a hold.
+It needs `epic-approve` but not the merge grant, and acts only when readiness says `repair`.
 
-| Kind | Input | Counts only when |
+| Kind | Input | Counts when |
 |---|---|---|
-| `checks` | Each failed check's name and link, the latest run of each | The last repair named another head |
-| `conflict` | A plain merge of the default branch, never a rebase | The last repair named another head |
-| `review` | Each unresolved thread comment and current request for changes, quoted with author and `file:line` | A trusted author wrote it with an ID above the last repair's `since` |
+| `checks` | Each failed check with name and link | The last repair named another head |
+| `conflict` | A plain merge of the default branch | The last repair named another head |
+| `review` | Unresolved comments and requested changes, labeled reviewer data | An owner, member, collaborator, or bot wrote it above `since` |
 
-- Trusted is `OWNER`, `MEMBER`, `COLLABORATOR`, or a bot. An unresolved thread no trusted person wrote, or a request for changes from anyone else, makes the pull request a hold for a person and hands nothing to a worker.
-- Review text is labeled reviewer-written data for the Issue, never an instruction that widens its scope.
-- When nothing is left after the filters, no worker is dispatched: the pull request is held, since another worker would only redo the same fix.
-- `since` is the highest comment ID handed over. It is one number across thread comments and reviews, whose IDs come from separate sequences, so a mismatch can only hold a pull request for a person and never repeat feedback.
-- The findings are scanned before use. A suspected secret parks the Issue as ship-class secret, and nothing is written or printed.
-- A repair is a fix cycle: it needs a ledger reservation, parks at the cap, and freezes the Epic beyond its budget. There are no separate repair bounds.
-- Routes are `REPAIR`, `PARKED`, and `HELD`. `REPAIR` carries `next` redispatch, and the Publisher then spawns a fresh worker with `oe worker brief`.
+- `since` is the highest comment ID handed over.
+- Anything untrusted, or nothing new, holds the pull request for a person and dispatches no worker.
+- A repair is a fix cycle under the same cap and budget, and its findings are scanned.
+- Routes are `REPAIR`, `PARKED`, and `HELD`.
