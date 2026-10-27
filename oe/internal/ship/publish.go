@@ -242,6 +242,7 @@ func (f *flow) remoteHead(ctx context.Context) (string, error) {
 
 // openPR reads the branch's pull requests and returns the one open, or 0.
 // A branch with only closed or merged pull requests is the board's to classify, never ours to open another for.
+// An open pull request that targets another branch than the default is refused, since create-linked-pr.sh links nothing for it and exits 0.
 func (f *flow) openPR(ctx context.Context) (int, error) {
 	prs, err := snapshot.ReadBranchPRs(ctx, f.d.Client, f.d.In.Repo, f.st.Branch)
 	if err != nil {
@@ -253,6 +254,8 @@ func (f *flow) openPR(ctx context.Context) (int, error) {
 		case pr.State != snapshot.StateOpen:
 		case open != 0:
 			return 0, f.refused("more than one pull request is open for %s; a person decides which stays", f.st.Branch)
+		case pr.Base != f.d.In.DefaultBranch:
+			return 0, f.refused("the open pull request #%d for %s targets %s, not the default branch %s; a person decides", pr.Number, f.st.Branch, pr.Base, f.d.In.DefaultBranch)
 		default:
 			open = pr.Number
 		}
@@ -460,6 +463,9 @@ func (f *flow) openPullRequest(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	if err := f.remoteStillApproved(ctx); err != nil {
+		return err
+	}
 	if pr != 0 {
 		err = f.link(ctx, pr)
 	} else {
@@ -473,6 +479,19 @@ func (f *flow) openPullRequest(ctx context.Context) error {
 	}
 	f.res.Route, f.res.Next, f.res.PR = RoutePublished, NextLand, pr
 	f.res.Reason = "the approved head is on origin and its pull request is linked"
+	return nil
+}
+
+// remoteStillApproved reads the branch on origin once more, right before a pull request is linked or created.
+// Anyone may move the branch after the push, and a pull request on another head must never be recorded as the approved one.
+func (f *flow) remoteStillApproved(ctx context.Context) error {
+	remote, err := f.remoteHead(ctx)
+	if err != nil {
+		return err
+	}
+	if remote != f.a.ReviewedSHA {
+		return f.externalPush(ctx, remote)
+	}
 	return nil
 }
 

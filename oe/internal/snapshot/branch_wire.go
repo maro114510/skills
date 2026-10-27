@@ -10,16 +10,22 @@ const branchPullsQuery = `query($owner: String!, $name: String!, $branch: String
   repository(owner: $owner, name: $name) {
     pullRequests(headRefName: $branch, states: [OPEN, CLOSED, MERGED], first: 100, after: $after) {
       pageInfo { hasNextPage endCursor }
-      nodes { number state mergedAt createdAt headRefName headRefOid isCrossRepository }
+      nodes { number state mergedAt createdAt headRefName baseRefName headRefOid isCrossRepository }
     }
   }
 }`
 
+// BranchPR is a pull request of one branch, with the branch it targets.
+type BranchPR struct {
+	PR
+	Base string
+}
+
 // ReadBranchPRs reads every pull request whose head is the branch of this repository, in any state.
 // A pull request from a fork that uses the same branch name is not one.
 // The listing is complete or it is an error, so a caller never opens a second pull request on a page it could not read.
-func ReadBranchPRs(ctx context.Context, c *gh.Client, repo, branch string) ([]PR, error) {
-	out := []PR{}
+func ReadBranchPRs(ctx context.Context, c *gh.Client, repo, branch string) ([]BranchPR, error) {
+	out := []BranchPR{}
 	err := eachPage("the pull requests of "+branch, func(after string) (PageInfo, bool, error) {
 		var data pullsData
 		if err := c.GraphQL(ctx, branchPullsQuery, pageVars(repo, after, gh.String("branch", branch)), &data); err != nil {
@@ -36,11 +42,14 @@ func ReadBranchPRs(ctx context.Context, c *gh.Client, repo, branch string) ([]PR
 			if *n.IsCrossRepository {
 				continue
 			}
+			if n.BaseRefName == "" {
+				return PageInfo{}, false, unreadable("PR #%d has no base branch", n.Number)
+			}
 			state := n.State
 			if n.MergedAt != nil {
 				state = StateMerged
 			}
-			out = append(out, PR{Number: n.Number, State: state, Branch: n.HeadRefName, HeadSHA: n.HeadRefOid, CreatedAt: n.CreatedAt})
+			out = append(out, BranchPR{PR: PR{Number: n.Number, State: state, Branch: n.HeadRefName, HeadSHA: n.HeadRefOid, CreatedAt: n.CreatedAt}, Base: n.BaseRefName})
 		}
 		return list.PageInfo, false, nil
 	})

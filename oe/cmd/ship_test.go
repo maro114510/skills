@@ -24,19 +24,27 @@ import (
 type prBoard struct {
 	mu  sync.Mutex
 	prs []boardPR
+	// lists counts the listings answered. onList runs after each one, with its count, as another actor would.
+	lists  int
+	onList func(n int)
 }
 
 type boardPR struct {
 	number int
 	state  string
 	branch string
+	base   string
 }
 
 func (b *prBoard) add(branch, prState string) int {
+	return b.addOnBase(branch, prState, "main")
+}
+
+func (b *prBoard) addOnBase(branch, prState, base string) int {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	n := firstPR + len(b.prs)
-	b.prs = append(b.prs, boardPR{number: n, state: prState, branch: branch})
+	b.prs = append(b.prs, boardPR{number: n, state: prState, branch: branch, base: base})
 	return n
 }
 
@@ -49,12 +57,17 @@ func (b *prBoard) count() int {
 // listing answers the per-branch pull request query.
 func (b *prBoard) listing(v map[string]string) string {
 	b.mu.Lock()
-	defer b.mu.Unlock()
 	var nodes []string
 	for _, pr := range b.prs {
 		if pr.branch == v["branch"] {
-			nodes = append(nodes, ghfake.PullNode(pr.number, pr.state, pr.branch, "2026-10-05T00:00:00Z", pr.state == "MERGED"))
+			nodes = append(nodes, ghfake.PullNodeOnBase(pr.number, pr.state, pr.branch, pr.base, "2026-10-05T00:00:00Z", pr.state == "MERGED"))
 		}
+	}
+	b.lists++
+	n, hook := b.lists, b.onList
+	b.mu.Unlock()
+	if hook != nil {
+		hook(n)
 	}
 	return ghfake.PullPage("["+strings.Join(nodes, ",")+"]", false, "")
 }
@@ -762,6 +775,63 @@ func TestPublishRefusesABranchWhosePullRequestWasClosed(t *testing.T) {
 	}
 	if n := len(s.pushes()); n != 0 || s.scripts.created() != 0 || s.stateOf(t).Publish != nil {
 		t.Errorf("pushes %d, created %d, record %+v", n, s.scripts.created(), s.stateOf(t).Publish)
+	}
+}
+
+// TestPublishRefusesAnOpenPullRequestOnAnotherBaseBeforeAnyPush shows that a pull request aimed at a branch other than the default is never reused.
+// create-linked-pr.sh links nothing for it and exits 0, so the publish would otherwise end linked on a pull request that cannot close the Issue.
+func TestPublishRefusesAnOpenPullRequestOnAnotherBaseBeforeAnyPush(t *testing.T) {
+	t.Parallel()
+
+	s := newShipFlow(t, "")
+	s.board.addOnBase("feat/issue-7", "OPEN", "release/1")
+	r := s.publish()
+	if r.code != 8 || !strings.Contains(r.stdout, "release/1") {
+		t.Fatalf("exit %d, stdout %q", r.code, r.stdout)
+	}
+	if n := len(s.pushes()); n != 0 || s.scripts.created() != 0 || s.scripts.linked() != 0 || s.stateOf(t).Publish != nil {
+		t.Errorf("pushes %d, created %d, linked %d, record %+v", n, s.scripts.created(), s.scripts.linked(), s.stateOf(t).Publish)
+	}
+}
+
+// TestPublishStopsWhenTheRemoteMovesAfterThePushAndBeforeThePullRequest shows that the branch is read again right before the link or create.
+// A pull request on someone else's commit is neither linked nor created, and the record stays at pushed.
+func TestPublishStopsWhenTheRemoteMovesAfterThePushAndBeforeThePullRequest(t *testing.T) {
+	t.Parallel()
+
+	for name, existing := range map[string]bool{"a new pull request": false, "an existing pull request": true} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			s := newShipFlow(t, "")
+			if existing {
+				s.board.add("feat/issue-7", "OPEN")
+			}
+			// The first listing is the plan's, before the push; the second is the one right before the link or create.
+			s.board.onList = func(n int) {
+				if n == 2 {
+					gitIn(t, s.shared, "push", "-q", "-f", "origin", s.base+":refs/heads/feat/issue-7")
+				}
+			}
+			r := s.publish()
+			if r.code != 8 || !strings.Contains(r.stdout, "external push") {
+				t.Fatalf("exit %d, stdout %q", r.code, r.stdout)
+			}
+			s.wantPushedButNotOpened(t)
+		})
+	}
+}
+
+// wantPushedButNotOpened checks that no pull request was linked or created, the record stays at pushed, and origin still holds the other party's commit.
+func (s shipFlow) wantPushedButNotOpened(t *testing.T) {
+	t.Helper()
+	if s.scripts.created() != 0 || s.scripts.linked() != 0 {
+		t.Errorf("created %d, linked %d, want neither", s.scripts.created(), s.scripts.linked())
+	}
+	if st := s.stateOf(t); st.Publish == nil || st.Publish.Phase != "pushed" {
+		t.Errorf("record = %+v, want the pushed phase kept", st.Publish)
+	}
+	if rem := s.remoteHead(t); rem != s.base {
+		t.Errorf("origin holds %s, want the other party's %s untouched", rem, s.base)
 	}
 }
 
