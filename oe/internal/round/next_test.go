@@ -209,3 +209,18 @@ func TestBeginRoundNeverResetsWhatTheInvocationKeeps(t *testing.T) {
 		t.Errorf("session = %+v, want polls, deferrals, and no-checks counts kept: allowances belong to the lease session, not to a round", s)
 	}
 }
+
+func TestRequireRoundRefusesASessionWhoseFirstRoundNeverBeganWithoutReadingAnything(t *testing.T) {
+	t.Parallel()
+
+	s := round.New()
+	if err := round.RequireRound(s); exitcode.CodeOf(err) != exitcode.Refused {
+		t.Errorf("RequireRound before a round = %v, want exit 8", err)
+	}
+
+	round.BeginRound(s, "9:old", false)
+
+	if err := round.RequireRound(s); err != nil {
+		t.Errorf("RequireRound after a round began = %v, want nil", err)
+	}
+}
