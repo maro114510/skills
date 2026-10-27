@@ -24,12 +24,38 @@ func Repair(ctx context.Context, d Deps, n int) (Result, error) {
 }
 
 func (f *flow) runRepair(ctx context.Context) error {
-	for _, step := range []stage{always(f.enter), always(f.approvedByEpic), always(f.freezeAndBase), f.repair} {
+	for _, step := range []stage{f.resume, always(f.enter), always(f.approvedByEpic), always(f.freezeAndBase), f.repair} {
 		if done, err := step(ctx); done || err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// resume finishes a repair whose marker was never posted.
+// The cycle is reserved, the findings are pending for this head, and the approval is gone, so the normal path would refuse.
+// The marker is posted by its key, which does nothing when it exists, and nothing is charged again.
+func (f *flow) resume(ctx context.Context) (bool, error) {
+	st, err := f.d.S.DispatchState(ctx, f.n)
+	if err != nil {
+		return false, err
+	}
+	r := st.Repair
+	if st.Approval != nil || len(st.PendingFindings) == 0 || r == nil || r.PR <= 0 || st.HeadSHA == nil || *st.HeadSHA != r.Head {
+		return false, nil
+	}
+	if _, err := f.d.S.Check(ctx); err != nil {
+		return true, err
+	}
+	nr, err := f.d.S.PostNote(ctx, f.n, fmt.Sprintf("repair:%d:%s:%d", r.PR, r.Head, r.Since), RepairNote(r.PR, r.Head, nil, r.Since))
+	if err != nil {
+		return true, err
+	}
+	f.res.PR, f.res.Notes = r.PR, append(f.res.Notes, nr)
+	f.res.Findings, f.res.Since = st.PendingFindings, r.Since
+	f.res.Route, f.res.Next = RouteRepair, coord.NextRedispatch
+	f.res.Reason = "the repair was recorded but its marker was missing; the marker is posted now, so spawn a fresh worker with oe worker brief"
+	return true, nil
 }
 
 // approvedByEpic requires the Epic's approval and nothing more: a repair is dispatch, review, and shipping, never a merge.

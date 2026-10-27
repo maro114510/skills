@@ -56,7 +56,11 @@ func MergeResultNote(pr int, reviewed, base, method, result, detail string) stri
 }
 
 // RepairNote records that a pull request's repair was handed to a worker, so the same head and window are never handed over twice.
+// A resumed repair does not know its kinds, and the line is left out.
 func RepairNote(pr int, head string, kinds []string, since int64) string {
-	return fmt.Sprintf("PR #%d の修復を worker に依頼しました（種類: %s）。\n\nHEAD: %s\n指摘の既読位置（since）: %d\n",
-		pr, strings.Join(kinds, ", "), head, since)
+	what := ""
+	if len(kinds) > 0 {
+		what = fmt.Sprintf("（種類: %s）", strings.Join(kinds, ", "))
+	}
+	return fmt.Sprintf("PR #%d の修復を worker に依頼しました%s。\n\nHEAD: %s\n指摘の既読位置（since）: %d\n", pr, what, head, since)
 }
