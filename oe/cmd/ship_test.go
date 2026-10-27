@@ -34,17 +34,23 @@ type boardPR struct {
 	state  string
 	branch string
 	base   string
+	body   string
 }
 
-func (b *prBoard) add(branch, prState string) int {
-	return b.addOnBase(branch, prState, "main")
+// add opens a pull request on the default branch whose body closes Issue 7, as oe's own would.
+func (b *prBoard) add(branch, prState string) {
+	b.addWith(branch, prState, "main", "Closes #7\n")
 }
 
-func (b *prBoard) addOnBase(branch, prState, base string) int {
+func (b *prBoard) addOnBase(branch, prState, base string) {
+	b.addWith(branch, prState, base, "Closes #7\n")
+}
+
+func (b *prBoard) addWith(branch, prState, base, body string) int {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	n := firstPR + len(b.prs)
-	b.prs = append(b.prs, boardPR{number: n, state: prState, branch: branch, base: base})
+	b.prs = append(b.prs, boardPR{number: n, state: prState, branch: branch, base: base, body: body})
 	return n
 }
 
@@ -60,7 +66,7 @@ func (b *prBoard) listing(v map[string]string) string {
 	var nodes []string
 	for _, pr := range b.prs {
 		if pr.branch == v["branch"] {
-			nodes = append(nodes, ghfake.PullNodeOnBase(pr.number, pr.state, pr.branch, pr.base, "2026-10-05T00:00:00Z", pr.state == "MERGED"))
+			nodes = append(nodes, ghfake.PullNodeOnBase(pr.number, pr.state, pr.branch, pr.base, pr.body, "2026-10-05T00:00:00Z", pr.state == "MERGED"))
 		}
 	}
 	b.lists++
@@ -118,7 +124,7 @@ func (f *fakeScripts) createOrLink(s ship.Script) (ship.ScriptResult, error) {
 	f.mu.Lock()
 	f.bodies = append(f.bodies, string(body))
 	f.mu.Unlock()
-	n := f.board.add(s.Args[slices.Index(s.Args, "--head")+1], "OPEN")
+	n := f.board.addWith(s.Args[slices.Index(s.Args, "--head")+1], "OPEN", "main", string(body))
 	if f.crashAfterCreate {
 		return ship.ScriptResult{}, errors.New("the process was killed after the pull request existed")
 	}
@@ -832,6 +838,50 @@ func (s shipFlow) wantPushedButNotOpened(t *testing.T) {
 	}
 	if rem := s.remoteHead(t); rem != s.base {
 		t.Errorf("origin holds %s, want the other party's %s untouched", rem, s.base)
+	}
+}
+
+// TestPublishNotesAnExistingPullRequestThatNamesNoIssue shows that a reused pull request whose body names neither Closes nor Related for the Issue is not recorded as linked.
+// create-linked-pr.sh --link exits 0 and links nothing for such a body, so oe reads the body itself; the publish still ends and the Issue gets one note.
+func TestPublishNotesAnExistingPullRequestThatNamesNoIssue(t *testing.T) {
+	t.Parallel()
+
+	for name, body := range map[string]string{
+		"no closing line":        "Opened by hand\n",
+		"another Issue":          "Closes #8\n",
+		"a line inside a fence":  "```\nCloses #7\n```\n",
+		"a keyword in the prose": "This closes #7 eventually\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			s := newShipFlow(t, "")
+			s.board.addWith("feat/issue-7", "OPEN", "main", body)
+			r := s.publish()
+			got := decode[shipped](t, r)
+			wantPublished(t, r, got)
+			if got.Link != "failed" || s.noteKeys("link-failed:7:30") != 1 || s.scripts.created() != 0 {
+				t.Errorf("link = %q, link-failed notes = %d, created = %d, want failed, one note, nothing created", got.Link, s.noteKeys("link-failed:7:30"), s.scripts.created())
+			}
+		})
+	}
+}
+
+// TestPublishLinksAnExistingPullRequestThatNamesTheIssue shows that a reused pull request which closes or only relates the Issue is linked.
+func TestPublishLinksAnExistingPullRequestThatNamesTheIssue(t *testing.T) {
+	t.Parallel()
+
+	for name, body := range map[string]string{"closes": "Closes #7\n", "related": "Intro\nRelated #7 (2 open sub-issues remain)\n", "keyword": "fixes: #7\n"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			s := newShipFlow(t, "")
+			s.board.addWith("feat/issue-7", "OPEN", "main", body)
+			r := s.publish()
+			got := decode[shipped](t, r)
+			wantPublished(t, r, got)
+			if got.Link != "ok" || s.noteKeys("link-failed:") != 0 || s.scripts.linked() != 1 {
+				t.Errorf("link = %q, notes = %d, link runs = %d, want ok, no note, one link run", got.Link, s.noteKeys("link-failed:"), s.scripts.linked())
+			}
+		})
 	}
 }
 

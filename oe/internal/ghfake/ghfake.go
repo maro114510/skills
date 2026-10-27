@@ -302,17 +302,17 @@ func PullPage(nodes string, more bool, cursor string) string {
 
 // PullNode is one pull request in the listing.
 func PullNode(n int, state, branch, created string, merged bool) string {
-	return PullNodeOnBase(n, state, branch, "main", created, merged)
+	return PullNodeOnBase(n, state, branch, "main", "", created, merged)
 }
 
-// PullNodeOnBase is a pull request of the branch that targets the base branch.
-func PullNodeOnBase(n int, state, branch, base, created string, merged bool) string {
+// PullNodeOnBase is a pull request of the branch that targets the base branch, with the body.
+func PullNodeOnBase(n int, state, branch, base, body, created string, merged bool) string {
 	mergedAt := "null"
 	if merged {
 		mergedAt = `"2026-10-10T00:00:00Z"`
 	}
-	return fmt.Sprintf(`{"number":%d,"state":%q,"mergedAt":%s,"createdAt":%q,"headRefName":%q,"baseRefName":%q,"headRefOid":"sha%d","isCrossRepository":false}`,
-		n, state, mergedAt, created, branch, base, n)
+	return fmt.Sprintf(`{"number":%d,"state":%q,"mergedAt":%s,"createdAt":%q,"headRefName":%q,"baseRefName":%q,"body":%q,"headRefOid":"sha%d","isCrossRepository":false}`,
+		n, state, mergedAt, created, branch, base, body, n)
 }
 
 // ForkPullNode is a pull request whose head branch is in another repository.

@@ -115,3 +115,21 @@ func PRNumber(out string) (int, bool) {
 	}
 	return 0, false
 }
+
+var referenceRE = regexp.MustCompile(`(?i)^\s*(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?|related):?\s+#([0-9]+)\b`)
+var fenceRE = regexp.MustCompile("^\\s*(?:```|~~~)")
+
+// References reports whether a pull request body names the Issue on a Closes or Related line outside a code fence.
+func References(body string, issue int) bool {
+	fenced := false
+	for line := range strings.SplitSeq(body, "\n") {
+		if fenceRE.MatchString(line) {
+			fenced = !fenced
+			continue
+		}
+		if m := referenceRE.FindStringSubmatch(line); !fenced && m != nil && m[1] == strconv.Itoa(issue) {
+			return true
+		}
+	}
+	return false
+}

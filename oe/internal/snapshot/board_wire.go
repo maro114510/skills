@@ -316,6 +316,7 @@ type pullNode struct {
 	CreatedAt         string  `json:"createdAt"`
 	HeadRefName       string  `json:"headRefName"`
 	BaseRefName       string  `json:"baseRefName"`
+	Body              string  `json:"body"`
 	HeadRefOid        string  `json:"headRefOid"`
 	IsCrossRepository *bool   `json:"isCrossRepository"`
 }

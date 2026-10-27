@@ -26,6 +26,12 @@ func LinkFailedNote(n, pr, exit int) string {
 		"PR は作成済みで、公開は完了しています。手動で `Closes #%d` の紐付けを確認してください。\n", pr, n, exit, n)
 }
 
+// LinkMissingNote says an existing pull request was reused but its body does not name the Issue.
+func LinkMissingNote(n, pr int) string {
+	return fmt.Sprintf("PR #%d は既に存在し、本文に #%d への `Closes` / `Related` の行がありません。\n\n"+
+		"公開は完了していますが、マージしても #%d は閉じません。PR 本文に `Closes #%d` を追加してください。\n", pr, n, n, n)
+}
+
 // asScan reports whether err is a note the secret scan refused.
 func asScan(err error) (*coord.ScanError, bool) {
 	scanErr, ok := errors.AsType[*coord.ScanError](err)

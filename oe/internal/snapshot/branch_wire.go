@@ -10,15 +10,16 @@ const branchPullsQuery = `query($owner: String!, $name: String!, $branch: String
   repository(owner: $owner, name: $name) {
     pullRequests(headRefName: $branch, states: [OPEN, CLOSED, MERGED], first: 100, after: $after) {
       pageInfo { hasNextPage endCursor }
-      nodes { number state mergedAt createdAt headRefName baseRefName headRefOid isCrossRepository }
+      nodes { number state mergedAt createdAt headRefName baseRefName body headRefOid isCrossRepository }
     }
   }
 }`
 
-// BranchPR is a pull request of one branch, with the branch it targets.
+// BranchPR is a pull request of one branch, with the branch it targets and its body.
 type BranchPR struct {
 	PR
 	Base string
+	Body string
 }
 
 // ReadBranchPRs reads every pull request whose head is the branch of this repository, in any state.
@@ -49,7 +50,7 @@ func ReadBranchPRs(ctx context.Context, c *gh.Client, repo, branch string) ([]Br
 			if n.MergedAt != nil {
 				state = StateMerged
 			}
-			out = append(out, BranchPR{PR: PR{Number: n.Number, State: state, Branch: n.HeadRefName, HeadSHA: n.HeadRefOid, CreatedAt: n.CreatedAt}, Base: n.BaseRefName})
+			out = append(out, BranchPR{PR: PR{Number: n.Number, State: state, Branch: n.HeadRefName, HeadSHA: n.HeadRefOid, CreatedAt: n.CreatedAt}, Base: n.BaseRefName, Body: n.Body})
 		}
 		return list.PageInfo, false, nil
 	})

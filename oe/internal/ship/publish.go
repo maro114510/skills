@@ -240,28 +240,28 @@ func (f *flow) remoteHead(ctx context.Context) (string, error) {
 	return "", nil
 }
 
-// openPR reads the branch's pull requests and returns the one open, or 0.
+// openPR reads the branch's pull requests and returns the one open, or a zero value when none is.
 // A branch with only closed or merged pull requests is the board's to classify, never ours to open another for.
 // An open pull request that targets another branch than the default is refused, since create-linked-pr.sh links nothing for it and exits 0.
-func (f *flow) openPR(ctx context.Context) (int, error) {
+func (f *flow) openPR(ctx context.Context) (snapshot.BranchPR, error) {
 	prs, err := snapshot.ReadBranchPRs(ctx, f.d.Client, f.d.In.Repo, f.st.Branch)
 	if err != nil {
-		return 0, err
+		return snapshot.BranchPR{}, err
 	}
-	open := 0
+	var open snapshot.BranchPR
 	for _, pr := range prs {
 		switch {
 		case pr.State != snapshot.StateOpen:
-		case open != 0:
-			return 0, f.refused("more than one pull request is open for %s; a person decides which stays", f.st.Branch)
+		case open.Number != 0:
+			return snapshot.BranchPR{}, f.refused("more than one pull request is open for %s; a person decides which stays", f.st.Branch)
 		case pr.Base != f.d.In.DefaultBranch:
-			return 0, f.refused("the open pull request #%d for %s targets %s, not the default branch %s; a person decides", pr.Number, f.st.Branch, pr.Base, f.d.In.DefaultBranch)
+			return snapshot.BranchPR{}, f.refused("the open pull request #%d for %s targets %s, not the default branch %s; a person decides", pr.Number, f.st.Branch, pr.Base, f.d.In.DefaultBranch)
 		default:
-			open = pr.Number
+			open = pr
 		}
 	}
-	if open == 0 && len(prs) > 0 {
-		return 0, f.refused("a pull request for %s was closed or merged and none is open; the board classifies the Issue, and a person decides epic-redo", f.st.Branch)
+	if open.Number == 0 && len(prs) > 0 {
+		return snapshot.BranchPR{}, f.refused("a pull request for %s was closed or merged and none is open; the board classifies the Issue, and a person decides epic-redo", f.st.Branch)
 	}
 	return open, nil
 }
@@ -459,15 +459,16 @@ func (f *flow) openPullRequest(ctx context.Context) error {
 	if err := f.gates(ctx); err != nil {
 		return err
 	}
-	pr, err := f.openPR(ctx)
+	existing, err := f.openPR(ctx)
 	if err != nil {
 		return err
 	}
 	if err := f.remoteStillApproved(ctx); err != nil {
 		return err
 	}
+	pr := existing.Number
 	if pr != 0 {
-		err = f.link(ctx, pr)
+		err = f.link(ctx, existing)
 	} else {
 		pr, err = f.create(ctx)
 	}
@@ -496,12 +497,16 @@ func (f *flow) remoteStillApproved(ctx context.Context) error {
 }
 
 // link ties an existing pull request to its Issues. A failure is noted on the Issue and never stops the round.
-func (f *flow) link(ctx context.Context, pr int) error {
-	out, err := f.d.Scripts.RunScript(ctx, Script{Path: f.r.Scripts.Create, Args: LinkArgs(f.d.In.Repo, pr), Dir: f.r.Worktree})
+// The script exits 0 and links nothing for a body without closing lines, so a body that does not name the Issue is a failed link too.
+func (f *flow) link(ctx context.Context, pr snapshot.BranchPR) error {
+	out, err := f.d.Scripts.RunScript(ctx, Script{Path: f.r.Scripts.Create, Args: LinkArgs(f.d.In.Repo, pr.Number), Dir: f.r.Worktree})
 	if err != nil {
 		return exitcode.Wrap(exitcode.Unreadable, err, "create-linked-pr.sh could not run")
 	}
-	return f.linked(ctx, pr, out.ExitCode)
+	if out.ExitCode == 0 && !References(pr.Body, f.r.Issue) {
+		return f.linkFailed(ctx, pr.Number, LinkMissingNote(f.r.Issue, pr.Number))
+	}
+	return f.linked(ctx, pr.Number, out.ExitCode)
 }
 
 // linked records the outcome of the linking: ok, or failed with a note once per pull request.
@@ -510,9 +515,14 @@ func (f *flow) linked(ctx context.Context, pr, exit int) error {
 		f.res.Link = "ok"
 		return nil
 	}
+	return f.linkFailed(ctx, pr, LinkFailedNote(f.r.Issue, pr, exit))
+}
+
+// linkFailed reports a pull request that exists but is not linked to its Issue.
+func (f *flow) linkFailed(ctx context.Context, pr int, note string) error {
 	f.res.Link = "failed"
 	n := f.r.Issue
-	nr, err := f.d.S.PostNote(ctx, n, fmt.Sprintf("link-failed:%d:%d", n, pr), LinkFailedNote(n, pr, exit))
+	nr, err := f.d.S.PostNote(ctx, n, fmt.Sprintf("link-failed:%d:%d", n, pr), note)
 	if err != nil {
 		return err
 	}
@@ -583,8 +593,8 @@ func (f *flow) createdNumber(ctx context.Context, out ScriptResult) (int, error)
 	if err != nil {
 		return 0, err
 	}
-	if pr == 0 {
+	if pr.Number == 0 {
 		return 0, exitcode.New(exitcode.Unreadable, "create-linked-pr.sh printed no pull request URL and none is open")
 	}
-	return pr, nil
+	return pr.Number, nil
 }
