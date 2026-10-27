@@ -1,6 +1,7 @@
 name: Check Rule Inventory
 
 # Every PR, unfiltered: an edit to any skill, agent, or reference can leave an inventory anchor dangling.
+# The candidate guard runs here too, since the inventory's owners point into the candidate.
 on:
   push:
     branches: [main]
@@ -24,8 +25,11 @@ jobs:
       - name: Check the inventory structure and anchors
         run: tests/check-rule-inventory.sh
 
+      - name: Check the candidate stays out of discovery and drives oe only
+        run: tests/check-candidate.sh
+
       - name: Install bats
         run: sudo apt-get update && sudo apt-get install -y bats
 
-      - name: Test the checker
-        run: bats tests/check-rule-inventory.bats
+      - name: Test the checker and the candidate guard
+        run: bats tests/check-rule-inventory.bats tests/check-candidate.bats

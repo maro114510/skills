@@ -7,7 +7,7 @@ MANIFESTS := $(PLUGIN_MANIFEST) $(MARKETPLACE_MANIFEST)
 GIT_CLIFF := git-cliff
 CLAUDE := claude
 
-.PHONY: help next-version check-version validate validate-plugin validate-agent-portability validate-apm check-rule-inventory oe-manifest release
+.PHONY: help next-version check-version validate validate-plugin validate-agent-portability validate-apm check-rule-inventory check-candidate oe-manifest release
 
 help: ## Show available commands.
 	@awk 'BEGIN { FS = ":.*##"; printf "Usage:\n  make <command>\n\nCommands:\n" } /^[a-zA-Z0-9_-]+:.*##/ { printf "  %-20s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
@@ -56,6 +56,9 @@ validate-apm: ## Verify APM deploys the agents portably (APM_TARGET=claude|codex
 
 check-rule-inventory: ## Check the orchestrate-epic v2 rule inventory structure and anchors.
 	@tests/check-rule-inventory.sh
+
+check-candidate: ## Check the orchestrate-epic v2 candidate stays out of discovery and drives oe only.
+	@tests/check-candidate.sh
 
 oe-manifest: ## Pin the oe release named by TAG=oe-vX.Y.Z in the manifest. Does not commit or push.
 	@test -n "$(TAG)" || { printf '%s\n' 'Usage: make oe-manifest TAG=oe-vX.Y.Z (the tag whose release workflow has finished)'; exit 1; }
