@@ -29,12 +29,18 @@ type flow struct {
 	board  *snapshot.Board
 }
 
+func newFlow(d Deps, n int) *flow {
+	var st state.Issue
+	var a state.Approval
+	return &flow{d: d, n: n, res: NewResult(n), st: st, a: a, pr: 0, method: "", board: nil}
+}
+
 // Merge lands the Issue's pull request, contract §8.
 // The order is fixed: reconcile an unresolved record, then the approval and its pull request, the freeze, the base, health,
 // the grant, the merge method, readiness, the final freeze, grant, and base checks, the intent, and one request.
 // Nothing is retried, and a request whose outcome is uncertain is settled from the pull request.
 func Merge(ctx context.Context, d Deps, n int) (Result, error) {
-	f := &flow{d: d, n: n, res: NewResult(n), st: state.Issue{}, a: state.Approval{}, pr: 0, method: "", board: nil}
+	f := newFlow(d, n)
 	err := f.run(ctx)
 	return f.res, err
 }
@@ -148,6 +154,9 @@ func (f *flow) health(ctx context.Context) error {
 		reason := fmt.Sprintf("post-merge default-branch checks %s on %s (PR #%d): %s", h.Status, h.Merge, h.PR, h.Reason)
 		lr, err := f.d.S.Freeze(ctx, reason, h.Merge, string(h.Status))
 		f.res.Freeze = lr.Freeze
+		if lr.Freeze != nil {
+			f.res.Route, f.res.Next, f.res.Reason = RouteFrozen, NextStop, reason
+		}
 		return err
 	case health.NextHold:
 		return exitcode.New(exitcode.Stop, "post-merge health is unreadable, so every merge is held: "+h.Reason)

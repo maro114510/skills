@@ -25,6 +25,8 @@ const (
 	RouteUnverifiedBase = "MERGED_UNVERIFIED_BASE"
 	// RouteReconciled is a record an earlier run left unresolved, settled from its pull request.
 	RouteReconciled = "RECONCILED"
+	// RouteFrozen is a merge held because the last merge's default-branch checks failed, which froze the Epic.
+	RouteFrozen = "FROZEN"
 )
 
 // What the loop does next.

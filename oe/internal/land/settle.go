@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/maro114510/skills/oe/internal/coord"
 	"github.com/maro114510/skills/oe/internal/exitcode"
@@ -156,7 +157,7 @@ func (f *flow) report(ctx context.Context, t target, o outcome, reconciled bool)
 		f.res.Route, f.res.Next = RouteReconciled, NextLand
 	case state.PhaseMergedUnverifiedBase:
 		f.res.Route, f.res.Next = route(RouteUnverifiedBase, RouteReconciled), NextStop
-		return exitcode.New(exitcode.Stop, "PR #"+fmt.Sprint(t.pr)+" merged on an unverified base; the Epic is frozen and nothing else may land")
+		return exitcode.New(exitcode.Stop, "PR #"+strconv.Itoa(t.pr)+" merged on an unverified base; the Epic is frozen and nothing else may land")
 	case state.PhaseHeadMoved:
 		f.res.Route, f.res.Next = RouteHeadMoved, NextReverify
 		return exitcode.New(exitcode.Stale, fmt.Sprintf("the head of pull request #%d moved after review, so GitHub refused the merge; review #%d again", t.pr, t.issue))
