@@ -200,7 +200,7 @@ func wantFailedChecks(t *testing.T, failed []snapshot.FailedCheck) {
 
 func wantUnresolvedThread(t *testing.T, threads []snapshot.FeedbackThread) {
 	t.Helper()
-	if len(threads) != 1 || threads[0].Path != "a.go" || threads[0].Line != 12 || threads[0].Total != 2 || len(threads[0].Comments) != 2 {
+	if len(threads) != 1 || threads[0].Path != "a.go" || threads[0].Line != 12 || len(threads[0].Comments) != 2 {
 		t.Fatalf("Threads = %+v, want only the unresolved thread on a.go", threads)
 	}
 	first, second := threads[0].Comments[0], threads[0].Comments[1]
@@ -247,19 +247,21 @@ func TestReadRepairInputIsCompleteOrAnError(t *testing.T) {
 
 	member := fcomment(5, "alice", "User", "MEMBER", "b")
 	tests := map[string]string{
-		"threads cut off":       feedbackPull(`{"totalCount":150,"nodes":[`+thread(false, "a.go", 1, 1, member)+`]}`, conn(), conn()),
-		"reviews cut off":       feedbackPull(conn(), `{"totalCount":101,"nodes":[]}`, conn()),
-		"checks cut off":        feedbackPull(conn(), conn(), `{"totalCount":150,"nodes":[]}`),
-		"no threads connection": feedbackPull(`null`, conn(), conn()),
-		"comment without an id": feedbackPull(conn(thread(false, "a.go", 1, 1, `{"authorAssociation":"MEMBER","author":{"__typename":"User","login":"a"},"body":"b"}`)), conn(), conn()),
-		"review without an id":  feedbackPull(conn(), conn(`{"state":"CHANGES_REQUESTED","authorAssociation":"MEMBER","author":{"__typename":"User","login":"a"},"body":"b"}`), conn()),
-		"thread state missing":  feedbackPull(conn(`{"path":"a.go","line":1,"comments":{"totalCount":1,"nodes":[`+member+`]}}`), conn(), conn()),
-		"review state missing":  feedbackPull(conn(), conn(`{"databaseId":9,"authorAssociation":"MEMBER","author":{"__typename":"User","login":"a"},"body":"b"}`), conn()),
-		"thread comments cut":   feedbackPull(conn(`{"isResolved":false,"path":"a.go","line":1,"comments":null}`), conn(), conn()),
-		"no head commit":        `{"data":{"repository":{"pullRequest":{"number":7,"headRefOid":"abc123","reviewThreads":` + conn() + `,"latestOpinionatedReviews":` + conn() + `,"commits":{"nodes":[]}}}}}`,
-		"another pull request":  strings.Replace(feedbackPull(conn(), conn(), conn()), `"number":7`, `"number":8`, 1),
-		"no pull request":       `{"data":{"repository":{"pullRequest":null}}}`,
-		"data beside errors":    strings.TrimSuffix(feedbackPull(conn(), conn(), conn()), "}") + `,"errors":[{"message":"partial"}]}`,
+		"threads cut off":          feedbackPull(`{"totalCount":150,"nodes":[`+thread(false, "a.go", 1, 1, member)+`]}`, conn(), conn()),
+		"reviews cut off":          feedbackPull(conn(), `{"totalCount":101,"nodes":[]}`, conn()),
+		"checks cut off":           feedbackPull(conn(), conn(), `{"totalCount":150,"nodes":[]}`),
+		"no threads connection":    feedbackPull(`null`, conn(), conn()),
+		"comment without an id":    feedbackPull(conn(thread(false, "a.go", 1, 1, `{"authorAssociation":"MEMBER","author":{"__typename":"User","login":"a"},"body":"b"}`)), conn(), conn()),
+		"review without an id":     feedbackPull(conn(), conn(`{"state":"CHANGES_REQUESTED","authorAssociation":"MEMBER","author":{"__typename":"User","login":"a"},"body":"b"}`), conn()),
+		"thread state missing":     feedbackPull(conn(`{"path":"a.go","line":1,"comments":{"totalCount":1,"nodes":[`+member+`]}}`), conn(), conn()),
+		"review state missing":     feedbackPull(conn(), conn(`{"databaseId":9,"authorAssociation":"MEMBER","author":{"__typename":"User","login":"a"},"body":"b"}`), conn()),
+		"thread comments cut":      feedbackPull(conn(`{"isResolved":false,"path":"a.go","line":1,"comments":null}`), conn(), conn()),
+		"no head commit":           `{"data":{"repository":{"pullRequest":{"number":7,"headRefOid":"abc123","reviewThreads":` + conn() + `,"latestOpinionatedReviews":` + conn() + `,"commits":{"nodes":[]}}}}}`,
+		"another pull request":     strings.Replace(feedbackPull(conn(), conn(), conn()), `"number":7`, `"number":8`, 1),
+		"no head":                  strings.Replace(feedbackPull(conn(), conn(), conn()), `"headRefOid":"abc123"`, `"headRefOid":""`, 1),
+		"checks of another commit": strings.Replace(feedbackPull(conn(), conn(), conn()), `"oid":"abc123"`, `"oid":"other"`, 1),
+		"no pull request":          `{"data":{"repository":{"pullRequest":null}}}`,
+		"data beside errors":       strings.TrimSuffix(feedbackPull(conn(), conn(), conn()), "}") + `,"errors":[{"message":"partial"}]}`,
 	}
 	for name, body := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -270,13 +272,11 @@ func TestReadRepairInputIsCompleteOrAnError(t *testing.T) {
 	}
 }
 
-// TestReadRepairInputKeepsAThreadWhoseCommentsExceedWhatWasRead: the worker is told how many comments the thread holds,
-// since the first ones are all the query returns.
-func TestReadRepairInputKeepsAThreadWhoseCommentsExceedWhatWasRead(t *testing.T) {
+// TestReadRepairInputRefusesAThreadWhoseCommentsExceedWhatWasRead: the query returns the oldest comments first,
+// so a longer thread would hand a repair feedback without its newest comment, which is the one that is acted on.
+func TestReadRepairInputRefusesAThreadWhoseCommentsExceedWhatWasRead(t *testing.T) {
 	t.Parallel()
 
-	got, err := readRepair(t, feedbackPull(conn(thread(false, "a.go", 1, 80, fcomment(5, "alice", "User", "MEMBER", "b"))), conn(), conn()))
-	if err != nil || len(got.Threads) != 1 || got.Threads[0].Total != 80 || len(got.Threads[0].Comments) != 1 {
-		t.Errorf("ReadRepairInput() = %+v, %v; want the thread with total 80 and the one comment read", got, err)
-	}
+	_, err := readRepair(t, feedbackPull(conn(thread(false, "a.go", 1, 80, fcomment(5, "alice", "User", "MEMBER", "b"))), conn(), conn()))
+	wantCode(t, err, exitcode.Unreadable)
 }

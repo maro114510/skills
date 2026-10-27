@@ -500,7 +500,6 @@ func TestWriteHTTPWithoutAnAnswerIsNoResponse(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]*spy{
-		"the runner cannot run gh":             newSpy(),
 		"gh failed before any HTTP status":     newSpy(mergeCall("", "gh: error connecting to api.github.com", 1)),
 		"stdout holds no status line":          newSpy(mergeCall("{\"sha\":\"m1\"}", "", 0)),
 		"stdout holds a status that is no int": newSpy(mergeCall("HTTP/2.0 abc\r\n\r\n{}", "", 0)),
@@ -513,6 +512,17 @@ func TestWriteHTTPWithoutAnAnswerIsNoResponse(t *testing.T) {
 				t.Errorf("WriteHTTP() err = %v, code %d; want ErrNoResponse and Unreadable", err, exitcode.CodeOf(err))
 			}
 		})
+	}
+}
+
+// TestWriteHTTPWhenGhCannotStartSentNothing: a runner that cannot start gh never put a request on the wire,
+// so reconciling it as a possibly merged request would invent a merge that was never asked for.
+func TestWriteHTTPWhenGhCannotStartSentNothing(t *testing.T) {
+	t.Parallel()
+
+	_, err := gh.New(newSpy(), false).WriteHTTP(t.Context(), mergeArgs()...)
+	if errors.Is(err, gh.ErrNoResponse) || exitcode.CodeOf(err) != exitcode.Unreadable {
+		t.Errorf("WriteHTTP() err = %v, code %d; want an ordinary Unreadable error that is not ErrNoResponse", err, exitcode.CodeOf(err))
 	}
 }
 
