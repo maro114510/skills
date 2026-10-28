@@ -47,7 +47,7 @@
 set -uo pipefail
 
 dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source-path=SCRIPTDIR disable=SC1091 # CI runs shellcheck without -x, so it cannot follow this.
+# shellcheck source-path=SCRIPTDIR
 source "${dir}/oe-config.sh"
 
 usage() {

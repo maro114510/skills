@@ -31,7 +31,7 @@
 set -uo pipefail
 
 dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source-path=SCRIPTDIR disable=SC1091 # CI runs shellcheck without -x, so it cannot follow this.
+# shellcheck source-path=SCRIPTDIR
 source "${dir}/oe-config.sh"
 
 usage() {
@@ -72,7 +72,6 @@ while read -r kind; do
   esac
 done <<<"${kinds}"
 
-# shellcheck disable=SC2154 # oe-config.sh assigns max_attempts.
 if ((used >= max_attempts)); then
   echo "oe attempt: Issue #${n} already used ${used} of ${max_attempts} attempts since its claim" >&2
   exit 4
