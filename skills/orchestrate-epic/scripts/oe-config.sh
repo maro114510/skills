@@ -10,10 +10,16 @@
 # | verify_context | oe/verify | The commit status context that holds the verdict |
 # | branch_prefix | feat/issue- | The prefix of an Issue branch, followed by the Issue number |
 #
-# oe-records.jq holds the markers of the records that oe writes on an Issue.
+# oe-records.jq defines which comments count as records when oe reads them.
 # shellcheck disable=SC2034 # The sourcing subcommand reads these.
 no_checks_grace=600
 max_attempts=3
 max_verifier_starts=2
 verify_context=oe/verify
 branch_prefix=feat/issue-
+
+# Prints the marker that starts the body of a record of kind $1, such as claim.
+# It must equal marker($kind) in oe-records.jq, which reads what this writes.
+record_marker() {
+  printf '<!-- oe:%s -->' "$1"
+}

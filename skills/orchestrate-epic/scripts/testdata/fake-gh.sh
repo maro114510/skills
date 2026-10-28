@@ -30,7 +30,7 @@ fi
 filter="." path="" query="" num="" method=GET fields="{}"
 while [[ $# -gt 0 ]]; do
   case "$1" in
-  api) path="$2" && shift ;;
+  api) ;;
   --jq) filter="$2" && shift ;;
   -X | --method) method="$2" && shift ;;
   -f | -F)
@@ -42,7 +42,7 @@ while [[ $# -gt 0 ]]; do
     fields="$(jq -c --arg k "${2%%=*}" --arg v "${2#*=}" '. + {($k): $v}' <<<"${fields}")"
     shift
     ;;
-  *) ;;
+  *) [[ -n "${path}" ]] || path="$1" ;;
   esac
   shift
 done
