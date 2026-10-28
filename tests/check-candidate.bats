@@ -374,6 +374,36 @@ shell_block() {
   done
 }
 
+@test "a heredoc delimiter must be quoted, since the shell expands the body of an unquoted one" {
+  shell_block "${cand}/router.md" "oe note post --key k <<'TAG'" 'text' 'TAG' 'oe note post --key k <<"TAG"' 'text' 'TAG'
+  run bash "${target}" "${cand}"
+  [ "${status}" -eq 0 ]
+  for line in 'oe note post --key k <<TAG' 'cat >"$f" <<TAG' 'oe note post --key k <<-TAG' "oe note post --key k <<'TAG\""; do
+    printf '# Router\n' >"${cand}/router.md"
+    shell_block "${cand}/router.md" "${line}" '$(git push origin main)' 'TAG'
+    run bash "${target}" "${cand}"
+    [ "${status}" -eq 1 ] || {
+      echo "accepted: ${line}"
+      return 1
+    }
+  done
+}
+
+@test "a quote or list marker indented up to three spaces still makes a container fence" {
+  for opener in ' > ```bash' '  > ```bash' '   - ```bash' '  1. ```bash' ' > > ~~~bash'; do
+    printf '# Router\n\n%s\ngit push origin main\n```\n' "${opener}" >"${cand}/router.md"
+    run bash "${target}" "${cand}"
+    [ "${status}" -eq 1 ] || {
+      echo "accepted: ${opener}"
+      return 1
+    }
+    [[ "${output}" == *"router.md:3"* ]] || {
+      echo "no location for: ${opener}: ${output}"
+      return 1
+    }
+  done
+}
+
 @test "a fenced block that is not shell is never judged" {
   printf '\n```text\ngit push origin main\n```\n\n```\ngit commit\n```\n' >>"${cand}/router.md"
   run bash "${target}" "${cand}"
