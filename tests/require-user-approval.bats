@@ -49,6 +49,14 @@ assert_allowed() {
   assert_allowed 'git push origin feat/x # user-approved'
 }
 
+@test "oe commands are not guarded, so the hook no longer knows the removed oe CLI" {
+  assert_allowed 'oe ship publish'
+  assert_allowed 'oe --epic 3 land merge --pr 9'
+  assert_allowed 'skills/orchestrate-epic/scripts/oe ship publish --epic 3'
+  # shellcheck disable=SC2016 # The variable must reach the hook unexpanded, as the model writes it.
+  assert_allowed '"${OE}" --epic 3 land merge'
+}
+
 @test "oe ship publish is blocked when invoked directly" {
   assert_blocked 'oe ship publish'
   assert_blocked 'oe --epic 3 ship publish'
