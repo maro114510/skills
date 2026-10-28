@@ -22,7 +22,8 @@
 # quoted literal and a quoted output redirect, and may end in a heredoc whose body is data. A quoted literal is opaque
 # to gh only after --jq. Quotes, $, backticks, parentheses, braces, ; | & # * ~ and a backslash fail. Rather than parse
 # shell, the guard allows few forms, and each fix of a bypass stays one more line of this grammar.
-# Fences follow markdown: a run of three or more backticks or tildes, closed by a run of at least as many. Blocks of
+# Fences follow markdown: a run of three or more backticks or tildes, closed by a run of at least as many, and a CRLF file is
+# read like an LF one. A fence inside a quote or a list item fails, since the guard does not follow containers. Blocks of
 # another language, and unlabeled ones, are text and are not judged.
 #
 # Exit codes: 0 clean, 1 violations, 2 usage error.
@@ -128,7 +129,12 @@ function fence(line,   s, c, n) {
 FNR == 1 { infence = 0; judged = 0; hd = ""; cont = 0; kind = "" }
 {
   line = $0
+  sub(/\r$/, "", line)
   if (!infence) {
+    if (line ~ /^[ \t]*((>|[-*+]|[0-9]+[.)])[ \t]*)+(```|~~~)/) {
+      violation("a fence inside a quote or a list item; the guard does not follow containers, so write the block at the top level")
+      next
+    }
     if (fence(line)) {
       lang = trim(FINFO); sub(/[ \t].*$/, "", lang)
       infence = 1; fch = FCH; flen = FLEN; judged = (lang ~ /^(bash|sh|shell|zsh)$/); hd = ""; cont = 0
