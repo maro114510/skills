@@ -8,7 +8,7 @@ For each Issue whose `next` is `review`, and for each `reverify` item of the pla
 oe review pin --issue <N> --worktree <WORKTREE> --checks-set <CHECKS_FILE> --repo-dir <REPO_DIR> --lease-token <TOKEN>
 ```
 
-`PINNED` with `next` `review` goes on. `BOUND` with `next` `ship` means an approval already holds the pair: go to `ship.md`. A conflict or an uncommitted change comes back with a `next`: follow it.
+`PINNED` with `next` `review` goes on. `BOUND` with `next` `ship` means an approval already holds the pair: go to `ship.md`, except for a `reverify` item, where it means a pull request head moved outside the loop and a person decides, see `dispatch.md`. A conflict or an uncommitted change comes back with a `next`: follow it.
 
 2. Reserve once for the whole batch of reviewers, before any spawn. A staleness re-verification, which is a `reverify` pass, is not charged: leave it out of the count. Exit 4 means the Epic froze: spawn nothing and stop:
 
