@@ -11,7 +11,7 @@
 #   - an emoji anywhere in a markdown file
 #
 # The allow-list is the whole of what the prose may run. Every line is an oe call, or one of:
-#   git fetch origin <branch>      a plain branch name, never a refspec, so it updates a remote-tracking ref only
+#   git fetch origin <branch>      a plain branch name or an upper-case <PLACEHOLDER>, never a refspec, so it updates a remote-tracking ref only
 #   sleep <seconds>                waits between polls
 #   mktemp                         makes a file for a report
 #   name="/literal/path"           names that file in a later call, since every call is its own shell
@@ -69,7 +69,7 @@ function judge(t) {
   if (t ~ /^[A-Za-z_][A-Za-z0-9_]*="\$\(mktemp( [^)"$`]*)?\)"$/) return
   if (chained(t)) return
   if (t ~ /^oe( |$)/) return
-  if (t ~ /^git fetch origin [A-Za-z0-9][A-Za-z0-9._\/-]*$/) return
+  if (t ~ /^git fetch origin ([A-Za-z0-9][A-Za-z0-9._\/-]*|<[A-Z][A-Z_]*>)$/) return
   if (t ~ /^sleep [0-9]+$/) return
   if (t ~ /^mktemp( |$)/) return
   if (t ~ /^cat >"\$[A-Za-z_][A-Za-z0-9_]*" <<[\047"]?[A-Za-z_][A-Za-z0-9_]*[\047"]?$/) return
