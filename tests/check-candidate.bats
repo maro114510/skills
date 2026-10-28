@@ -193,10 +193,10 @@ shell_block() {
 }
 
 @test "git fetch may name a plain branch and never a refspec" {
-  shell_block "${cand}/router.md" 'git fetch origin main' 'git fetch origin feature/x-1'
+  shell_block "${cand}/router.md" 'git fetch origin main' 'git fetch origin feature/x-1' 'git fetch origin <DEFAULT_BRANCH>'
   run bash "${target}" "${cand}"
   [ "${status}" -eq 0 ]
-  for line in 'git fetch origin main:main' 'git fetch origin +main:other' 'git fetch origin --force main' 'git fetch origin' 'git fetch --all'; do
+  for line in 'git fetch origin main:main' 'git fetch origin +main:other' 'git fetch origin --force main' 'git fetch origin' 'git fetch --all' 'git fetch origin <a:b>' 'git fetch origin <lower>'; do
     printf '# Router\n' >"${cand}/router.md"
     shell_block "${cand}/router.md" "${line}"
     run bash "${target}" "${cand}"
