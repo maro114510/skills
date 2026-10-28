@@ -3,17 +3,14 @@
 #
 # Guarded commands:
 #   - git push
-#   - oe ship publish and oe land merge, the only oe subcommands that push, open a PR, or merge,
-#     whether oe runs directly, by path, or through skills/orchestrate-epic/scripts/oe
 #
 # Approved commands must include "# user-approved" at the end of the command.
 # Bash treats this as a comment, so the command never sees it.
 #
 # Examples:
-#   git push origin feat/my-feature                            -> blocked
-#   git push origin feat/my-feature # user-approved            -> allowed
-#   skills/orchestrate-epic/scripts/oe --epic 3 ship publish   -> blocked
-#   oe resolve --epic 3                                        -> allowed
+#   git push origin feat/my-feature                  -> blocked
+#   git push origin feat/my-feature # user-approved  -> allowed
+#   git status                                       -> allowed
 
 # Backslash-newline continuations are joined, because bash runs them as one command; every
 # other newline stays, because it separates commands.
@@ -30,29 +27,21 @@ except Exception:
   exit 1
 }
 
-# Command boundaries before a command word and after its last word, shared by both patterns, so
-# `cd x&&git push`, `(git push)`, or `oe land merge>log` are seen as well.
+# Command boundaries before a command word and after its last word, so `cd x&&git push`,
+# `(git push)`, or `git push>log` are seen as well.
 START="(^|[[:space:];&|(\`\"'/{])"
 END="([[:space:]\"';&|)<>}]|$)"
 GIT_PUSH="${START}git([[:space:]]+[^[:space:]]*)*[[:space:]]+push${END}"
-# An `oe` token: the bare name or the last path segment, or a shell variable that may hold the
-# wrapper path, optionally quoted; then any words; then `ship ... publish` or `land ... merge`,
-# where flags may sit between the two words.
-OE_TOKEN="(${START}oe[\"']?|\\$\\{?[A-Za-z_][A-Za-z0-9_]*\\}?[\"']?)"
-OE_WORDS='([[:space:]]+[^[:space:]]+)*[[:space:]]+'
-OE_MUTATION="${OE_TOKEN}${OE_WORDS}(ship${OE_WORDS}publish|land${OE_WORDS}merge)${END}"
 MARKER='#[[:space:]]*user-approved[[:space:]]*$'
 
 # guarded_in <text> prints what <text> runs that needs approval, or nothing. Backslashes and
-# quotes are removed first, because bash drops them before running a word: `\oe`, `'o'e`, and
+# quotes are removed first, because bash drops them before running a word: `\git`, `'g'it`, and
 # `g"i"t` all run the real command.
 guarded_in() {
   local text
   text="$(printf '%s' "$1" | tr -d "\\\\'\"")"
   if printf '%s' "${text}" | grep -qE "${GIT_PUSH}"; then
     printf 'git push'
-  elif printf '%s' "${text}" | grep -qE "${OE_MUTATION}"; then
-    printf 'oe ship publish / oe land merge'
   fi
 }
 

@@ -1,5 +1,0 @@
-# Pins the oe release that scripts/oe may run, with the sha256 of each asset.
-# Written by make oe-manifest TAG=oe-vX.Y.Z after the release workflow publishes the assets.
-# Lands only by reviewed PR and is never edited by hand.
-# Without a tag line nothing is pinned and the wrapper refuses to run.
-repo	maro114510/skills
