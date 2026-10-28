@@ -285,7 +285,7 @@ shell_block() {
 }
 
 @test "a mktemp assignment holds only plain words inside its substitution" {
-  shell_block "${cand}/router.md" 'x="$(mktemp)"' 'y="$(mktemp -p /tmp)"'
+  shell_block "${cand}/router.md" 'x="$(mktemp)"'
   run bash "${target}" "${cand}"
   [ "${status}" -eq 0 ]
   for line in 'x="$(mktemp ; git push origin main)"' 'x="$(mktemp && git push)"' 'x="$(mktemp | sh)"' 'x="$(mktemp) ; (git push"' 'x="$(mktemp "a b")"'; do
@@ -478,6 +478,58 @@ shell_block() {
       return 1
     }
   done
+}
+
+@test "mktemp takes no argument, so it cannot make a file anywhere but the default temporary directory" {
+  shell_block "${cand}/router.md" 'mktemp' 'x="$(mktemp)"'
+  run bash "${target}" "${cand}"
+  [ "${status}" -eq 0 ]
+  for line in 'mktemp .git/refs/heads/junk.XXXXXX' 'mktemp -p /home/u' 'mktemp -d' 'f="$(mktemp .git/refs/heads/junk.XXXXXX)"' 'f="$(mktemp -p /tmp)"'; do
+    printf '# Router\n' >"${cand}/router.md"
+    shell_block "${cand}/router.md" "${line}"
+    run bash "${target}" "${cand}"
+    [ "${status}" -eq 1 ] || {
+      echo "accepted: ${line}"
+      return 1
+    }
+  done
+}
+
+@test "an oe redirect may name only the approved CHECKS_FILE placeholder" {
+  shell_block "${cand}/router.md" 'oe checks derive --base <DEFAULT_BRANCH> >"<CHECKS_FILE>"'
+  run bash "${target}" "${cand}"
+  [ "${status}" -eq 0 ]
+  for line in 'oe --help >".git/refs/heads/main"' 'oe gate >"/etc/passwd"' 'oe gate >"<OTHER_FILE>"' 'oe gate >"<CHECKS_FILE>x"' 'oe gate >"report-x.md"'; do
+    printf '# Router\n' >"${cand}/router.md"
+    shell_block "${cand}/router.md" "${line}"
+    run bash "${target}" "${cand}"
+    [ "${status}" -eq 1 ] || {
+      echo "accepted: ${line}"
+      return 1
+    }
+  done
+}
+
+@test "cat writes only through a variable assigned a report path or mktemp earlier in the same block" {
+  shell_block "${cand}/router.md" 'f="<STATE_DIR>/sessions/report-<OWNER>_<REPO>-<EPIC>-<N>.md"' "cat >\"\$f\" <<'TAG'" 'text' 'TAG'
+  run bash "${target}" "${cand}"
+  [ "${status}" -eq 0 ]
+  shell_block "${cand}/router.md" 'g="$(mktemp)"' "cat >\"\$g\" <<'TAG'" 'text' 'TAG'
+  run bash "${target}" "${cand}"
+  [ "${status}" -eq 0 ]
+  printf '# Router\n' >"${cand}/router.md"
+  shell_block "${cand}/router.md" "cat >\"\$GITHUB_ENV\" <<'TAG'" 'text' 'TAG'
+  run bash "${target}" "${cand}"
+  [ "${status}" -eq 1 ]
+  printf '# Router\n' >"${cand}/router.md"
+  shell_block "${cand}/router.md" "cat >\"\$f\" <<'TAG'" 'text' 'TAG'
+  run bash "${target}" "${cand}"
+  [ "${status}" -eq 1 ]
+  printf '# Router\n' >"${cand}/router.md"
+  shell_block "${cand}/router.md" 'f="<STATE_DIR>/sessions/report-<OWNER>_<REPO>-<EPIC>-<N>.md"'
+  shell_block "${cand}/router.md" "cat >\"\$f\" <<'TAG'" 'text' 'TAG'
+  run bash "${target}" "${cand}"
+  [ "${status}" -eq 1 ]
 }
 
 @test "a fenced block that is not shell is never judged" {
