@@ -8,7 +8,7 @@
 #   - a file named SKILL.md anywhere under the directory, since discovery would load it (Epic #277, D7)
 #   - a candidate agent with a frontmatter key other than name and description, which includes a model pin
 #   - in a fenced bash, sh, shell, or zsh block, a command that is not on the allow-list below
-#   - an emoji, or a carriage return, anywhere in a markdown file
+#   - an emoji, a carriage return, or a leading byte order mark in a markdown file
 #
 # The allow-list is the whole of what the prose may run. Every line is an oe call, or one of:
 #   git fetch origin <branch>      a plain branch name or an upper-case <PLACEHOLDER>, never a refspec, so it updates a remote-tracking ref only
@@ -18,10 +18,11 @@
 #   cat >"$file" <<'TAG'           writes the report, and only that form of cat is allowed
 #   gh issue view ...              reads an Issue
 #   gh api repos/... ...           reads, and fails when a flag makes it write
-# An oe line, and the arguments of gh and mktemp, hold only plain words, <placeholders>, a quoted "$variable", and for oe a
-# quoted literal and a quoted output redirect, and may end in a heredoc with a quoted delimiter, whose body is data. A quoted literal is opaque
-# to gh only after --jq. Quotes, $, backticks, parentheses, braces, ; | & # * ~ and a backslash fail. Rather than parse
-# shell, the guard allows few forms, and each fix of a bypass stays one more line of this grammar.
+# An oe line holds plain words, <placeholders>, a quoted "$variable", a quoted literal, a quoted output redirect, and may end
+# in a heredoc with a quoted delimiter, whose body is data. The arguments of gh and mktemp hold plain words and
+# <placeholders> only, since a variable can hold a write flag; a quoted literal is opaque to gh only after --jq. Quotes, $,
+# backticks, parentheses, braces, ; | & # * ~ and a backslash fail elsewhere. Rather than parse shell, the guard allows few
+# forms, and each fix of a bypass stays one more line of this grammar.
 # Fences follow markdown at column 0: a run of three or more backticks or tildes, closed by a run of at least as many.
 # Blocks of another language, and unlabeled ones, are text and are not judged. Rather than model more of markdown and
 # shell, the guard fails on what it would have to model: an indented fence, a fence inside a quote or a list item, a
@@ -82,7 +83,7 @@ function args_ok(rest, kind,   prev, tok, n) {
     if (match(rest, WORD) && (RLENGTH == length(rest) || substr(rest, RLENGTH + 1, 1) ~ /[ \t]/)) {
       n = RLENGTH; tok = substr(rest, 1, n)
       if (kind == "gh" && (tok ~ /^-[A-Za-z]*[fFX]/ || tok ~ /^--(method|field|raw-field|input)/)) return 0
-    } else if (match(rest, VAR) && (RLENGTH == length(rest) || substr(rest, RLENGTH + 1, 1) ~ /[ \t]/)) {
+    } else if (kind != "gh" && match(rest, VAR) && (RLENGTH == length(rest) || substr(rest, RLENGTH + 1, 1) ~ /[ \t]/)) {
       n = RLENGTH; tok = substr(rest, 1, n)
     } else if (kind == "oe" && match(rest, RED) && (RLENGTH == length(rest) || substr(rest, RLENGTH + 1, 1) ~ /[ \t]/)) {
       n = RLENGTH; tok = substr(rest, 1, n)
@@ -154,6 +155,10 @@ END { exit bad }
 
 while IFS= read -r path; do
   rel="${path#"${dir}"/}"
+  if [[ "$(head -c 3 "${path}" | od -An -tx1 | tr -d ' \n')" == efbbbf ]]; then
+    fail "${rel}:1: starts with a byte order mark, which markdown ignores; remove it"
+    continue
+  fi
   if grep -q "$(printf '\r')" "${path}"; then
     fail "${rel}:1: contains a carriage return; use LF line endings, since markdown also reads a bare CR as a line end"
     continue
