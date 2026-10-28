@@ -96,7 +96,11 @@ function refuse(t) { violation("is not an oe call or an allowed read: " substr(t
 function judge(t,   rest) {
   HDTAG = ""
   if (t ~ /^[A-Za-z_][A-Za-z0-9_]*="[^"$`\\]*"$/) return 1
-  if (t ~ /^[A-Za-z_][A-Za-z0-9_]*="\$\(mktemp( [^)"$`]*)?\)"$/) return 1
+  if (match(t, /^[A-Za-z_][A-Za-z0-9_]*="\$\(mktemp/) && substr(t, length(t) - 1) == ")\"") {
+    rest = substr(t, RLENGTH + 1, length(t) - RLENGTH - 2)
+    if (rest ~ /^([ \t]|$)/ && args_ok(rest, "plain")) return 1
+    return refuse(t)
+  }
   if (t ~ /^git fetch origin ([A-Za-z0-9][A-Za-z0-9._\/-]*|<[A-Z][A-Z_]*>)$/) return 1
   if (t ~ /^sleep [0-9]+$/) return 1
   if (t ~ /^cat >"\$[A-Za-z_][A-Za-z0-9_]*" <<[\047"]?[A-Za-z_][A-Za-z0-9_]*[\047"]?$/) { match(t, /<<.*$/); HDTAG = tagof(substr(t, RSTART)); return 1 }
@@ -109,7 +113,9 @@ function judge(t,   rest) {
 # fence parses a line as a markdown code fence: a run of three or more backticks or tildes, and for backticks an
 # info string without a backtick. It sets FCH, FLEN, and FINFO.
 function fence(line,   s, c, n) {
-  s = line; sub(/^[ \t]+/, "", s)
+  # Four spaces, or a tab, make indented code and no fence. Up to three spaces are allowed.
+  if (line ~ /^(    |\t)/) return 0
+  s = line; sub(/^ +/, "", s)
   c = substr(s, 1, 1)
   if (c != "`" && c != "~") return 0
   n = 0
