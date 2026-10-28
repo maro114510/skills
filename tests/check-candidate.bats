@@ -95,7 +95,7 @@ shell_block() {
 }
 
 @test "a variable may be set to a literal path and to nothing else" {
-  shell_block "${cand}/router.md" 'f="/tmp/tmp.abc123"' "cat >\"\$f\" <<'REPORT'" 'text' 'REPORT' 'oe worker report --issue 7 --file "$f"'
+  shell_block "${cand}/router.md" 'f="/home/u/.local/state/oe/sessions/report-o_r-277-7.md"' "cat >\"\$f\" <<'REPORT'" 'text' 'REPORT' 'oe worker report --issue 7 --file "$f"'
   run bash "${target}" "${cand}"
   [ "${status}" -eq 0 ]
   for line in 'f="$HOME/x"' 'f="$(git push)"' 'f="`git push`"' 'f=/tmp/x' 'f="/tmp/x" git push'; do
@@ -461,6 +461,23 @@ shell_block() {
   printf '# Router\n\n```text\nx\n```\n\n```\ny\n```\n\n```bash title=x\noe gate --lease-token t\n```\n\n```json\n{}\n```\n' >"${cand}/router.md"
   run bash "${target}" "${cand}"
   [ "${status}" -eq 0 ]
+}
+
+@test "a variable that names a file to write may be set only to a report path or to mktemp" {
+  shell_block "${cand}/router.md" 'f="/home/u/.local/state/oe/sessions/report-o_r-277-7.md"' "cat >\"\$f\" <<'TAG'" 'text' 'TAG' 'g="$(mktemp)"' "cat >\"\$g\" <<'TAG'" 'text' 'TAG' \
+    'h="<STATE_DIR>/sessions/report-<OWNER>_<REPO>-<EPIC>-<N>.md"'
+  run bash "${target}" "${cand}"
+  [ "${status}" -eq 0 ]
+  for line in 'ref=".git/refs/heads/main"' 'f="/etc/passwd"' 'f="/tmp/x"' 'f="<REPORT_FILE>"' 'f="/home/u/.local/state/oe/sessions/../../x"' \
+    'f="/home/u/.local/state/oe/sessions/report-x/../../x"' 'f="report-x"' 'f=""'; do
+    printf '# Router\n' >"${cand}/router.md"
+    shell_block "${cand}/router.md" "${line}" "cat >\"\$f\" <<'TAG'" 'text' 'TAG'
+    run bash "${target}" "${cand}"
+    [ "${status}" -eq 1 ] || {
+      echo "accepted: ${line}"
+      return 1
+    }
+  done
 }
 
 @test "a fenced block that is not shell is never judged" {
