@@ -445,6 +445,24 @@ shell_block() {
   [ "${status}" -eq 0 ]
 }
 
+@test "a fence info string holds one plain word or nothing, since markdown decodes entities in it" {
+  for info in 'b&#97;sh' 'b&amp;sh' '\bash' 'bash{.x}' 'bash,x' '{bash}' 'ba\sh'; do
+    printf '# Router\n\n```%s\ngit push origin main\n```\n' "${info}" >"${cand}/router.md"
+    run bash "${target}" "${cand}"
+    [ "${status}" -eq 1 ] || {
+      echo "accepted: ${info}"
+      return 1
+    }
+    [[ "${output}" == *"router.md:3"*"info string"* ]] || {
+      echo "no info-string violation for: ${info}: ${output}"
+      return 1
+    }
+  done
+  printf '# Router\n\n```text\nx\n```\n\n```\ny\n```\n\n```bash title=x\noe gate --lease-token t\n```\n\n```json\n{}\n```\n' >"${cand}/router.md"
+  run bash "${target}" "${cand}"
+  [ "${status}" -eq 0 ]
+}
+
 @test "a fenced block that is not shell is never judged" {
   printf '\n```text\ngit push origin main\n```\n\n```\ngit commit\n```\n' >>"${cand}/router.md"
   run bash "${target}" "${cand}"
