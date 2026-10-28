@@ -18,9 +18,12 @@
 #   cat >"$file" <<'TAG'           writes the report, and only that form of cat is allowed
 #   gh issue view ...              reads an Issue
 #   gh api repos/... ...           reads, and fails when a flag makes it write
-# A line may redirect, and may open a heredoc whose body is data and is never judged. It may not chain a
-# second command with && || ; | or &, or substitute one with $( ) or backticks, except mktemp assigned to a variable.
-# Fenced blocks of any other language, and unlabeled ones, are text and are not judged.
+# An oe line, and the arguments of gh and mktemp, hold only plain words, <placeholders>, a quoted "$variable", and for oe a
+# quoted literal and a quoted output redirect, and may end in a heredoc whose body is data. A quoted literal is opaque
+# to gh only after --jq. Quotes, $, backticks, parentheses, braces, ; | & # * ~ and a backslash fail. Rather than parse
+# shell, the guard allows few forms, and each fix of a bypass stays one more line of this grammar.
+# Fences follow markdown: a run of three or more backticks or tildes, closed by a run of at least as many. Blocks of
+# another language, and unlabeled ones, are text and are not judged.
 #
 # Exit codes: 0 clean, 1 violations, 2 usage error.
 
@@ -54,54 +57,91 @@ fi
 
 # shellcheck disable=SC2016 # The awk program is single-quoted on purpose.
 judge='
+BEGIN {
+  # A word is plain characters and <placeholders> only. Quotes, $, `, ( ) { } < > ; | & # * ~ and a backslash never appear in one.
+  WORD = "^([A-Za-z0-9_./:=@+,-]|<[A-Za-z][A-Za-z_]*>)+"
+  VAR = "^\"\\$[A-Za-z_][A-Za-z0-9_]*\""
+  RED = "^>\"[^\"$`\\\\]*\""
+  SQ = "^\047[^\047]*\047"
+  HD = "^<<-?[ \t]*[\047\"]?[A-Za-z_][A-Za-z0-9_]*[\047\"]?$"
+}
 function trim(s) { sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s); return s }
 function violation(msg) { printf "%s:%d: %s\n", rel, FNR, msg; bad = 1 }
-function chained(t,   s) {
-  if (t ~ /\$\(|`/) { violation("substitutes a command: " substr(t, 1, 60)); return 1 }
-  s = t
-  gsub(/\047[^\047]*\047/, "\047\047", s)
-  gsub(/"[^"]*"/, "\"\"", s)
-  if (s ~ /[;|&]/) { violation("chains a second command: " substr(t, 1, 60)); return 1 }
-  return 0
+function tagof(h) { sub(/^<<-?[ \t]*[\047"]?/, "", h); sub(/[\047"]$/, "", h); return h }
+# args_ok judges the arguments of a command token by token. kind is oe, gh, or plain.
+function args_ok(rest, kind,   prev, tok, n) {
+  prev = ""
+  HDTAG = ""
+  while (1) {
+    sub(/^[ \t]+/, "", rest)
+    if (rest == "") return 1
+    if (kind == "oe" && rest ~ HD) { HDTAG = tagof(rest); return 1 }
+    n = 0
+    if (match(rest, WORD) && (RLENGTH == length(rest) || substr(rest, RLENGTH + 1, 1) ~ /[ \t]/)) {
+      n = RLENGTH; tok = substr(rest, 1, n)
+      if (kind == "gh" && (tok ~ /^-[A-Za-z]*[fFX]/ || tok ~ /^--(method|field|raw-field|input)/)) return 0
+    } else if (match(rest, VAR) && (RLENGTH == length(rest) || substr(rest, RLENGTH + 1, 1) ~ /[ \t]/)) {
+      n = RLENGTH; tok = substr(rest, 1, n)
+    } else if (kind == "oe" && match(rest, RED) && (RLENGTH == length(rest) || substr(rest, RLENGTH + 1, 1) ~ /[ \t]/)) {
+      n = RLENGTH; tok = substr(rest, 1, n)
+    } else if ((kind == "oe" || prev == "--jq") && match(rest, SQ) && (RLENGTH == length(rest) || substr(rest, RLENGTH + 1, 1) ~ /[ \t]/)) {
+      n = RLENGTH; tok = substr(rest, 1, n)
+    }
+    if (n == 0) return 0
+    prev = tok; rest = substr(rest, n + 1)
+  }
 }
-function judge(t) {
-  if (t ~ /^[A-Za-z_][A-Za-z0-9_]*="[^"$`\\]*"$/) return
-  if (t ~ /^[A-Za-z_][A-Za-z0-9_]*="\$\(mktemp( [^)"$`]*)?\)"$/) return
-  if (chained(t)) return
-  if (t ~ /^oe( |$)/) return
-  if (t ~ /^git fetch origin ([A-Za-z0-9][A-Za-z0-9._\/-]*|<[A-Z][A-Z_]*>)$/) return
-  if (t ~ /^sleep [0-9]+$/) return
-  if (t ~ /^mktemp( |$)/) return
-  if (t ~ /^cat >"\$[A-Za-z_][A-Za-z0-9_]*" <<[\047"]?[A-Za-z_][A-Za-z0-9_]*[\047"]?$/) return
-  if (t ~ /^gh issue view( |$)/) return
-  if (t ~ /^gh api repos\// && t !~ / -[XfF]/ && t !~ / --(method|field|raw-field|input)([ =]|$)/) return
-  violation("is not an oe call or an allowed read: " substr(t, 1, 60))
+function refuse(t) { violation("is not an oe call or an allowed read: " substr(t, 1, 60)); return 0 }
+# judge returns 1 when the line is allowed. Anything it does not name fails.
+function judge(t,   rest) {
+  HDTAG = ""
+  if (t ~ /^[A-Za-z_][A-Za-z0-9_]*="[^"$`\\]*"$/) return 1
+  if (t ~ /^[A-Za-z_][A-Za-z0-9_]*="\$\(mktemp( [^)"$`]*)?\)"$/) return 1
+  if (t ~ /^git fetch origin ([A-Za-z0-9][A-Za-z0-9._\/-]*|<[A-Z][A-Z_]*>)$/) return 1
+  if (t ~ /^sleep [0-9]+$/) return 1
+  if (t ~ /^cat >"\$[A-Za-z_][A-Za-z0-9_]*" <<[\047"]?[A-Za-z_][A-Za-z0-9_]*[\047"]?$/) { match(t, /<<.*$/); HDTAG = tagof(substr(t, RSTART)); return 1 }
+  if (t ~ /^oe([ \t]|$)/) { rest = substr(t, 3); return args_ok(rest, "oe") ? 1 : refuse(t) }
+  if (t ~ /^mktemp([ \t]|$)/) { rest = substr(t, 7); return args_ok(rest, "plain") ? 1 : refuse(t) }
+  if (t ~ /^gh issue view([ \t]|$)/) { rest = substr(t, 15); return args_ok(rest, "gh") ? 1 : refuse(t) }
+  if (t ~ /^gh api repos\//) { rest = substr(t, 8); return args_ok(rest, "gh") ? 1 : refuse(t) }
+  return refuse(t)
 }
-FNR == 1 { infence = 0; judged = 0; hd = ""; cont = 0 }
+# fence parses a line as a markdown code fence: a run of three or more backticks or tildes, and for backticks an
+# info string without a backtick. It sets FCH, FLEN, and FINFO.
+function fence(line,   s, c, n) {
+  s = line; sub(/^[ \t]+/, "", s)
+  c = substr(s, 1, 1)
+  if (c != "`" && c != "~") return 0
+  n = 0
+  while (substr(s, n + 1, 1) == c) n++
+  if (n < 3) return 0
+  FCH = c; FLEN = n; FINFO = substr(s, n + 1)
+  if (c == "`" && index(FINFO, "`") > 0) return 0
+  return 1
+}
+FNR == 1 { infence = 0; judged = 0; hd = ""; cont = 0; kind = "" }
 {
   line = $0
-  if (!infence && line ~ /^[ \t]*(~~~|````)/) {
-    violation("uses a fence the guard cannot track; use three backticks")
+  if (!infence) {
+    if (fence(line)) {
+      lang = trim(FINFO); sub(/[ \t].*$/, "", lang)
+      infence = 1; fch = FCH; flen = FLEN; judged = (lang ~ /^(bash|sh|shell|zsh)$/); hd = ""; cont = 0
+    }
     next
   }
-  if (!infence && match(line, /^[ \t]*```/)) {
-    lang = trim(substr(line, RLENGTH + 1))
-    sub(/[ \t].*$/, "", lang)
-    infence = 1; judged = (lang ~ /^(bash|sh|shell|zsh)$/); hd = ""; cont = 0
-    next
-  }
-  if (infence && line ~ /^[ \t]*```[ \t]*$/) { infence = 0; judged = 0; next }
-  if (!infence || !judged) next
+  if (fence(line) && FCH == fch && FLEN >= flen && trim(FINFO) == "") { infence = 0; judged = 0; next }
+  if (!judged) next
   if (hd != "") { if (trim(line) == hd) hd = ""; next }
   t = trim(line)
   if (t == "" || t ~ /^#/) next
-  if (cont) { cont = (t ~ /\\$/); chained(t); next }
-  cont = (t ~ /\\$/)
-  if (t !~ /<<</ && match(t, /<<-?[ \t]*[\047"]?[A-Za-z_][A-Za-z0-9_]*[\047"]?/)) {
-    hd = substr(t, RSTART, RLENGTH)
-    sub(/^<<-?[ \t]*[\047"]?/, "", hd); sub(/[\047"]$/, "", hd)
+  if (cont) {
+    cont = (t ~ /\\$/); if (cont) sub(/[ \t]*\\$/, "", t)
+    if (args_ok(t, kind)) { if (HDTAG != "") hd = HDTAG } else violation("a continuation holds more than plain words: " substr(t, 1, 60))
+    next
   }
-  judge(t)
+  cont = (t ~ /\\$/); if (cont) sub(/[ \t]*\\$/, "", t)
+  kind = (t ~ /^oe([ \t]|$)/) ? "oe" : "gh"
+  if (judge(t) && HDTAG != "") hd = HDTAG
 }
 END { exit bad }
 '
