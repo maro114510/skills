@@ -1,101 +1,106 @@
-# orchestrate-epic Design
+# orchestrate-epic 設計
 
-A concept-level design, not a detailed one. Child Issues and code fill in the details.
+## 目的
 
-## Purpose
+Epic の子 Issue を依存順に検証済み PR へ変え、状態はすべて GitHub から導き、マージは人間かリポジトリの自動化に任せる。
 
-Turn an Epic's child Issues into verified PRs in dependency order, with every state derived from GitHub, and leave merging to humans or repository automation.
+## 責務
 
-## Responsibilities
-
-| Part | Responsibility |
+| 担当 | 責務 |
 |---|---|
-| orchestrate-epic | Repeats `oe ready`, starts one fresh agent per next action, at most 3 at once, then `oe wait`; it ends when every child Issue is closed or nothing changes for 4 hours |
-| pr-owner | Moves one Issue one step: implements a new Issue with `implement autonomous`, or repairs every signal named in its brief, then pushes and opens or updates the PR, or asks a question and pushes nothing |
-| pr-verify | Checks one head SHA against the Issue's acceptance criteria in a detached worktree and records a verdict on that SHA |
-| `oe` | Derives the loop's state from GitHub and writes every marked record and verdict: `ready`, `claim`, attempts, questions, briefs, `verdict`, and `wait` |
-| Human | Answers questions, reviews, merges, closes Issues, and restarts a parked Issue by deleting its branch |
+| orchestrate-epic | oe ready で次の行動を得て新しいエージェントを起動し、oe wait で変化を待つことを繰り返す |
+| pr-owner | Issue を 1 段だけ進め、実装か修理を push するか、質問だけして何も push しない |
+| pr-verify | 1 つの SHA を Issue の受け入れ基準で検証し、その SHA に判定を書く |
+| oe | GitHub から状態を導き、AI の記録と判定をすべて書く |
+| 人間 | 質問に答え、レビューし、マージし、停止した Issue をブランチ削除でやり直させる |
 
-## Invariants
+## 不変条件
 
-Each row names the row of the safety-condition table in Epic #403 that it covers.
-
-| # | Invariant | Safety row |
-|---|---|---|
-| 1 | The AI never merges and never enables auto-merge | Merge grant, expected-SHA merge, reconciliation, freeze, budget, one merge at a time: dropped |
-| 2 | An Issue starts only when every blocked-by Issue is closed as completed | Dependencies done before starting |
-| 3 | A claim is the creation of `feat/issue-<n>` on origin, which fails when the ref exists | No double claim |
-| 4 | A verdict is the commit status `orchestrate-epic/verify` on the SHA checked, and is written only while that SHA is the PR head | Verdict bound to the SHA |
-| 5 | A Verifier's brief, built by `oe`, holds only the Issue, the head SHA, and the base | Verifier never sees the worker's report |
-| 6 | Every Owner and Verifier is a fresh agent that ends after one step | A fresh agent per step |
-| 7 | Owner attempts are counted from GitHub, and the 4th is refused | Retry cap survives restarts |
-| 8 | Agents work only in their own worktrees, never in the shared checkout | Never touch the shared checkout |
-| 9 | Human input is an unmarked comment or review by OWNER, MEMBER, or COLLABORATOR; every AI write carries the marker; labels mean nothing | No labels or loose words; trusted input only |
-| 10 | A failed GitHub read decides nothing: `oe ready` exits non-zero and proposes nothing | A failed read decides nothing |
-| 11 | Invoking the skill is consent, and ending the session stops every agent | Entry gate: dropped |
-| 12 | Real CI decides; nothing starts while the default-branch head lacks passing checks | Locally reproduced CHECKS_SET: dropped |
-
-The secret-scan row maps to the accepted risks.
-
-## Source of Truth
-
-Every AI write is marked by its first line, `<!-- orchestrate-epic:<kind> -->`, where kind is `claim`, `attempt`, `question`, or `findings`.
-A record counts only when it follows the Issue's latest `claim`, or always when no `claim` exists, so deleting the branch starts the Issue over.
-Within the session, `oe ready` also excludes Issues whose agent is still running.
-
-The board stops first when the default-branch head:
-
-- Has no checks 10 minutes after it appeared: the session exits with that reason
-- Has a pending or failing check, or no checks yet: start nothing and wait
-
-Otherwise a closed child Issue is done, and each open one takes the first matching action.
-
-| # | GitHub shows | Next action |
-|---|---|---|
-| 1 | After the latest claim, a merged PR, or the branch with only a closed unmerged PR | Wait for a human |
-| 2 | No branch, and a blocker is open or closed other than as completed | Blocked; a non-completed blocker waits for a human |
-| 3 | No branch, and every blocker closed as completed | Claim, then start an Owner |
-| 4 | The latest `question` on the Issue has no trusted Issue comment after it | Wait for the answer |
-| 5 | No PR; a conflict; a failing check; a `failure` verdict on the head; or, newer than the latest `attempt`, a trusted answer to the latest `question`, a CHANGES_REQUESTED review, or review-thread comment | Start an Owner, or park at 3 attempts |
-| 6 | A pending check, unknown mergeability, or no checks within 10 minutes of the head | Wait for CI |
-| 7 | No checks 10 minutes after the head appeared | Park |
-| 8 | Every check passes, and the head has no `success` or `failure` verdict | Start a Verifier, or park at 2 `pending` verify statuses on this SHA; `oe` writes `pending` before each Verifier starts |
-| 9 | A `success` verdict on the head | Wait for the merge |
-
-`orchestrate-epic/verify` itself never counts as a check.
-
-## Worked Examples
-
-| Case | What happens |
+| 不変条件 | 対応する Epic の安全条件 |
 |---|---|
-| Normal path | A is ready, `oe claim` creates its branch, and `oe` records attempt 1. The Owner pushes and opens a PR that closes A. CI passes, and a Verifier records `success` on the head. A human merges and A closes. B, blocked by A, becomes ready |
-| Lost agent | The Owner ends without a PR, or the session dies. Nothing on GitHub says done, so the next `oe ready` starts attempt 2 on the same branch, and a rerun resumes from the same state |
-| Failed verification | The Verifier records `failure` and a `findings` comment. Row 5 starts an Owner with those findings, its push creates a new head without a verdict, and CI and verification run again |
-| Failed CI | A check fails on the head, and row 5 starts an Owner to fix it on the same branch |
-| Reached cap | After 3 attempts row 5 still matches, so the Issue is parked and its dependents stay blocked. A human finishes and merges it by hand, or deletes the branch to start over |
-| Red default branch | A check on the default-branch head fails, so no claim, Owner, or Verifier starts and PRs spend no attempts. Once it passes, the loop continues |
+| AI はマージも自動マージ有効化もしない | マージ許可などマージ系の条件はすべて不要になる |
+| 依存先がすべて完了で閉じてから着手する | 依存の完了 |
+| 着手はブランチ作成で行い、既にあれば失敗する | 二重着手の防止 |
+| 判定は検証した SHA のコミットステータスで、その SHA が PR の先頭のときだけ書く | 判定と SHA の結び付け |
+| Verifier には Issue と SHA とベースだけを渡す | Verifier は作業者の報告を見ない |
+| エージェントは 1 段ごとに新しく起動して終わる | 段ごとに新しいエージェント |
+| Owner の試行は GitHub から数え、4 回目は拒否する | 再起動しても残る試行上限 |
+| エージェントは自分の worktree だけで作業する | 共有チェックアウトに触れない |
+| 人間の入力は信頼ユーザーのマーカーなしコメントだけで、ラベルは意味を持たない | 信頼できる入力だけを使う |
+| GitHub の読み取りに失敗したら何も決めない | 読み取り失敗で判断しない |
+| 起動が同意で、セッション終了ですべて止まる | 開始ゲートは不要になる |
+| 本物の CI で判断する | ローカル再現の検査集合は不要になる |
 
-## Accepted Risks
+秘密情報の検査は受容するリスクに対応する。
 
-- Verdicts can be forged under the shared token
-- A verified PR is not verified again after its base moves
-- Workflows changed by the AI run with secrets
-- `oe` does not scan for secrets; the commit skill screens each commit
-- An unmarked AI write reads as human input
-- The session lock is host-local, so a second session on another host is not refused and its agents can work the same branch
+## 状態の導出
 
-## Decisions
+```mermaid
+flowchart TD
+  B{"既定ブランチの check"} -->|"10 分経っても無い"| X["セッション終了"]
+  B -->|"保留か失敗"| N["何も始めない"]
+  B -->|"成功"| C{"Issue は閉じている"}
+  C -->|"はい"| Done["完了"]
+  C -->|"いいえ"| M{"マージ済み PR か、閉じた PR だけのブランチがある"}
+  M -->|"はい"| H["人間待ち"]
+  M -->|"いいえ"| R{"ブランチがある"}
+  R -->|"無く依存が完了"| Claim["着手して Owner 起動"]
+  R -->|"無く依存が未完了"| Wait["依存待ち"]
+  R -->|"ある"| Q{"未回答の質問がある"}
+  Q -->|"はい"| A["回答待ち"]
+  Q -->|"いいえ"| F{"修理シグナルがある"}
+  F -->|"3 回未満"| O["Owner 起動"]
+  F -->|"3 回到達"| P["停止"]
+  F -->|"無い"| K{"PR の check"}
+  K -->|"保留"| CI["CI 待ち"]
+  K -->|"10 分経っても無い"| P
+  K -->|"すべて成功"| V{"判定"}
+  V -->|"無く 2 回未満"| Ver["Verifier 起動"]
+  V -->|"無く 2 回到達"| P
+  V -->|"成功"| Merge["マージ待ち"]
+```
 
-| Topic | Decision |
+- 修理シグナル
+  - PR が無い
+  - 競合している
+  - check が失敗している
+  - 判定が失敗している
+  - 最新の試行より新しい信頼ユーザーの回答、変更要求レビュー、レビュースレッドのコメント
+- 数え方
+  - 記録は最新の着手記録より後のものだけを数え、着手記録が無ければすべて数える
+  - Verifier の回数は、起動前にその SHA へ付ける保留ステータスの数で数える
+  - 自分の判定ステータスは check に含めない
+  - 実行中のエージェントがいる Issue はセッション内で除く
+
+## 具体例
+
+| 場面 | 動き |
 |---|---|
-| Blocker closed as not planned or duplicate | The dependent waits for a human |
-| Signals that start a repair Owner | Failing checks, a `failure` verdict, merge conflicts, and trusted CHANGES_REQUESTED reviews or review-thread comments newer than the latest attempt. Plain PR comments and bot reviews start nothing |
-| Restart after a reached cap | Records count only after the latest `claim`, so deleting the branch resets the cap. The branch is created before the `claim` record, so a lost record leaves the old records counting, which stops for a human rather than retrying |
-| Re-dispatch after an answer | Counts toward the cap of 3, like every Owner dispatch |
-| Verifier ends without a verdict | Retried once; 2 `pending` verify statuses on one SHA park the Issue |
-| `oe wait` and idle limit | One call waits at most 25 minutes; after 4 hours without change the session ends with a summary |
-| Parallel agents | At most 3 Owners and Verifiers together, overridable by argument |
-| Worktrees | Each agent's worktree is removed when the agent ends; unpushed work is lost, because only GitHub holds state |
-| Verdict findings | A marked `findings` comment on the PR, read by the next Owner |
-| Checks not yet registered | 10 minutes of grace before no checks counts as no CI |
-| Merged PR on an open Issue | Waits for a human, never claimed again |
+| 正常 | A に着手し、Owner が PR を開き、CI と Verifier が成功し、人間がマージすると A に依存する B が着手可能になる |
+| エージェント消失 | GitHub に完了の印が無いので次の試行が同じブランチで始まり、セッションの再実行も同じ状態から再開する |
+| 検証失敗 | 失敗判定と指摘コメントを受けて Owner が修理し、新しい先頭で CI と検証をやり直す |
+| CI 失敗 | Owner が同じブランチで修理する |
+| 上限到達 | 3 回で停止し、依存する Issue も待ち、人間が手で仕上げるかブランチを消してやり直す |
+| 既定ブランチの失敗 | 着手も Owner も Verifier も始めないので試行を消費せず、成功に戻れば再開する |
+
+## 受容するリスク
+
+- 共有トークンでは判定を偽造できる
+- ベースが動いても再検証しない
+- AI が変えたワークフローが秘密情報付きで動く
+- oe は秘密情報を検査せず、各コミットは commit スキルが検査する
+- マーカーを付け忘れた AI の書き込みは人間の入力に見える
+- セッションロックはホスト内だけなので、別ホストのセッションは拒否できない
+
+## 決定事項
+
+| 論点 | 決定 |
+|---|---|
+| 依存先が不要や重複で閉じた | 依存する Issue は人間を待つ |
+| 修理を起動するシグナル | 上の修理シグナルだけで、通常の PR コメントと bot のレビューは無視する |
+| 回答後の再起動 | 試行上限 3 回に数える |
+| Verifier が判定を出せない | 1 回だけ再試行し、2 回目で停止する |
+| 待機 | oe wait は 1 回 25 分までで、4 時間変化が無ければ要約を出して終わる |
+| 並列数 | Owner と Verifier の合計 3 で、引数で変えられる |
+| worktree | エージェント終了時に消し、push していない作業は捨てる |
+| 判定の指摘 | マーカー付きの PR コメントに書き、次の Owner が読む |
