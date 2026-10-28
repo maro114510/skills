@@ -1,6 +1,5 @@
 #!/usr/bin/env bats
-# Tests for .claude/hooks/require-user-approval.sh: git push and the irreversible oe subcommands
-# need the approval marker, whether oe runs directly or through the orchestrate-epic wrapper.
+# Tests for .claude/hooks/require-user-approval.sh: git push needs the approval marker.
 # shellcheck disable=SC2292 # bats fails a test on a mid-test `[[ ]]` only under bash 4.1+; `[ ]` works on every bash.
 
 setup() {
@@ -49,105 +48,24 @@ assert_allowed() {
   assert_allowed 'git push origin feat/x # user-approved'
 }
 
-@test "oe commands are not guarded, so the hook no longer knows the removed oe CLI" {
-  assert_allowed 'oe ship publish'
-  assert_allowed 'oe --epic 3 land merge --pr 9'
-  assert_allowed 'skills/orchestrate-epic/scripts/oe ship publish --epic 3'
-  # shellcheck disable=SC2016 # The variable must reach the hook unexpanded, as the model writes it.
-  assert_allowed '"${OE}" --epic 3 land merge'
-}
-
-@test "oe ship publish is blocked when invoked directly" {
-  assert_blocked 'oe ship publish'
-  assert_blocked 'oe --epic 3 ship publish'
-  assert_blocked './oe ship publish'
-  assert_blocked '/usr/local/bin/oe --repo a/b ship publish'
-  assert_blocked 'cd oe && ./oe ship publish'
-}
-
-@test "oe land merge is blocked when invoked directly" {
-  assert_blocked 'oe land merge'
-  assert_blocked 'oe --epic 3 land merge --pr 9'
-}
-
-@test "the irreversible subcommands are blocked through the wrapper path" {
-  assert_blocked 'skills/orchestrate-epic/scripts/oe ship publish --epic 3'
-  assert_blocked 'bash skills/orchestrate-epic/scripts/oe land merge'
-  # shellcheck disable=SC2016 # The variable must reach the hook unexpanded, as the model writes it.
-  assert_blocked '"${CLAUDE_PLUGIN_ROOT}/skills/orchestrate-epic/scripts/oe" --epic 3 land merge'
-  assert_blocked "'/plugins/skills/orchestrate-epic/scripts/oe' ship publish"
-}
-
-@test "shell-escaped or split-quoted command names do not bypass the hook" {
-  assert_blocked '\oe ship publish'
-  assert_blocked "'o'e ship publish"
-  assert_blocked '"o"e land merge'
-  assert_blocked 'o\e land merge'
+@test "shell-escaped or split-quoted git push does not bypass the hook" {
   assert_blocked '\git push origin x'
   assert_blocked "g'i't push origin x"
   assert_blocked 'git "push" origin x'
-  assert_allowed '\oe ship publish # user-approved'
 }
 
-@test "flags between the subcommand words do not bypass the hook" {
-  assert_blocked 'oe ship --epic 3 publish'
-  assert_blocked 'skills/orchestrate-epic/scripts/oe land --pr 9 merge'
+@test "a git push split across lines or joined by a continuation is blocked" {
+  assert_blocked $'git \\\n  push origin x'
+  assert_blocked $'echo start\ngit push origin x'
 }
 
-@test "a guarded oe subcommand inside a compound command is blocked" {
-  assert_blocked 'true && oe ship publish'
-  assert_blocked 'echo start; skills/orchestrate-epic/scripts/oe land merge; echo done'
-  assert_blocked '(oe land merge)'
-}
-
-@test "a guarded command split across lines is blocked" {
-  assert_blocked $'oe --epic 3 ship \\\n  publish'
-  assert_blocked $'skills/orchestrate-epic/scripts/oe \\\n  --epic 3 land merge'
-  assert_blocked $'echo start\noe land merge'
-}
-
-@test "the wrapper path held in a variable does not bypass the hook" {
-  # shellcheck disable=SC2016 # The variables must reach the hook unexpanded, as the model writes them.
-  assert_blocked 'OE=skills/orchestrate-epic/scripts/oe; "$OE" ship publish'
-  # shellcheck disable=SC2016
-  assert_blocked '"${OE}" --epic 3 land merge'
-}
-
-@test "redirection or a closing brace right after the subcommand does not bypass the hook" {
-  assert_blocked 'oe ship publish>out.json'
-  assert_blocked 'oe land merge<in'
-  assert_blocked '{ oe land merge;}'
-  assert_blocked 'f() { oe land merge}'
-}
-
-@test "the marker approves only on the guarded command's own line" {
-  assert_blocked $'echo hi # user-approved\noe ship publish'
+@test "the marker approves only on the git push's own line" {
   assert_blocked $'echo hi # user-approved\ngit push origin feat/x'
   assert_blocked $'git push origin main\n# user-approved'
-  assert_blocked $'oe ship publish\n# user-approved'
-  assert_blocked $'oe ship publish # user-approved\ngit push origin main'
-  assert_blocked $'oe ship\npublish # user-approved'
-  assert_allowed $'oe --epic 3 \\\n  ship publish # user-approved'
+  assert_blocked $'git push origin a # user-approved\ngit push origin main'
+  assert_allowed $'git \\\n  push origin feat/x # user-approved'
   assert_allowed $'cd repo\ngit push origin feat/x # user-approved'
   assert_allowed $'git push origin a # user-approved\ngit push origin b # user-approved'
-}
-
-@test "the irreversible subcommands with the marker are allowed" {
-  assert_allowed 'oe ship publish # user-approved'
-  assert_allowed 'skills/orchestrate-epic/scripts/oe --epic 3 land merge # user-approved'
-}
-
-@test "read-only oe subcommands are allowed" {
-  assert_allowed 'oe resolve --epic 3'
-  assert_allowed 'skills/orchestrate-epic/scripts/oe --snapshot s.json resolve --epic 3'
-  assert_allowed 'oe ship'
-  assert_allowed 'oe --version'
-}
-
-@test "commands that only mention the words are allowed" {
-  assert_allowed 'go test ./oe/...'
-  assert_allowed 'echo shoe ship publish'
-  assert_allowed 'grep -r "land merge" docs'
 }
 
 @test "unparseable hook input fails" {
