@@ -103,7 +103,7 @@ ISSUE_QUERY='query($owner: String!, $repo: String!, $num: Int!, $branch: String!
         number state createdAt mergedAt isCrossRepository headRefOid mergeable
         reviews(last: 100, states: [CHANGES_REQUESTED]) { nodes { authorAssociation body submittedAt } }
         reviewThreads(last: 50) { nodes { comments(last: 50) { nodes { authorAssociation body createdAt } } } }
-        commits(last: 1) { nodes { commit { oid committedDate '"${CHECKS}"' } } }
+        headRef { target { ... on Commit { oid committedDate '"${CHECKS}"' } } }
       }
     }
   }
@@ -203,7 +203,7 @@ CLASSIFY='
       elif $question != null and ($answers | length) == 0 then "wait-answer\tthe question has no unmarked comment from a trusted role yet"
       elif $pr == null then $answered + ["no PR yet"] | repair($attempts | length)
       else
-        ($pr.commits.nodes[0].commit // error("PR #\($pr.number) head unreadable")) as $head
+        ($pr.headRef.target // error("PR #\($pr.number) head unreadable")) as $head
         | if $head.oid != $pr.headRefOid then error("PR #\($pr.number) head changed during the read") else . end
         | (facts[$head.oid] // error("PR #\($pr.number) head \($head.oid) changed during the read")) as $f
         | ($head | ci) as $ci
