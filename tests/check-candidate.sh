@@ -19,7 +19,7 @@
 #   gh issue view ...              reads an Issue
 #   gh api repos/... ...           reads, and fails when a flag makes it write
 # An oe line, and the arguments of gh and mktemp, hold only plain words, <placeholders>, a quoted "$variable", and for oe a
-# quoted literal and a quoted output redirect, and may end in a heredoc whose body is data. A quoted literal is opaque
+# quoted literal and a quoted output redirect, and may end in a heredoc with a quoted delimiter, whose body is data. A quoted literal is opaque
 # to gh only after --jq. Quotes, $, backticks, parentheses, braces, ; | & # * ~ and a backslash fail. Rather than parse
 # shell, the guard allows few forms, and each fix of a bypass stays one more line of this grammar.
 # Fences follow markdown at column 0: a run of three or more backticks or tildes, closed by a run of at least as many.
@@ -65,11 +65,11 @@ BEGIN {
   VAR = "^\"\\$[A-Za-z_][A-Za-z0-9_]*\""
   RED = "^>\"[^\"$`\\\\]*\""
   SQ = "^\047[^\047]*\047"
-  HD = "^<<-?[ \t]*[\047\"]?[A-Za-z_][A-Za-z0-9_]*[\047\"]?$"
+  HD = "^<<([\047][A-Za-z_][A-Za-z0-9_]*[\047]|\"[A-Za-z_][A-Za-z0-9_]*\")$"
 }
 function trim(s) { sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s); return s }
 function violation(msg) { printf "%s:%d: %s\n", rel, FNR, msg; bad = 1 }
-function tagof(h) { sub(/^<<-?[ \t]*[\047"]?/, "", h); sub(/[\047"]$/, "", h); return h }
+function tagof(h) { sub(/^<</, "", h); gsub(/[\047"]/, "", h); return h }
 # args_ok judges the arguments of a command token by token. kind is oe, gh, or plain.
 function args_ok(rest, kind,   prev, tok, n) {
   prev = ""
@@ -105,7 +105,7 @@ function judge(t,   rest) {
   }
   if (t ~ /^git fetch origin ([A-Za-z0-9][A-Za-z0-9._\/-]*|<[A-Z][A-Z_]*>)$/) return 1
   if (t ~ /^sleep [0-9]+$/) return 1
-  if (t ~ /^cat >"\$[A-Za-z_][A-Za-z0-9_]*" <<[\047"]?[A-Za-z_][A-Za-z0-9_]*[\047"]?$/) { match(t, /<<.*$/); HDTAG = tagof(substr(t, RSTART)); return 1 }
+  if (t ~ /^cat >"\$[A-Za-z_][A-Za-z0-9_]*" <<([\047][A-Za-z_][A-Za-z0-9_]*[\047]|"[A-Za-z_][A-Za-z0-9_]*")$/) { match(t, /<<.*$/); HDTAG = tagof(substr(t, RSTART)); return 1 }
   if (t ~ /^oe([ \t]|$)/) { rest = substr(t, 3); return args_ok(rest, "oe") ? 1 : refuse(t) }
   if (t ~ /^mktemp([ \t]|$)/) { rest = substr(t, 7); return args_ok(rest, "plain") ? 1 : refuse(t) }
   if (t ~ /^gh issue view([ \t]|$)/) { rest = substr(t, 15); return args_ok(rest, "gh") ? 1 : refuse(t) }
@@ -131,7 +131,7 @@ FNR == 1 { infence = 0; judged = 0; hd = "" }
   # The guard follows fences at column 0 only. An indented one could open or close a block it would not see.
   if (line ~ /^[ \t]+(```|~~~)/) { violation("an indented fence; the guard follows only fences at column 0"); next }
   if (!infence) {
-    if (line ~ /^((>|[-*+]|[0-9]+[.)])[ \t]*)+(```|~~~)/) {
+    if (line ~ /^[ \t]*((>|[-*+]|[0-9]+[.)])[ \t]*)+(```|~~~)/) {
       violation("a fence inside a quote or a list item; the guard does not follow containers, so write the block at the top level")
       next
     }
