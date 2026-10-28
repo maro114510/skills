@@ -1,0 +1,55 @@
+# The read of one child Issue in oe ready.
+# It returns the Issue, its dependencies, its latest comments, its branch, and the pull requests opened from that branch.
+query($owner: String!, $repo: String!, $num: Int!, $branch: String!, $ref: String!) {
+  repository(owner: $owner, name: $repo) {
+    issue(number: $num) {
+      number
+      state
+      stateReason
+      blockedBy(first: 100) {
+        totalCount
+        nodes { number state stateReason }
+      }
+      comments(last: 100) {
+        totalCount
+        nodes { authorAssociation body createdAt }
+      }
+    }
+    ref(qualifiedName: $ref) { name }
+    pullRequests(headRefName: $branch, first: 100, orderBy: {field: CREATED_AT, direction: DESC}) {
+      totalCount
+      nodes {
+        number
+        state
+        createdAt
+        mergedAt
+        isCrossRepository
+        headRefOid
+        mergeable
+        reviews(last: 100, states: [CHANGES_REQUESTED]) {
+          nodes { authorAssociation body submittedAt }
+        }
+        reviewThreads(last: 100) {
+          totalCount
+          nodes { comments(last: 20) { nodes { authorAssociation body createdAt } } }
+        }
+        headRef { target { ... on Commit { ...HeadChecks } } }
+      }
+    }
+  }
+}
+
+fragment HeadChecks on Commit {
+  oid
+  committedDate
+  statusCheckRollup {
+    contexts(first: 100) {
+      totalCount
+      nodes {
+        __typename
+        ... on CheckRun { name status conclusion startedAt checkSuite { databaseId } }
+        ... on StatusContext { context state createdAt }
+      }
+    }
+  }
+}

@@ -1,0 +1,32 @@
+# The Epic read of oe ready.
+# It returns the default branch head with its checks and the list of child Issues.
+query($owner: String!, $repo: String!, $epic: Int!) {
+  repository(owner: $owner, name: $repo) {
+    nameWithOwner
+    defaultBranchRef {
+      name
+      target { ... on Commit { ...HeadChecks } }
+    }
+    issue(number: $epic) {
+      subIssues(first: 100) {
+        totalCount
+        nodes { number repository { nameWithOwner } }
+      }
+    }
+  }
+}
+
+fragment HeadChecks on Commit {
+  oid
+  committedDate
+  statusCheckRollup {
+    contexts(first: 100) {
+      totalCount
+      nodes {
+        __typename
+        ... on CheckRun { name status conclusion startedAt checkSuite { databaseId } }
+        ... on StatusContext { context state createdAt }
+      }
+    }
+  }
+}

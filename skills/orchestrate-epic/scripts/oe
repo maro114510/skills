@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# oe
+#
+# The helper commands of orchestrate-epic.
+# Each subcommand lives in oe-SUBCOMMAND.sh next to this file.
+#
+# | Subcommand | Does |
+# |---|---|
+# | ready | Prints the next action of every child Issue of an Epic |
+#
+# An unknown or missing subcommand exits 2.
+set -uo pipefail
+
+dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+case "${1:-}" in
+ready)
+  sub="$1"
+  shift
+  exec bash "${dir}/oe-${sub}.sh" "$@"
+  ;;
+*)
+  echo "Usage: oe ready <owner/repo> <epic-number> [--running <issue-number>]..." >&2
+  exit 2
+  ;;
+esac
