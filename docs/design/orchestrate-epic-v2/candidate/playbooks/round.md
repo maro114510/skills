@@ -28,14 +28,14 @@ oe ledger freeze --reason <REASON> --merge <MERGE> --health <HEALTH> --lease-tok
 git fetch origin <DEFAULT_BRANCH>
 ```
 
-5. Make a file for CHECKS_SET, then derive CHECKS_SET into it. Every later call of this round names that file as `--checks-set`:
+5. Make a file for CHECKS_SET, then derive CHECKS_SET into it. `--base` names the default branch from `oe resolve`, so a checkout without `refs/remotes/origin/HEAD` works. Every later call of this round names that file as `--checks-set`:
 
 ```bash
 mktemp
 ```
 
 ```bash
-oe checks derive >"<CHECKS_FILE>"
+oe checks derive --base <DEFAULT_BRANCH> >"<CHECKS_FILE>"
 ```
 
 6. Post the notes the board proposed, once each:

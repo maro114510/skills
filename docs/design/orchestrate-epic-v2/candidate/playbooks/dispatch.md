@@ -16,7 +16,7 @@ oe state start --issue <N> --lease-token <TOKEN>
 oe worker worktree --issue <N> --repo-dir <REPO_DIR> --lease-token <TOKEN>
 ```
 
-3. Render the worker's whole prompt. Exit 8 means a human comment is not consumed yet: run `oe state apply-signals` for the Issue, then this again:
+3. Render the worker's whole prompt. Exit 8 may mean a human comment is not consumed yet. Run `oe state apply-signals` for the Issue, then step 2 again, and only then this call: an `epic-redo` records a new branch, so the worktree has to be made again, and a decision that parked or dropped the Issue makes `oe worker worktree` refuse it, in which case skip the Issue. Never call `oe round plan` again for this, since that begins another round:
 
 ```bash
 oe worker brief --issue <N> --worktree <WORKTREE> --implement <IMPLEMENT> --checks-set <CHECKS_FILE> --repo-dir <REPO_DIR> --lease-token <TOKEN>

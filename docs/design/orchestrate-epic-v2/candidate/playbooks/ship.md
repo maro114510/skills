@@ -13,7 +13,9 @@ oe ship publish --issue <N> --worktree <WORKTREE> --checks-set <CHECKS_FILE> --r
 `oe` scans for secrets, checks freshness, runs CHECKS_SET, checks the freeze again, pushes, and opens or links the pull request. It prints a route, and one Issue's failure never stops the others.
 
 - `PUBLISHED` with `next` `land`: add the pull request to Ship Report.
-- `INTERRUPTED`: run the same command again. It resumes from the recorded phase.
+- Read the exit code first, with the router's table. `INTERRUPTED` carries the exit code of what interrupted it, and it never overrides a stop.
 - Exit 3: the pair went stale. Pin again with `review.md`.
 - Exit 4: the Epic froze. Render Frozen Epic and stop.
+- Exits 6, 7, and 8: stop, and report the verdict line.
+- `INTERRUPTED` with exit 1 or 5: do not run it again in this pass. The publish stays recorded, and the same command in the next round resumes from the recorded phase.
 - Anything else is an Issue `oe` parked, for a secret or red checks: nothing more. Report its `reason` with Escalation.

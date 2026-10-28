@@ -32,4 +32,4 @@ Add `--ship-class <kind>` when a finding is ship-class, judged as in `dispatch.m
 | `FIX` | `redispatch` | A fresh worker with the findings, which `oe` reserved as a fix cycle |
 | `STALE` | `reverify` or `defer` | Pin again, or defer, as the router says |
 | `PARKED` | `parked` | Nothing more |
-| `MALFORMED` | none | Exit 8, nothing written. Spawn a fresh reviewer |
+| `MALFORMED` | none | Exit 8, nothing written. Reserve one more reviewer pass with step 2, even for a re-verification, since `oe` does not count a replacement; exit 4 means the Epic froze, so spawn nothing. Then spawn a fresh reviewer |

@@ -50,7 +50,7 @@ Every command prints one JSON payload or one verdict line, and its exit code dec
 | 0 | Proceed | Read `next` below |
 | 1 | A read failed or was partial | Stop the action and report the verdict line. Never retry blindly and never act on a partial read |
 | 2 | Usage error | Fix the call |
-| 3 | Stale: the head or the base moved | Follow `next`, which is `reverify`. Never park an Issue for this |
+| 3 | Stale: the head or the base moved, or CHECKS_SET was derived at another commit or for another default branch | The verdict says "derive it again" and carries no `next` when CHECKS_SET is the stale one: fetch the base and derive CHECKS_SET into a fresh file as `playbooks/round.md` steps 4 and 5 do, then repeat the call. Otherwise follow `next`, which is `reverify`. Never park an Issue for this |
 | 4 | Stop: frozen, health failed, an unrecordable merge result, or an unknown merge outcome | Stop work, render Frozen Epic when it is a freeze, and never retry |
 | 5 | Wait: checks or health are pending | Poll, see `playbooks/land.md` |
 | 6 | Protocol: a v1 marker, bad JSON, or a duplicate state | Stop. A person repairs GitHub |
