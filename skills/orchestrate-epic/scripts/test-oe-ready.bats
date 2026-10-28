@@ -780,3 +780,50 @@ JSON
   [ "${status}" -eq 0 ]
   [ "$(action_of 5)" = wait-merge ]
 }
+
+# A push during the read
+
+@test "a push during the read does not hide a pending question" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
+      {"by": "OWNER", "at": "07:01", "body": "<!-- oe:attempt -->"},
+      {"by": "OWNER", "at": "07:30", "body": "<!-- oe:question -->\nWhich option?"}
+    ],
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "pushed_during_read": true}]
+  }]
+}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-answer ]
+}
+
+@test "a push during the read fails the read when the action depends on the head" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
+      {"by": "OWNER", "at": "07:01", "body": "<!-- oe:attempt -->"}
+    ],
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "pushed_during_read": true}]
+  }]
+}
+JSON
+
+  run --separate-stderr bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 1 ]
+  [ -z "${output}" ]
+}

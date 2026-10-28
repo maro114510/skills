@@ -41,6 +41,7 @@
 # | from_fork | Whether its branch lives in a fork | false |
 # | conflicting | Whether it conflicts with its base | false |
 # | pushed | When its head was pushed | Same as opened |
+# | pushed_during_read | Whether a new head arrived after the pull request list was read | false |
 # | committed | The commit time of its head | Same as opened |
 # | checks | Check name to result on its head | No checks |
 # | verdicts | oe/verify states on its head, newest first | None |
@@ -77,14 +78,17 @@ def epic_response:
       issue: {subIssues: {totalCount: (.issues | length),
         nodes: [.issues[] | {number, repository: {nameWithOwner: "o/r"}}]}}}}};
 
+# The head the Issue read sees, which differs from the listed head after a push during the read.
+def read_sha: if .pushed_during_read then "c" * 40 else pr_sha end;
+
 def pull_request:
-  {number, isCrossRepository: (.from_fork // false), headRefOid: pr_sha,
+  {number, isCrossRepository: (.from_fork // false), headRefOid: read_sha,
     state: (.state // "open" | ascii_upcase), createdAt: (.opened | time),
     mergedAt: (if .merged then .merged | time else null end),
     mergeable: (if .conflicting then "CONFLICTING" else "MERGEABLE" end),
     reviews: {nodes: [.reviews[]? | author + {submittedAt: (.at | time)}]},
     reviewThreads: {nodes: [{comments: {nodes: [.thread_comments[]? | author + {createdAt: (.at | time)}]}}]},
-    headRef: {target: {oid: pr_sha, committedDate: (.committed // .opened | time), statusCheckRollup: rollup}}};
+    headRef: {target: {oid: read_sha, committedDate: (.committed // .opened | time), statusCheckRollup: rollup}}};
 
 def issue_response($n):
   (.issues[] | select(.number == $n)) as $i
