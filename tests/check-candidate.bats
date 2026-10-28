@@ -121,12 +121,6 @@ shell_block() {
   done
 }
 
-@test "a continuation line belongs to its command" {
-  shell_block "${cand}/router.md" "oe worker brief --issue 7 \\" '  --lease-token t'
-  run bash "${target}" "${cand}"
-  [ "${status}" -eq 0 ]
-}
-
 @test "a continuation after a forbidden command does not hide it" {
   shell_block "${cand}/router.md" "git push \\" '  origin main'
   run bash "${target}" "${cand}"
@@ -141,22 +135,6 @@ shell_block() {
     run bash "${target}" "${cand}"
     [ "${status}" -eq 1 ] || {
       echo "accepted: ${line}"
-      return 1
-    }
-  done
-}
-
-@test "a command chained on a continuation line fails" {
-  for line in '  && git push origin main' '  | sh' '  ; git push' '  $(git push)' '  `git push`'; do
-    printf '# Router\n' >"${cand}/router.md"
-    shell_block "${cand}/router.md" "oe worker brief --issue 7 \\" "${line}"
-    run bash "${target}" "${cand}"
-    [ "${status}" -eq 1 ] || {
-      echo "accepted: ${line}"
-      return 1
-    }
-    [[ "${output}" == *"router.md:5"* ]] || {
-      echo "no location for: ${line}: ${output}"
       return 1
     }
   done
@@ -321,34 +299,6 @@ shell_block() {
   done
 }
 
-@test "a line indented four spaces or by a tab is no fence, and up to three spaces still is" {
-  printf '# Router\n\n    ```text\n\n```bash\ngit push origin main\n```\n' >"${cand}/router.md"
-  run bash "${target}" "${cand}"
-  [ "${status}" -eq 1 ]
-  [[ "${output}" == *"router.md:6"* ]]
-  printf '# Router\n\n\t```text\n\n```bash\ngit push origin main\n```\n' >"${cand}/router.md"
-  run bash "${target}" "${cand}"
-  [ "${status}" -eq 1 ]
-  [[ "${output}" == *"router.md:6"* ]]
-  printf '# Router\n\n   ```bash\ngit push origin main\n   ```\n' >"${cand}/router.md"
-  run bash "${target}" "${cand}"
-  [ "${status}" -eq 1 ]
-  [[ "${output}" == *"router.md:4"* ]]
-  printf '# Router\n\n   ```bash\noe gate --lease-token t\n   ```\n' >"${cand}/router.md"
-  run bash "${target}" "${cand}"
-  [ "${status}" -eq 0 ]
-}
-
-@test "a candidate written with CRLF line ends is judged like one with LF" {
-  printf '# Router\r\n\r\n```bash\r\ngit push origin main\r\n```\r\n' >"${cand}/router.md"
-  run bash "${target}" "${cand}"
-  [ "${status}" -eq 1 ]
-  [[ "${output}" == *"router.md:4"* ]]
-  printf '# Router\r\n\r\n```bash\r\noe gate --lease-token t\r\n```\r\n' >"${cand}/router.md"
-  run bash "${target}" "${cand}"
-  [ "${status}" -eq 0 ]
-}
-
 @test "a fence inside a quote or a list item fails, because the guard does not follow containers" {
   for opener in '> ```bash' '>> ```bash' '- ```bash' '* ```bash' '1. ```bash' '2) ```bash' '- > ```bash' '> - ~~~bash'; do
     printf '# Router\n\n%s\ngit push origin main\n```\n' "${opener}" >"${cand}/router.md"
@@ -368,6 +318,60 @@ shell_block() {
   printf '# Router\n\nA fence is three backticks, written ``` like this, in prose.\n\nUse - and > in tables | a | b |\n' >"${cand}/router.md"
   run bash "${target}" "${cand}"
   [ "${status}" -eq 0 ]
+}
+
+@test "a backslash at the end of a line fails, so a command is always one physical line" {
+  for line in "oe worker brief --issue 7 \\" "git push \\" "gh api repos/o/r/issues/7/comments --met\\"; do
+    printf '# Router\n' >"${cand}/router.md"
+    shell_block "${cand}/router.md" "${line}" 'hod POST'
+    run bash "${target}" "${cand}"
+    [ "${status}" -eq 1 ] || {
+      echo "accepted: ${line}"
+      return 1
+    }
+    [[ "${output}" == *"router.md:4"* ]] || {
+      echo "no location for: ${line}: ${output}"
+      return 1
+    }
+  done
+}
+
+@test "a backslash before a blank line does not let the next command pass as an argument" {
+  printf '# Router\n\n```bash\noe gate --lease-token t \\\n\ngit push origin main\n```\n' >"${cand}/router.md"
+  run bash "${target}" "${cand}"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"router.md:6"* ]]
+}
+
+@test "a carriage return anywhere fails the file, whether CRLF or a bare CR" {
+  printf '# Router\r\n\r\n```bash\r\ngit push origin main\r\n```\r\n' >"${cand}/router.md"
+  run bash "${target}" "${cand}"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"router.md:1"*"carriage return"* ]]
+  printf '# Router\r\r```bash\rgit push origin main\r```\r' >"${cand}/router.md"
+  run bash "${target}" "${cand}"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"carriage return"* ]]
+  printf '# Router\n\n```bash\noe gate --lease-token t\n```\n' >"${cand}/router.md"
+  run bash "${target}" "${cand}"
+  [ "${status}" -eq 0 ]
+}
+
+@test "an indented fence fails wherever it is, so no indentation can open or close a block the guard misses" {
+  for body in '    ```text\n\n```bash\ngit push origin main\n```\n' '\t```text\n\n```bash\ngit push origin main\n```\n' \
+    '   ```bash\noe gate --lease-token t\n   ```\n' '```text\nx\n   ```\n```bash\ngit push origin main\n```\n' \
+    '- item\n\n    ```bash\n    git push origin main\n    ```\n'; do
+    printf '# Router\n\n%b' "${body}" >"${cand}/router.md"
+    run bash "${target}" "${cand}"
+    [ "${status}" -eq 1 ] || {
+      echo "accepted: ${body}"
+      return 1
+    }
+    [[ "${output}" == *"indented fence"* ]] || {
+      echo "no indented-fence violation: ${body}: ${output}"
+      return 1
+    }
+  done
 }
 
 @test "a fenced block that is not shell is never judged" {
