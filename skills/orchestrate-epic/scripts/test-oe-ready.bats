@@ -28,6 +28,7 @@ def closed: .issue.state = "CLOSED" | .issue.stateReason = "COMPLETED";
 def pr($number; $state; $created; $sha; $checks): {number: $number, state: $state, createdAt: $created,
   mergedAt: (if $state == "MERGED" then "2027-01-15T07:40:00Z" else null end), isCrossRepository: false,
   headRefOid: $sha, mergeable: "MERGEABLE", reviews: {totalCount: 0, nodes: []}, reviewThreads: {nodes: []},
+  headRef: {target: {oid: $sha, committedDate: $created, statusCheckRollup: rollup($checks)}},
   commits: {nodes: [{commit: {oid: $sha, committedDate: $created, statusCheckRollup: rollup($checks)}}]}};
 def prs($p): .pullRequests.nodes = $p;
 '
@@ -548,4 +549,15 @@ pr_with_comments() {
   run bash "${oe}" ready o/r 1
   [ "${status}" -eq 0 ]
   [ "$(action_of 5)" = wait-merge ]
+}
+
+@test "a PR with more commits than GitHub lists is classified by its head commit" {
+  # GitHub lists at most 250 commits of a PR, so the last one listed is then not the head.
+  claimed_pr '[passed("test")]' "2027-01-15T07:10:00Z" \
+    '.commits.nodes[0].commit = {oid: "cccccccccccccccccccccccccccccccccccccccc", committedDate: "2027-01-15T06:00:00Z", statusCheckRollup: null}'
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-verifier ]
 }
