@@ -26,7 +26,7 @@
 # Fences follow markdown at column 0: a run of three or more backticks or tildes, closed by a run of at least as many.
 # Blocks of another language, and unlabeled ones, are text and are not judged. Rather than model more of markdown and
 # shell, the guard fails on what it would have to model: an indented fence, a fence inside a quote or a list item, a
-# carriage return anywhere in the file, and a backslash at the end of a line.
+# carriage return anywhere in the file, an HTML block, and a backslash at the end of a line.
 #
 # Exit codes: 0 clean, 1 violations, 2 usage error.
 
@@ -132,6 +132,11 @@ FNR == 1 { infence = 0; judged = 0; hd = "" }
   # The guard follows fences at column 0 only. An indented one could open or close a block it would not see.
   if (line ~ /^[ \t]+(```|~~~)/) { violation("an indented fence; the guard follows only fences at column 0"); next }
   if (!infence) {
+    # An HTML block keeps a fence marker inside it as text. Running text such as <TOKEN> or a<b does not start one.
+    if (line ~ /^[ \t]*<(\/?[A-Za-z][A-Za-z0-9-]*([ \t>\/]|$)|!|\?)/ && line !~ /^[ \t]*<[A-Z][A-Z_]*>/) {
+      violation("an HTML block; markdown keeps what follows as text, so the guard cannot follow the fences after it")
+      next
+    }
     if (line ~ /^[ \t]*((>|[-*+]|[0-9]+[.)])[ \t]*)+(```|~~~)/) {
       violation("a fence inside a quote or a list item; the guard does not follow containers, so write the block at the top level")
       next
