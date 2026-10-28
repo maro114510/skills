@@ -827,3 +827,62 @@ JSON
   [ "${status}" -eq 1 ]
   [ -z "${output}" ]
 }
+
+# Reads that GitHub cuts short
+
+@test "a closed Issue with more comments than one read holds is done" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{"number": 5, "closed": true, "branch": true, "older_comments": 150}]
+}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = "done" ]
+}
+
+@test "more review threads than one read holds fail the read instead of missing engineer input" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
+      {"by": "OWNER", "at": "07:30", "body": "<!-- oe:attempt -->"}
+    ],
+    "pull_requests": [{
+      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"], "older_threads": 100
+    }]
+  }]
+}
+JSON
+
+  run --separate-stderr bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 1 ]
+  [ -z "${output}" ]
+}
+
+@test "more pull requests on the branch name than one read holds fail the read instead of missing the real one" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [{"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"}],
+    "older_pull_requests": 100
+  }]
+}
+JSON
+
+  run --separate-stderr bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 1 ]
+  [ -z "${output}" ]
+}

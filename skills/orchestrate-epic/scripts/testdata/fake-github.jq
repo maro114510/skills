@@ -31,6 +31,8 @@
 # | branch | Whether the branch feat/issue-N exists | false |
 # | comments | Issue comments, oldest first, each with by, at, and body | None |
 # | pull_requests | Pull requests opened from the branch | None |
+# | older_comments | How many older comments GitHub leaves out of the read | 0 |
+# | older_pull_requests | How many older pull requests GitHub leaves out of the read | 0 |
 #
 # | Pull request field | Holds | Default |
 # |---|---|---|
@@ -47,6 +49,7 @@
 # | verdicts | oe/verify states on its head, newest first | None |
 # | reviews | Changes requested reviews, each with by, at, and body | None |
 # | thread_comments | Review-thread comments, each with by, at, and body | None |
+# | older_threads | How many older review threads GitHub leaves out of the read | 0 |
 #
 # - A check result is success, failure, cancelled, or in_progress.
 # - The by field is an author association such as OWNER, MEMBER, or NONE.
@@ -87,7 +90,7 @@ def pull_request:
     mergedAt: (if .merged then .merged | time else null end),
     mergeable: (if .conflicting then "CONFLICTING" else "MERGEABLE" end),
     reviews: {nodes: [.reviews[]? | author + {submittedAt: (.at | time)}]},
-    reviewThreads: {nodes: [{comments: {nodes: [.thread_comments[]? | author + {createdAt: (.at | time)}]}}]},
+    reviewThreads: {totalCount: (1 + (.older_threads // 0)), nodes: [{comments: {nodes: [.thread_comments[]? | author + {createdAt: (.at | time)}]}}]},
     headRef: {target: {oid: read_sha, committedDate: (.committed // .opened | time), statusCheckRollup: rollup}}};
 
 def issue_response($n):
@@ -99,10 +102,10 @@ def issue_response($n):
         blockedBy: {totalCount: ($i.blocked_by // [] | length), nodes: [$i.blocked_by[]? | {number,
           state: (if .state == "open" then "OPEN" else "CLOSED" end),
           stateReason: (if .state == "open" then null else (.state | ascii_upcase) end)}]},
-        comments: {totalCount: ($i.comments // [] | length),
+        comments: {totalCount: ($i.comments // [] | length) + ($i.older_comments // 0),
           nodes: [$i.comments[]? | author + {createdAt: (.at | time)}]}},
       ref: (if $i.branch then {name: "feat/issue-\($n)"} else null end),
-      pullRequests: {nodes: [$i.pull_requests // [] | sort_by(.opened) | reverse | .[] | pull_request]}}}};
+      pullRequests: {totalCount: ($i.pull_requests // [] | length) + ($i.older_pull_requests // 0), nodes: [$i.pull_requests // [] | sort_by(.opened) | reverse | .[] | pull_request]}}}};
 
 def open_pull_requests:
   [.issues[] | .number as $n | .pull_requests[]? | select((.state // "open") == "open")
