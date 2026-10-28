@@ -39,11 +39,11 @@ If any of the five is missing, end without a verdict and say which.
 3. Find what changed with `git -C <worktree> diff "$(git -C <worktree> merge-base origin/<base> HEAD)"`. If it fails, end without a verdict.
 4. Read `<skills-root>/implement/references/evidence.md` and gather evidence for each criterion in the worktree as it defines. Write one line per criterion in its section 5 form. For a criterion with no evidence, write `-> none: <the evidence that would settle it>`. Put an input too long for its line after all criterion lines.
 5. Decide the verdict. It is `success` only when every criterion is evidenced. Otherwise it is `failure`. A behavior criterion that nothing available can exercise, such as a UI no tool can drive, has no evidence, so it makes the verdict `failure`.
-6. Confirm `git -C <worktree> rev-parse HEAD` still prints `<sha>`, then record the verdict with the criterion lines as findings:
+6. Confirm `git -C <worktree> rev-parse HEAD` still prints `<sha>`, then record the verdict with the step 4 lines as findings:
 
    ```bash
    bash <skills-root>/orchestrate-epic/scripts/oe verdict <repo> <issue> <sha> <success|failure> <<'EOF'
-   <one line per criterion>
+   <the step 4 lines>
    EOF
    ```
 
