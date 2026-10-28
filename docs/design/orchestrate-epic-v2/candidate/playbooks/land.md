@@ -13,7 +13,7 @@ oe land merge --issue <N> --lease-token <TOKEN>
 | `MERGED`, `next` `rescan` | The pass ends. Go to the poll below |
 | `HELD`, `next` `repair` | `oe land repair`, below |
 | `HELD`, `next` `human` | Nothing more. `oe` posted the hold once |
-| `HELD`, exit 8 | No merge grant: leave the pull request open for the person |
+| Exit 8 | Read the verdict line. When it says to run `oe ship publish` first or again, a publish was interrupted before it was recorded as linked, so the pull request is not landable yet: run `playbooks/ship.md` for the Issue, which resumes it, then land again. Otherwise it is no merge grant, or another failed precondition: leave the pull request open for the person |
 | `HEAD_MOVED`, exit 3 | Pin again with `review.md` |
 | Exit 5 | The last merge's checks are pending: poll |
 | Exit 4 | Stop landing. Render Frozen Epic when the Epic froze |
