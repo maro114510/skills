@@ -1,7 +1,14 @@
 #!/usr/bin/env bash
-# oe: the orchestrate-epic helper. Each subcommand lives in oe-<subcommand>.sh beside this file.
-# Usage: oe <subcommand> [<args>...]
-# Exit: the subcommand's, or 2 for a missing or unknown subcommand.
+# oe
+#
+# The helper commands of orchestrate-epic.
+# Each subcommand lives in oe-SUBCOMMAND.sh next to this file.
+#
+# | Subcommand | Does |
+# |---|---|
+# | ready | Prints the next action of every child Issue of an Epic |
+#
+# An unknown or missing subcommand exits 2.
 set -uo pipefail
 
 dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
