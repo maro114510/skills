@@ -52,14 +52,14 @@ Otherwise a closed child Issue is done, and each open one takes the first matchi
 
 | # | GitHub shows | Next action |
 |---|---|---|
-| 1 | After the claim, a merged PR, or the branch with only a closed unmerged PR | Wait for a human |
+| 1 | After the latest claim, a merged PR, or the branch with only a closed unmerged PR | Wait for a human |
 | 2 | No branch, and a blocker is open or closed other than as completed | Blocked; a non-completed blocker waits for a human |
 | 3 | No branch, and every blocker closed as completed | Claim, then start an Owner |
 | 4 | The latest `question` on the Issue has no trusted Issue comment after it | Wait for the answer |
-| 5 | No PR; a conflict; a failing check; a `failure` verdict on the head; or, newer than the latest `attempt`, a trusted answer, CHANGES_REQUESTED review, or review-thread comment | Start an Owner, or park at 3 attempts |
+| 5 | No PR; a conflict; a failing check; a `failure` verdict on the head; or, newer than the latest `attempt`, a trusted answer to the latest `question`, a CHANGES_REQUESTED review, or review-thread comment | Start an Owner, or park at 3 attempts |
 | 6 | A pending check, unknown mergeability, or no checks within 10 minutes of the head | Wait for CI |
 | 7 | No checks 10 minutes after the head appeared | Park |
-| 8 | Every check passes, and the head has no verdict | Start a Verifier, or park at 2 `pending` verify statuses on this SHA |
+| 8 | Every check passes, and the head has no `success` or `failure` verdict | Start a Verifier, or park at 2 `pending` verify statuses on this SHA; `oe` writes `pending` before each Verifier starts |
 | 9 | A `success` verdict on the head | Wait for the merge |
 
 `orchestrate-epic/verify` itself never counts as a check.
@@ -90,7 +90,7 @@ Otherwise a closed child Issue is done, and each open one takes the first matchi
 |---|---|
 | Blocker closed as not planned or duplicate | The dependent waits for a human |
 | Signals that start a repair Owner | Failing checks, a `failure` verdict, merge conflicts, and trusted CHANGES_REQUESTED reviews or review-thread comments newer than the latest attempt. Plain PR comments and bot reviews start nothing |
-| Restart after a reached cap | Records count only after the latest `claim`, so deleting the branch resets the cap; a lost `claim` record over-counts, which parks rather than retries |
+| Restart after a reached cap | Records count only after the latest `claim`, so deleting the branch resets the cap. The branch is created before the `claim` record, so a lost record over-counts, which parks rather than retries |
 | Re-dispatch after an answer | Counts toward the cap of 3, like every Owner dispatch |
 | Verifier ends without a verdict | Retried once; 2 `pending` verify statuses on one SHA park the Issue |
 | `oe wait` and idle limit | One call waits at most 25 minutes; after 4 hours without change the session ends with a summary |
