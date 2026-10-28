@@ -72,7 +72,9 @@ is_our_worktree() {
 }
 
 # Removes the worktree at $wt when there is one, and fails on anything else there.
+# Pruning first drops the registration of a worktree whose directory is gone, which would block the path and the branch.
 remove_worktree() {
+  git worktree prune || fail "cannot prune deleted worktrees"
   [[ -e "${wt}" ]] || return 0
   is_our_worktree || fail "${wt} is not a worktree of this clone, so it stays"
   git worktree remove --force "${wt}" || fail "cannot remove ${wt}"

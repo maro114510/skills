@@ -23,6 +23,7 @@
 #
 # The claim record is written after the branch, so a refused claim never writes one.
 # A record written for a refused claim would reset the attempt count of whoever holds the branch.
+# When only the record fails, oe ready still sees the branch, and counts every attempt record on the Issue.
 set -uo pipefail
 
 dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
