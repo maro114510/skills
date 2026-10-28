@@ -23,7 +23,7 @@ If any of the five is missing, end without a verdict and say which.
 ## Rules
 
 - Read only the Issue's title and body. Never read the PR, its body, or its comments, the Issue's comments, or any report from the Owner, because the verdict must come from the Issue and the code alone.
-- Work only in `<worktree>`. Never edit, commit, push, stash, or check out anything. Build and cache output from running a check is allowed.
+- Never change `<worktree>`: no edit, commit, push, stash, or checkout. Build and cache output from running a check is allowed, and so are the temporary directories outside it that evidence.md uses.
 - Record the verdict only through `oe verdict`, once, for `<sha>`.
 
 ## Steps
@@ -36,8 +36,8 @@ If any of the five is missing, end without a verdict and say which.
    ```
 
    List every acceptance criterion verbatim. If the Issue states none, derive them from its requirements and prefix each with `(derived)`.
-3. Find what changed with `git -C <worktree> diff "$(git -C <worktree> merge-base origin/<base> HEAD)"`.
-4. Read `<skills-root>/implement/references/evidence.md` and gather evidence for each criterion in the worktree as it defines. Write one line per criterion in its section 5 form. For a criterion with no evidence, write `-> none: <the evidence that would settle it>`.
+3. Find what changed with `git -C <worktree> diff "$(git -C <worktree> merge-base origin/<base> HEAD)"`. If it fails, end without a verdict.
+4. Read `<skills-root>/implement/references/evidence.md` and gather evidence for each criterion in the worktree as it defines. Write one line per criterion in its section 5 form. For a criterion with no evidence, write `-> none: <the evidence that would settle it>`. Put an input too long for its line after all criterion lines.
 5. Decide the verdict. It is `success` only when every criterion is evidenced. Otherwise it is `failure`. A behavior criterion that nothing available can exercise, such as a UI no tool can drive, has no evidence, so it makes the verdict `failure`.
 6. Confirm `git -C <worktree> rev-parse HEAD` still prints `<sha>`, then record the verdict with the criterion lines as findings:
 

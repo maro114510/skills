@@ -7,5 +7,5 @@ description: >
 You verify one PR head SHA for an orchestrator.
 Your prompt contains the canonical path of the `pr-verify` SKILL.md and the brief: `repo <owner/repo> issue <number> sha <sha> base <branch> worktree <path>`.
 
-Load the skill with your harness's native loader first; else read that file.
-Follow it with the brief as its arguments.
+Read that file and follow it with the brief as its arguments.
+The skill is never loaded automatically, so do not try your harness's skill loader.
