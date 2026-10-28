@@ -14,7 +14,7 @@
 #   git fetch origin <branch>      a plain branch name or an upper-case <PLACEHOLDER>, never a refspec, so it updates a remote-tracking ref only
 #   sleep <seconds>                waits between polls
 #   mktemp                         makes a file for a report
-#   name="/literal/path"           names that file in a later call, since every call is its own shell
+#   name=".../sessions/report-..." names a report file in the oe sessions directory, the only place cat may write
 #   cat >"$file" <<'TAG'           writes the report, and only that form of cat is allowed
 #   gh issue view ...              reads an Issue
 #   gh api repos/... ...           reads, and fails when a flag makes it write
@@ -98,7 +98,9 @@ function refuse(t) { violation("is not an oe call or an allowed read: " substr(t
 # judge returns 1 when the line is allowed. Anything it does not name fails.
 function judge(t,   rest) {
   HDTAG = ""
-  if (t ~ /^[A-Za-z_][A-Za-z0-9_]*="[^"$`\\]*"$/) return 1
+  # A variable may name only a report file in the oe sessions directory, which is where cat is allowed to write. Any other
+  # literal could name a file the loop must never overwrite, such as .git/refs/heads/main.
+  if (t ~ /^[A-Za-z_][A-Za-z0-9_]*="(<STATE_DIR>|\/[A-Za-z0-9_.\/-]+)\/sessions\/report-[A-Za-z0-9_.<>-]+"$/ && t !~ /\.\./) return 1
   if (match(t, /^[A-Za-z_][A-Za-z0-9_]*="\$\(mktemp/) && substr(t, length(t) - 1) == ")\"") {
     rest = substr(t, RLENGTH + 1, length(t) - RLENGTH - 2)
     if (rest ~ /^([ \t]|$)/ && args_ok(rest, "plain")) return 1
