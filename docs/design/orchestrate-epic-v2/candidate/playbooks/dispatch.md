@@ -1,6 +1,6 @@
 # Dispatch
 
-`work` holds at most `max-parallel` items, each with `kind`, `issue`, `branch`, and `resume`. A `reverify` item has no worker: it goes to `review.md`. Every `dispatch` item goes through the steps below. Do steps 1 to 4 serially, then spawn every worker of the batch in one message, so that they run in parallel.
+`work` holds at most `max-parallel` items, each with `kind`, `issue`, `branch`, and `resume`. A `reverify` item spawns no worker, but a restarted Publisher has no path for its worktree: run step 2 for it, which spawns and charges nothing. Then check that the DONE report file of the Issue is still there, see the end of step 6. Only then does it go to `review.md`. Every `dispatch` item goes through the steps below. Do steps 1 to 4 serially, then spawn every worker of the batch in one message, so that they run in parallel.
 
 A fresh worker for an Issue whose `next` is `redispatch` joins the same batch from step 2, in the same round. `oe` reserved the fix cycle already, but it never reserves a worker spawn: step 4 does, for every worker, a first dispatch and a re-dispatch alike. A worker is never spawned without it.
 
@@ -44,7 +44,7 @@ REPORT
 oe worker report --issue <N> --worktree <WORKTREE> --repo-dir <REPO_DIR> --file "$f" --lease-token <TOKEN>
 ```
 
-Keep the file until the Issue's pull request exists, because `oe ship publish` reads the same report. If a restart lost it, the Issue goes through a new dispatch.
+Keep the file until the Issue's pull request is merged, because `oe ship publish` reads the same report, and refuses without it. GitHub holds only the skips and decisions of a report, never its checks, so nothing can recreate the file. When a restart lost it, which is the usual case for a stale pull request planned in a later invocation, run steps 2 to 6 again with a fresh worker, reserved as step 4 says. It finds its work committed, and its new DONE report becomes the file. The Issue is then reviewed again before it ships.
 
 ## Judgment on a BLOCKED report
 

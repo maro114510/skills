@@ -27,7 +27,7 @@ oe gate --lease-token <TOKEN>
 | `frozen` | 4 | Render Frozen Epic, end the lease, and stop. The freeze note went out once, and you post nothing |
 | `approved` | 0 | Go on. `merge_authorized` says whether landing may merge |
 
-Any other status, or exit 1, 6, or 7, stops the run: report the verdict line. Ending the lease is one call, and exit 7 means it is not yours to end:
+Any other status, or exit 1, 6, or 7, stops the run: report the verdict line. Ending the lease is one call. Skip it only when the verdict says another session holds the lease, that this session lost it, or that its lease was ended:
 
 ```bash
 oe lease end --lease-token <TOKEN>
