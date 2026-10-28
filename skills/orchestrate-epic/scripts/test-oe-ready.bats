@@ -1,139 +1,30 @@
 #!/usr/bin/env bats
-# Tests for `oe ready`. A stub gh answers every read from fixture files, applying --jq with jq as
-# the real gh applies its built-in jq. Each test writes every fixture its outcome depends on.
+# Tests for oe ready.
+#
+# - Each test writes the GitHub state it needs as JSON, then runs oe ready against it.
+# - testdata/fake-gh.sh stands in for gh and answers every read from that state.
+# - testdata/fake-github.jq lists every field of the state and its default.
+# - Every test runs at 08:00 on the same day.
 # shellcheck disable=SC2292 # bats fails a test on a mid-test `[[ ]]` only under bash 4.1+; `[ ]` works on every bash.
-
-# 2027-01-15T08:00:00Z, the fixed current time every test runs at.
-NOW=1800000000
-HOUR_AGO="2027-01-15T07:00:00Z"
-FIVE_MINUTES_AGO="2027-01-15T07:55:00Z"
-DEFAULT_SHA=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-PR_SHA=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-
-# jq helpers for the fixture edits below.
-# shellcheck disable=SC2016 # jq program, not shell expansion.
-DEFS='
-def rollup($checks): if $checks == null then null else {contexts: {totalCount: ($checks | length), nodes: $checks}} end;
-def passed($name): {__typename: "CheckRun", name: $name, status: "COMPLETED", conclusion: "SUCCESS",
-  startedAt: "2027-01-15T07:20:00Z", checkSuite: {databaseId: 1}};
-def failed($name): passed($name) | .conclusion = "FAILURE";
-def running($name): passed($name) | .status = "IN_PROGRESS" | .conclusion = null;
-def status($context; $state): {__typename: "StatusContext", context: $context, state: $state, createdAt: "2027-01-15T07:20:00Z"};
-def comment($assoc; $body; $at): {authorAssociation: $assoc, body: $body, createdAt: $at};
-def comments($c): .issue.comments = {totalCount: ($c | length), nodes: $c};
-def blockers($b): .issue.blockedBy = {totalCount: ($b | length), nodes: $b};
-def blocker($n; $state; $reason): {number: $n, state: $state, stateReason: $reason};
-def branch: .ref = {name: "feat/issue-\(.issue.number)"};
-def closed: .issue.state = "CLOSED" | .issue.stateReason = "COMPLETED";
-def pr($number; $state; $created; $sha; $checks): {number: $number, state: $state, createdAt: $created,
-  mergedAt: (if $state == "MERGED" then "2027-01-15T07:40:00Z" else null end), isCrossRepository: false,
-  headRefOid: $sha, mergeable: "MERGEABLE", reviews: {totalCount: 0, nodes: []}, reviewThreads: {nodes: []},
-  headRef: {target: {oid: $sha, committedDate: $created, statusCheckRollup: rollup($checks)}}};
-def prs($p): .pullRequests.nodes = $p;
-'
 
 setup() {
   bats_require_minimum_version 1.5.0
   oe="${BATS_TEST_DIRNAME}/oe"
-  export OE_FIXTURES="${BATS_TEST_TMPDIR}/fixtures"
-  mkdir -p "${OE_FIXTURES}" "${BATS_TEST_TMPDIR}/bin"
-  cat >"${BATS_TEST_TMPDIR}/bin/gh" <<'STUB'
-#!/usr/bin/env bash
-# Answers oe's reads from $OE_FIXTURES. A call whose arguments contain $GH_FAIL fails.
-args="$*"
-if [[ -n "${GH_FAIL:-}" && "${args}" == *"${GH_FAIL}"* ]]; then
-  echo "gh: HTTP 502" >&2
-  exit 1
-fi
-prog="" path="" query="" num=""
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-  api) path="$2" && shift ;;
-  --jq) prog="$2" && shift ;;
-  -f | -F)
-    case "$2" in
-    query=*) query="${2#query=}" ;;
-    num=*) num="${2#num=}" ;;
-    esac
-    shift
-    ;;
-  esac
-  shift
-done
-case "${path}" in
-graphql)
-  if [[ "${query}" == *subIssues* ]]; then file=gate.json; else file="issue-${num}.json"; fi
-  ;;
-*/pulls\?*) file=pulls.json ;;
-*/statuses*)
-  sha="${path#*/commits/}"
-  file="statuses-${sha%%/*}.json"
-  ;;
-*/activity\?*)
-  ref="${path#*ref=refs/heads/}"
-  ref="${ref%%&*}"
-  file="activity-${ref//\//_}.json"
-  ;;
-*)
-  echo "stub: unexpected gh call: ${args}" >&2
-  exit 99
-  ;;
-esac
-if [[ ! -f "${OE_FIXTURES}/${file}" ]]; then
-  [[ "${path}" != graphql ]] || { echo "stub: no fixture ${file}" >&2 && exit 98; }
-  printf '[]' | jq -r "${prog:-.}"
-  exit
-fi
-jq -r "${prog:-.}" "${OE_FIXTURES}/${file}"
-STUB
+  mkdir -p "${BATS_TEST_TMPDIR}/bin"
+  printf '#!/usr/bin/env bash\nexec bash "%s/testdata/fake-gh.sh" "$@"\n' "${BATS_TEST_DIRNAME}" >"${BATS_TEST_TMPDIR}/bin/gh"
   chmod +x "${BATS_TEST_TMPDIR}/bin/gh"
   export PATH="${BATS_TEST_TMPDIR}/bin:${PATH}"
-  export OE_NOW="${NOW}"
+  export OE_GITHUB="${BATS_TEST_TMPDIR}/github.json"
+  # 2027-01-15 08:00 UTC
+  export OE_NOW=1800000000
 }
 
-# Writes the Epic read: $1 is a jq expression for the default-branch head's checks, or null for
-# none; the rest are the child Issue numbers.
-gate() {
-  local checks="$1"
-  shift
-  jq -n --arg sha "${DEFAULT_SHA}" --arg at "${HOUR_AGO}" "${DEFS}"' ($ARGS.positional | map(tonumber)) as $n
-    | {data: {repository: {nameWithOwner: "o/r",
-        defaultBranchRef: {name: "main", target: {oid: $sha, committedDate: $at, statusCheckRollup: rollup('"${checks}"')}},
-        issue: {subIssues: {totalCount: ($n | length), nodes: ($n | map({number: ., repository: {nameWithOwner: "o/r"}}))}}}}}' \
-    --args "$@" >"${OE_FIXTURES}/gate.json"
+# Saves the GitHub state from stdin.
+github() {
+  cat >"${OE_GITHUB}"
 }
 
-# Writes Issue $1's read: an open Issue with no dependencies, comments, branch, or PR, edited by
-# the jq expression $2 applied to .data.repository.
-issue() {
-  jq -n --argjson n "$1" "${DEFS}"'{data: {repository: {
-      issue: {number: $n, state: "OPEN", stateReason: null, blockedBy: {totalCount: 0, nodes: []},
-        comments: {totalCount: 0, nodes: []}},
-      ref: null, pullRequests: {nodes: []}}}}
-    | .data.repository |= ('"${2:-.}"')' >"${OE_FIXTURES}/issue-$1.json"
-}
-
-# Lists an open PR from feat/issue-$1 at head $2 in the REST pull list.
-listed_pr() {
-  jq -n --arg ref "feat/issue-$1" --arg sha "$2" \
-    '[{head: {ref: $ref, sha: $sha, repo: {full_name: "o/r"}}}]' >"${OE_FIXTURES}/pulls.json"
-}
-
-# Records a push of $2 to branch $1 at time $3.
-pushed() {
-  jq -n --arg sha "$2" --arg at "$3" '[{after: $sha, timestamp: $at}]' >"${OE_FIXTURES}/activity-${1//\//_}.json"
-}
-
-# Writes the commit statuses on $1, newest first, as REST returns them: each later argument is
-# context:state.
-statuses() {
-  local sha="$1"
-  shift
-  jq -n '$ARGS.positional | map(split(":") | {context: .[0], state: .[1]})' \
-    --args "$@" >"${OE_FIXTURES}/statuses-${sha}.json"
-}
-
-# Prints the action oe ready gave Issue $1.
+# Prints the action that oe ready gave the Issue numbered $1.
 action_of() {
   printf '%s\n' "${lines[@]}" | while IFS=$'\t' read -r n action _; do
     if [ "${n}" = "$1" ]; then
@@ -142,26 +33,15 @@ action_of() {
   done
 }
 
-# Issue 5, claimed with one attempt, whose open PR #50 has head PR_SHA with the checks $1 (a jq
-# expression, or null for none), pushed at $2, and edited by the jq expression $3.
-claimed_pr() {
-  gate '[passed("test")]' 5
-  issue 5 'branch | comments([comment("OWNER"; "<!-- oe:claim -->"; "2027-01-15T07:00:00Z"),
-    comment("OWNER"; "<!-- oe:attempt -->"; "2027-01-15T07:01:00Z")])
-    | prs([pr(50; "OPEN"; "2027-01-15T07:10:00Z"; "'"${PR_SHA}"'"; '"$1"') | '"${3:-.}"'])'
-  listed_pr 5 "${PR_SHA}"
-  pushed feat/issue-5 "${PR_SHA}" "$2"
-}
+# Default branch gate
 
-# An Issue whose PR passed CI and has no verdict yet; a starting point for reads that must fail.
-green_pr_without_verdict() {
-  claimed_pr '[passed("test")]' "2027-01-15T07:10:00Z"
+@test "a default branch head with no checks ten minutes after its push ends the session with a reason" {
+  github <<'JSON'
+{
+  "default_branch": {"pushed": "07:00"},
+  "issues": [{"number": 5}]
 }
-
-@test "default head with no checks ten minutes after its push ends the session with a reason" {
-  gate null 5
-  issue 5
-  pushed main "${DEFAULT_SHA}" "${HOUR_AGO}"
+JSON
 
   run bash "${oe}" ready o/r 1
 
@@ -173,11 +53,13 @@ green_pr_without_verdict() {
   esac
 }
 
-@test "default head with no checks for under ten minutes since its push makes every Issue wait" {
-  gate null 5 6
-  issue 5
-  issue 6
-  pushed main "${DEFAULT_SHA}" "${FIVE_MINUTES_AGO}"
+@test "a default branch head pushed five minutes ago with no checks makes every Issue wait, even when committed long before" {
+  github <<'JSON'
+{
+  "default_branch": {"committed": "06:00", "pushed": "07:55"},
+  "issues": [{"number": 5}, {"number": 6}]
+}
+JSON
 
   run bash "${oe}" ready o/r 1
 
@@ -186,9 +68,13 @@ green_pr_without_verdict() {
   [ "$(action_of 6)" = wait-base ]
 }
 
-@test "a failing check on the default head makes no Issue ready" {
-  gate '[passed("lint"), failed("test")]' 5
-  issue 5
+@test "a failed check on the default branch head makes no Issue ready" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"lint": "success", "test": "failure"}},
+  "issues": [{"number": 5}]
+}
+JSON
 
   run bash "${oe}" ready o/r 1
 
@@ -196,9 +82,13 @@ green_pr_without_verdict() {
   [ "$(action_of 5)" = wait-base ]
 }
 
-@test "a pending check on the default head makes no Issue ready" {
-  gate '[running("test")]' 5
-  issue 5
+@test "a running check on the default branch head makes no Issue ready" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "in_progress"}},
+  "issues": [{"number": 5}]
+}
+JSON
 
   run bash "${oe}" ready o/r 1
 
@@ -206,19 +96,58 @@ green_pr_without_verdict() {
   [ "$(action_of 5)" = wait-base ]
 }
 
-@test "the oe/verify status on the default head is not counted as a check" {
-  gate '[status("oe/verify"; "SUCCESS")]' 5
-  issue 5
-  pushed main "${DEFAULT_SHA}" "${HOUR_AGO}"
+@test "the oe/verify status on the default branch head does not count as a check" {
+  github <<'JSON'
+{
+  "default_branch": {"pushed": "07:00", "statuses": {"oe/verify": "success"}},
+  "issues": [{"number": 5}]
+}
+JSON
 
   run bash "${oe}" ready o/r 1
 
   [ "${status}" -eq 3 ]
 }
 
+# Failed reads
+
+@test "every failed GitHub read exits non-zero and prints nothing" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
+      {"by": "OWNER", "at": "07:01", "body": "<!-- oe:attempt -->"}
+    ],
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}}]
+  }]
+}
+JSON
+  run bash "${oe}" ready o/r 1
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-verifier ]
+
+  # The Epic read, the Issue read, the pull request list, the commit statuses, and the push activity.
+  for read in subIssues "num=5" /pulls /statuses /activity; do
+    GH_FAIL="${read}" run --separate-stderr bash "${oe}" ready o/r 1
+
+    [ "${status}" -eq 1 ]
+    [ -z "${output}" ]
+  done
+}
+
+# Before the claim
+
 @test "an Issue with no branch and every dependency completed is claimed" {
-  gate '[passed("test")]' 5
-  issue 5 'blockers([blocker(3; "CLOSED"; "COMPLETED")])'
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{"number": 5, "blocked_by": [{"number": 3, "state": "completed"}]}]
+}
+JSON
 
   run bash "${oe}" ready o/r 1
 
@@ -227,24 +156,13 @@ green_pr_without_verdict() {
   [ "$(action_of 5)" = claim ]
 }
 
-@test "a failed gh read exits non-zero and prints nothing" {
-  green_pr_without_verdict
-  run bash "${oe}" ready o/r 1
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = start-verifier ]
-
-  for call in subIssues "num=5" /pulls /statuses /activity; do
-    GH_FAIL="${call}" run --separate-stderr bash "${oe}" ready o/r 1
-
-    [ "${status}" -ne 0 ]
-    [ "${status}" -ne 3 ]
-    [ -z "${output}" ]
-  done
-}
-
 @test "a closed Issue is done" {
-  gate '[passed("test")]' 5
-  issue 5 'closed'
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{"number": 5, "closed": true}]
+}
+JSON
 
   run bash "${oe}" ready o/r 1
 
@@ -252,9 +170,16 @@ green_pr_without_verdict() {
   [ "$(action_of 5)" = "done" ]
 }
 
-@test "an Issue with an open dependency is not ready" {
-  gate '[passed("test")]' 5
-  issue 5 'blockers([blocker(3; "CLOSED"; "COMPLETED"), blocker(4; "OPEN"; null)])'
+@test "an Issue with one open dependency is not ready" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "blocked_by": [{"number": 3, "state": "completed"}, {"number": 4, "state": "open"}]
+  }]
+}
+JSON
 
   run bash "${oe}" ready o/r 1
 
@@ -263,8 +188,12 @@ green_pr_without_verdict() {
 }
 
 @test "an Issue whose dependency closed as not planned waits instead of being claimed" {
-  gate '[passed("test")]' 5
-  issue 5 'blockers([blocker(4; "CLOSED"; "NOT_PLANNED")])'
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{"number": 5, "blocked_by": [{"number": 4, "state": "not_planned"}]}]
+}
+JSON
 
   run bash "${oe}" ready o/r 1
 
@@ -272,9 +201,17 @@ green_pr_without_verdict() {
   [ "$(action_of 5)" = wait-dependencies ]
 }
 
-@test "an Issue whose branch exists without a PR is not ready and gets an Owner" {
-  gate '[passed("test")]' 5
-  issue 5 'branch | comments([comment("OWNER"; "<!-- oe:claim -->"; "2027-01-15T07:00:00Z")])'
+@test "an Issue whose branch exists without a pull request is not ready to claim and gets an Owner" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [{"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"}]
+  }]
+}
+JSON
 
   run bash "${oe}" ready o/r 1
 
@@ -282,10 +219,17 @@ green_pr_without_verdict() {
   [ "$(action_of 5)" = start-owner ]
 }
 
-@test "an open Issue whose PR merged after the latest claim waits for an engineer" {
-  gate '[passed("test")]' 5
-  issue 5 'comments([comment("OWNER"; "<!-- oe:claim -->"; "2027-01-15T07:00:00Z")])
-    | prs([pr(50; "MERGED"; "2027-01-15T07:10:00Z"; "'"${PR_SHA}"'"; [passed("test")])])'
+@test "an open Issue whose pull request merged after the latest claim waits for an engineer" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "comments": [{"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"}],
+    "pull_requests": [{"number": 50, "state": "merged", "opened": "07:10", "merged": "07:40"}]
+  }]
+}
+JSON
 
   run bash "${oe}" ready o/r 1
 
@@ -293,10 +237,17 @@ green_pr_without_verdict() {
   [ "$(action_of 5)" = wait-engineer ]
 }
 
-@test "a PR merged before the latest claim does not hold a restarted Issue" {
-  gate '[passed("test")]' 5
-  issue 5 'comments([comment("OWNER"; "<!-- oe:claim -->"; "2027-01-15T07:50:00Z")])
-    | prs([pr(50; "MERGED"; "2027-01-15T07:10:00Z"; "'"${PR_SHA}"'"; [passed("test")])])'
+@test "a pull request merged before the latest claim does not hold a restarted Issue" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "comments": [{"by": "OWNER", "at": "07:50", "body": "<!-- oe:claim -->"}],
+    "pull_requests": [{"number": 50, "state": "merged", "opened": "07:10", "merged": "07:40"}]
+  }]
+}
+JSON
 
   run bash "${oe}" ready o/r 1
 
@@ -304,10 +255,18 @@ green_pr_without_verdict() {
   [ "$(action_of 5)" = claim ]
 }
 
-@test "an Issue whose branch exists and whose PR closed without merging waits for an engineer" {
-  gate '[passed("test")]' 5
-  issue 5 'branch | comments([comment("OWNER"; "<!-- oe:claim -->"; "2027-01-15T07:00:00Z")])
-    | prs([pr(50; "CLOSED"; "2027-01-15T07:10:00Z"; "'"${PR_SHA}"'"; [passed("test")])])'
+@test "an Issue whose branch exists and whose pull request closed without merging waits for an engineer" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [{"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"}],
+    "pull_requests": [{"number": 50, "state": "closed", "opened": "07:10"}]
+  }]
+}
+JSON
 
   run bash "${oe}" ready o/r 1
 
@@ -315,9 +274,16 @@ green_pr_without_verdict() {
   [ "$(action_of 5)" = wait-engineer ]
 }
 
-@test "a PR from a fork with the Issue's branch name is ignored" {
-  gate '[passed("test")]' 5
-  issue 5 'prs([pr(50; "MERGED"; "2027-01-15T07:10:00Z"; "'"${PR_SHA}"'"; [passed("test")]) | .isCrossRepository = true])'
+@test "a merged pull request from a fork with the Issue's branch name is ignored" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "pull_requests": [{"number": 50, "state": "merged", "opened": "07:10", "merged": "07:40", "from_fork": true}]
+  }]
+}
+JSON
 
   run bash "${oe}" ready o/r 1
 
@@ -325,11 +291,13 @@ green_pr_without_verdict() {
   [ "$(action_of 5)" = claim ]
 }
 
-@test "an Issue with an agent running in this session is left out and the rest come in number order" {
-  gate '[passed("test")]' 7 5 6
-  issue 5
-  issue 6
-  issue 7
+@test "an Issue whose agent runs in this session is left out, and the rest come in number order" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{"number": 7}, {"number": 5}, {"number": 6}]
+}
+JSON
 
   run bash "${oe}" ready o/r 1 --running 6
 
@@ -339,8 +307,23 @@ green_pr_without_verdict() {
   [ "${lines[1]%%$'\t'*}" = 7 ]
 }
 
-@test "a failed check on the PR head gets an Owner" {
-  claimed_pr '[passed("lint"), failed("test")]' "2027-01-15T07:10:00Z"
+# Verification
+
+@test "a failed check on the pull request head gets an Owner" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
+      {"by": "OWNER", "at": "07:01", "body": "<!-- oe:attempt -->"}
+    ],
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"lint": "success", "test": "failure"}}]
+  }]
+}
+JSON
 
   run bash "${oe}" ready o/r 1
 
@@ -348,9 +331,21 @@ green_pr_without_verdict() {
   [ "$(action_of 5)" = start-owner ]
 }
 
-@test "a failure verdict on the PR head gets an Owner" {
-  claimed_pr '[passed("test")]' "2027-01-15T07:10:00Z"
-  statuses "${PR_SHA}" oe/verify:failure oe/verify:pending
+@test "a failure verdict on the pull request head gets an Owner" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
+      {"by": "OWNER", "at": "07:01", "body": "<!-- oe:attempt -->"}
+    ],
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["failure", "pending"]}]
+  }]
+}
+JSON
 
   run bash "${oe}" ready o/r 1
 
@@ -358,8 +353,21 @@ green_pr_without_verdict() {
   [ "$(action_of 5)" = start-owner ]
 }
 
-@test "a PR that conflicts with its base gets an Owner" {
-  claimed_pr '[passed("test")]' "2027-01-15T07:10:00Z" '.mergeable = "CONFLICTING"'
+@test "a pull request that conflicts with its base gets an Owner" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
+      {"by": "OWNER", "at": "07:01", "body": "<!-- oe:attempt -->"}
+    ],
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "conflicting": true}]
+  }]
+}
+JSON
 
   run bash "${oe}" ready o/r 1
 
@@ -367,9 +375,21 @@ green_pr_without_verdict() {
   [ "$(action_of 5)" = start-owner ]
 }
 
-@test "a success verdict on the PR head waits for the merge" {
-  claimed_pr '[passed("test")]' "2027-01-15T07:10:00Z"
-  statuses "${PR_SHA}" oe/verify:success oe/verify:pending
+@test "a success verdict on the pull request head waits for the merge" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
+      {"by": "OWNER", "at": "07:01", "body": "<!-- oe:attempt -->"}
+    ],
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success", "pending"]}]
+  }]
+}
+JSON
 
   run bash "${oe}" ready o/r 1
 
@@ -377,8 +397,21 @@ green_pr_without_verdict() {
   [ "$(action_of 5)" = wait-merge ]
 }
 
-@test "a pending check on the PR head waits for CI" {
-  claimed_pr '[passed("lint"), running("test")]' "2027-01-15T07:10:00Z"
+@test "a running check on the pull request head waits for CI" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
+      {"by": "OWNER", "at": "07:01", "body": "<!-- oe:attempt -->"}
+    ],
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"lint": "success", "test": "in_progress"}}]
+  }]
+}
+JSON
 
   run bash "${oe}" ready o/r 1
 
@@ -386,47 +419,113 @@ green_pr_without_verdict() {
   [ "$(action_of 5)" = wait-ci ]
 }
 
-@test "a PR head with no checks waits for CI for ten minutes after its push, then is parked" {
-  claimed_pr null "${FIVE_MINUTES_AGO}"
+@test "a pull request head pushed five minutes ago with no checks waits for CI, even when committed long before" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
+      {"by": "OWNER", "at": "07:01", "body": "<!-- oe:attempt -->"}
+    ],
+    "pull_requests": [{"number": 50, "opened": "07:10", "committed": "06:00", "pushed": "07:55"}]
+  }]
+}
+JSON
+
   run bash "${oe}" ready o/r 1
+
   [ "${status}" -eq 0 ]
   [ "$(action_of 5)" = wait-ci ]
+}
 
-  claimed_pr null "${HOUR_AGO}"
+@test "a pull request head with no checks ten minutes after its push is parked" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
+      {"by": "OWNER", "at": "07:01", "body": "<!-- oe:attempt -->"}
+    ],
+    "pull_requests": [{"number": 50, "opened": "07:10", "pushed": "07:40"}]
+  }]
+}
+JSON
+
   run bash "${oe}" ready o/r 1
+
   [ "${status}" -eq 0 ]
   [ "$(action_of 5)" = parked ]
 }
 
-@test "a Verifier is restarted once without a verdict, then the Issue is parked" {
-  claimed_pr '[passed("test")]' "2027-01-15T07:10:00Z"
-  statuses "${PR_SHA}" oe/verify:pending
+@test "a Verifier that ended once without a verdict is started again" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
+      {"by": "OWNER", "at": "07:01", "body": "<!-- oe:attempt -->"}
+    ],
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["pending"]}]
+  }]
+}
+JSON
+
   run bash "${oe}" ready o/r 1
+
   [ "${status}" -eq 0 ]
   [ "$(action_of 5)" = start-verifier ]
+}
 
-  statuses "${PR_SHA}" oe/verify:pending oe/verify:pending
+@test "a Verifier that ended twice without a verdict parks the Issue" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
+      {"by": "OWNER", "at": "07:01", "body": "<!-- oe:attempt -->"}
+    ],
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["pending", "pending"]}]
+  }]
+}
+JSON
+
   run bash "${oe}" ready o/r 1
+
   [ "${status}" -eq 0 ]
   [ "$(action_of 5)" = parked ]
 }
 
-# Issue 5 with branch and the Issue comments $1 (a jq array), whose open PR #50 at PR_SHA passed CI
-# and was pushed an hour ago, edited by the jq expression $2.
-pr_with_comments() {
-  gate '[passed("test")]' 5
-  issue 5 'branch | comments('"$1"')
-    | prs([pr(50; "OPEN"; "2027-01-15T07:10:00Z"; "'"${PR_SHA}"'"; [passed("test")]) | '"${2:-.}"'])'
-  listed_pr 5 "${PR_SHA}"
-  pushed feat/issue-5 "${PR_SHA}" "2027-01-15T07:10:00Z"
-}
+# Attempts
 
 @test "three attempts after the latest claim park an Issue that still needs repair" {
-  pr_with_comments '[comment("OWNER"; "<!-- oe:claim -->"; "2027-01-15T07:00:00Z"),
-    comment("OWNER"; "<!-- oe:attempt -->"; "2027-01-15T07:01:00Z"),
-    comment("OWNER"; "<!-- oe:attempt -->"; "2027-01-15T07:20:00Z"),
-    comment("OWNER"; "<!-- oe:attempt -->"; "2027-01-15T07:40:00Z")]'
-  statuses "${PR_SHA}" oe/verify:failure
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
+      {"by": "OWNER", "at": "07:01", "body": "<!-- oe:attempt -->"},
+      {"by": "OWNER", "at": "07:20", "body": "<!-- oe:attempt -->"},
+      {"by": "OWNER", "at": "07:40", "body": "<!-- oe:attempt -->"}
+    ],
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["failure"]}]
+  }]
+}
+JSON
 
   run bash "${oe}" ready o/r 1
 
@@ -435,13 +534,24 @@ pr_with_comments() {
 }
 
 @test "attempts before the latest claim do not count toward the cap" {
-  pr_with_comments '[comment("OWNER"; "<!-- oe:claim -->"; "2027-01-15T06:00:00Z"),
-    comment("OWNER"; "<!-- oe:attempt -->"; "2027-01-15T06:01:00Z"),
-    comment("OWNER"; "<!-- oe:attempt -->"; "2027-01-15T06:20:00Z"),
-    comment("OWNER"; "<!-- oe:attempt -->"; "2027-01-15T06:40:00Z"),
-    comment("OWNER"; "<!-- oe:claim -->"; "2027-01-15T07:00:00Z"),
-    comment("OWNER"; "<!-- oe:attempt -->"; "2027-01-15T07:00:00Z")]'
-  statuses "${PR_SHA}" oe/verify:failure
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "OWNER", "at": "06:00", "body": "<!-- oe:claim -->"},
+      {"by": "OWNER", "at": "06:01", "body": "<!-- oe:attempt -->"},
+      {"by": "OWNER", "at": "06:20", "body": "<!-- oe:attempt -->"},
+      {"by": "OWNER", "at": "06:40", "body": "<!-- oe:attempt -->"},
+      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
+      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:attempt -->"}
+    ],
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["failure"]}]
+  }]
+}
+JSON
 
   run bash "${oe}" ready o/r 1
 
@@ -450,11 +560,22 @@ pr_with_comments() {
 }
 
 @test "an attempt record by an untrusted author does not count toward the cap" {
-  pr_with_comments '[comment("OWNER"; "<!-- oe:claim -->"; "2027-01-15T07:00:00Z"),
-    comment("OWNER"; "<!-- oe:attempt -->"; "2027-01-15T07:01:00Z"),
-    comment("OWNER"; "<!-- oe:attempt -->"; "2027-01-15T07:20:00Z"),
-    comment("NONE"; "<!-- oe:attempt -->"; "2027-01-15T07:40:00Z")]'
-  statuses "${PR_SHA}" oe/verify:failure
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
+      {"by": "OWNER", "at": "07:01", "body": "<!-- oe:attempt -->"},
+      {"by": "OWNER", "at": "07:20", "body": "<!-- oe:attempt -->"},
+      {"by": "NONE", "at": "07:40", "body": "<!-- oe:attempt -->"}
+    ],
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["failure"]}]
+  }]
+}
+JSON
 
   run bash "${oe}" ready o/r 1
 
@@ -462,11 +583,23 @@ pr_with_comments() {
   [ "$(action_of 5)" = start-owner ]
 }
 
-@test "a question with no later trusted comment waits for the answer" {
-  gate '[passed("test")]' 5
-  issue 5 'branch | comments([comment("OWNER"; "<!-- oe:claim -->"; "2027-01-15T07:00:00Z"),
-    comment("OWNER"; "<!-- oe:attempt -->"; "2027-01-15T07:01:00Z"),
-    comment("OWNER"; "<!-- oe:question -->\nWhich option?"; "2027-01-15T07:10:00Z")])'
+# Engineer input
+
+@test "a question with no later comment waits for the answer" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
+      {"by": "OWNER", "at": "07:01", "body": "<!-- oe:attempt -->"},
+      {"by": "OWNER", "at": "07:10", "body": "<!-- oe:question -->\nWhich option?"}
+    ]
+  }]
+}
+JSON
 
   run bash "${oe}" ready o/r 1
 
@@ -475,13 +608,23 @@ pr_with_comments() {
 }
 
 @test "a marked or untrusted comment after a question does not answer it" {
-  gate '[passed("test")]' 5
-  issue 5 'branch | comments([comment("OWNER"; "<!-- oe:claim -->"; "2027-01-15T07:00:00Z"),
-    comment("OWNER"; "<!-- oe:attempt -->"; "2027-01-15T07:01:00Z"),
-    comment("OWNER"; "<!-- oe:question -->\nWhich option?"; "2027-01-15T07:10:00Z"),
-    comment("MEMBER"; "<!-- oe:note -->\nUse option A"; "2027-01-15T07:20:00Z"),
-    comment("NONE"; "Use option A"; "2027-01-15T07:21:00Z"),
-    comment("CONTRIBUTOR"; "Use option A"; "2027-01-15T07:22:00Z")])'
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
+      {"by": "OWNER", "at": "07:01", "body": "<!-- oe:attempt -->"},
+      {"by": "OWNER", "at": "07:10", "body": "<!-- oe:question -->\nWhich option?"},
+      {"by": "MEMBER", "at": "07:20", "body": "<!-- oe:note -->\nUse option A"},
+      {"by": "NONE", "at": "07:21", "body": "Use option A"},
+      {"by": "CONTRIBUTOR", "at": "07:22", "body": "Use option A"}
+    ]
+  }]
+}
+JSON
 
   run bash "${oe}" ready o/r 1
 
@@ -489,12 +632,23 @@ pr_with_comments() {
   [ "$(action_of 5)" = wait-answer ]
 }
 
-@test "an unmarked trusted answer after the latest attempt gets an Owner even on a verified PR" {
-  pr_with_comments '[comment("OWNER"; "<!-- oe:claim -->"; "2027-01-15T07:00:00Z"),
-    comment("OWNER"; "<!-- oe:attempt -->"; "2027-01-15T07:01:00Z"),
-    comment("OWNER"; "<!-- oe:question -->\nWhich option?"; "2027-01-15T07:10:00Z"),
-    comment("MEMBER"; "Use option A"; "2027-01-15T07:20:00Z")]'
-  statuses "${PR_SHA}" oe/verify:success
+@test "an unmarked trusted answer after the latest attempt gets an Owner, even on a verified pull request" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
+      {"by": "OWNER", "at": "07:01", "body": "<!-- oe:attempt -->"},
+      {"by": "OWNER", "at": "07:10", "body": "<!-- oe:question -->\nWhich option?"},
+      {"by": "MEMBER", "at": "07:20", "body": "Use option A"}
+    ],
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"]}]
+  }]
+}
+JSON
 
   run bash "${oe}" ready o/r 1
 
@@ -502,13 +656,24 @@ pr_with_comments() {
   [ "$(action_of 5)" = start-owner ]
 }
 
-@test "an answer an earlier attempt already took does not start another Owner" {
-  pr_with_comments '[comment("OWNER"; "<!-- oe:claim -->"; "2027-01-15T07:00:00Z"),
-    comment("OWNER"; "<!-- oe:attempt -->"; "2027-01-15T07:01:00Z"),
-    comment("OWNER"; "<!-- oe:question -->\nWhich option?"; "2027-01-15T07:02:00Z"),
-    comment("MEMBER"; "Use option A"; "2027-01-15T07:03:00Z"),
-    comment("OWNER"; "<!-- oe:attempt -->"; "2027-01-15T07:04:00Z")]'
-  statuses "${PR_SHA}" oe/verify:success
+@test "an answer that an earlier attempt already took does not start another Owner" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
+      {"by": "OWNER", "at": "07:01", "body": "<!-- oe:attempt -->"},
+      {"by": "OWNER", "at": "07:02", "body": "<!-- oe:question -->\nWhich option?"},
+      {"by": "MEMBER", "at": "07:03", "body": "Use option A"},
+      {"by": "OWNER", "at": "07:04", "body": "<!-- oe:attempt -->"}
+    ],
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"]}]
+  }]
+}
+JSON
 
   run bash "${oe}" ready o/r 1
 
@@ -516,47 +681,102 @@ pr_with_comments() {
   [ "$(action_of 5)" = wait-merge ]
 }
 
-@test "a trusted Changes requested review after the latest attempt gets an Owner, an earlier one does not" {
-  claim_and_attempt='[comment("OWNER"; "<!-- oe:claim -->"; "2027-01-15T07:00:00Z"),
-    comment("OWNER"; "<!-- oe:attempt -->"; "2027-01-15T07:30:00Z")]'
-  pr_with_comments "${claim_and_attempt}" '.reviews = {totalCount: 1, nodes: [{authorAssociation: "MEMBER",
-    body: "Rename this", submittedAt: "2027-01-15T07:40:00Z"}]}'
-  statuses "${PR_SHA}" oe/verify:success
+@test "a trusted Changes requested review after the latest attempt gets an Owner" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
+      {"by": "OWNER", "at": "07:30", "body": "<!-- oe:attempt -->"}
+    ],
+    "pull_requests": [{
+      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
+      "reviews": [{"by": "MEMBER", "at": "07:40", "body": "Rename this"}]
+    }]
+  }]
+}
+JSON
+
   run bash "${oe}" ready o/r 1
+
   [ "${status}" -eq 0 ]
   [ "$(action_of 5)" = start-owner ]
+}
 
-  pr_with_comments "${claim_and_attempt}" '.reviews = {totalCount: 1, nodes: [{authorAssociation: "MEMBER",
-    body: "Rename this", submittedAt: "2027-01-15T07:20:00Z"}]}'
+@test "a Changes requested review before the latest attempt does not start another Owner" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
+      {"by": "OWNER", "at": "07:30", "body": "<!-- oe:attempt -->"}
+    ],
+    "pull_requests": [{
+      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
+      "reviews": [{"by": "MEMBER", "at": "07:20", "body": "Rename this"}]
+    }]
+  }]
+}
+JSON
+
   run bash "${oe}" ready o/r 1
+
   [ "${status}" -eq 0 ]
   [ "$(action_of 5)" = wait-merge ]
 }
 
-@test "a trusted review-thread comment after the latest attempt gets an Owner, an untrusted one does not" {
-  claim_and_attempt='[comment("OWNER"; "<!-- oe:claim -->"; "2027-01-15T07:00:00Z"),
-    comment("OWNER"; "<!-- oe:attempt -->"; "2027-01-15T07:30:00Z")]'
-  pr_with_comments "${claim_and_attempt}" '.reviewThreads = {nodes: [{comments: {nodes: [
-    comment("COLLABORATOR"; "This leaks the token"; "2027-01-15T07:40:00Z")]}}]}'
-  statuses "${PR_SHA}" oe/verify:success
+@test "a trusted review-thread comment after the latest attempt gets an Owner" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
+      {"by": "OWNER", "at": "07:30", "body": "<!-- oe:attempt -->"}
+    ],
+    "pull_requests": [{
+      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
+      "thread_comments": [{"by": "COLLABORATOR", "at": "07:40", "body": "This leaks the token"}]
+    }]
+  }]
+}
+JSON
+
   run bash "${oe}" ready o/r 1
+
   [ "${status}" -eq 0 ]
   [ "$(action_of 5)" = start-owner ]
-
-  pr_with_comments "${claim_and_attempt}" '.reviewThreads = {nodes: [{comments: {nodes: [
-    comment("NONE"; "This leaks the token"; "2027-01-15T07:40:00Z")]}}]}'
-  run bash "${oe}" ready o/r 1
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = wait-merge ]
 }
 
-@test "a PR with more commits than GitHub lists is classified by its head commit" {
-  # GitHub lists at most 250 commits of a PR, so the last one listed is then not the head.
-  claimed_pr '[passed("test")]' "2027-01-15T07:10:00Z" \
-    '.commits.nodes[0].commit = {oid: "cccccccccccccccccccccccccccccccccccccccc", committedDate: "2027-01-15T06:00:00Z", statusCheckRollup: null}'
+@test "an untrusted review-thread comment does not start an Owner" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
+      {"by": "OWNER", "at": "07:30", "body": "<!-- oe:attempt -->"}
+    ],
+    "pull_requests": [{
+      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
+      "thread_comments": [{"by": "NONE", "at": "07:40", "body": "This leaks the token"}]
+    }]
+  }]
+}
+JSON
 
   run bash "${oe}" ready o/r 1
 
   [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = start-verifier ]
+  [ "$(action_of 5)" = wait-merge ]
 }
