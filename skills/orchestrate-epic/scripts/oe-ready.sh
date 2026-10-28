@@ -34,6 +34,8 @@
 # | oe-ready-epic.graphql | The Epic read |
 # | oe-ready-issue.graphql | The read of one Issue |
 # | oe-ready.jq | Every rule that turns a response into an action |
+# | oe-records.jq | Which comments count as records and as engineer input |
+# | oe-config.sh | The limits and names shared with oe's writers |
 #
 # Reads, in order
 #
@@ -44,22 +46,9 @@
 # 5. One read per Issue gives everything else.
 set -uo pipefail
 
-# Limits and names shared with oe's writers.
-#
-# | Name | Value | Meaning |
-# |---|---|---|
-# | no_checks_grace | 600 | Seconds a commit may go without checks before its CI counts as missing |
-# | max_attempts | 3 | Owner attempts after the latest claim before the Issue parks |
-# | max_verifier_starts | 2 | Verifier starts on one commit before the Issue parks |
-# | verify_context | oe/verify | The commit status context that holds the verdict |
-# | branch_prefix | feat/issue- | The prefix of an Issue branch, followed by the Issue number |
-no_checks_grace=600
-max_attempts=3
-max_verifier_starts=2
-verify_context=oe/verify
-branch_prefix=feat/issue-
-
 dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source-path=SCRIPTDIR disable=SC1091 # CI runs shellcheck without -x, so it cannot follow this.
+source "${dir}/oe-config.sh"
 
 usage() {
   echo "$1" >&2
@@ -90,7 +79,9 @@ now="${OE_NOW:-$(date -u +%s)}"
 
 epic_query="$(<"${dir}/oe-ready-epic.graphql")" || fail "cannot read oe-ready-epic.graphql"
 issue_query="$(<"${dir}/oe-ready-issue.graphql")" || fail "cannot read oe-ready-issue.graphql"
+records="$(<"${dir}/oe-records.jq")" || fail "cannot read oe-records.jq"
 rules="$(<"${dir}/oe-ready.jq")" || fail "cannot read oe-ready.jq"
+rules="${records}"$'\n'"${rules}"
 
 # Prints the jq program that runs the entry point $1 of oe-ready.jq, with pr_heads set to $2.
 program() {
