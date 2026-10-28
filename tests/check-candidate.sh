@@ -13,14 +13,14 @@
 # The allow-list is the whole of what the prose may run. Every line is an oe call, or one of:
 #   git fetch origin <branch>      a plain branch name or an upper-case <PLACEHOLDER>, never a refspec, so it updates a remote-tracking ref only
 #   sleep <seconds>                waits between polls
-#   mktemp                         makes a file for a report
+#   mktemp                         with no argument, makes a file in the default temporary directory
 #   name=".../sessions/report-..." names a report file in the oe sessions directory, the only place cat may write
 #   cat >"$file" <<'TAG'           writes the report, and only that form of cat is allowed
 #   gh issue view ...              reads an Issue
 #   gh api repos/... ...           reads, and fails when a flag makes it write
 # An oe line holds plain words, <placeholders>, a quoted "$variable", a quoted literal, a quoted output redirect, and may end
 # in a heredoc with a quoted delimiter, whose body is data. The arguments of gh and mktemp hold plain words and
-# <placeholders> only, since a variable can hold a write flag; a quoted literal is opaque to gh only after --jq. Quotes, $,
+# <placeholders> only, since a variable can hold a write flag; mktemp takes no argument; the one redirect is >"<CHECKS_FILE>"; a quoted literal is opaque to gh only after --jq. Quotes, $,
 # backticks, parentheses, braces, ; | & # * ~ and a backslash fail elsewhere. Rather than parse shell, the guard allows few
 # forms, and each fix of a bypass stays one more line of this grammar.
 # Fences follow markdown at column 0: a run of three or more backticks or tildes, closed by a run of at least as many.
@@ -64,7 +64,7 @@ BEGIN {
   # A word is plain characters and <placeholders> only. Quotes, $, `, ( ) { } < > ; | & # * ~ and a backslash never appear in one.
   WORD = "^([A-Za-z0-9_./:=@+,-]|<[A-Za-z][A-Za-z_]*>)+"
   VAR = "^\"\\$[A-Za-z_][A-Za-z0-9_]*\""
-  RED = "^>\"[^\"$`\\\\]*\""
+  RED = "^>\"<CHECKS_FILE>\""
   SQ = "^\047[^\047]*\047"
   HD = "^<<([\047][A-Za-z_][A-Za-z0-9_]*[\047]|\"[A-Za-z_][A-Za-z0-9_]*\")$"
 }
@@ -96,21 +96,21 @@ function args_ok(rest, kind,   prev, tok, n) {
 }
 function refuse(t) { violation("is not an oe call or an allowed read: " substr(t, 1, 60)); return 0 }
 # judge returns 1 when the line is allowed. Anything it does not name fails.
-function judge(t,   rest) {
+function judge(t,   rest, v) {
   HDTAG = ""
   # A variable may name only a report file in the oe sessions directory, which is where cat is allowed to write. Any other
   # literal could name a file the loop must never overwrite, such as .git/refs/heads/main.
-  if (t ~ /^[A-Za-z_][A-Za-z0-9_]*="(<STATE_DIR>|\/[A-Za-z0-9_.\/-]+)\/sessions\/report-[A-Za-z0-9_.<>-]+"$/ && t !~ /\.\./) return 1
-  if (match(t, /^[A-Za-z_][A-Za-z0-9_]*="\$\(mktemp/) && substr(t, length(t) - 1) == ")\"") {
-    rest = substr(t, RLENGTH + 1, length(t) - RLENGTH - 2)
-    if (rest ~ /^([ \t]|$)/ && args_ok(rest, "plain")) return 1
-    return refuse(t)
-  }
+  if (t ~ /^[A-Za-z_][A-Za-z0-9_]*="(<STATE_DIR>|\/[A-Za-z0-9_.\/-]+)\/sessions\/report-[A-Za-z0-9_.<>-]+"$/ && t !~ /\.\./) { v = t; sub(/=.*$/, "", v); safe[v] = 1; return 1 }
+  if (t ~ /^[A-Za-z_][A-Za-z0-9_]*="\$\(mktemp\)"$/) { v = t; sub(/=.*$/, "", v); safe[v] = 1; return 1 }
   if (t ~ /^git fetch origin ([A-Za-z0-9][A-Za-z0-9._\/-]*|<[A-Z][A-Z_]*>)$/) return 1
   if (t ~ /^sleep [0-9]+$/) return 1
-  if (t ~ /^cat >"\$[A-Za-z_][A-Za-z0-9_]*" <<([\047][A-Za-z_][A-Za-z0-9_]*[\047]|"[A-Za-z_][A-Za-z0-9_]*")$/) { match(t, /<<.*$/); HDTAG = tagof(substr(t, RSTART)); return 1 }
+  if (t ~ /^cat >"\$[A-Za-z_][A-Za-z0-9_]*" <<([\047][A-Za-z_][A-Za-z0-9_]*[\047]|"[A-Za-z_][A-Za-z0-9_]*")$/) {
+    v = t; sub(/^cat >"\$/, "", v); sub(/".*$/, "", v)
+    if (!(v in safe)) return refuse(t)
+    match(t, /<<.*$/); HDTAG = tagof(substr(t, RSTART)); return 1
+  }
   if (t ~ /^oe([ \t]|$)/) { rest = substr(t, 3); return args_ok(rest, "oe") ? 1 : refuse(t) }
-  if (t ~ /^mktemp([ \t]|$)/) { rest = substr(t, 7); return args_ok(rest, "plain") ? 1 : refuse(t) }
+  if (t == "mktemp") return 1
   if (t ~ /^gh issue view([ \t]|$)/) { rest = substr(t, 15); return args_ok(rest, "gh") ? 1 : refuse(t) }
   if (t ~ /^gh api repos\//) { rest = substr(t, 8); return args_ok(rest, "gh") ? 1 : refuse(t) }
   return refuse(t)
@@ -128,7 +128,7 @@ function fence(line,   s, c, n) {
   if (c == "`" && index(FINFO, "`") > 0) return 0
   return 1
 }
-FNR == 1 { infence = 0; judged = 0; hd = "" }
+FNR == 1 { infence = 0; judged = 0; hd = ""; split("", safe) }
 {
   line = $0
   # The guard follows fences at column 0 only. An indented one could open or close a block it would not see.
@@ -147,7 +147,7 @@ FNR == 1 { infence = 0; judged = 0; hd = "" }
       # Markdown decodes character references and escapes in the info string, so its first word may only be plain characters.
       lang = trim(FINFO); sub(/[ \t].*$/, "", lang)
       if (lang !~ /^[A-Za-z0-9_+.#-]*$/) { violation("a fence info string with a character the guard would have to decode: " substr(lang, 1, 30)); next }
-      infence = 1; fch = FCH; flen = FLEN; judged = (lang ~ /^(bash|sh|shell|zsh)$/); hd = ""
+      infence = 1; fch = FCH; flen = FLEN; judged = (lang ~ /^(bash|sh|shell|zsh)$/); hd = ""; split("", safe)
     }
     next
   }
