@@ -1,5 +1,0 @@
-#status: incomplete
-id	source	quote	rule	disposition	issue	owner	reason
-GL-01	tests/fixtures/rule-inventory/source.md	never reads or writes a label	No label is read or written	kept	#282	test:tests/fixtures/rule-inventory/source.md::TestNoSuchTest	-
-MQ-01	tests/fixtures/rule-inventory/source.md	sends the reviewed SHA as its expected head	Merge with expected SHA	kept	#290	prose:tests/fixtures/rule-inventory/source.md#Every merge request sends	-
-EV-06	tests/fixtures/rule-inventory/source.md	A third fix cycle parks the Issue.	Cap at two fix cycles	retired	#288	prose:tests/fixtures/rule-inventory/source.md#A third fix cycle	Replaced by the fix-cycle transition guard

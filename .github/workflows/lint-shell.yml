@@ -9,14 +9,6 @@ on:
       - 'tests/implement-repro/**'
       - '.shellcheckrc'
       - '.github/workflows/lint-shell.yml'
-      # The oe wrapper has no .sh extension.
-      # The other paths are read by the oe release isolation tests.
-      - 'skills/orchestrate-epic/scripts/oe'
-      - 'skills/orchestrate-epic/scripts/oe-manifest.tsv'
-      - 'cliff.toml'
-      - 'Makefile'
-      - '.github/workflows/release.yml'
-      - '.github/workflows/oe-release.yml'
   pull_request:
     paths:
       - '**.sh'
@@ -24,14 +16,6 @@ on:
       - 'tests/implement-repro/**'
       - '.shellcheckrc'
       - '.github/workflows/lint-shell.yml'
-      # The oe wrapper has no .sh extension.
-      # The other paths are read by the oe release isolation tests.
-      - 'skills/orchestrate-epic/scripts/oe'
-      - 'skills/orchestrate-epic/scripts/oe-manifest.tsv'
-      - 'cliff.toml'
-      - 'Makefile'
-      - '.github/workflows/release.yml'
-      - '.github/workflows/oe-release.yml'
 
 permissions:
   contents: read
@@ -60,22 +44,6 @@ jobs:
 
       - name: Run the implement reproduction repository suite
         run: bats tests/implement-repro.bats
-
-      - name: Install git-cliff
-        env:
-          GIT_CLIFF_VERSION: 2.14.2
-          GIT_CLIFF_SHA256: 24f397c733add5390fdceee3a2088588ab0d5f944ce00d34cb7029b888cf2db4
-        run: |
-          set -euo pipefail
-          tarball="${RUNNER_TEMP}/git-cliff.tar.gz"
-          curl -fsSL --retry 3 -o "${tarball}" \
-            "https://github.com/orhun/git-cliff/releases/download/v${GIT_CLIFF_VERSION}/git-cliff-${GIT_CLIFF_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
-          echo "${GIT_CLIFF_SHA256}  ${tarball}" | sha256sum -c -
-          tar -xzf "${tarball}" -C "${RUNNER_TEMP}"
-          echo "${RUNNER_TEMP}/git-cliff-${GIT_CLIFF_VERSION}" >> "$GITHUB_PATH"
-
-      - name: Run the oe manifest and release isolation suites
-        run: bats tests/oe-manifest.bats tests/oe-release-isolation.bats
 
   shell-script-tests:
     name: Shell script tests

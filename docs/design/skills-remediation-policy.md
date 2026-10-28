@@ -2,7 +2,7 @@
 
 対象は implement、commit、create-pr、create-github-issues の 4 スキル。行番号は main の `f3c8933` を基準とする。
 
-orchestrate-epic と agents は対象外とする。両者の仕様は `docs/design/orchestrate-epic-v2/contract.md` を正とし、この文書と食い違えばそちらを優先する。
+orchestrate-epic と agents は対象外とする。
 
 ## 1. 方針
 
