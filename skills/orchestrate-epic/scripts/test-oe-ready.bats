@@ -410,3 +410,142 @@ green_pr_without_verdict() {
   [ "${status}" -eq 0 ]
   [ "$(action_of 5)" = parked ]
 }
+
+# Issue 5 with branch and the Issue comments $1 (a jq array), whose open PR #50 at PR_SHA passed CI
+# and was pushed an hour ago, edited by the jq expression $2.
+pr_with_comments() {
+  gate '[passed("test")]' 5
+  issue 5 'branch | comments('"$1"')
+    | prs([pr(50; "OPEN"; "2027-01-15T07:10:00Z"; "'"${PR_SHA}"'"; [passed("test")]) | '"${2:-.}"'])'
+  listed_pr 5 "${PR_SHA}"
+  pushed feat/issue-5 "${PR_SHA}" "2027-01-15T07:10:00Z"
+}
+
+@test "three attempts after the latest claim park an Issue that still needs repair" {
+  pr_with_comments '[comment("OWNER"; "<!-- oe:claim -->"; "2027-01-15T07:00:00Z"),
+    comment("OWNER"; "<!-- oe:attempt -->"; "2027-01-15T07:01:00Z"),
+    comment("OWNER"; "<!-- oe:attempt -->"; "2027-01-15T07:20:00Z"),
+    comment("OWNER"; "<!-- oe:attempt -->"; "2027-01-15T07:40:00Z")]'
+  statuses "${PR_SHA}" oe/verify:failure
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = parked ]
+}
+
+@test "attempts before the latest claim do not count toward the cap" {
+  pr_with_comments '[comment("OWNER"; "<!-- oe:claim -->"; "2027-01-15T06:00:00Z"),
+    comment("OWNER"; "<!-- oe:attempt -->"; "2027-01-15T06:01:00Z"),
+    comment("OWNER"; "<!-- oe:attempt -->"; "2027-01-15T06:20:00Z"),
+    comment("OWNER"; "<!-- oe:attempt -->"; "2027-01-15T06:40:00Z"),
+    comment("OWNER"; "<!-- oe:claim -->"; "2027-01-15T07:00:00Z"),
+    comment("OWNER"; "<!-- oe:attempt -->"; "2027-01-15T07:00:00Z")]'
+  statuses "${PR_SHA}" oe/verify:failure
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-owner ]
+}
+
+@test "an attempt record by an untrusted author does not count toward the cap" {
+  pr_with_comments '[comment("OWNER"; "<!-- oe:claim -->"; "2027-01-15T07:00:00Z"),
+    comment("OWNER"; "<!-- oe:attempt -->"; "2027-01-15T07:01:00Z"),
+    comment("OWNER"; "<!-- oe:attempt -->"; "2027-01-15T07:20:00Z"),
+    comment("NONE"; "<!-- oe:attempt -->"; "2027-01-15T07:40:00Z")]'
+  statuses "${PR_SHA}" oe/verify:failure
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-owner ]
+}
+
+@test "a question with no later trusted comment waits for the answer" {
+  gate '[passed("test")]' 5
+  issue 5 'branch | comments([comment("OWNER"; "<!-- oe:claim -->"; "2027-01-15T07:00:00Z"),
+    comment("OWNER"; "<!-- oe:attempt -->"; "2027-01-15T07:01:00Z"),
+    comment("OWNER"; "<!-- oe:question -->\nWhich option?"; "2027-01-15T07:10:00Z")])'
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-answer ]
+}
+
+@test "a marked or untrusted comment after a question does not answer it" {
+  gate '[passed("test")]' 5
+  issue 5 'branch | comments([comment("OWNER"; "<!-- oe:claim -->"; "2027-01-15T07:00:00Z"),
+    comment("OWNER"; "<!-- oe:attempt -->"; "2027-01-15T07:01:00Z"),
+    comment("OWNER"; "<!-- oe:question -->\nWhich option?"; "2027-01-15T07:10:00Z"),
+    comment("MEMBER"; "<!-- oe:note -->\nUse option A"; "2027-01-15T07:20:00Z"),
+    comment("NONE"; "Use option A"; "2027-01-15T07:21:00Z"),
+    comment("CONTRIBUTOR"; "Use option A"; "2027-01-15T07:22:00Z")])'
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-answer ]
+}
+
+@test "an unmarked trusted answer after the latest attempt gets an Owner even on a verified PR" {
+  pr_with_comments '[comment("OWNER"; "<!-- oe:claim -->"; "2027-01-15T07:00:00Z"),
+    comment("OWNER"; "<!-- oe:attempt -->"; "2027-01-15T07:01:00Z"),
+    comment("OWNER"; "<!-- oe:question -->\nWhich option?"; "2027-01-15T07:10:00Z"),
+    comment("MEMBER"; "Use option A"; "2027-01-15T07:20:00Z")]'
+  statuses "${PR_SHA}" oe/verify:success
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-owner ]
+}
+
+@test "an answer an earlier attempt already took does not start another Owner" {
+  pr_with_comments '[comment("OWNER"; "<!-- oe:claim -->"; "2027-01-15T07:00:00Z"),
+    comment("OWNER"; "<!-- oe:attempt -->"; "2027-01-15T07:01:00Z"),
+    comment("OWNER"; "<!-- oe:question -->\nWhich option?"; "2027-01-15T07:02:00Z"),
+    comment("MEMBER"; "Use option A"; "2027-01-15T07:03:00Z"),
+    comment("OWNER"; "<!-- oe:attempt -->"; "2027-01-15T07:04:00Z")]'
+  statuses "${PR_SHA}" oe/verify:success
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-merge ]
+}
+
+@test "a trusted Changes requested review after the latest attempt gets an Owner, an earlier one does not" {
+  claim_and_attempt='[comment("OWNER"; "<!-- oe:claim -->"; "2027-01-15T07:00:00Z"),
+    comment("OWNER"; "<!-- oe:attempt -->"; "2027-01-15T07:30:00Z")]'
+  pr_with_comments "${claim_and_attempt}" '.reviews = {totalCount: 1, nodes: [{authorAssociation: "MEMBER",
+    body: "Rename this", submittedAt: "2027-01-15T07:40:00Z"}]}'
+  statuses "${PR_SHA}" oe/verify:success
+  run bash "${oe}" ready o/r 1
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-owner ]
+
+  pr_with_comments "${claim_and_attempt}" '.reviews = {totalCount: 1, nodes: [{authorAssociation: "MEMBER",
+    body: "Rename this", submittedAt: "2027-01-15T07:20:00Z"}]}'
+  run bash "${oe}" ready o/r 1
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-merge ]
+}
+
+@test "a trusted review-thread comment after the latest attempt gets an Owner, an untrusted one does not" {
+  claim_and_attempt='[comment("OWNER"; "<!-- oe:claim -->"; "2027-01-15T07:00:00Z"),
+    comment("OWNER"; "<!-- oe:attempt -->"; "2027-01-15T07:30:00Z")]'
+  pr_with_comments "${claim_and_attempt}" '.reviewThreads = {nodes: [{comments: {nodes: [
+    comment("COLLABORATOR"; "This leaks the token"; "2027-01-15T07:40:00Z")]}}]}'
+  statuses "${PR_SHA}" oe/verify:success
+  run bash "${oe}" ready o/r 1
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-owner ]
+
+  pr_with_comments "${claim_and_attempt}" '.reviewThreads = {nodes: [{comments: {nodes: [
+    comment("NONE"; "This leaks the token"; "2027-01-15T07:40:00Z")]}}]}'
+  run bash "${oe}" ready o/r 1
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-merge ]
+}
