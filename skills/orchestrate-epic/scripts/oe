@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# oe: the orchestrate-epic helper. Each subcommand lives in oe-<subcommand>.sh beside this file.
+# Usage: oe <subcommand> [<args>...]
+# Exit: the subcommand's, or 2 for a missing or unknown subcommand.
+set -uo pipefail
+
+dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+case "${1:-}" in
+ready)
+  sub="$1"
+  shift
+  exec bash "${dir}/oe-${sub}.sh" "$@"
+  ;;
+*)
+  echo "Usage: oe ready <owner/repo> <epic-number> [--running <issue-number>]..." >&2
+  exit 2
+  ;;
+esac
