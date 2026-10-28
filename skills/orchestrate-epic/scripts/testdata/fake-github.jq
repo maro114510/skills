@@ -102,10 +102,10 @@ def issue_response($n):
         blockedBy: {totalCount: ($i.blocked_by // [] | length), nodes: [$i.blocked_by[]? | {number,
           state: (if .state == "open" then "OPEN" else "CLOSED" end),
           stateReason: (if .state == "open" then null else (.state | ascii_upcase) end)}]},
-        comments: {totalCount: ($i.comments // [] | length) + ($i.older_comments // 0),
+        comments: {totalCount: (($i.comments // [] | length) + ($i.older_comments // 0)),
           nodes: [$i.comments[]? | author + {createdAt: (.at | time)}]}},
       ref: (if $i.branch then {name: "feat/issue-\($n)"} else null end),
-      pullRequests: {totalCount: ($i.pull_requests // [] | length) + ($i.older_pull_requests // 0), nodes: [$i.pull_requests // [] | sort_by(.opened) | reverse | .[] | pull_request]}}}};
+      pullRequests: {totalCount: (($i.pull_requests // [] | length) + ($i.older_pull_requests // 0)), nodes: [$i.pull_requests // [] | sort_by(.opened) | reverse | .[] | pull_request]}}}};
 
 def open_pull_requests:
   [.issues[] | .number as $n | .pull_requests[]? | select((.state // "open") == "open")
