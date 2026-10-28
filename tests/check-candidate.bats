@@ -425,7 +425,7 @@ shell_block() {
 }
 
 @test "an HTML block outside a fence fails, since markdown keeps a fence marker inside it as text" {
-  for line in '<div>' '<details>' '</div>' '<!-- note -->' '<pre>' '<?php' '<!DOCTYPE html>'; do
+  for line in '<div>' '<details>' '</div>' '<!-- note -->' '<pre>' '<?php' '<!DOCTYPE html>' '<DIV>' '<P>' '<TOKEN>' '<N>' '<WORKTREE> text'; do
     printf '# Router\n\n%s\n```text\n</div>\n```bash\ngit push origin main\n```\n' "${line}" >"${cand}/router.md"
     run bash "${target}" "${cand}"
     [ "${status}" -eq 1 ] || {
@@ -439,7 +439,7 @@ shell_block() {
   done
 }
 
-@test "a placeholder or a comparison in running text is not an HTML block" {
+@test "a placeholder or a comparison inside a line is not an HTML block" {
   printf '# Router\n\nUse <TOKEN> and <N> in a call. A value a<b is fine, and so is <3.\n\n- item <WORKTREE>\n\n| a | b |\n|---|---|\n| <X> | y |\n' >"${cand}/router.md"
   run bash "${target}" "${cand}"
   [ "${status}" -eq 0 ]
