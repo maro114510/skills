@@ -36,7 +36,12 @@ fail() {
 repo="$1"
 epic="$2"
 shift 2
-[[ $# -eq 0 ]] || usage "Unknown argument: $1"
+running=" "
+while [[ $# -gt 0 ]]; do
+  [[ "$1" == --running && "${2:-}" =~ ^[1-9][0-9]*$ ]] || usage "Expected --running <issue-number>, got: $*"
+  running+="$2 "
+  shift 2
+done
 
 now="${OE_NOW:-$(date -u +%s)}"
 [[ "${now}" =~ ^[0-9]+$ ]] || usage "OE_NOW must be epoch seconds"
@@ -80,6 +85,8 @@ ISSUE_QUERY='query($owner: String!, $repo: String!, $num: Int!, $branch: String!
 # shellcheck disable=SC2016 # jq program, not shell expansion.
 COMMON='
   def epoch: sub("\\.[0-9]+"; "") | fromdateiso8601;
+  def trusted: (.authorAssociation // "") as $a | $a == "OWNER" or $a == "MEMBER" or $a == "COLLABORATOR";
+  def record($kind): trusted and ((.body // "") | startswith("<!-- oe:\($kind) -->"));
   def check_name: .name // .context // "unnamed check";
   def check_class:
     if .__typename == "CheckRun" then
@@ -133,12 +140,28 @@ GATE='
 CLASSIFY='
   .data.repository as $r
   | ($r.issue // error("Issue not found")) as $i
+  | ($i.comments.nodes // error("comments unreadable")) as $cs
+  | ([range(0; $cs | length) | select($cs[.] | record("claim"))] | last) as $claim
+  | (if $claim == null then null else $cs[$claim].createdAt end) as $claimAt
   | [($r.pullRequests.nodes // error("pull requests unreadable"))[] | select(.isCrossRepository == false)] as $prs
-  | ($prs | first) as $pr
   | ($r.ref != null) as $branch
+  | if $i.comments.totalCount > ($cs | length) and $claim == null and ($branch or ($prs | length) > 0)
+    then error("Issue #\($i.number) has over \($cs | length) comments and none of the latest is a claim record")
+    else . end
+  | ([$prs[] | select($claimAt == null or .createdAt >= $claimAt)] | first) as $pr
+  | ([$prs[] | select(.mergedAt != null and ($claimAt == null or .mergedAt >= $claimAt))] | first) as $merged
   | "\($i.number)\t" + (
-      if ($branch | not) then "claim\tevery dependency completed"
-      elif $pr == null then error("not classified yet")
+      if $i.state == "CLOSED" then "done\tclosed"
+      elif $merged != null then "wait-engineer\tPR #\($merged.number) merged; the Issue is still open"
+      elif $branch and $pr != null and $pr.state == "CLOSED" then "wait-engineer\tPR #\($pr.number) closed without merging"
+      elif ($branch | not) then
+        ($i.blockedBy
+          | if (.nodes | type) != "array" or .totalCount > (.nodes | length) then error("Issue #\($i.number) dependencies unreadable") else .nodes end
+          | map(select(.state != "CLOSED" or .stateReason != "COMPLETED"))) as $waiting
+        | if ($waiting | length) > 0
+          then "wait-dependencies\t" + ($waiting | map("#\(.number) " + (if .state == "OPEN" then "open" else "closed as \(.stateReason // "unknown")" end)) | join(", "))
+          else "claim\tevery dependency completed" end
+      elif $pr == null then "start-owner\tno PR yet"
       else
         ($pr.commits.nodes[0].commit // error("PR #\($pr.number) head unreadable")) as $head
         | if $head.oid != $pr.headRefOid then error("PR #\($pr.number) head changed during the read") else . end
@@ -190,7 +213,9 @@ esac
 
 sorted=()
 if [[ ${#issues[@]} -gt 0 ]]; then
-  while read -r n; do sorted+=("${n}"); done < <(printf '%s\n' "${issues[@]}" | sort -n -u)
+  while read -r n; do
+    [[ "${running}" == *" ${n} "* ]] || sorted+=("${n}")
+  done < <(printf '%s\n' "${issues[@]}" | sort -n -u)
 fi
 
 out=""
@@ -213,6 +238,7 @@ facts=""
 while IFS=$'\t' read -r n sha; do
   [[ -n "${n}" ]] || continue
   [[ "${n}" =~ ^[1-9][0-9]*$ && "${sha}" =~ ^[0-9a-f]{40}$ ]] || fail "pull request list unreadable"
+  [[ " ${sorted[*]-} " == *" ${n} "* ]] || continue
   states="$(gh api "repos/${repo}/commits/${sha}/statuses?per_page=100" --paginate \
     --jq '.[] | select(.context == "'"${VERIFY_CONTEXT}"'") | .state' 2>"${err}")" ||
     fail "status read for ${sha} failed: $(head -n1 "${err}")"
