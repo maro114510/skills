@@ -114,6 +114,9 @@ def epic_lines:
 #   - A pull request from a fork never counts.
 # - Engineer input counts once.
 #   - Input before the latest attempt was already handed to that attempt's Owner.
+# - A head that cannot be read fails the read only when the action depends on the head.
+#   - A push between the reads is the usual cause.
+#   - next_action raises it right before row 8, the first row that needs the head.
 def issue_state:
   .data.repository as $r
   | ($r.issue // error("Issue not found")) as $issue
@@ -133,13 +136,14 @@ def issue_state:
   | (if any($answers[]; . > ($last_start // -1)) then ["a trusted answer to the question"] else [] end) as $answered
   | ([$prs[] | select($claimed_at == null or .createdAt >= $claimed_at)] | first) as $pr
   | ([$prs[] | select(.mergedAt != null and ($claimed_at == null or .mergedAt >= $claimed_at))] | first) as $merged
-  | (if $branch and $pr.state == "OPEN" then
+  | (if $branch and $pr.state == "OPEN" then try (
       ($pr.headRef.target // error("PR #\($pr.number) head unreadable")) as $target
       | if $target.oid != $pr.headRefOid then error("PR #\($pr.number) head changed during the read") else . end
       | (pr_heads[$target.oid] // error("PR #\($pr.number) head \($target.oid) changed during the read")) as $facts
       | ($target | ci) as $ci
       | {sha: $target.oid[0:7], ci: $ci.state, ci_detail: $ci.detail, verdict: $facts.verdict, starts: $facts.starts,
           age: (now_s - ($facts.pushed // ($target.committedDate | epoch)))}
+    ) catch {unreadable: .}
     else null end) as $head
   | {
       number: $issue.number,
@@ -158,7 +162,7 @@ def issue_state:
       attempts: ($attempts | length),
       head: $head,
       repairs: (if $pr == null then $answered + ["no PR yet"]
-        elif $head == null then []
+        elif $head == null or $head.unreadable != null then []
         else $answered + [
           if $pr.mergeable == "CONFLICTING" then "PR #\($pr.number) conflicts with its base" else empty end,
           if $head.ci == "failed" then "checks failed on \($head.sha): \($head.ci_detail)" else empty end,
@@ -211,6 +215,7 @@ def next_action:
     if (.waiting_on | length) > 0 then act("wait-dependencies"; .waiting_on | join(", "))
     else act("claim"; "every dependency completed") end
   elif .question_open then act("wait-answer"; "the question has no unmarked comment from a trusted role yet")
+  elif .head.unreadable != null then error(.head.unreadable)
   elif (.repairs | length) > 0 then
     (.repairs | join("; ")) as $why
     | if .attempts >= max_attempts then act("parked"; "\(.attempts) attempts used; still: \($why)")
