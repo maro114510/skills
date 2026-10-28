@@ -22,9 +22,13 @@ oe gate --lease-token <TOKEN>
 
 | `status` | Exit | You |
 |---|---|---|
-| `run-plan-posted` | 8 | Stop. `oe` posted the Run Plan once. Render Approval Needed |
-| `awaiting-approval` | 8 | Stop. Render Approval Needed |
-| `frozen` | 4 | Render Frozen Epic and stop. The freeze note went out once, and you post nothing |
+| `run-plan-posted` | 8 | Render Approval Needed, end the lease, and stop. `oe` posted the Run Plan once |
+| `awaiting-approval` | 8 | Render Approval Needed, end the lease, and stop |
+| `frozen` | 4 | Render Frozen Epic, end the lease, and stop. The freeze note went out once, and you post nothing |
 | `approved` | 0 | Go on. `merge_authorized` says whether landing may merge |
 
-Any other status, or exit 1, 6, or 7, stops the run: report the verdict line.
+Any other status, or exit 1, 6, or 7, stops the run: report the verdict line. Ending the lease is one call, and exit 7 means it is not yours to end:
+
+```bash
+oe lease end --lease-token <TOKEN>
+```
