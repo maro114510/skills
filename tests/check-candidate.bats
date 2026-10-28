@@ -306,6 +306,39 @@ shell_block() {
   done
 }
 
+@test "a mktemp assignment holds only plain words inside its substitution" {
+  shell_block "${cand}/router.md" 'x="$(mktemp)"' 'y="$(mktemp -p /tmp)"'
+  run bash "${target}" "${cand}"
+  [ "${status}" -eq 0 ]
+  for line in 'x="$(mktemp ; git push origin main)"' 'x="$(mktemp && git push)"' 'x="$(mktemp | sh)"' 'x="$(mktemp) ; (git push"' 'x="$(mktemp "a b")"'; do
+    printf '# Router\n' >"${cand}/router.md"
+    shell_block "${cand}/router.md" "${line}"
+    run bash "${target}" "${cand}"
+    [ "${status}" -eq 1 ] || {
+      echo "accepted: ${line}"
+      return 1
+    }
+  done
+}
+
+@test "a line indented four spaces or by a tab is no fence, and up to three spaces still is" {
+  printf '# Router\n\n    ```text\n\n```bash\ngit push origin main\n```\n' >"${cand}/router.md"
+  run bash "${target}" "${cand}"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"router.md:6"* ]]
+  printf '# Router\n\n\t```text\n\n```bash\ngit push origin main\n```\n' >"${cand}/router.md"
+  run bash "${target}" "${cand}"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"router.md:6"* ]]
+  printf '# Router\n\n   ```bash\ngit push origin main\n   ```\n' >"${cand}/router.md"
+  run bash "${target}" "${cand}"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"router.md:4"* ]]
+  printf '# Router\n\n   ```bash\noe gate --lease-token t\n   ```\n' >"${cand}/router.md"
+  run bash "${target}" "${cand}"
+  [ "${status}" -eq 0 ]
+}
+
 @test "a fenced block that is not shell is never judged" {
   printf '\n```text\ngit push origin main\n```\n\n```\ngit commit\n```\n' >>"${cand}/router.md"
   run bash "${target}" "${cand}"
