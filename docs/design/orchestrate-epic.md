@@ -1,142 +1,142 @@
-# orchestrate-epic設計
+# orchestrate-epic Design
 
-## 目的
+## Purpose
 
-orchestrate-epicは、Epicの子Issueを依存順に検証済みのPRにする。状態はすべてGitHubから読み取り、マージはエンジニアかリポジトリの自動化が行う。
+orchestrate-epic turns an Epic's child Issues into verified PRs in dependency order. It reads every state from GitHub, and an engineer or repository automation does the merging.
 
-## 責務
+## Responsibilities
 
-各部品は1つの仕事だけを行い、自分では状態を保存しない。状態はすべてGitHubにある。
+Each part does one job and stores no state of its own. All state lives on GitHub.
 
-### 進行役
+### Coordinator
 
-| 部品 | 仕事 | 使う部品 |
+| Part | Job | Uses |
 |---|---|---|
-| orchestrate-epic | oe readyで各Issueの次の行動を受け取り、必要なエージェントを起動し、oe waitでGitHubの変化を待つ。これを繰り返す | oe、pr-owner、pr-verify |
+| orchestrate-epic | Gets each Issue's next action from oe ready, starts the agents it needs, and waits for GitHub to change with oe wait, in a loop | oe, pr-owner, pr-verify |
 
-### エージェント
+### Agents
 
-| 部品 | 仕事 | 使う部品 |
+| Part | Job | Uses |
 |---|---|---|
-| pr-owner | 1つのIssueについて実装か修理を1回行い、pushする。判断できなければIssueに質問を書き、何もpushしない | implement、create-pr、oe question |
-| pr-verify | PRの先頭SHAのコードがIssueの受け入れ基準をすべて満たすかを、実際に動かして確かめる | oe verdict |
+| pr-owner | Implements or repairs one Issue once and pushes. When it cannot decide, it writes a question on the Issue and pushes nothing | implement, create-pr, oe question |
+| pr-verify | Runs the code at the PR's head SHA to check that it meets every acceptance criterion of the Issue | oe verdict |
 
-### 既存スキル
+### Existing skills
 
-| 部品 | 仕事 | 使う部品 |
+| Part | Job | Uses |
 |---|---|---|
-| implement | コードとテストを書いてコミットする。pushはしない | commit |
-| commit | 秘密情報を検査してからコミットする | なし |
-| create-pr | PRの本文を書き、PRを開く | なし |
+| implement | Writes code and tests and commits them, without pushing | commit |
+| commit | Screens for secrets, then commits | none |
+| create-pr | Writes the PR body and opens the PR | none |
 
 ### oe
 
-| 部品 | 仕事 | 書き込み先 |
+| Part | Job | Writes to |
 |---|---|---|
-| oe lock | 同じEpicの2つ目のセッションを拒否する | ホスト内のロック |
-| oe ready | GitHubを読み、各Issueの次の行動を出力する | なし |
-| oe wait | oe readyの出力が変わるか、25分経つまで待つ | なし |
-| oe brief | OwnerとVerifierに渡す指示を作る | なし |
-| oe claim | Issueのブランチを作り、着手記録を書く | originのブランチとIssueのコメント |
-| oe worktree | 共有チェックアウトの外に作業用のworktreeを作り、エージェントの終了後に消す | ローカルのworktree |
-| oe attempt | Ownerの起動前に試行記録を書き、4回目は拒否する | Issueのコメント |
-| oe question | Ownerの質問を書く | Issueのコメント |
-| oe verdict | Verifierの判定と指摘を書く | SHAのコミットステータスとPRのコメント |
+| oe lock | Refuses a second session for the same Epic | A host-local lock |
+| oe ready | Reads GitHub and prints each Issue's next action | nothing |
+| oe wait | Waits until oe ready's output changes or 25 minutes pass | nothing |
+| oe brief | Builds the brief handed to an Owner or a Verifier | nothing |
+| oe claim | Creates the Issue's branch and writes a claim record | A branch on origin and an Issue comment |
+| oe worktree | Creates an agent's worktree outside the shared checkout and removes it after the agent ends | A local worktree |
+| oe attempt | Writes an attempt record before an Owner starts, and refuses a 4th | An Issue comment |
+| oe question | Writes an Owner's question | An Issue comment |
+| oe verdict | Writes a Verifier's verdict and findings | A commit status on the SHA and a PR comment |
 
-### エンジニア
+### Engineer
 
-- Ownerの質問に、Issueのコメントで答える
-- PRのコードをレビューし、直してほしければChanges requestedを出す
-- PRを承認してマージする
-- 停止したIssueのブランチを消し、AIに最初からやり直させる
+- Answers an Owner's question with a comment on the Issue
+- Reviews the PR's code and submits Changes requested when something must change
+- Approves and merges the PR
+- Deletes a parked Issue's branch so the AI starts it over
 
-## 不変条件
+## Invariants
 
-| 不変条件 | 対応するEpicの安全条件 |
+| Invariant | Safety condition in the Epic |
 |---|---|
-| AIはマージせず、自動マージも有効にしない | マージ許可、SHA指定マージ、マージ後の凍結などマージ系の条件。AIがマージしないので不要になる |
-| 依存先のIssueがすべて完了として閉じるまで、Issueに着手しない | 依存の完了 |
-| 着手とはIssueのブランチをoriginに作ることで、ブランチが既にあれば着手は失敗する | 二重着手の防止 |
-| 判定は検証したSHAのコミットステータスとして書き、そのSHAがPRの先頭でなくなっていれば書かない | 判定とSHAの結び付け |
-| Verifierに渡すのはIssue、SHA、ベースブランチだけで、PRの本文やOwnerの報告は渡さない | Verifierは作業者の報告を見ない |
-| OwnerもVerifierも仕事1回ごとに新しく起動し、仕事が終われば終了する | 段ごとに新しいエージェント |
-| Ownerの試行回数はGitHub上の試行記録から数え、4回目の起動は拒否する | 再起動しても残る試行上限 |
-| エージェントは自分用のworktreeだけで作業し、共有チェックアウトには触れない | 共有チェックアウトに触れない |
-| エンジニアの入力として扱うのは、OWNER、MEMBER、COLLABORATORの権限を持つ人が書いたマーカーの無いコメントとレビューだけで、ラベルは何も意味しない | 信頼できる入力だけを使う |
-| GitHubの読み取りに1つでも失敗したら、oe readyは何も出力せずに失敗で終わる | 読み取り失敗で判断しない |
-| スキルの起動を同意とみなし、セッションを終えるとすべてのエージェントが止まる | 開始ゲート。起動が同意なので不要になる |
-| 成否はGitHub上の本物のCIで判断し、ローカルでCIを再現しない | ローカルで再現する検査集合。本物のCIを使うので不要になる |
+| The AI never merges and never enables auto-merge | The merge conditions, such as the merge grant, the expected-SHA merge, and the post-merge freeze. They are dropped because the AI never merges |
+| No Issue starts until every Issue it depends on is closed as completed | Dependencies done before starting |
+| Claiming an Issue means creating its branch on origin, and the claim fails when the branch already exists | No double claim |
+| A verdict is written as a commit status on the SHA that was checked, and is not written once that SHA is no longer the PR's head | Verdict bound to the SHA |
+| A Verifier receives only the Issue, the SHA, and the base branch, never the PR body or the Owner's report | Verifier never sees the worker's report |
+| Every Owner and Verifier starts fresh for one job and ends when the job is done | A fresh agent per step |
+| Owner attempts are counted from the attempt records on GitHub, and a 4th start is refused | Retry cap survives restarts |
+| Each agent works only in its own worktree and never touches the shared checkout | Never touch the shared checkout |
+| Engineer input is only an unmarked comment or review by someone with the OWNER, MEMBER, or COLLABORATOR role, and labels mean nothing | Trusted input only |
+| When any GitHub read fails, oe ready prints nothing and exits with an error | A failed read decides nothing |
+| Invoking the skill is consent, and ending the session stops every agent | The entry gate. It is dropped because invoking is consent |
+| Success is decided by the real CI on GitHub, never by a local reproduction | The locally reproduced check set. It is dropped because the real CI runs |
 
-秘密情報の検査という安全条件は、受容するリスクとして扱う。
+The secret-scan safety condition is handled as an accepted risk.
 
-## 状態の導出
+## Source of Truth
 
-1つのIssueは次の図の段階を進む。
+An Issue moves through the phases in this diagram.
 
 ```mermaid
 flowchart TB
-  subgraph Pre["着手前"]
-    Blocked["依存待ち"] -->|"依存がすべて完了"| Ready["着手可能"]
+  subgraph Pre["Before claim"]
+    Blocked["Waiting on dependencies"] -->|"All dependencies completed"| Ready["Ready"]
   end
-  subgraph Work["作業"]
-    Owner["Owner作業中"] -->|"質問"| Ask["回答待ち"]
-    Ask -->|"回答"| Owner
-    Owner -->|"push"| CI["CI待ち"]
-    CI -->|"失敗か競合"| Owner
+  subgraph Work["Work"]
+    Owner["Owner working"] -->|"Question"| Ask["Waiting for an answer"]
+    Ask -->|"Answer"| Owner
+    Owner -->|"Push"| CI["Waiting for CI"]
+    CI -->|"Failure or conflict"| Owner
   end
-  subgraph Check["検証"]
-    Verify["Verifier作業中"] -->|"成功"| Merge["マージ待ち"]
+  subgraph Check["Verification"]
+    Verify["Verifier working"] -->|"Success"| Merge["Waiting for the merge"]
   end
-  Ready -->|"着手"| Owner
-  CI -->|"成功"| Verify
-  Verify -->|"失敗"| Owner
+  Ready -->|"Claim"| Owner
+  CI -->|"Success"| Verify
+  Verify -->|"Failure"| Owner
   Merge -->|"Changes requested"| Owner
-  Merge -->|"エンジニアがマージ"| Done["完了"]
-  Owner -->|"試行が3回"| Parked["停止"]
-  CI -->|"10分checkが無い"| Parked
-  Verify -->|"判定無しが2回"| Parked
+  Merge -->|"Engineer merges"| Done["Done"]
+  Owner -->|"3 attempts"| Parked["Parked"]
+  CI -->|"No checks after 10 minutes"| Parked
+  Verify -->|"No verdict twice"| Parked
 ```
 
-oe readyは各Issueについて、次の表を上から見て最初に当てはまった行の行動を出す。行1と行2は既定ブランチを見る関門で、すべてのIssueに効く。
+For each Issue, oe ready reads this table from the top and outputs the action of the first row that matches. Rows 1 and 2 are gates on the default branch and apply to every Issue.
 
-| 順 | 段階 | GitHubの状態 | 次の行動 |
+| Row | Phase | State on GitHub | Next action |
 |---|---|---|---|
-| 1 | 関門 | 既定ブランチの先頭SHAに、10分経ってもcheckが1つも無い | セッションを終える |
-| 2 | 関門 | 既定ブランチの先頭SHAのcheckに、保留中か失敗のものがある | 何も始めずに待つ |
-| 3 | 着手前 | Issueが閉じている | 完了とする |
-| 4 | 着手前 | 最新の着手記録より後にマージ済みのPRがある。またはブランチがあり、そのPRが閉じられている | エンジニアを待つ |
-| 5 | 着手前 | ブランチが無く、完了していない依存先がある | 依存先を待つ |
-| 6 | 着手前 | ブランチが無く、依存先がすべて完了している | 着手してOwnerを起動する |
-| 7 | 作業 | Issue上の最新の質問の後に、信頼ユーザーのコメントが無い | 回答を待つ |
-| 8 | 作業 | 下の修理シグナルのどれかがある | Ownerを起動する。試行がすでに3回なら停止する |
-| 9 | 検証 | PRの先頭SHAのcheckに、保留中のものがある | CIを待つ |
-| 10 | 検証 | PRの先頭SHAに、10分経ってもcheckが1つも無い | 停止する |
-| 11 | 検証 | PRの先頭SHAに、成功の判定も失敗の判定も無い | Verifierを起動する。保留ステータスがすでに2つあれば停止する |
-| 12 | 検証 | PRの先頭SHAに成功の判定がある | エンジニアのマージを待つ |
+| 1 | Gate | The default branch's head SHA still has no checks after 10 minutes | End the session |
+| 2 | Gate | A check on the default branch's head SHA is pending or failed | Start nothing and wait |
+| 3 | Before claim | The Issue is closed | Mark it done |
+| 4 | Before claim | A PR merged after the latest claim record, or the branch exists and its PR was closed without merging | Wait for an engineer |
+| 5 | Before claim | No branch exists, and a dependency is not completed | Wait for the dependencies |
+| 6 | Before claim | No branch exists, and every dependency is completed | Claim and start an Owner |
+| 7 | Work | No trusted user has commented on the Issue since its latest question | Wait for the answer |
+| 8 | Work | Any repair signal below is present | Start an Owner, or park the Issue when it already has 3 attempts |
+| 9 | Verification | A check on the PR's head SHA is pending | Wait for CI |
+| 10 | Verification | The PR's head SHA still has no checks after 10 minutes | Park the Issue |
+| 11 | Verification | The PR's head SHA has neither a success nor a failure verdict | Start a Verifier, or park the Issue when the SHA already has 2 pending statuses |
+| 12 | Verification | The PR's head SHA has a success verdict | Wait for an engineer to merge |
 
-- 修理シグナル
-  - PRがまだ無い
-  - PRがベースブランチと競合している
-  - PRの先頭SHAのcheckが失敗している
-  - PRの先頭SHAの判定が失敗している
-  - 最新の試行記録より後に、信頼ユーザーが次のどれかを書いた
-    - 最新の質問への回答
-    - Changes requestedのレビュー
-    - レビュースレッドのコメント
-- 数え方
-  - 数えるのは最新の着手記録より後の記録だけで、着手記録が1つも無ければすべての記録を数える
-  - Verifierの起動回数は、oeが起動前にそのSHAへ付ける保留ステータスの数で数える
-  - oe verdictが書くステータスは、CIのcheckとして数えない
-  - このセッションでエージェントが動いているIssueは、oe readyの対象から外す
+- Repair signals
+  - No PR exists yet
+  - The PR conflicts with the base branch
+  - A check on the PR's head SHA failed
+  - The verdict on the PR's head SHA is a failure
+  - Since the latest attempt record, a trusted user wrote one of these
+    - An answer to the latest question
+    - A Changes requested review
+    - A review-thread comment
+- Counting
+  - Only records after the latest claim record count, and every record counts when there is no claim record
+  - Verifier starts are counted by the pending statuses that oe puts on the SHA before each start
+  - The status oe verdict writes is never counted as a CI check
+  - An Issue with an agent running in this session is left out of oe ready's output
 
-## 具体例
+## Worked Examples
 
-正常系の流れを示す。IssueのBはIssueのAに依存する。
+The normal path. Issue B depends on Issue A.
 
 ```mermaid
 sequenceDiagram
   autonumber
-  actor H as エンジニア
+  actor H as Engineer
   box rgb(235,242,255) AI
     participant O as orchestrate-epic
     participant E as oe
@@ -146,85 +146,85 @@ sequenceDiagram
     participant V as pr-verify
   end
   participant G as GitHub
-  H->>O: 起動する
+  H->>O: Invoke
   rect rgba(0,120,255,0.08)
-    Note over O,G: 着手
+    Note over O,G: Claim
     O->>E: ready
-    E->>G: 状態を読む
-    E-->>O: Aに着手する
-    O->>E: claimとattempt
-    E->>G: ブランチと記録を作る
+    E->>G: Read the state
+    E-->>O: Claim A
+    O->>E: claim and attempt
+    E->>G: Create the branch and records
   end
   rect rgba(0,200,120,0.08)
-    Note over O,G: 実装
-    O->>+W: Aを渡して起動する
-    W->>+I: autonomousで実行する
-    I-->>-W: コミットを返す
-    W->>G: pushする
+    Note over O,G: Implementation
+    O->>+W: Start with A
+    W->>+I: Run in autonomous mode
+    I-->>-W: Return the commits
+    W->>G: Push
   end
   rect rgba(0,180,200,0.08)
-    Note over O,G: PR作成
-    W->>+C: 実行する
-    C->>G: PRを開く
-    C-->>-W: 完了を返す
-    W-->>-O: 終了する
+    Note over O,G: PR creation
+    W->>+C: Run
+    C->>G: Open the PR
+    C-->>-W: Done
+    W-->>-O: End
   end
   rect rgba(120,120,120,0.08)
-    Note over O,G: CI監視
-    loop oe readyの出力が変わるまで
+    Note over O,G: CI watch
+    loop Until oe ready's output changes
       O->>E: wait
-      E->>G: CIを確認する
+      E->>G: Check CI
     end
-    E-->>O: Aを検証する
+    E-->>O: Verify A
   end
   rect rgba(255,160,0,0.08)
-    Note over O,G: 検証
+    Note over O,G: Verification
     O->>E: brief
-    O->>+V: Issue、SHA、ベースブランチだけを渡して起動する
-    Note over V: Issueの受け入れ基準を1つずつ実際に動かして確かめる
-    V->>E: verdictで成功を書く
-    E->>G: SHAに成功のステータスを付ける
-    V-->>-O: 終了する
+    O->>+V: Start with only the Issue, the SHA, and the base branch
+    Note over V: Runs the code to check each acceptance criterion of the Issue
+    V->>E: Write success with verdict
+    E->>G: Put a success status on the SHA
+    V-->>-O: End
   end
   rect rgba(160,80,255,0.08)
-    Note over H,G: 承認とマージ
-    loop oe readyの出力が変わるまで
+    Note over H,G: Approval and merge
+    loop Until oe ready's output changes
       O->>E: wait
-      E->>G: PRを確認する
+      E->>G: Check the PR
     end
-    H->>G: レビューして承認する
-    H->>G: マージする
-    G-->>E: Aが閉じる
-    E-->>O: Bに着手する
+    H->>G: Review and approve
+    H->>G: Merge
+    G-->>E: A closes
+    E-->>O: Claim B
   end
 ```
 
-| 場面 | 動き |
+| Case | What happens |
 |---|---|
-| エージェント消失 | OwnerがPRを作らずに終わるか、セッションが落ちる。GitHubには完了の記録が無いので、次のoe readyが同じブランチで次の試行を始める |
-| 検証失敗 | Verifierが失敗の判定と指摘コメントを書く。Ownerが指摘を読んで修理し、pushする。新しいSHAには判定が無いので、CIと検証をやり直す |
-| CI失敗 | Ownerが同じブランチで失敗したcheckを直し、pushする |
-| 上限到達 | 3回試行しても修理シグナルが残るとIssueは停止し、依存するIssueも止まる。エンジニアは手で仕上げてマージするか、ブランチを消してやり直させる |
-| 既定ブランチの失敗 | 既定ブランチのcheckが失敗している間は、着手もOwnerもVerifierも始めないので試行は減らない。checkが成功に戻れば再開する |
+| Lost agent | The Owner ends without a PR, or the session dies. GitHub has no record of completion, so the next oe ready starts the next attempt on the same branch |
+| Failed verification | The Verifier writes a failure verdict and a findings comment. An Owner reads the findings, repairs, and pushes. The new SHA has no verdict, so CI and verification run again |
+| Failed CI | An Owner fixes the failed check on the same branch and pushes |
+| Reached cap | When a repair signal remains after 3 attempts, the Issue is parked and the Issues that depend on it stop too. The engineer either finishes and merges it by hand, or deletes the branch so the AI starts over |
+| Red default branch | While a check on the default branch fails, no claim, Owner, or Verifier starts, so no attempt is spent. The loop resumes once the check passes |
 
-## 受容するリスク
+## Accepted Risks
 
-- トークンを共有するので、判定のステータスを偽造できる
-- 検証の後にベースブランチが進んでも、検証をやり直さない
-- AIが変更したワークフローも、リポジトリの秘密情報を使って動く
-- oeは秘密情報を検査せず、各コミットはcommitスキルが検査する
-- AIがマーカーを付け忘れたコメントは、エンジニアの入力として読まれる
-- セッションロックは同じホストの中でしか効かないので、別のホストで同じEpicを動かすと、2つのエージェントが同じブランチを触りうる
+- The token is shared, so a verdict status can be forged
+- When the base branch moves after verification, nothing is verified again
+- Workflows the AI changed run with the repository's secrets
+- oe does not scan for secrets, and the commit skill screens each commit instead
+- A comment the AI forgot to mark is read as engineer input
+- The session lock works only within one host, so running the same Epic on another host lets two agents touch the same branch
 
-## 決定事項
+## Decisions
 
-| 論点 | 決定 |
+| Question | Decision |
 |---|---|
-| 依存先が不要または重複として閉じた | 依存するIssueには着手せず、エンジニアの判断を待つ |
-| 修理を起動するシグナル | 上の修理シグナルだけで、PRの通常コメントとbotのレビューでは起動しない |
-| 質問に回答した後のOwnerの再起動 | 試行3回の上限に数える |
-| Verifierが判定を出さずに終わった | 同じSHAで1回だけ再起動し、2回目も判定が無ければ停止する |
-| 待機時間 | oe waitは1回25分まで待ち、oe readyの出力が4時間変わらなければ、要約を出してセッションを終える |
-| 同時に動くエージェント数 | OwnerとVerifierの合計で3とし、起動時の引数で変えられる |
-| worktree | エージェントが終わったらそのworktreeを消し、pushしていない作業は捨てる |
-| 判定の指摘の置き場所 | マーカー付きのPRコメントに書き、次のOwnerがそれを読む |
+| A dependency closed as not planned or duplicate | The dependent Issue is not claimed and waits for an engineer's decision |
+| Signals that start a repair Owner | Only the repair signals above. Plain PR comments and bot reviews start nothing |
+| Restarting an Owner after an answer | Counts toward the cap of 3 attempts |
+| A Verifier ends without a verdict | It is restarted once on the same SHA, and the Issue is parked when the second start also gives no verdict |
+| Waiting | One oe wait call waits up to 25 minutes, and when oe ready's output does not change for 4 hours, the session prints a summary and ends |
+| Agents running at once | 3 Owners and Verifiers combined, changeable by an argument at invocation |
+| Worktrees | An agent's worktree is removed when the agent ends, and unpushed work is discarded |
+| Where findings go | A marked PR comment, which the next Owner reads |
