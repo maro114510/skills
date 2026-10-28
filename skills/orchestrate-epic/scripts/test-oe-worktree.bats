@@ -130,3 +130,13 @@ snapshot() {
   [ "${output}" = "${tmp}/elsewhere/issue-5" ]
   [ "$(git -C "${output}" rev-parse HEAD)" = "${issue_head}" ]
 }
+
+@test "an Issue worktree whose directory was deleted by hand is created again" {
+  git -C "${shared}" worktree add -q -b feat/issue-5 "${tmp}/shared-oe/issue-5" origin/feat/issue-5
+  rm -rf "${tmp}/shared-oe/issue-5"
+
+  run --separate-stderr bash "${oe}" worktree add 5
+
+  [ "${status}" -eq 0 ]
+  [ "$(git -C "${tmp}/shared-oe/issue-5" rev-parse HEAD)" = "${issue_head}" ]
+}
