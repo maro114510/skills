@@ -142,7 +142,9 @@ FNR == 1 { infence = 0; judged = 0; hd = "" }
       next
     }
     if (fence(line)) {
+      # Markdown decodes character references and escapes in the info string, so its first word may only be plain characters.
       lang = trim(FINFO); sub(/[ \t].*$/, "", lang)
+      if (lang !~ /^[A-Za-z0-9_+.#-]*$/) { violation("a fence info string with a character the guard would have to decode: " substr(lang, 1, 30)); next }
       infence = 1; fch = FCH; flen = FLEN; judged = (lang ~ /^(bash|sh|shell|zsh)$/); hd = ""
     }
     next
