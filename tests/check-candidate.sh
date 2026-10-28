@@ -8,7 +8,7 @@
 #   - a file named SKILL.md anywhere under the directory, since discovery would load it (Epic #277, D7)
 #   - a candidate agent with a frontmatter key other than name and description, which includes a model pin
 #   - in a fenced bash, sh, shell, or zsh block, a command that is not on the allow-list below
-#   - an emoji anywhere in a markdown file
+#   - an emoji, or a carriage return, anywhere in a markdown file
 #
 # The allow-list is the whole of what the prose may run. Every line is an oe call, or one of:
 #   git fetch origin <branch>      a plain branch name or an upper-case <PLACEHOLDER>, never a refspec, so it updates a remote-tracking ref only
@@ -22,9 +22,10 @@
 # quoted literal and a quoted output redirect, and may end in a heredoc whose body is data. A quoted literal is opaque
 # to gh only after --jq. Quotes, $, backticks, parentheses, braces, ; | & # * ~ and a backslash fail. Rather than parse
 # shell, the guard allows few forms, and each fix of a bypass stays one more line of this grammar.
-# Fences follow markdown: a run of three or more backticks or tildes, closed by a run of at least as many, and a CRLF file is
-# read like an LF one. A fence inside a quote or a list item fails, since the guard does not follow containers. Blocks of
-# another language, and unlabeled ones, are text and are not judged.
+# Fences follow markdown at column 0: a run of three or more backticks or tildes, closed by a run of at least as many.
+# Blocks of another language, and unlabeled ones, are text and are not judged. Rather than model more of markdown and
+# shell, the guard fails on what it would have to model: an indented fence, a fence inside a quote or a list item, a
+# carriage return anywhere in the file, and a backslash at the end of a line.
 #
 # Exit codes: 0 clean, 1 violations, 2 usage error.
 
@@ -111,12 +112,10 @@ function judge(t,   rest) {
   if (t ~ /^gh api repos\//) { rest = substr(t, 8); return args_ok(rest, "gh") ? 1 : refuse(t) }
   return refuse(t)
 }
-# fence parses a line as a markdown code fence: a run of three or more backticks or tildes, and for backticks an
+# fence parses a line as a markdown code fence at column 0: a run of three or more backticks or tildes, and for backticks an
 # info string without a backtick. It sets FCH, FLEN, and FINFO.
 function fence(line,   s, c, n) {
-  # Four spaces, or a tab, make indented code and no fence. Up to three spaces are allowed.
-  if (line ~ /^(    |\t)/) return 0
-  s = line; sub(/^ +/, "", s)
+  s = line
   c = substr(s, 1, 1)
   if (c != "`" && c != "~") return 0
   n = 0
@@ -126,18 +125,19 @@ function fence(line,   s, c, n) {
   if (c == "`" && index(FINFO, "`") > 0) return 0
   return 1
 }
-FNR == 1 { infence = 0; judged = 0; hd = ""; cont = 0; kind = "" }
+FNR == 1 { infence = 0; judged = 0; hd = "" }
 {
   line = $0
-  sub(/\r$/, "", line)
+  # The guard follows fences at column 0 only. An indented one could open or close a block it would not see.
+  if (line ~ /^[ \t]+(```|~~~)/) { violation("an indented fence; the guard follows only fences at column 0"); next }
   if (!infence) {
-    if (line ~ /^[ \t]*((>|[-*+]|[0-9]+[.)])[ \t]*)+(```|~~~)/) {
+    if (line ~ /^((>|[-*+]|[0-9]+[.)])[ \t]*)+(```|~~~)/) {
       violation("a fence inside a quote or a list item; the guard does not follow containers, so write the block at the top level")
       next
     }
     if (fence(line)) {
       lang = trim(FINFO); sub(/[ \t].*$/, "", lang)
-      infence = 1; fch = FCH; flen = FLEN; judged = (lang ~ /^(bash|sh|shell|zsh)$/); hd = ""; cont = 0
+      infence = 1; fch = FCH; flen = FLEN; judged = (lang ~ /^(bash|sh|shell|zsh)$/); hd = ""
     }
     next
   }
@@ -146,13 +146,7 @@ FNR == 1 { infence = 0; judged = 0; hd = ""; cont = 0; kind = "" }
   if (hd != "") { if (trim(line) == hd) hd = ""; next }
   t = trim(line)
   if (t == "" || t ~ /^#/) next
-  if (cont) {
-    cont = (t ~ /\\$/); if (cont) sub(/[ \t]*\\$/, "", t)
-    if (args_ok(t, kind)) { if (HDTAG != "") hd = HDTAG } else violation("a continuation holds more than plain words: " substr(t, 1, 60))
-    next
-  }
-  cont = (t ~ /\\$/); if (cont) sub(/[ \t]*\\$/, "", t)
-  kind = (t ~ /^oe([ \t]|$)/) ? "oe" : "gh"
+  if (t ~ /\\$/) { violation("a line continuation; write one command per line"); next }
   if (judge(t) && HDTAG != "") hd = HDTAG
 }
 END { exit bad }
@@ -160,6 +154,10 @@ END { exit bad }
 
 while IFS= read -r path; do
   rel="${path#"${dir}"/}"
+  if grep -q "$(printf '\r')" "${path}"; then
+    fail "${rel}:1: contains a carriage return; use LF line endings, since markdown also reads a bare CR as a line end"
+    continue
+  fi
   if ! out="$(awk -v rel="${rel}" "${judge}" "${path}")"; then
     fail "${out}"
   fi
