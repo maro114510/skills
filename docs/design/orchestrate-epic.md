@@ -40,7 +40,7 @@ The secret-scan row maps to the accepted risks.
 ## Source of Truth
 
 Every AI write is marked by its first line, `<!-- orchestrate-epic:<kind> -->`, where kind is `claim`, `attempt`, `question`, or `findings`.
-A record counts only when it follows the Issue's latest `claim`, so deleting the branch starts the Issue over.
+A record counts only when it follows the Issue's latest `claim`, or always when no `claim` exists, so deleting the branch starts the Issue over.
 Within the session, `oe ready` also excludes Issues whose agent is still running.
 
 The board stops first when the default-branch head:
