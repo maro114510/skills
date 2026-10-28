@@ -62,7 +62,9 @@ shell_block() {
 
 @test "a worker may read an Issue and its comments with gh" {
   shell_block "${cand}/agents/issue-worker.md" 'gh issue view 7 --repo o/r --json title,body --jq .body' \
-    'gh api repos/o/r/issues/7/comments --paginate --jq .[].body'
+    "gh api repos/o/r/issues/7/comments --paginate --jq '.[].body'"
+  shell_block "${cand}/agents/issue-worker.md" 'gh issue view <number> --repo <REPO> --json title,body --jq .body' \
+    "gh api repos/<REPO>/issues/<number>/comments --paginate --jq '.[]|select(.author_association==\"OWNER\")|.body'"
   run bash "${target}" "${cand}"
   [ "${status}" -eq 0 ]
 }
@@ -213,15 +215,94 @@ shell_block() {
   [ "${status}" -eq 1 ]
 }
 
-@test "a fence the guard cannot track fails instead of hiding what follows" {
-  for fence in '~~~bash' '````bash'; do
-    printf '# Router\n\n%s\ngit push origin main\n%s\n' "${fence}" "${fence%%[a-z]*}" >"${cand}/router.md"
+@test "a process substitution or a subshell fails" {
+  for line in 'oe worker brief --file <(git push)' 'oe worker brief --file >(sh)' 'oe worker brief (git push)' 'oe worker brief {git,push}'; do
+    printf '# Router\n' >"${cand}/router.md"
+    shell_block "${cand}/router.md" "${line}"
     run bash "${target}" "${cand}"
     [ "${status}" -eq 1 ] || {
-      echo "accepted: ${fence}"
+      echo "accepted: ${line}"
       return 1
     }
-    [[ "${output}" == *"fence"* ]]
+  done
+}
+
+@test "a gh api write flag fails when it is quoted, clustered, or attached" {
+  for line in 'gh api repos/o/r/issues/7/comments "-f" "body=x"' "gh api repos/o/r/issues/7/comments '-f' 'body=x'" \
+    'gh api repos/o/r/issues/7/comments -ifbody=x' 'gh api repos/o/r/issues/7/comments -Xpost' 'gh api repos/o/r/issues/7/comments "--method" POST' \
+    "gh api repos/o/r/issues/7/comments --jq '.' '-f' x"; do
+    printf '# Router\n' >"${cand}/router.md"
+    shell_block "${cand}/router.md" "${line}"
+    run bash "${target}" "${cand}"
+    [ "${status}" -eq 1 ] || {
+      echo "accepted: ${line}"
+      return 1
+    }
+  done
+}
+
+@test "a quoted or commented heredoc marker does not hide the lines after it" {
+  for line in 'oe note post --key "<<EOF"' 'oe note post --key k # <<EOF' "oe note post --key '<<EOF'x"; do
+    printf '# Router\n' >"${cand}/router.md"
+    shell_block "${cand}/router.md" "${line}" 'git push origin main'
+    run bash "${target}" "${cand}"
+    [ "${status}" -eq 1 ] || {
+      echo "accepted: ${line}"
+      return 1
+    }
+    [[ "${output}" == *"router.md:5"* ]] || {
+      echo "git push on line 5 was not reported after: ${line}: ${output}"
+      return 1
+    }
+  done
+}
+
+@test "a fence closed by a longer fence ends, so a later shell block is judged" {
+  printf '# Router\n\n```text\nx\n````\n\n```bash\ngit push origin main\n```\n' >"${cand}/router.md"
+  run bash "${target}" "${cand}"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"router.md:8"* ]]
+}
+
+@test "a line with a backtick in its info string is not a fence" {
+  printf '# Router\n\n```text`invalid\n\n```bash\ngit push origin main\n```\n' >"${cand}/router.md"
+  run bash "${target}" "${cand}"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"router.md:6"* ]]
+}
+
+@test "a tilde fence and a four-backtick fence are tracked and judged like a plain one" {
+  for open in '~~~bash' '````bash'; do
+    close="${open%%[a-z]*}"
+    printf '# Router\n\n%s\ngit push origin main\n%s\n' "${open}" "${close}" >"${cand}/router.md"
+    run bash "${target}" "${cand}"
+    [ "${status}" -eq 1 ] || {
+      echo "accepted: ${open}"
+      return 1
+    }
+    [[ "${output}" == *"router.md:4"* ]]
+    printf '# Router\n\n%s\noe gate --lease-token t\n%s\n' "${open}" "${close}" >"${cand}/router.md"
+    run bash "${target}" "${cand}"
+    [ "${status}" -eq 0 ] || {
+      echo "rejected a clean block: ${open}"
+      return 1
+    }
+  done
+}
+
+@test "an oe line may carry only plain words, placeholders, a quoted variable, a quoted redirect, and a quoted literal" {
+  shell_block "${cand}/router.md" 'oe lease acquire --pid "$PPID"' 'oe checks derive --base <DEFAULT_BRANCH> >"<CHECKS_FILE>"' \
+    "oe round plan --lease-token <TOKEN> --reason 'a b; c'" 'oe worker report --issue 7 --file "$f"'
+  run bash "${target}" "${cand}"
+  [ "${status}" -eq 0 ]
+  for line in 'oe gate $TOKEN' 'oe gate >/tmp/x' 'oe gate "a b"' 'oe gate "$f$g"' 'oe gate ~/x' 'oe gate *' 'oe gate a\ b' 'oe gate ${HOME}'; do
+    printf '# Router\n' >"${cand}/router.md"
+    shell_block "${cand}/router.md" "${line}"
+    run bash "${target}" "${cand}"
+    [ "${status}" -eq 1 ] || {
+      echo "accepted: ${line}"
+      return 1
+    }
   done
 }
 
