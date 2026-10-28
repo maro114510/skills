@@ -30,10 +30,10 @@ oe ledger reserve --worker-dispatches <COUNT> --lease-token <TOKEN>
 
 5. Spawn one `issue-implementer` for each item, all in one message, passing the brief's `prompt` verbatim and nothing else. Never continue an agent that ran before.
 
-6. When a worker returns, write its final message, unchanged, to the report file of the Issue and route it, in one call. The file is `/tmp/oe-report-<OWNER>-<REPO>-<EPIC>-<N>.md`, a fixed name built from the repository, the Epic, and the Issue, so that a restarted Publisher finds it again. The heredoc ends at a delimiter line, and the message is agent output, so a fixed word could end it early and run the rest of the message as shell. Use the delimiter below with the twelve hex characters replaced by fresh random ones for every report, and check that no line of the message equals it:
+6. When a worker returns, write its final message, unchanged, to the report file of the Issue and route it, in one call. The file lives in the sessions directory of the `oe` state directory, `$XDG_STATE_HOME/oe/sessions` or, when that is unset, `$HOME/.local/state/oe/sessions`, written out as an absolute path. `oe round plan` creates that directory readable by its owner only, so nothing else can read the report or plant a link at its name, and every round plans before it dispatches. The name is `report-<OWNER>_<REPO>-<EPIC>-<N>.md`. A GitHub owner name holds no underscore, so the first underscore ends it and the name is the same for one repository only, and a restarted Publisher finds the file again. The heredoc ends at a delimiter line, and the message is agent output, so a fixed word could end it early and run the rest of the message as shell. Use the delimiter below with the twelve hex characters replaced by fresh random ones for every report, and check that no line of the message equals it:
 
 ```bash
-f="/tmp/oe-report-<OWNER>-<REPO>-<EPIC>-<N>.md"
+f="<STATE_DIR>/sessions/report-<OWNER>_<REPO>-<EPIC>-<N>.md"
 cat >"$f" <<'REPORT_8F3A9C1D27E4'
 <the worker's final message, unchanged>
 REPORT_8F3A9C1D27E4
