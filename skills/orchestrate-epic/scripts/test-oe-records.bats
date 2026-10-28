@@ -137,3 +137,118 @@ JSON
   *) return 1 ;;
   esac
 }
+
+# oe attempt
+
+@test "an Issue with two attempts since its claim gets a third attempt record" {
+  github <<'JSON'
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
+      {"by": "OWNER", "at": "07:01", "body": "<!-- oe:attempt -->"},
+      {"by": "OWNER", "at": "07:30", "body": "<!-- oe:attempt -->"}
+    ]
+  }]
+}
+JSON
+
+  run bash "${oe}" attempt o/r 5
+
+  [ "${status}" -eq 0 ]
+  [ "$(comment_count 5)" -eq 4 ]
+  case "$(last_comment 5)" in
+  '<!-- oe:attempt -->'*) ;;
+  *) return 1 ;;
+  esac
+}
+
+@test "the fourth attempt since the claim is refused and nothing is posted" {
+  github <<'JSON'
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
+      {"by": "OWNER", "at": "07:01", "body": "<!-- oe:attempt -->"},
+      {"by": "OWNER", "at": "07:20", "body": "<!-- oe:attempt -->"},
+      {"by": "OWNER", "at": "07:40", "body": "<!-- oe:attempt -->"}
+    ]
+  }]
+}
+JSON
+
+  run bash "${oe}" attempt o/r 5
+
+  [ "${status}" -eq 4 ]
+  [ "$(comment_count 5)" -eq 4 ]
+}
+
+@test "attempts before the latest claim do not count toward the cap" {
+  github <<'JSON'
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "OWNER", "at": "06:00", "body": "<!-- oe:claim -->"},
+      {"by": "OWNER", "at": "06:01", "body": "<!-- oe:attempt -->"},
+      {"by": "OWNER", "at": "06:20", "body": "<!-- oe:attempt -->"},
+      {"by": "OWNER", "at": "06:40", "body": "<!-- oe:attempt -->"},
+      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"}
+    ]
+  }]
+}
+JSON
+
+  run bash "${oe}" attempt o/r 5
+
+  [ "${status}" -eq 0 ]
+  [ "$(comment_count 5)" -eq 6 ]
+}
+
+@test "attempt records by an untrusted author do not count toward the cap" {
+  github <<'JSON'
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
+      {"by": "NONE", "at": "07:01", "body": "<!-- oe:attempt -->"},
+      {"by": "NONE", "at": "07:02", "body": "<!-- oe:attempt -->"},
+      {"by": "NONE", "at": "07:03", "body": "<!-- oe:attempt -->"}
+    ]
+  }]
+}
+JSON
+
+  run bash "${oe}" attempt o/r 5
+
+  [ "${status}" -eq 0 ]
+  [ "$(comment_count 5)" -eq 5 ]
+}
+
+@test "a failed read of the Issue comments posts no attempt record" {
+  github <<'JSON'
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [{"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"}]
+  }]
+}
+JSON
+
+  GH_FAIL="/comments?" run --separate-stderr bash "${oe}" attempt o/r 5
+
+  [ "${status}" -eq 1 ]
+  case "${stderr}" in
+  *"comment"*) ;;
+  *) return 1 ;;
+  esac
+  [ "$(comment_count 5)" -eq 1 ]
+}
