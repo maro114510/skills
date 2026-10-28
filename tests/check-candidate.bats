@@ -404,6 +404,26 @@ shell_block() {
   done
 }
 
+@test "a gh argument cannot be a variable, since a variable can hold a write flag" {
+  for line in 'gh api repos/o/r/issues/7/comments "$flag" body=x' 'gh issue view 7 "$flag"'; do
+    printf '# Router\n' >"${cand}/router.md"
+    shell_block "${cand}/router.md" 'flag="-f"' "${line}"
+    run bash "${target}" "${cand}"
+    [ "${status}" -eq 1 ] || {
+      echo "accepted: ${line}"
+      return 1
+    }
+    [[ "${output}" == *"router.md:5"* ]]
+  done
+}
+
+@test "a byte order mark at the start of a file fails, since markdown ignores it and the fence would be missed" {
+  printf '\xef\xbb\xbf# Router\n\n```bash\ngit push origin main\n```\n' >"${cand}/router.md"
+  run bash "${target}" "${cand}"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"router.md:1"*"byte order mark"* ]]
+}
+
 @test "a fenced block that is not shell is never judged" {
   printf '\n```text\ngit push origin main\n```\n\n```\ngit commit\n```\n' >>"${cand}/router.md"
   run bash "${target}" "${cand}"
