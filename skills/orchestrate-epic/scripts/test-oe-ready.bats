@@ -235,3 +235,100 @@ green_pr_without_verdict() {
     [ -z "${output}" ]
   done
 }
+
+@test "a closed Issue is done" {
+  gate '[passed("test")]' 5
+  issue 5 'closed'
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = "done" ]
+}
+
+@test "an Issue with an open dependency is not ready" {
+  gate '[passed("test")]' 5
+  issue 5 'blockers([blocker(3; "CLOSED"; "COMPLETED"), blocker(4; "OPEN"; null)])'
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-dependencies ]
+}
+
+@test "an Issue whose dependency closed as not planned waits instead of being claimed" {
+  gate '[passed("test")]' 5
+  issue 5 'blockers([blocker(4; "CLOSED"; "NOT_PLANNED")])'
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-dependencies ]
+}
+
+@test "an Issue whose branch exists without a PR is not ready and gets an Owner" {
+  gate '[passed("test")]' 5
+  issue 5 'branch | comments([comment("OWNER"; "<!-- oe:claim -->"; "2027-01-15T07:00:00Z")])'
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-owner ]
+}
+
+@test "an open Issue whose PR merged after the latest claim waits for an engineer" {
+  gate '[passed("test")]' 5
+  issue 5 'comments([comment("OWNER"; "<!-- oe:claim -->"; "2027-01-15T07:00:00Z")])
+    | prs([pr(50; "MERGED"; "2027-01-15T07:10:00Z"; "'"${PR_SHA}"'"; [passed("test")])])'
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-engineer ]
+}
+
+@test "a PR merged before the latest claim does not hold a restarted Issue" {
+  gate '[passed("test")]' 5
+  issue 5 'comments([comment("OWNER"; "<!-- oe:claim -->"; "2027-01-15T07:50:00Z")])
+    | prs([pr(50; "MERGED"; "2027-01-15T07:10:00Z"; "'"${PR_SHA}"'"; [passed("test")])])'
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = claim ]
+}
+
+@test "an Issue whose branch exists and whose PR closed without merging waits for an engineer" {
+  gate '[passed("test")]' 5
+  issue 5 'branch | comments([comment("OWNER"; "<!-- oe:claim -->"; "2027-01-15T07:00:00Z")])
+    | prs([pr(50; "CLOSED"; "2027-01-15T07:10:00Z"; "'"${PR_SHA}"'"; [passed("test")])])'
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-engineer ]
+}
+
+@test "a PR from a fork with the Issue's branch name is ignored" {
+  gate '[passed("test")]' 5
+  issue 5 'prs([pr(50; "MERGED"; "2027-01-15T07:10:00Z"; "'"${PR_SHA}"'"; [passed("test")]) | .isCrossRepository = true])'
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = claim ]
+}
+
+@test "an Issue with an agent running in this session is left out and the rest come in number order" {
+  gate '[passed("test")]' 7 5 6
+  issue 5
+  issue 6
+  issue 7
+
+  run bash "${oe}" ready o/r 1 --running 6
+
+  [ "${status}" -eq 0 ]
+  [ "${#lines[@]}" -eq 2 ]
+  [ "${lines[0]%%$'\t'*}" = 5 ]
+  [ "${lines[1]%%$'\t'*}" = 7 ]
+}
