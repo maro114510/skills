@@ -16,6 +16,8 @@ set -uo pipefail
 
 # Seconds a SHA may go without checks before its CI counts as missing rather than not started.
 NO_CHECKS_GRACE=600
+# Verifier starts on one SHA, each marked by a pending oe/verify status, before the Issue parks.
+MAX_VERIFIER_STARTS=2
 VERIFY_CONTEXT=oe/verify
 BRANCH_PREFIX=feat/issue-
 
@@ -167,8 +169,19 @@ CLASSIFY='
         | if $head.oid != $pr.headRefOid then error("PR #\($pr.number) head changed during the read") else . end
         | (facts[$head.oid] // error("PR #\($pr.number) head \($head.oid) changed during the read")) as $f
         | ($head | ci) as $ci
-        | if $ci.state == "passed" then "start-verifier\tchecks passed on \($head.oid[0:7])"
-          else error("not classified yet") end
+        | $head.oid[0:7] as $sha
+        | [ if $pr.mergeable == "CONFLICTING" then "PR #\($pr.number) conflicts with its base" else empty end,
+            if $ci.state == "failed" then "checks failed on \($sha): \($ci.detail)" else empty end,
+            if $f.verdict == "failure" or $f.verdict == "error" then "failure verdict on \($sha)" else empty end
+          ] as $repairs
+        | (now_s - ($f.pushed // ($head.committedDate | epoch))) as $age
+        | if ($repairs | length) > 0 then "start-owner\t" + ($repairs | join("; "))
+          elif $ci.state == "pending" then "wait-ci\tchecks pending on \($sha): \($ci.detail)"
+          elif $ci.state == "none" and $age < '"${NO_CHECKS_GRACE}"' then "wait-ci\tno checks yet on \($sha), \($age)s after its push"
+          elif $ci.state == "none" then "parked\tno checks on \($sha) \($age)s after its push"
+          elif $f.verdict == "success" then "wait-merge\tsuccess verdict on \($sha)"
+          elif $f.starts >= '"${MAX_VERIFIER_STARTS}"' then "parked\tVerifier started \($f.starts) times on \($sha) without a verdict"
+          else "start-verifier\tchecks passed on \($sha)" end
       end)'
 
 # Prints the epoch seconds of the latest push of SHA $2 to branch $1, or nothing when the
