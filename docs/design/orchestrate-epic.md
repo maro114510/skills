@@ -49,6 +49,7 @@ Each part does one job and stores no state of its own. All state lives on GitHub
 - Reviews the PR's code and submits Changes requested when something must change
 - Approves and merges the PR
 - Deletes a parked Issue's branch so the AI starts it over
+- Removes or replaces a dependency that was closed as not planned or duplicate
 
 ## Invariants
 
@@ -102,14 +103,14 @@ For each Issue, oe ready reads this table from the top and outputs the action of
 | Row | Phase | State on GitHub | Next action |
 |---|---|---|---|
 | 1 | Gate | The default branch's head SHA still has no checks after 10 minutes | End the session |
-| 2 | Gate | A check on the default branch's head SHA is pending or failed | Start nothing and wait |
+| 2 | Gate | A check on the default branch's head SHA is pending or failed, or the SHA has had no checks for less than 10 minutes | Start nothing and wait |
 | 3 | Before claim | The Issue is closed | Mark it done |
 | 4 | Before claim | A PR merged after the latest claim record, or the branch exists and its PR was closed without merging | Wait for an engineer |
 | 5 | Before claim | No branch exists, and a dependency is not completed | Wait for the dependencies |
 | 6 | Before claim | No branch exists, and every dependency is completed | Claim and start an Owner |
 | 7 | Work | No trusted user has commented on the Issue since its latest question | Wait for the answer |
 | 8 | Work | Any repair signal below is present | Start an Owner, or park the Issue when it already has 3 attempts |
-| 9 | Verification | A check on the PR's head SHA is pending | Wait for CI |
+| 9 | Verification | A check on the PR's head SHA is pending, or the SHA has had no checks for less than 10 minutes | Wait for CI |
 | 10 | Verification | The PR's head SHA still has no checks after 10 minutes | Park the Issue |
 | 11 | Verification | The PR's head SHA has neither a success nor a failure verdict | Start a Verifier, or park the Issue when the SHA already has 2 pending statuses |
 | 12 | Verification | The PR's head SHA has a success verdict | Wait for an engineer to merge |
@@ -126,7 +127,7 @@ For each Issue, oe ready reads this table from the top and outputs the action of
 - Counting
   - Only records after the latest claim record count, and every record counts when there is no claim record
   - Verifier starts are counted by the pending statuses that oe puts on the SHA before each start
-  - The status oe verdict writes is never counted as a CI check
+  - The verify status that oe writes, whether pending, success, or failure, is never counted as a CI check
   - An Issue with an agent running in this session is left out of oe ready's output
 
 ## Worked Examples
@@ -224,7 +225,7 @@ sequenceDiagram
 | Signals that start a repair Owner | Only the repair signals above. Plain PR comments and bot reviews start nothing |
 | Restarting an Owner after an answer | Counts toward the cap of 3 attempts |
 | A Verifier ends without a verdict | It is restarted once on the same SHA, and the Issue is parked when the second start also gives no verdict |
-| Waiting | One oe wait call waits up to 25 minutes, and when oe ready's output does not change for 4 hours, the session prints a summary and ends |
+| Waiting | One oe wait call waits up to 25 minutes, and when no agent is running and oe ready's output does not change for 4 hours, the session prints a summary and ends |
 | Agents running at once | 3 Owners and Verifiers combined, changeable by an argument at invocation |
 | Worktrees | An agent's worktree is removed when the agent ends, and unpushed work is discarded |
 | Where findings go | A marked PR comment, which the next Owner reads |
