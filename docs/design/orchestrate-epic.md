@@ -126,6 +126,7 @@ For each Issue, oe ready reads this table from the top and outputs the action of
     - A review-thread comment
 - Counting
   - Only records after the latest claim record count, and every record counts when there is no claim record
+  - The PR means the latest PR opened from the branch after the latest claim record
   - Verifier starts are counted by the pending statuses that oe puts on the SHA before each start
   - The verify status that oe writes, whether pending, success, or failure, is never counted as a CI check
   - An Issue with an agent running in this session is left out of oe ready's output
