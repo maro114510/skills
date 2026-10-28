@@ -132,8 +132,8 @@ FNR == 1 { infence = 0; judged = 0; hd = "" }
   # The guard follows fences at column 0 only. An indented one could open or close a block it would not see.
   if (line ~ /^[ \t]+(```|~~~)/) { violation("an indented fence; the guard follows only fences at column 0"); next }
   if (!infence) {
-    # An HTML block keeps a fence marker inside it as text. Running text such as <TOKEN> or a<b does not start one.
-    if (line ~ /^[ \t]*<(\/?[A-Za-z][A-Za-z0-9-]*([ \t>\/]|$)|!|\?)/ && line !~ /^[ \t]*<[A-Z][A-Z_]*>/) {
+    # An HTML block keeps a fence marker inside it as text, and tag names are case-insensitive. A placeholder or a<b inside a line does not start one.
+    if (line ~ /^[ \t]*<(\/?[A-Za-z][A-Za-z0-9-]*([ \t>\/]|$)|!|\?)/) {
       violation("an HTML block; markdown keeps what follows as text, so the guard cannot follow the fences after it")
       next
     }
