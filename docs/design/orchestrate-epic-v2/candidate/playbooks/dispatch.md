@@ -1,6 +1,6 @@
 # Dispatch
 
-`work` holds at most `max-parallel` items, each with `kind`, `issue`, `branch`, and `resume`. A `reverify` item spawns no worker, but a restarted Publisher has no path for its worktree: run step 2 for it, which spawns and charges nothing, then pin it with step 1 of `review.md` before anything is spent. Two cases the loop cannot repair stop for a person: report the Issue with Escalation, then `oe round defer --issue <N> --reason stale` so that no later round plans it again. One is a pull request with no Issue state, which a person opened and `oe worker worktree` refuses; the loop never adopts one. The other is a pin that answers `BOUND`, since the approval then still matches the recorded pair, and the staleness is a pull request head someone pushed outside the loop, which `oe ship publish` and `oe land merge` would only bounce back. Only after the pin answers `PINNED`, check that the DONE report file of the Issue is still there, see the end of step 6; if it is gone, run steps 2 to 6 with a fresh worker, whose DONE report clears the pin, and pin again. Then it goes on in `review.md`. Every `dispatch` item goes through the steps below. Do steps 1 to 4 serially, then spawn every worker of the batch in one message, so that they run in parallel.
+`work` holds at most `max-parallel` items, each with `kind`, `issue`, `branch`, and `resume`. A `reverify` item spawns no worker, but a restarted Publisher has no path for its worktree: run step 2 for it, which spawns and charges nothing, then pin it with step 1 of `review.md` before anything is spent. Two cases the loop cannot repair stop for a person: report the Issue with Escalation, then `oe round defer --issue <N> --reason stale` so that no later round plans it again. One is a pull request with no Issue state, which a person opened and `oe worker worktree` refuses; the loop never adopts one. The other is a pin that answers `BOUND`, since the approval then still matches the recorded pair, and the staleness is a pull request head someone pushed outside the loop, which `oe ship publish` and `oe land merge` would only bounce back. Only after the pin answers `PINNED`, read the report file of the Issue, see step 6, and if it is gone stop for a person as step 6 says. Otherwise it goes on in `review.md`. A pull request head pushed outside the loop can still reach this point when the default branch also moved, because the approval is then stale and the pin answers `PINNED`. It costs one reviewer pass and no worker: `oe ship publish` refuses an unexplained remote head with an `external-push` note, which ship.md reports. Every `dispatch` item goes through the steps below. Do steps 1 to 4 serially, then spawn every worker of the batch in one message, so that they run in parallel.
 
 A fresh worker for an Issue whose `next` is `redispatch` joins the same batch from step 2, in the same round. `oe` reserved the fix cycle already, but it never reserves a worker spawn: step 4 does, for every worker, a first dispatch and a re-dispatch alike. A worker is never spawned without it.
 
@@ -30,21 +30,17 @@ oe ledger reserve --worker-dispatches <COUNT> --lease-token <TOKEN>
 
 5. Spawn one `issue-implementer` for each item, all in one message, passing the brief's `prompt` verbatim and nothing else. Never continue an agent that ran before.
 
-6. When a worker returns, write its final message, unchanged, to a file of its own. Make the file, then write and route it in one call with the path `mktemp` printed:
+6. When a worker returns, write its final message, unchanged, to the report file of the Issue and route it, in one call. The file is `/tmp/oe-report-<OWNER>-<REPO>-<EPIC>-<N>.md`, a fixed name built from the repository, the Epic, and the Issue, so that a restarted Publisher finds it again. The heredoc ends at a delimiter line, and the message is agent output, so a fixed word could end it early and run the rest of the message as shell. Use the delimiter below with the twelve hex characters replaced by fresh random ones for every report, and check that no line of the message equals it:
 
 ```bash
-mktemp
-```
-
-```bash
-f="<REPORT_FILE>"
-cat >"$f" <<'REPORT'
+f="/tmp/oe-report-<OWNER>-<REPO>-<EPIC>-<N>.md"
+cat >"$f" <<'REPORT_8F3A9C1D27E4'
 <the worker's final message, unchanged>
-REPORT
+REPORT_8F3A9C1D27E4
 oe worker report --issue <N> --worktree <WORKTREE> --repo-dir <REPO_DIR> --file "$f" --lease-token <TOKEN>
 ```
 
-Keep the file until the Issue's pull request is merged, because `oe ship publish` reads the same report, and refuses without it. GitHub holds only the skips and decisions of a report, never its checks, so nothing can recreate the file. When a restart lost it, which is the usual case for a stale pull request planned in a later invocation, run steps 2 to 6 again with a fresh worker, reserved as step 4 says. It finds its work committed, and its new DONE report becomes the file. The Issue is then reviewed again before it ships.
+Keep the file until the Issue's pull request is merged, because `oe ship publish` reads the same report, and refuses without it. GitHub holds only the skips and decisions of a report, never its checks, so nothing can recreate it. A lost file is therefore a case for a person: spend nothing to rebuild it, report the Issue with Escalation, and `oe round defer --issue <N> --reason stale`.
 
 ## Judgment on a BLOCKED report
 

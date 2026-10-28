@@ -18,7 +18,7 @@ oe ledger reserve --reviewer-passes <COUNT> --lease-token <TOKEN>
 
 3. Spawn one `issue-reviewer` for each pinned Issue, all in one message, passing `prompt` verbatim. Never add the worker's report.
 
-4. When a reviewer returns, write its final message, unchanged, to a file the way `dispatch.md` writes a report, and bind it:
+4. When a reviewer returns, write its final message, unchanged, to a temporary file the way step 6 of `dispatch.md` writes a report, with a fresh random delimiter, and bind it. Make the file name with `mktemp` and use the path it printed:
 
 ```bash
 oe review verdict --issue <N> --worktree <WORKTREE> --checks-set <CHECKS_FILE> --repo-dir <REPO_DIR> --file "$f" --lease-token <TOKEN>

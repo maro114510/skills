@@ -7,7 +7,7 @@ oe ship publish --issue <N> --worktree <WORKTREE> --checks-set <CHECKS_FILE> --r
 ```
 
 - `--title` is a Conventional Commits title, `type(scope): subject`, under 70 characters and specific to the Issue. The type and scope stay English, and the subject is in the repository's usual language.
-- `--report-file` is the worker's DONE report file that `dispatch.md` kept.
+- `--report-file` is the worker's DONE report file that step 6 of `dispatch.md` kept at its fixed path.
 - Add `--nits-file <NITS_FILE>` only when the reviewer raised nits that a fix cycle resolved: a file saying how each was resolved, written the way a report file is. Otherwise leave it out.
 
 `oe` scans for secrets, checks freshness, runs CHECKS_SET, checks the freeze again, pushes, and opens or links the pull request. It prints a route, and one Issue's failure never stops the others.
