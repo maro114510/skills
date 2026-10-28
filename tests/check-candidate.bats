@@ -172,6 +172,58 @@ shell_block() {
   [[ "${output}" == *"~/.claude"* ]]
 }
 
+@test "a here-string does not open a heredoc that hides the lines after it" {
+  shell_block "${cand}/router.md" 'oe note post --on 7 --key k <<<text' 'git push origin main'
+  run bash "${target}" "${cand}"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"router.md:5"* ]]
+}
+
+@test "a mktemp assignment cannot carry a substitution" {
+  for line in 'x="$(mktemp -p `git push`)"' 'x="$(mktemp -p $HOME)"'; do
+    printf '# Router\n' >"${cand}/router.md"
+    shell_block "${cand}/router.md" "${line}"
+    run bash "${target}" "${cand}"
+    [ "${status}" -eq 1 ] || {
+      echo "accepted: ${line}"
+      return 1
+    }
+  done
+}
+
+@test "git fetch may name a plain branch and never a refspec" {
+  shell_block "${cand}/router.md" 'git fetch origin main' 'git fetch origin feature/x-1'
+  run bash "${target}" "${cand}"
+  [ "${status}" -eq 0 ]
+  for line in 'git fetch origin main:main' 'git fetch origin +main:other' 'git fetch origin --force main' 'git fetch origin' 'git fetch --all'; do
+    printf '# Router\n' >"${cand}/router.md"
+    shell_block "${cand}/router.md" "${line}"
+    run bash "${target}" "${cand}"
+    [ "${status}" -eq 1 ] || {
+      echo "accepted: ${line}"
+      return 1
+    }
+  done
+}
+
+@test "a block labeled bash with more words is still judged" {
+  printf '\n```bash title=x\ngit push origin main\n```\n' >>"${cand}/router.md"
+  run bash "${target}" "${cand}"
+  [ "${status}" -eq 1 ]
+}
+
+@test "a fence the guard cannot track fails instead of hiding what follows" {
+  for fence in '~~~bash' '````bash'; do
+    printf '# Router\n\n%s\ngit push origin main\n%s\n' "${fence}" "${fence%%[a-z]*}" >"${cand}/router.md"
+    run bash "${target}" "${cand}"
+    [ "${status}" -eq 1 ] || {
+      echo "accepted: ${fence}"
+      return 1
+    }
+    [[ "${output}" == *"fence"* ]]
+  done
+}
+
 @test "a fenced block that is not shell is never judged" {
   printf '\n```text\ngit push origin main\n```\n\n```\ngit commit\n```\n' >>"${cand}/router.md"
   run bash "${target}" "${cand}"
