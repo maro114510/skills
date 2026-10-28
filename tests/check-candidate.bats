@@ -339,6 +339,37 @@ shell_block() {
   [ "${status}" -eq 0 ]
 }
 
+@test "a candidate written with CRLF line ends is judged like one with LF" {
+  printf '# Router\r\n\r\n```bash\r\ngit push origin main\r\n```\r\n' >"${cand}/router.md"
+  run bash "${target}" "${cand}"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"router.md:4"* ]]
+  printf '# Router\r\n\r\n```bash\r\noe gate --lease-token t\r\n```\r\n' >"${cand}/router.md"
+  run bash "${target}" "${cand}"
+  [ "${status}" -eq 0 ]
+}
+
+@test "a fence inside a quote or a list item fails, because the guard does not follow containers" {
+  for opener in '> ```bash' '>> ```bash' '- ```bash' '* ```bash' '1. ```bash' '2) ```bash' '- > ```bash' '> - ~~~bash'; do
+    printf '# Router\n\n%s\ngit push origin main\n```\n' "${opener}" >"${cand}/router.md"
+    run bash "${target}" "${cand}"
+    [ "${status}" -eq 1 ] || {
+      echo "accepted: ${opener}"
+      return 1
+    }
+    [[ "${output}" == *"router.md:3"* ]] || {
+      echo "no location for: ${opener}: ${output}"
+      return 1
+    }
+  done
+}
+
+@test "triple backticks in the middle of a sentence are not a container fence" {
+  printf '# Router\n\nA fence is three backticks, written ``` like this, in prose.\n\nUse - and > in tables | a | b |\n' >"${cand}/router.md"
+  run bash "${target}" "${cand}"
+  [ "${status}" -eq 0 ]
+}
+
 @test "a fenced block that is not shell is never judged" {
   printf '\n```text\ngit push origin main\n```\n\n```\ngit commit\n```\n' >>"${cand}/router.md"
   run bash "${target}" "${cand}"
