@@ -6,13 +6,26 @@ Epic の子 Issue を依存順に検証済み PR へ変え、状態はすべて 
 
 ## 責務
 
-| 担当 | 責務 |
-|---|---|
-| orchestrate-epic | oe ready で次の行動を得て新しいエージェントを起動し、oe wait で変化を待つことを繰り返す |
-| pr-owner | Issue を 1 段だけ進め、実装か修理を push するか、質問だけして何も push しない |
-| pr-verify | 1 つの SHA を Issue の受け入れ基準で検証し、その SHA に判定を書く |
-| oe | GitHub から状態を導き、AI の記録と判定をすべて書く |
-| 人間 | 質問に答え、レビューし、マージし、停止した Issue をブランチ削除でやり直させる |
+各部品は 1 つの仕事だけを持ち、状態を持たない。
+
+| 部品 | 仕事 | 使う部品 |
+|---|---|---|
+| orchestrate-epic | 次の行動を得てエージェントを起動し、変化を待つことを繰り返す | oe、pr-owner、pr-verify |
+| pr-owner | Issue を 1 段だけ進めて push し、迷えば質問だけして何も push しない | implement、create-pr、oe question |
+| implement | コードとテストを書いてコミットし、push はしない | commit |
+| commit | 秘密情報を検査してコミットする | なし |
+| create-pr | PR を作る | なし |
+| pr-verify | 1 つの SHA を Issue の受け入れ基準で検証する | oe verdict |
+| oe lock | 同じ Epic の 2 つ目のセッションを拒否する | なし |
+| oe ready | GitHub を読み、Issue ごとの次の行動を出し、何も書かない | なし |
+| oe claim | ブランチと着手記録を作る | なし |
+| oe worktree | 共有チェックアウトの外に作業場所を用意し、終了時に消す | なし |
+| oe attempt | 試行記録を書き、4 回目を拒否する | なし |
+| oe brief | エージェントへの指示を作り、何も書かない | なし |
+| oe question | 質問をマーカー付きで Issue に書く | なし |
+| oe verdict | SHA に保留、成功、失敗のステータスを付け、指摘を PR に書く | なし |
+| oe wait | oe ready の出力が変わるか時間切れまで待つ | oe ready |
+| 人間 | 答え、レビューし、マージし、ブランチを消してやり直させる | なし |
 
 ## 不変条件
 
@@ -74,9 +87,39 @@ flowchart TD
 
 ## 具体例
 
+正常系では、B は A に依存する。
+
+```mermaid
+sequenceDiagram
+  actor H as 人間
+  participant O as orchestrate-epic
+  participant E as oe
+  participant W as pr-owner
+  participant V as pr-verify
+  participant G as GitHub
+  H->>O: 起動
+  O->>E: ready
+  E->>G: 読む
+  E-->>O: A に着手
+  O->>E: claim と attempt
+  E->>G: ブランチと記録を作る
+  O->>W: A を渡して起動
+  W->>G: push して PR を開く
+  O->>E: wait
+  G-->>E: CI が成功
+  E-->>O: A を検証
+  O->>E: brief
+  O->>V: A の SHA を渡して起動
+  V->>E: verdict で成功
+  E->>G: SHA に成功を付ける
+  O->>E: wait
+  H->>G: A をマージする
+  G-->>E: A が閉じる
+  E-->>O: B に着手
+```
+
 | 場面 | 動き |
 |---|---|
-| 正常 | A に着手し、Owner が PR を開き、CI と Verifier が成功し、人間がマージすると A に依存する B が着手可能になる |
 | エージェント消失 | GitHub に完了の印が無いので次の試行が同じブランチで始まり、セッションの再実行も同じ状態から再開する |
 | 検証失敗 | 失敗判定と指摘コメントを受けて Owner が修理し、新しい先頭で CI と検証をやり直す |
 | CI 失敗 | Owner が同じブランチで修理する |
