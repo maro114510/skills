@@ -122,6 +122,8 @@ def issue_state:
   | ($r.issue // error("Issue not found")) as $issue
   | ($issue.comments.nodes // error("comments unreadable")) as $comments
   | ($r.ref != null) as $branch
+  | if $r.pullRequests.totalCount > ($r.pullRequests.nodes | length)
+    then error("Issue #\($issue.number) branch has more pull requests than one read holds") else . end
   | [($r.pullRequests.nodes // error("pull requests unreadable"))[] | select(.isCrossRepository == false)] as $prs
   | ($comments | indexes(record("claim")) | last) as $claim
   | if $issue.comments.totalCount > ($comments | length) and $claim == null and ($branch or ($prs | length) > 0)
@@ -140,6 +142,8 @@ def issue_state:
       ($pr.headRef.target // error("PR #\($pr.number) head unreadable")) as $target
       | if $target.oid != $pr.headRefOid then error("PR #\($pr.number) head changed during the read") else . end
       | (pr_heads[$target.oid] // error("PR #\($pr.number) head \($target.oid) changed during the read")) as $facts
+      | if $pr.reviewThreads.totalCount > ($pr.reviewThreads.nodes | length)
+        then error("PR #\($pr.number) has more review threads than one read holds") else . end
       | ($target | ci) as $ci
       | {sha: $target.oid[0:7], ci: $ci.state, ci_detail: $ci.detail, verdict: $facts.verdict, starts: $facts.starts,
           age: (now_s - ($facts.pushed // ($target.committedDate | epoch)))}
@@ -229,4 +233,7 @@ def next_action:
   elif .head.verdict != "success" then act("start-verifier"; "checks passed on \(.head.sha)")
   else act("wait-merge"; "success verdict on \(.head.sha)") end;
 
-def classify: issue_state | next_action;
+# A closed Issue is done before anything else is read, so a busy closed Issue never fails the read.
+def classify:
+  if .data.repository.issue.state == "CLOSED" then .data.repository.issue | act("done"; "closed")
+  else issue_state | next_action end;

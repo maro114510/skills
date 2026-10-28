@@ -16,7 +16,8 @@ query($owner: String!, $repo: String!, $num: Int!, $branch: String!, $ref: Strin
       }
     }
     ref(qualifiedName: $ref) { name }
-    pullRequests(headRefName: $branch, first: 10, orderBy: {field: CREATED_AT, direction: DESC}) {
+    pullRequests(headRefName: $branch, first: 100, orderBy: {field: CREATED_AT, direction: DESC}) {
+      totalCount
       nodes {
         number
         state
@@ -28,8 +29,9 @@ query($owner: String!, $repo: String!, $num: Int!, $branch: String!, $ref: Strin
         reviews(last: 100, states: [CHANGES_REQUESTED]) {
           nodes { authorAssociation body submittedAt }
         }
-        reviewThreads(last: 50) {
-          nodes { comments(last: 50) { nodes { authorAssociation body createdAt } } }
+        reviewThreads(last: 100) {
+          totalCount
+          nodes { comments(last: 20) { nodes { authorAssociation body createdAt } } }
         }
         headRef { target { ... on Commit { ...HeadChecks } } }
       }
