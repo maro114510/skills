@@ -173,6 +173,7 @@ shell_block() {
 }
 
 @test "a here-string does not open a heredoc that hides the lines after it" {
+  printf '# Router\n' >"${cand}/router.md"
   shell_block "${cand}/router.md" 'oe note post --on 7 --key k <<<text' 'git push origin main'
   run bash "${target}" "${cand}"
   [ "${status}" -eq 1 ]
