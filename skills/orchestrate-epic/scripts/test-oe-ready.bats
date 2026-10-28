@@ -142,14 +142,20 @@ action_of() {
   done
 }
 
-# An Issue whose PR passed CI and has no verdict yet; a starting point for reads that must fail.
-green_pr_without_verdict() {
+# Issue 5, claimed with one attempt, whose open PR #50 has head PR_SHA with the checks $1 (a jq
+# expression, or null for none), pushed at $2, and edited by the jq expression $3.
+claimed_pr() {
   gate '[passed("test")]' 5
   issue 5 'branch | comments([comment("OWNER"; "<!-- oe:claim -->"; "2027-01-15T07:00:00Z"),
     comment("OWNER"; "<!-- oe:attempt -->"; "2027-01-15T07:01:00Z")])
-    | prs([pr(50; "OPEN"; "2027-01-15T07:10:00Z"; "'"${PR_SHA}"'"; [passed("test")])])'
+    | prs([pr(50; "OPEN"; "2027-01-15T07:10:00Z"; "'"${PR_SHA}"'"; '"$1"') | '"${3:-.}"'])'
   listed_pr 5 "${PR_SHA}"
-  pushed feat/issue-5 "${PR_SHA}" "2027-01-15T07:10:00Z"
+  pushed feat/issue-5 "${PR_SHA}" "$2"
+}
+
+# An Issue whose PR passed CI and has no verdict yet; a starting point for reads that must fail.
+green_pr_without_verdict() {
+  claimed_pr '[passed("test")]' "2027-01-15T07:10:00Z"
 }
 
 @test "default head with no checks ten minutes after its push ends the session with a reason" {
@@ -331,4 +337,76 @@ green_pr_without_verdict() {
   [ "${#lines[@]}" -eq 2 ]
   [ "${lines[0]%%$'\t'*}" = 5 ]
   [ "${lines[1]%%$'\t'*}" = 7 ]
+}
+
+@test "a failed check on the PR head gets an Owner" {
+  claimed_pr '[passed("lint"), failed("test")]' "2027-01-15T07:10:00Z"
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-owner ]
+}
+
+@test "a failure verdict on the PR head gets an Owner" {
+  claimed_pr '[passed("test")]' "2027-01-15T07:10:00Z"
+  statuses "${PR_SHA}" oe/verify:failure oe/verify:pending
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-owner ]
+}
+
+@test "a PR that conflicts with its base gets an Owner" {
+  claimed_pr '[passed("test")]' "2027-01-15T07:10:00Z" '.mergeable = "CONFLICTING"'
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-owner ]
+}
+
+@test "a success verdict on the PR head waits for the merge" {
+  claimed_pr '[passed("test")]' "2027-01-15T07:10:00Z"
+  statuses "${PR_SHA}" oe/verify:success oe/verify:pending
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-merge ]
+}
+
+@test "a pending check on the PR head waits for CI" {
+  claimed_pr '[passed("lint"), running("test")]' "2027-01-15T07:10:00Z"
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-ci ]
+}
+
+@test "a PR head with no checks waits for CI for ten minutes after its push, then is parked" {
+  claimed_pr null "${FIVE_MINUTES_AGO}"
+  run bash "${oe}" ready o/r 1
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-ci ]
+
+  claimed_pr null "${HOUR_AGO}"
+  run bash "${oe}" ready o/r 1
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = parked ]
+}
+
+@test "a Verifier is restarted once without a verdict, then the Issue is parked" {
+  claimed_pr '[passed("test")]' "2027-01-15T07:10:00Z"
+  statuses "${PR_SHA}" oe/verify:pending
+  run bash "${oe}" ready o/r 1
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-verifier ]
+
+  statuses "${PR_SHA}" oe/verify:pending oe/verify:pending
+  run bash "${oe}" ready o/r 1
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = parked ]
 }
