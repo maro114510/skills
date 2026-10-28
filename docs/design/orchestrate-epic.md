@@ -13,7 +13,7 @@ Turn an Epic's child Issues into verified PRs in dependency order, with every st
 | orchestrate-epic | Repeats `oe ready`, starts one fresh agent per next action, at most 3 at once, then `oe wait`; it ends when every child Issue is closed or nothing changes for 4 hours |
 | pr-owner | Moves one Issue one step: implements a new Issue with `implement autonomous`, or repairs every signal named in its brief, then pushes and opens or updates the PR, or asks a question and pushes nothing |
 | pr-verify | Checks one head SHA against the Issue's acceptance criteria in a detached worktree and records a verdict on that SHA |
-| `oe` | The only part that reads the loop's state from GitHub or writes it there: `ready`, `claim`, attempts, questions, briefs, `verdict`, and `wait` |
+| `oe` | Derives the loop's state from GitHub and writes every marked record and verdict: `ready`, `claim`, attempts, questions, briefs, `verdict`, and `wait` |
 | Human | Answers questions, reviews, merges, closes Issues, and restarts a parked Issue by deleting its branch |
 
 ## Invariants
@@ -72,7 +72,7 @@ Otherwise a closed child Issue is done, and each open one takes the first matchi
 | Lost agent | The Owner ends without a PR, or the session dies. Nothing on GitHub says done, so the next `oe ready` starts attempt 2 on the same branch, and a rerun resumes from the same state |
 | Failed verification | The Verifier records `failure` and a `findings` comment. Row 5 starts an Owner with those findings, its push creates a new head without a verdict, and CI and verification run again |
 | Failed CI | A check fails on the head, and row 5 starts an Owner to fix it on the same branch |
-| Reached cap | After 3 attempts row 5 still matches, so the Issue is parked and its dependents stay blocked. A human fixes it by hand, or deletes the branch to start over |
+| Reached cap | After 3 attempts row 5 still matches, so the Issue is parked and its dependents stay blocked. A human finishes and merges it by hand, or deletes the branch to start over |
 | Red default branch | A check on the default-branch head fails, so no claim, Owner, or Verifier starts and PRs spend no attempts. Once it passes, the loop continues |
 
 ## Accepted Risks
@@ -90,7 +90,7 @@ Otherwise a closed child Issue is done, and each open one takes the first matchi
 |---|---|
 | Blocker closed as not planned or duplicate | The dependent waits for a human |
 | Signals that start a repair Owner | Failing checks, a `failure` verdict, merge conflicts, and trusted CHANGES_REQUESTED reviews or review-thread comments newer than the latest attempt. Plain PR comments and bot reviews start nothing |
-| Restart after a reached cap | Records count only after the latest `claim`, so deleting the branch resets the cap. The branch is created before the `claim` record, so a lost record over-counts, which parks rather than retries |
+| Restart after a reached cap | Records count only after the latest `claim`, so deleting the branch resets the cap. The branch is created before the `claim` record, so a lost record leaves the old records counting, which stops for a human rather than retrying |
 | Re-dispatch after an answer | Counts toward the cap of 3, like every Owner dispatch |
 | Verifier ends without a verdict | Retried once; 2 `pending` verify statuses on one SHA park the Issue |
 | `oe wait` and idle limit | One call waits at most 25 minutes; after 4 hours without change the session ends with a summary |
