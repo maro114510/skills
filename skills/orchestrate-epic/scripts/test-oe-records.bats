@@ -252,3 +252,47 @@ JSON
   esac
   [ "$(comment_count 5)" -eq 1 ]
 }
+
+# oe question
+
+@test "a posted question carries the marker and makes oe ready wait for the answer" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
+      {"by": "OWNER", "at": "07:01", "body": "<!-- oe:attempt -->"}
+    ]
+  }]
+}
+JSON
+
+  run bash "${oe}" question o/r 5 <<<"Should the cache key include the locale?"
+  [ "${status}" -eq 0 ]
+  [ "$(last_comment 5)" = $'<!-- oe:question -->\nShould the cache key include the locale?' ]
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-answer ]
+}
+
+@test "an empty question is refused and nothing is posted" {
+  github <<'JSON'
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [{"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"}]
+  }]
+}
+JSON
+
+  run bash "${oe}" question o/r 5 <<<"   "
+
+  [ "${status}" -eq 2 ]
+  [ "$(comment_count 5)" -eq 1 ]
+}
