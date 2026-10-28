@@ -28,8 +28,7 @@ def closed: .issue.state = "CLOSED" | .issue.stateReason = "COMPLETED";
 def pr($number; $state; $created; $sha; $checks): {number: $number, state: $state, createdAt: $created,
   mergedAt: (if $state == "MERGED" then "2027-01-15T07:40:00Z" else null end), isCrossRepository: false,
   headRefOid: $sha, mergeable: "MERGEABLE", reviews: {totalCount: 0, nodes: []}, reviewThreads: {nodes: []},
-  headRef: {target: {oid: $sha, committedDate: $created, statusCheckRollup: rollup($checks)}},
-  commits: {nodes: [{commit: {oid: $sha, committedDate: $created, statusCheckRollup: rollup($checks)}}]}};
+  headRef: {target: {oid: $sha, committedDate: $created, statusCheckRollup: rollup($checks)}}};
 def prs($p): .pullRequests.nodes = $p;
 '
 
