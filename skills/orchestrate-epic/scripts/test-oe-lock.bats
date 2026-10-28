@@ -14,7 +14,7 @@ setup() {
 
 teardown() {
   for pid in ${sessions[@]+"${sessions[@]}"}; do
-    kill "${pid}" 2>/dev/null || true
+    { kill "${pid}" && wait "${pid}"; } 2>/dev/null || true
   done
 }
 
@@ -27,8 +27,7 @@ start_session() {
 
 # Ends the session process $1 and waits until it is gone.
 end_session() {
-  kill "$1"
-  wait "$1" 2>/dev/null || true
+  { kill "$1" && wait "$1"; } 2>/dev/null || true
 }
 
 # Prints the token from the output of a successful acquire.
