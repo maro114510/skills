@@ -2,7 +2,7 @@
 name: orchestrate-epic
 description: >
   Turn a GitHub Epic's child Issues into verified PRs in dependency order.
-  A loop asks oe ready for each Issue's next action, claims ready Issues, starts a fresh pr-owner agent to implement or repair one Issue and a fresh pr-verify agent to check one PR head SHA, and waits for GitHub to change with oe wait, with agents and the wait running in the background so waiting costs no tokens.
+  A loop asks oe ready for each Issue's next action, claims ready Issues, starts a fresh pr-owner agent to implement or repair one Issue and a fresh pr-verify agent to check one PR head SHA, and waits for GitHub to change with oe wait, with agents and the wait running in the background where the harness allows, so waiting costs no tokens there.
   Every state lives on GitHub, so rerunning with the same Epic resumes from anywhere.
   The AI never merges and never enables auto-merge: an engineer or repository automation merges, and a merged dependency starts the next Issue.
   Invoking it is consent to push branches and open PRs; ending the session stops everything.
