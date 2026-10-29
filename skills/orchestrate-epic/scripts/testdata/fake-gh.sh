@@ -6,6 +6,8 @@
 # - fake-github-write.jq applies a write to the state, and this script saves the new state.
 # - The --jq filter is then applied to that response, as gh applies it.
 # - A call whose arguments contain GH_FAIL fails as if GitHub were down, and changes nothing.
+# - OE_GITHUB_NEXT, when set, names a state file that replaces the state at the second Epic read.
+#   It models GitHub changing between two oe ready runs, at a point the test controls.
 #
 # | gh call | Answered as |
 # |---|---|
@@ -80,6 +82,11 @@ case "${path}" in
 graphql)
   if [[ "${query}" == *subIssues* ]]; then
     call=epic arg=""
+    if [[ -n "${OE_GITHUB_NEXT:-}" ]]; then
+      reads=$(($(cat "${OE_GITHUB}.reads" 2>/dev/null || echo 0) + 1))
+      echo "${reads}" >"${OE_GITHUB}.reads"
+      [[ "${reads}" -ne 2 ]] || cp "${OE_GITHUB_NEXT}" "${OE_GITHUB}"
+    fi
   else
     call=issue arg="${num}"
   fi
