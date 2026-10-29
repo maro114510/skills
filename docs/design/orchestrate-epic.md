@@ -217,7 +217,7 @@ sequenceDiagram
 - oe does not scan for secrets, and the commit skill screens each commit instead
 - A comment the AI forgot to mark is read as engineer input
 - The session lock works only within one host, so running the same Epic on another host lets two agents touch the same branch
-- In OpenCode V2 the session's process is the shared background service, so a session that ends without releasing its lock blocks a rerun until the service restarts or the lock is released with its token
+- In OpenCode V2 and an interactive Codex session the session's process is a shared background service, so a session that ends without releasing its lock blocks a rerun until the service restarts or the lock is released with its token
 - oe ready reads only the newest PR with an Issue's branch name, so a newer PR from a fork with that name hides the Issue's own PR; its Owners find nothing to repair, and the Issue parks
 
 ## Decisions
@@ -231,8 +231,10 @@ sequenceDiagram
 | Waiting | One oe wait call waits up to 9 minutes, under the 10-minute limit Claude Code puts on a background command, and when no agent is running and oe ready's output does not change for 4 hours, the session prints a summary and ends |
 | Agents running at once | 3 Owners and Verifiers combined, changeable by an argument at invocation |
 | How the loop waits | Agents and oe wait run in the background and the session ends its turn, so waiting costs no tokens and the session wakes when an agent ends or oe wait returns. A blocking oe wait would not notice an ended agent, because oe ready leaves running Issues out |
-| Harnesses | The skill text, not a fork, maps each harness's tools onto the loop. Claude Code and OpenCode V2 run agents and oe wait in the background. OpenCode V1 has no background shell, so oe wait runs in the foreground and an ended agent is noticed up to 9 minutes late. Without `OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS=true`, V1 has no background agents either, so each pass starts its agents as one batch and the slowest one delays every other Issue |
-| Agent mode | The agents declare `mode: subagent`, because OpenCode V2 makes an agent without a mode a primary agent and refuses to start it as a subagent |
+| Harnesses | The skill text, not a fork, maps each harness's tools onto the loop. Claude Code and OpenCode V2 run agents and oe wait in the background. OpenCode V1 has no background shell, so oe wait runs in the foreground and an ended agent is noticed up to 9 minutes late. Without `OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS=true`, V1 has no background agents either, so each pass starts its agents as one batch and the slowest one delays every other Issue. Codex starts agents in the background but wakes no idle session, so the session never ends its turn: it polls a foreground oe wait, bounded to 4 minutes while an agent runs, and notices an ended agent when that wait exits. Codex agents start with `fork_turns: "none"`, because the default copies the session's conversation into the agent |
+| Agent mode | The agents declare `mode: subagent`, because OpenCode V2 makes an agent without a mode a primary agent and refuses to start it as a subagent. APM drops the key for Codex, which reads only the agent's name, description, and instructions |
+| Codex skill size | Codex injects only the first 8,000 bytes of a named skill, so orchestrate-epic ends with an end marker and tells the model near its top to read the whole file when that marker is missing, instead of keeping the skill under the limit |
+| Implicit invocation | Codex ignores `disable-model-invocation`, so orchestrate-epic, pr-owner, and pr-verify carry `agents/openai.yaml` with `allow_implicit_invocation: false`, because invoking orchestrate-epic is the consent to push |
 | Counting Verifier starts | oe brief writes the pending verify status that oe ready counts, before it prints a Verifier's brief, so no Verifier starts uncounted |
 | Worktrees | An agent's worktree is removed when the agent ends, and unpushed work is discarded |
 | Where findings go | A marked PR comment, which the next Owner reads |
