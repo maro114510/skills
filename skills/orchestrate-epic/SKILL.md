@@ -49,7 +49,7 @@ OE_SESSION_PID="$PPID" bash <skill-dir>/scripts/oe lock acquire <repo> <epic>
 
 Keep the printed `token=`. Exit 4 means another session runs this Epic on this host: stop and say so. Any other non-zero exit: stop and show the error.
 After the session resumes, as after a restart, acquire again with the token before anything else.
-In OpenCode V2, `$PPID` is the shared background service, which serves many sessions and outlives this one, so a lock left by a session that ended without Step 4 holds until that service restarts. On exit 4 there, also tell the user that such a lock frees on `opencode service restart`, or on `oe lock release` with the `token=` that the ended session printed in its transcript.
+In OpenCode V2, `$PPID` is the shared background service, which serves many sessions and outlives this one, so a lock left by a session that ended without Step 4 holds until that service restarts. On exit 4 there, also tell the user that such a lock frees on `oe lock release` with the `token=` that the ended session printed in its transcript, or on `opencode service restart`, which also interrupts every other session the service runs.
 
 ## Step 3: Loop
 
