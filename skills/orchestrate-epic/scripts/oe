@@ -34,7 +34,8 @@ Usage: oe ready <owner/repo> <epic-number> [--running <issue-number>]...
        oe attempt <owner/repo> <issue-number>
        oe question <owner/repo> <issue-number> < question
        oe verdict <owner/repo> <issue-number> <sha> success|failure < findings
-       oe worktree add|remove <issue-number>
+       oe worktree add <issue-number> [--detach]
+       oe worktree remove <issue-number>
        oe lock acquire <owner/repo> <epic-number> [<token>]
        oe lock release <owner/repo> <epic-number> <token>
 EOF
