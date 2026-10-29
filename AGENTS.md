@@ -20,6 +20,10 @@ Repository instructions for coding agents.
 | `.claude-plugin/marketplace.json` | Source location used by `claude plugin install` |
 | `skills/<skill-name>/SKILL.md` | Frontmatter and prompt body of one skill |
 | `skills/<skill-name>/references/` | Optional large static documents the prompt pulls in |
+| `agents/<agent-name>.md` | Portable subagent that APM deploys; only `name` and `description` frontmatter, and listed in `tests/validate-apm.sh` |
+| `skills/orchestrate-epic/scripts/oe` | Shell helpers that read and write orchestrate-epic's state on GitHub; each `oe-<subcommand>.sh` header documents one subcommand |
+| `skills/**/*.bats` | Script tests that `.github/workflows/lint-shell.yml` runs |
+| `docs/design/orchestrate-epic.md` | The orchestrate-epic Design Doc that oe and the agents implement |
 | `.github/workflows/test-plugin-install.yml` | CI: `validate` then `test-install`, on push to `main` and every PR |
 | `.github/workflows/release.yml` | Creates a GitHub Release on a `v*` tag push after checking the tag matches both manifests |
 | `cliff.toml` | `git-cliff` config used by `make release` |

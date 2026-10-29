@@ -12,7 +12,7 @@ Each part does one job and stores no state of its own. All state lives on GitHub
 
 | Part | Job | Uses |
 |---|---|---|
-| orchestrate-epic | Gets each Issue's next action from oe ready, starts the agents it needs, and waits for GitHub to change with oe wait, in a loop | oe, pr-owner, pr-verify |
+| orchestrate-epic | Gets each Issue's next action from oe ready, starts the agents it needs in the background, and waits in the background for an agent to end or GitHub to change with oe wait, in a loop | oe, pr-owner, pr-verify |
 
 ### Agents
 
@@ -36,9 +36,9 @@ Each part does one job and stores no state of its own. All state lives on GitHub
 | oe lock | Refuses a second session for the same Epic | A host-local lock |
 | oe ready | Reads GitHub and prints each Issue's next action | nothing |
 | oe wait | Waits until oe ready's output changes or 25 minutes pass | nothing |
-| oe brief | Builds the brief handed to an Owner or a Verifier | nothing |
+| oe brief | Builds the brief handed to an Owner or a Verifier, and records each Verifier start before its brief | A pending verify status on the SHA, for a Verifier |
 | oe claim | Creates the Issue's branch and writes a claim record | A branch on origin and an Issue comment |
-| oe worktree | Creates an agent's worktree outside the shared checkout and removes it after the agent ends | A local worktree |
+| oe worktree | Creates an agent's worktree outside the shared checkout, on the Issue branch for an Owner and detached at its head for a Verifier, and removes it after the agent ends | A local worktree |
 | oe attempt | Writes an attempt record before an Owner starts, and refuses a 4th | An Issue comment |
 | oe question | Writes an Owner's question | An Issue comment |
 | oe verdict | Writes a Verifier's verdict and findings | A commit status on the SHA and a PR comment |
@@ -228,5 +228,7 @@ sequenceDiagram
 | A Verifier ends without a verdict | It is restarted once on the same SHA, and the Issue is parked when the second start also gives no verdict |
 | Waiting | One oe wait call waits up to 25 minutes, and when no agent is running and oe ready's output does not change for 4 hours, the session prints a summary and ends |
 | Agents running at once | 3 Owners and Verifiers combined, changeable by an argument at invocation |
+| How the loop waits | Agents and oe wait run in the background and the session ends its turn, so waiting costs no tokens and the session wakes when an agent ends or oe wait returns. A blocking oe wait would not notice an ended agent, because oe ready leaves running Issues out |
+| Counting Verifier starts | oe brief writes the pending verify status that oe ready counts, before it prints a Verifier's brief, so no Verifier starts uncounted |
 | Worktrees | An agent's worktree is removed when the agent ends, and unpushed work is discarded |
 | Where findings go | A marked PR comment, which the next Owner reads |
