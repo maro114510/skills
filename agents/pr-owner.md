@@ -1,5 +1,6 @@
 ---
 name: pr-owner
+mode: subagent
 description: >
   Owner agent used by the orchestrate-epic skill. Moves one Issue one step forward by running the pr-owner skill: implements it and opens its PR, or repairs its open PR, then pushes; when it cannot decide, it writes a question with `oe question` and pushes nothing. Never merges or enables auto-merge. Not intended for direct invocation.
 ---

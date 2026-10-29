@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ALLOWED_AGENT_KEYS='name description'
-GUIDANCE='portable agents may only use: description, name'
+ALLOWED_AGENT_KEYS='name description mode'
+GUIDANCE='portable agents may only use: description, mode, name'
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "${script_dir}/.." && pwd)"
