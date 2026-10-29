@@ -87,13 +87,27 @@ running() {
   [[ "${pid}" =~ ^[1-9][0-9]*$ && -n "${lstart}" && "$(lstart_of "${pid}")" == "${lstart}" ]]
 }
 
+# Prints the holder blob of the lock, or nothing when the lock is free.
+# Only rev-parse exit 1 means the ref is missing; any other failure means the store itself cannot be read.
+holder() {
+  local out rc
+  out="$(store_git rev-parse --quiet --verify "${ref}")"
+  rc=$?
+  case "${rc}" in
+  0) printf "%s" "${out}" ;;
+  1) ;;
+  *) fail "cannot read the lock store ${store}" ;;
+  esac
+}
+
 refuse() {
   echo "oe lock: another session holds ${repo}#${epic}: pid=$(field pid "$1") started=$(field started "$1")" >&2
   exit 4
 }
 
 if [[ "${cmd}" == release ]]; then
-  current="$(store_git rev-parse --quiet --verify "${ref}")" || exit 0
+  current="$(holder)" || exit 1
+  [[ -n "${current}" ]] || exit 0
   [[ "$(field token "${current}")" == "${token}" ]] || refuse "${current}"
   store_git update-ref -d "${ref}" "${current}" || fail "cannot release ${repo}#${epic}"
   exit 0
@@ -118,7 +132,8 @@ blob="$(printf 'token=%s\npid=%s\nlstart=%s\nrepo=%s\nepic=%s\nstarted=%s\n' \
 
 # A failed swap means another session changed the lock in between, so it is read again.
 for _ in 1 2 3; do
-  if current="$(store_git rev-parse --quiet --verify "${ref}")"; then
+  current="$(holder)" || exit 1
+  if [[ -n "${current}" ]]; then
     if [[ "$(field token "${current}")" != "${token}" ]] && running "${current}"; then
       refuse "${current}"
     fi
