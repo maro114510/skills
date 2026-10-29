@@ -11,6 +11,7 @@
 # | claim | Creates an Issue's branch on origin and writes the claim record |
 # | attempt | Writes an attempt record before an Owner starts, and refuses one past the cap |
 # | question | Writes an Owner's question on the Issue |
+# | brief | Builds an Owner's or a Verifier's brief, recording each Verifier start on its SHA |
 # | verdict | Writes a Verifier's verdict on the PR head SHA it checked, with its findings |
 # | worktree | Creates or removes an Issue branch's worktree outside the shared checkout |
 # | lock | Holds or releases the one session allowed per Epic on this host |
@@ -21,7 +22,7 @@ set -uo pipefail
 dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 case "${1:-}" in
-ready | wait | claim | attempt | question | verdict | worktree | lock)
+ready | wait | claim | attempt | question | brief | verdict | worktree | lock)
   sub="$1"
   shift
   exec bash "${dir}/oe-${sub}.sh" "$@"
@@ -33,6 +34,8 @@ Usage: oe ready <owner/repo> <epic-number> [--running <issue-number>]...
        oe claim <owner/repo> <issue-number>
        oe attempt <owner/repo> <issue-number>
        oe question <owner/repo> <issue-number> < question
+       oe brief owner <owner/repo> <issue-number> <worktree> [<reason>]
+       oe brief verifier <owner/repo> <issue-number> <worktree>
        oe verdict <owner/repo> <issue-number> <sha> success|failure < findings
        oe worktree add <issue-number> [--detach]
        oe worktree remove <issue-number>
