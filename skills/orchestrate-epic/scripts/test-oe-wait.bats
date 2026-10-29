@@ -84,6 +84,36 @@ JSON
   [ "$(action_of 5)" = start-verifier ]
 }
 
+@test "a reason whose elapsed time grows between polls while every action stays the same does not end the wait" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [{"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"}],
+    "pull_requests": [{"number": 15, "opened": "07:55"}]
+  }]
+}
+JSON
+  github_at_second_poll <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [{"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"}],
+    "pull_requests": [{"number": 15, "opened": "07:54"}]
+  }]
+}
+JSON
+
+  run bash "${oe}" wait o/r 1 --timeout 1
+
+  [ "${status}" -eq 5 ]
+  [ "$(action_of 5)" = wait-ci ]
+}
+
 @test "wait returns at the timeout with the unchanged next actions when nothing changes" {
   pr_15_checks_running
 
