@@ -10,6 +10,7 @@
 #
 # - --running is passed to oe ready, and also means an agent is still running.
 # - --timeout bounds this call, wait_timeout seconds by default.
+#   The deadline is checked before each poll, so the call can run up to one poll interval past it.
 # - --idle-since is when the caller last saw a next action change, or when the session started, in epoch seconds.
 #   With no --running, the session is idle once idle_limit seconds have passed since then.
 # - OE_NOW sets the current time in epoch seconds, as in oe ready.
