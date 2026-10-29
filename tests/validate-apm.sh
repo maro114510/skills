@@ -7,6 +7,10 @@ PORTABLE_AGENT_KEYS='name description mode'
 OPENCODE_AGENT_MODE='subagent'
 OPENCODE_REJECT_MARKER='OpenCode will reject this agent'
 OPENCODE_CLI='opencode'
+# Skills that must run only when a user names them.
+CODEX_EXPLICIT_SKILLS=(orchestrate-epic pr-owner pr-verify)
+# Codex 0.165.0 truncates a plugin's skill it injects to this many bytes (MAX_SKILL_PROMPT_BYTES).
+CODEX_SKILL_PROMPT_BYTES=8000
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "${script_dir}/.." && pwd)"
@@ -100,6 +104,40 @@ check_codex() {
     fi
     if ! grep -q '^developer_instructions = ' "${deployed}"; then
       fail "[codex] ${name}.toml is missing its agent instructions"
+    fi
+  done
+
+  # Codex ignores disable-model-invocation, so only agents/openai.yaml keeps these skills from
+  # starting on their own; orchestrate-epic pushes branches, and invoking it is the consent.
+  local skill policy
+  for skill in "${CODEX_EXPLICIT_SKILLS[@]}"; do
+    policy="${project_dir}/.agents/skills/${skill}/agents/openai.yaml"
+    if [[ ! -f "${policy}" ]]; then
+      fail "[codex] ${skill} has no agents/openai.yaml, so Codex may invoke it implicitly"
+    elif ! grep -q '^policy:[[:space:]]*$' "${policy}" ||
+      ! grep -Eq '^[[:space:]]+allow_implicit_invocation:[[:space:]]*false[[:space:]]*$' "${policy}"; then
+      fail "[codex] ${skill}/agents/openai.yaml does not set policy.allow_implicit_invocation: false"
+    fi
+  done
+
+  # Codex injects only the first CODEX_SKILL_PROMPT_BYTES of a plugin's skill, and says so only in a
+  # UI warning, so a longer skill must end with an end marker and name it within that prefix.
+  local body end_marker
+  for skill in "${CODEX_EXPLICIT_SKILLS[@]}"; do
+    body="${project_dir}/.agents/skills/${skill}/SKILL.md"
+    end_marker="<!-- end of ${skill} -->"
+    if [[ ! -f "${body}" ]]; then
+      fail "[codex] ${skill}/SKILL.md was not deployed under .agents/skills/"
+      continue
+    fi
+    if [[ "$(wc -c <"${body}" | tr -d '[:space:]')" -le "${CODEX_SKILL_PROMPT_BYTES}" ]]; then
+      continue
+    fi
+    if [[ "$(tail -n 1 "${body}")" != "${end_marker}" ]]; then
+      fail "[codex] ${skill}/SKILL.md exceeds ${CODEX_SKILL_PROMPT_BYTES} bytes and does not end with ${end_marker}"
+    fi
+    if ! head -c "${CODEX_SKILL_PROMPT_BYTES}" "${body}" | grep -qF "\`${end_marker}\`"; then
+      fail "[codex] ${skill}/SKILL.md does not name ${end_marker} within the first ${CODEX_SKILL_PROMPT_BYTES} bytes Codex injects"
     fi
   done
 }
