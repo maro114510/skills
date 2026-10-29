@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-AGENT_NAMES=(issue-implementer issue-reviewer pr-owner pr-verify)
+AGENT_NAMES=(pr-owner pr-verify)
 PORTABLE_AGENT_KEYS='name description'
 OPENCODE_REJECT_MARKER='OpenCode will reject this agent'
 OPENCODE_CLI='opencode'

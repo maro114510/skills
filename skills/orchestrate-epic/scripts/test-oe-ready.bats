@@ -868,14 +868,18 @@ JSON
   [ -z "${output}" ]
 }
 
-@test "more pull requests on the branch name than one read holds fail the read instead of missing the real one" {
+@test "older pull requests left out of the read do not fail it, and the newest one decides the action" {
   github <<'JSON'
 {
   "default_branch": {"checks": {"test": "success"}},
   "issues": [{
     "number": 5,
     "branch": true,
-    "comments": [{"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"}],
+    "comments": [
+      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
+      {"by": "OWNER", "at": "07:01", "body": "<!-- oe:attempt -->"}
+    ],
+    "pull_requests": [{"number": 15, "opened": "07:10", "checks": {"test": "success"}}],
     "older_pull_requests": 100
   }]
 }
@@ -883,6 +887,6 @@ JSON
 
   run --separate-stderr bash "${oe}" ready o/r 1
 
-  [ "${status}" -eq 1 ]
-  [ -z "${output}" ]
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-verifier ]
 }

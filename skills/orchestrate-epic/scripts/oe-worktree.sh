@@ -6,7 +6,7 @@
 #
 # Usage
 #
-#   oe worktree add <issue-number>
+#   oe worktree add <issue-number> [--detach]
 #   oe worktree remove <issue-number>
 #
 # - Run it from the shared checkout or any worktree of the same clone.
@@ -16,6 +16,7 @@
 # | Subcommand | Does |
 # |---|---|
 # | add | Fetches the Issue branch from origin and checks it out in a fresh worktree tracking it, then prints the path |
+# | add --detach | Fetches the Issue branch the same way and checks out its head detached, for a Verifier, then prints the path |
 # | remove | Removes the worktree and the local Issue branch, discarding unpushed work |
 #
 # - add replaces a leftover worktree at the path, so a fresh agent starts from what origin holds.
@@ -39,7 +40,8 @@ source "${dir}/oe-config.sh"
 
 usage() {
   echo "$1" >&2
-  echo "Usage: oe worktree add|remove <issue-number>" >&2
+  echo "Usage: oe worktree add <issue-number> [--detach]" >&2
+  echo "       oe worktree remove <issue-number>" >&2
   exit 2
 }
 
@@ -48,11 +50,16 @@ fail() {
   exit 1
 }
 
-[[ $# -eq 2 ]] || usage "Expected add|remove <issue-number>"
+[[ $# -eq 2 || $# -eq 3 ]] || usage "Expected add|remove <issue-number>"
 [[ "$1" == add || "$1" == remove ]] || usage "Unknown subcommand: $1"
 [[ "$2" =~ ^[1-9][0-9]*$ ]] || usage "Invalid Issue number: $2"
 cmd="$1"
 n="$2"
+detach=0
+if [[ $# -eq 3 ]]; then
+  [[ "${cmd}" == add && "$3" == --detach ]] || usage "Unknown option: $3"
+  detach=1
+fi
 branch="${branch_prefix}${n}"
 
 common="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || usage "Not inside a Git repository"
@@ -94,6 +101,10 @@ git rev-parse --verify --quiet "${tracking}^{commit}" >/dev/null || fail "cannot
 
 remove_worktree
 mkdir -p "${root}" || fail "cannot create ${root}"
-git worktree add --quiet --track -B "${branch}" "${wt}" "origin/${branch}" ||
-  fail "cannot create ${wt} on ${branch}"
+if ((detach)); then
+  git worktree add --quiet --detach "${wt}" "${tracking}" || fail "cannot create ${wt} at the head of ${branch}"
+else
+  git worktree add --quiet --track -B "${branch}" "${wt}" "origin/${branch}" ||
+    fail "cannot create ${wt} on ${branch}"
+fi
 printf '%s\n' "${wt}"

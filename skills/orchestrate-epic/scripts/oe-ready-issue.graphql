@@ -1,5 +1,5 @@
 # The read of one child Issue in oe ready.
-# It returns the Issue, its dependencies, its latest comments, its branch, and the pull requests opened from that branch.
+# It returns the Issue, its dependencies, its latest comments, its branch, and the newest pull request opened from that branch.
 query($owner: String!, $repo: String!, $num: Int!, $branch: String!, $ref: String!) {
   repository(owner: $owner, name: $repo) {
     issue(number: $num) {
@@ -16,7 +16,8 @@ query($owner: String!, $repo: String!, $num: Int!, $branch: String!, $ref: Strin
       }
     }
     ref(qualifiedName: $ref) { name }
-    pullRequests(headRefName: $branch, first: 100, orderBy: {field: CREATED_AT, direction: DESC}) {
+    # Only the newest pull request decides the action, and each one more costs about one rate-limit point.
+    pullRequests(headRefName: $branch, first: 1, orderBy: {field: CREATED_AT, direction: DESC}) {
       totalCount
       nodes {
         number
