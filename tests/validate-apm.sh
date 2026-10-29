@@ -7,6 +7,8 @@ PORTABLE_AGENT_KEYS='name description mode'
 OPENCODE_AGENT_MODE='subagent'
 OPENCODE_REJECT_MARKER='OpenCode will reject this agent'
 OPENCODE_CLI='opencode'
+# Skills that must run only when a user names them.
+CODEX_EXPLICIT_SKILLS=(orchestrate-epic pr-owner pr-verify)
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "${script_dir}/.." && pwd)"
@@ -100,6 +102,19 @@ check_codex() {
     fi
     if ! grep -q '^developer_instructions = ' "${deployed}"; then
       fail "[codex] ${name}.toml is missing its agent instructions"
+    fi
+  done
+
+  # Codex ignores disable-model-invocation, so only agents/openai.yaml keeps these skills from
+  # starting on their own; orchestrate-epic pushes branches, and invoking it is the consent.
+  local skill policy
+  for skill in "${CODEX_EXPLICIT_SKILLS[@]}"; do
+    policy="${project_dir}/.agents/skills/${skill}/agents/openai.yaml"
+    if [[ ! -f "${policy}" ]]; then
+      fail "[codex] ${skill} has no agents/openai.yaml, so Codex may invoke it implicitly"
+    elif ! grep -q '^policy:[[:space:]]*$' "${policy}" ||
+      ! grep -Eq '^[[:space:]]+allow_implicit_invocation:[[:space:]]*false[[:space:]]*$' "${policy}"; then
+      fail "[codex] ${skill}/agents/openai.yaml does not set policy.allow_implicit_invocation: false"
     fi
   done
 }
