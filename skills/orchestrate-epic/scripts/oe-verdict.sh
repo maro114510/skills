@@ -69,23 +69,9 @@ findings="$(cat)" || usage "Cannot read the findings from stdin"
 err="$(mktemp)" || fail "mktemp failed"
 trap 'rm -f "${err}"' EXIT
 
-# The open PRs from the Issue's branch in this repository, newest first, as number and head SHA.
-prs="$(gh api "repos/${repo}/pulls?state=open&head=${repo%%/*}:${branch}&per_page=100" --jq '.[]
-  | select((.head.repo.full_name // "" | ascii_downcase) == ("'"${repo}"'" | ascii_downcase)
-    and .head.ref == "'"${branch}"'")
-  | "\(.number)\t\(.head.sha)"' 2>"${err}")" ||
-  fail "pull request read for ${branch} failed: $(head -n1 "${err}")"
-
-pr=""
-head=""
-while IFS=$'\t' read -r number number_sha; do
-  [[ -n "${number}" ]] || continue
-  [[ "${number}" =~ ^[1-9][0-9]*$ && "${number_sha}" =~ ^[0-9a-f]{40}$ ]] || fail "pull request read for ${branch} unreadable"
-  if [[ -z "${pr}" ]]; then
-    pr="${number}"
-    head="${number_sha}"
-  fi
-done <<<"${prs}"
+found="$(open_pr_head "${repo}" "${branch}" 2>"${err}")" || fail "$(head -n1 "${err}")"
+pr="${found%%$'\t'*}"
+head="${found#*$'\t'}"
 
 if [[ -z "${pr}" ]]; then
   echo "oe verdict: ${branch} has no open pull request on ${repo}, so nothing was written" >&2
