@@ -53,6 +53,7 @@ After the session resumes, as after a restart, acquire again with the token befo
 ## Step 3: Loop
 
 Keep in memory only the agents this session started, each with its Issue number and role, and `<idle-since>`, the epoch seconds when the session started.
+Take every "now" below from `date +%s`, never from memory.
 Everything else is read again from GitHub on every pass.
 
 ### 3.1 Read
@@ -117,6 +118,7 @@ The harness wakes you when an agent ends or the wait returns, and whichever come
 | The wait exited 0 or 5 | Go to 3.1 |
 | The wait exited 1 | Go to 3.1, and end the session as in Step 4 after three exit-1 wakes in a row |
 | The wait exited 3 | End the session as in Step 4 |
+| The harness stopped the wait, as on a time limit | Go to 3.1 |
 | The wait exited 6 | No agent runs and nothing changed for the idle limit: end the session as in Step 4 |
 | A wait you already replaced returns | Ignore it |
 
