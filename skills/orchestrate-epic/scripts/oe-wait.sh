@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # oe wait
 #
-# Blocks inside one call until oe ready's output changes, so waiting for CI or a human costs the session no tokens.
+# Blocks inside one call until oe ready's next actions change, so waiting for CI or a human costs the session no tokens.
 # It reads GitHub only through oe ready, and writes nothing.
 #
 # Usage
@@ -10,12 +10,14 @@
 #
 # - --running is passed to oe ready, and also means an agent is still running.
 # - --timeout bounds this call, wait_timeout seconds by default.
-# - --idle-since is when the caller last saw the output change, or when the session started, in epoch seconds.
+# - --idle-since is when the caller last saw a next action change, or when the session started, in epoch seconds.
 #   With no --running, the session is idle once idle_limit seconds have passed since then.
 # - OE_NOW sets the current time in epoch seconds, as in oe ready.
 # - OE_WAIT_INTERVAL sets the seconds between two polls, wait_interval by default.
 #
 # The first oe ready run is the baseline, and every later run is compared with it.
+# Only each line's Issue number and action are compared, because a reason carries the seconds since a push,
+# which differ on every run while nothing the session can act on has changed.
 #
 # Output
 #
@@ -25,12 +27,12 @@
 #
 # | Code | Meaning | Output |
 # |---|---|---|
-# | 0 | The output changed | The new output |
+# | 0 | An Issue's next action changed, or an Issue appeared or left | The new output |
 # | 1 | A GitHub read failed | Nothing |
 # | 2 | The arguments are invalid | Nothing |
 # | 3 | oe ready ended the session: the default branch head has no checks after no_checks_grace | The end line |
-# | 5 | The timeout passed with the output unchanged | The unchanged output |
-# | 6 | The session is idle: no agent runs and idle_limit has passed since --idle-since | The unchanged output, as the session's summary |
+# | 5 | The timeout passed with every next action unchanged | The latest output |
+# | 6 | The session is idle: no agent runs and idle_limit has passed since --idle-since | The latest output, as the session's summary |
 #
 # After exit 6 the session ends, and a rerun of orchestrate-epic resumes from GitHub, where every state lives.
 set -uo pipefail
@@ -102,6 +104,11 @@ poll() {
   esac
 }
 
+# Prints the Issue number and action of every line of $1, the part of oe ready's output a change is judged on.
+actions() {
+  cut -f1,2 <<<"$1"
+}
+
 # Ends the wait with the current output when the session is idle.
 end_if_idle() {
   if [[ -n "${idle_since}" && ${#running[@]} -eq 0 ]] && (($(now) - idle_since >= idle_limit)); then
@@ -112,14 +119,14 @@ end_if_idle() {
 
 current=""
 poll
-baseline="${current}"
+baseline="$(actions "${current}")"
 end_if_idle
 
 deadline=$(($(date -u +%s) + timeout))
 while (($(date -u +%s) < deadline)); do
   sleep "${interval}"
   poll
-  if [[ "${current}" != "${baseline}" ]]; then
+  if [[ "$(actions "${current}")" != "${baseline}" ]]; then
     emit
     exit 0
   fi
