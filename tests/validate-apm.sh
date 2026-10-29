@@ -2,7 +2,9 @@
 set -euo pipefail
 
 AGENT_NAMES=(pr-owner pr-verify)
-PORTABLE_AGENT_KEYS='name description'
+PORTABLE_AGENT_KEYS='name description mode'
+# OpenCode V2 makes an agent without a mode a primary agent, which its subagent tool refuses to start.
+OPENCODE_AGENT_MODE='subagent'
 OPENCODE_REJECT_MARKER='OpenCode will reject this agent'
 OPENCODE_CLI='opencode'
 
@@ -53,6 +55,25 @@ frontmatter_keys() {
   ' "$1"
 }
 
+# Succeeds when the frontmatter of file $1 sets top-level key $2 to the plain value $3.
+frontmatter_has() {
+  awk -v want_key="$2" -v want_value="$3" '
+    BEGIN { infront = 0; found = 0 }
+    NR == 1 {
+      if ($0 ~ /^---[[:space:]]*$/) infront = 1
+      next
+    }
+    !infront { exit }
+    /^---[[:space:]]*$/ { exit }
+    {
+      line = $0
+      sub(/[[:space:]]+$/, "", line)
+      if (line == want_key ": " want_value) found = 1
+    }
+    END { exit found ? 0 : 1 }
+  ' "$1"
+}
+
 check_claude() {
   local project_dir="$1" name
   for name in "${AGENT_NAMES[@]}"; do
@@ -100,6 +121,9 @@ check_opencode() {
         fail "[opencode] ${name}.md has non-portable frontmatter key \"${key}\""
       fi
     done < <(frontmatter_keys "${deployed}")
+    if ! frontmatter_has "${deployed}" mode "${OPENCODE_AGENT_MODE}"; then
+      fail "[opencode] ${name}.md does not declare mode: ${OPENCODE_AGENT_MODE}, so OpenCode V2 cannot start it as a subagent"
+    fi
   done
 
   if grep -q "${OPENCODE_REJECT_MARKER}" "${log_file}" ||

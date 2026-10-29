@@ -1,5 +1,6 @@
 ---
 name: pr-verify
+mode: subagent
 description: >
   Verifier agent used by the orchestrate-epic skill. Checks one PR head SHA against its Issue's acceptance criteria in a detached worktree by running the pr-verify skill, and records the verdict only through `oe verdict`. Never edits, commits, or pushes. Not intended for direct invocation.
 ---
