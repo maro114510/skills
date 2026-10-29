@@ -13,6 +13,7 @@
 # | Claim | `<!-- oe:claim -->` | oe claim |
 # | Attempt | `<!-- oe:attempt -->` | oe attempt |
 # | Question | `<!-- oe:question -->` | oe question |
+# | Verdict findings, on the PR | `<!-- oe:verdict -->` | oe verdict |
 def trusted: (.authorAssociation // "") as $a | $a == "OWNER" or $a == "MEMBER" or $a == "COLLABORATOR";
 def marker($kind): "<!-- oe:\($kind) -->";
 def record($kind): trusted and ((.body // "") | startswith(marker($kind)));

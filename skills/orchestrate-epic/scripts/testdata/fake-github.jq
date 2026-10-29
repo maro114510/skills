@@ -116,7 +116,7 @@ def issue_response($n):
 
 def open_pull_requests:
   [.issues[] | .number as $n | .pull_requests[]? | select((.state // "open") == "open")
-    | {head: {ref: "feat/issue-\($n)", sha: pr_sha, repo: {full_name: (if .from_fork then "fork/r" else "o/r" end)}}}];
+    | {number, head: {ref: "feat/issue-\($n)", sha: pr_sha, repo: {full_name: (if .from_fork then "fork/r" else "o/r" end)}}}];
 
 def statuses($sha):
   [(.written_statuses[]? | select(.sha == $sha) | {context, state, target_url}),
