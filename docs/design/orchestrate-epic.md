@@ -218,6 +218,7 @@ sequenceDiagram
 - A comment the AI forgot to mark is read as engineer input
 - The session lock works only within one host, so running the same Epic on another host lets two agents touch the same branch
 - In OpenCode V2 and an interactive Codex session the session's process is a shared background service, so a session that ends without releasing its lock blocks a rerun until the service restarts or the lock is released with its token
+- In Codex, waiting is not free: the session polls oe wait every 30 seconds within one turn, so a long run grows its context, and a compaction can drop the lock token or the running agents the session keeps in memory
 - oe ready reads only the newest PR with an Issue's branch name, so a newer PR from a fork with that name hides the Issue's own PR; its Owners find nothing to repair, and the Issue parks
 
 ## Decisions
