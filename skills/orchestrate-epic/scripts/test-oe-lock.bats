@@ -107,3 +107,18 @@ token_of() {
 
   [ "${status}" -eq 2 ]
 }
+
+@test "a release on an unreadable lock store fails instead of reporting the lock free" {
+  start_session
+  OE_SESSION_PID="${session_pid}" run bash "${oe}" lock acquire o/r 1
+  token="$(token_of "${output}")"
+  echo garbage >"${OE_STATE_DIR}/locks.git/HEAD"
+
+  run --separate-stderr bash "${oe}" lock release o/r 1 "${token}"
+
+  [ "${status}" -eq 1 ]
+  case "${stderr}" in
+  *"lock store"*) ;;
+  *) return 1 ;;
+  esac
+}
