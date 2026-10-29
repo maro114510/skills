@@ -47,7 +47,7 @@ If any of the first four is missing, end without changing anything and say which
      |---|---|
      | Failed checks | `gh pr checks <pr> --repo <repo>`, and `gh run view --job <job-id> --repo <repo> --log-failed` for each failed GitHub Actions job |
      | Conflict | `mergeable` is `CONFLICTING` in step 2 |
-     | Verification findings | The latest trusted PR comment that starts with `<!-- oe:verdict -->`, from `gh api repos/<repo>/issues/<pr>/comments --paginate` |
+     | Verification findings | The latest trusted PR comment that starts with `<!-- oe:verdict -->` and names the PR's `headRefOid` from step 2, from `gh api repos/<repo>/issues/<pr>/comments --paginate`. Findings for any other SHA describe code that is no longer the head, so they are absent |
      | Review feedback | Engineer input in `CHANGES_REQUESTED` reviews from `gh api repos/<repo>/pulls/<pr>/reviews --paginate` and in review comments from `gh api repos/<repo>/pulls/<pr>/comments --paginate`, posted after the previous Owner started |
 
      The previous Owner started at the second-latest attempt record after the latest claim record, because the latest one is this Owner's. With fewer than two such attempt records, use the latest claim record; with no claim record, take all feedback.
