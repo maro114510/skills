@@ -9,7 +9,7 @@ OPENCODE_REJECT_MARKER='OpenCode will reject this agent'
 OPENCODE_CLI='opencode'
 # Skills that must run only when a user names them.
 CODEX_EXPLICIT_SKILLS=(orchestrate-epic pr-owner pr-verify)
-# Codex 0.165.0 truncates a skill it injects to this many bytes (MAX_SKILL_PROMPT_BYTES).
+# Codex 0.165.0 truncates a plugin's skill it injects to this many bytes (MAX_SKILL_PROMPT_BYTES).
 CODEX_SKILL_PROMPT_BYTES=8000
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -120,7 +120,7 @@ check_codex() {
     fi
   done
 
-  # Codex injects only the first CODEX_SKILL_PROMPT_BYTES of a named skill, and says so only in a
+  # Codex injects only the first CODEX_SKILL_PROMPT_BYTES of a plugin's skill, and says so only in a
   # UI warning, so a longer skill must end with an end marker and name it within that prefix.
   local body end_marker
   for skill in "${CODEX_EXPLICIT_SKILLS[@]}"; do

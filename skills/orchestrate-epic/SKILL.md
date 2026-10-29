@@ -14,7 +14,7 @@ argument-hint: "epic <number|url> [repo <owner/repo>] [max-agents <n>]"
 
 # orchestrate-epic
 
-This file ends with the line `<!-- end of orchestrate-epic -->`. If you cannot see that line, your harness cut the file short, as Codex does after 8,000 bytes: read the whole file from its path before doing anything else.
+This file ends with the line `<!-- end of orchestrate-epic -->`. If you cannot see that line, your harness cut the file short, as Codex does after 8,000 bytes for a skill from a plugin: read the whole file from its path before doing anything else.
 
 Drive an Epic's child Issues to verified PRs, one step per fresh agent, with every state read from GitHub.
 
