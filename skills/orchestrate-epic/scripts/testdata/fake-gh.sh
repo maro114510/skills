@@ -18,7 +18,8 @@
 # | api repos/o/r/git/ref/heads/BRANCH | ref BRANCH |
 # | api repos/o/r/issues/N/comments | comments N |
 # | api -X POST repos/o/r/git/refs | the write create_ref |
-# | api -X POST repos/o/r/issues/N/comments | the write comment N |
+# | api -X POST repos/o/r/issues/N/comments | the write comment N, where N is an Issue or a pull request |
+# | api -X POST repos/o/r/statuses/SHA | the write status SHA |
 set -uo pipefail
 
 args="$*"
@@ -60,6 +61,7 @@ if [[ "${method}" == POST ]]; then
     n="${path#*/issues/}"
     call=comment arg="${n%%/*}"
     ;;
+  */statuses/*) call=status arg="${path##*/statuses/}" ;;
   *) unexpected ;;
   esac
   result="$(jq -n --argjson state "$(cat "${OE_GITHUB}")" --arg call "${call}" --arg arg "${arg}" \

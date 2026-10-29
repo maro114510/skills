@@ -25,6 +25,7 @@
 # | default_branch.checks | Check name to result | No checks |
 # | default_branch.statuses | Status context to state | No statuses |
 # | issues | The child Issues of the Epic | No Issues |
+# | written_statuses | Commit statuses oe wrote, newest first, each with sha, context, state, description, and target_url | None |
 #
 # | Issue field | Holds | Default |
 # |---|---|---|
@@ -41,6 +42,8 @@
 # | Pull request field | Holds | Default |
 # |---|---|---|
 # | number | The pull request number, which also names its head SHA | Required |
+# | head_sha | Its head SHA, set to model a push | Named by number |
+# | comments | Conversation comments, oldest first, each with by, at, and body | None |
 # | state | open, merged, or closed | open |
 # | opened | When it was opened | Required |
 # | merged | When it was merged | Not merged |
@@ -60,7 +63,7 @@
 
 def time: "2027-01-15T\(.):00Z";
 def default_sha: "a" * 40;
-def pr_sha: "\(.number)" as $n | ("b" * (40 - ($n | length))) + $n;
+def pr_sha: .head_sha // ("\(.number)" as $n | ("b" * (40 - ($n | length))) + $n);
 def author: {authorAssociation: .by, body: .body};
 
 def check_run($name; $result):
@@ -116,7 +119,8 @@ def open_pull_requests:
     | {head: {ref: "feat/issue-\($n)", sha: pr_sha, repo: {full_name: (if .from_fork then "fork/r" else "o/r" end)}}}];
 
 def statuses($sha):
-  [.issues[].pull_requests[]? | select(pr_sha == $sha) | .verdicts[]? | {context: "oe/verify", state: .}];
+  [(.written_statuses[]? | select(.sha == $sha) | {context, state, target_url}),
+    (.issues[].pull_requests[]? | select(pr_sha == $sha) | .verdicts[]? | {context: "oe/verify", state: .})];
 
 def pushes($branch):
   if $branch == "main" then [{after: default_sha, timestamp: (.default_branch.pushed // "07:00" | time)}]
