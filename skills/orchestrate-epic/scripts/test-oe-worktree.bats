@@ -140,3 +140,39 @@ snapshot() {
   [ "${status}" -eq 0 ]
   [ "$(git -C "${tmp}/shared-oe/issue-5" rev-parse HEAD)" = "${issue_head}" ]
 }
+
+@test "a Verifier worktree checks out the origin branch head detached and leaves the shared checkout unchanged" {
+  before="$(snapshot)"
+
+  run --separate-stderr bash "${oe}" worktree add 5 --detach
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "${tmp}/shared-oe/issue-5" ]
+  [ "$(git -C "${output}" rev-parse HEAD)" = "${issue_head}" ]
+  run git -C "${tmp}/shared-oe/issue-5" symbolic-ref -q HEAD
+  [ "${status}" -ne 0 ]
+  [ "$(snapshot)" = "${before}" ]
+}
+
+@test "a Verifier worktree replaces the Owner worktree left at the path, with its unpushed work" {
+  wt="${tmp}/shared-oe/issue-5"
+  git -C "${shared}" worktree add -q -b feat/issue-5 "${wt}" origin/feat/issue-5
+  echo unpushed >"${wt}/unpushed"
+  git -C "${wt}" add unpushed
+  git -C "${wt}" commit -q -m unpushed
+
+  run --separate-stderr bash "${oe}" worktree add 5 --detach
+
+  [ "${status}" -eq 0 ]
+  [ "$(git -C "${wt}" rev-parse HEAD)" = "${issue_head}" ]
+  [ -z "$(git -C "${wt}" status --porcelain --untracked-files=all)" ]
+  run git -C "${wt}" symbolic-ref -q HEAD
+  [ "${status}" -ne 0 ]
+}
+
+@test "an unknown option to worktree add is refused and creates nothing" {
+  run --separate-stderr bash "${oe}" worktree add 5 --detached
+
+  [ "${status}" -eq 2 ]
+  [ ! -e "${tmp}/shared-oe/issue-5" ]
+}
