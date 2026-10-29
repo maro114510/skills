@@ -217,6 +217,7 @@ sequenceDiagram
 - oe does not scan for secrets, and the commit skill screens each commit instead
 - A comment the AI forgot to mark is read as engineer input
 - The session lock works only within one host, so running the same Epic on another host lets two agents touch the same branch
+- oe ready reads only the newest PR with an Issue's branch name, so a newer PR from a fork with that name hides the Issue's own PR; its Owners find nothing to repair, and the Issue parks
 
 ## Decisions
 

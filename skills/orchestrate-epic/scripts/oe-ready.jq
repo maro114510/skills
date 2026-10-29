@@ -97,6 +97,7 @@ def epic_lines:
 #   - Every record counts when there is no claim.
 # - The pull request is the newest one opened from the Issue's branch after the latest claim.
 #   - A pull request from a fork never counts.
+#   - The read holds only the newest pull request with the branch name, so a newer one from a fork hides the Issue's own.
 # - Engineer input counts once.
 #   - Input before the latest attempt was already handed to that attempt's Owner.
 # - A head that cannot be read fails the read only when the action depends on the head.
@@ -107,8 +108,6 @@ def issue_state:
   | ($r.issue // error("Issue not found")) as $issue
   | ($issue.comments.nodes // error("comments unreadable")) as $comments
   | ($r.ref != null) as $branch
-  | if $r.pullRequests.totalCount > ($r.pullRequests.nodes | length)
-    then error("Issue #\($issue.number) branch has more pull requests than one read holds") else . end
   | [($r.pullRequests.nodes // error("pull requests unreadable"))[] | select(.isCrossRepository == false)] as $prs
   | ($comments | indexes(record("claim")) | last) as $claim
   | if $issue.comments.totalCount > ($comments | length) and $claim == null and ($branch or ($prs | length) > 0)
