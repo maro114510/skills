@@ -49,7 +49,7 @@ OE_SESSION_PID="$PPID" bash <skill-dir>/scripts/oe lock acquire <repo> <epic>
 
 Keep the printed `token=`. Exit 4 means another session runs this Epic on this host: stop and say so. Any other non-zero exit: stop and show the error.
 After the session resumes, as after a restart, acquire again with the token before anything else.
-In OpenCode V2, `$PPID` is the shared background service, which serves many sessions and outlives this one, so a lock left by a session that ended without Step 4 holds until that service restarts. On exit 4 there, also tell the user that such a lock frees on `oe lock release` with that session's token or on a restart of the service.
+In OpenCode V2, `$PPID` is the shared background service, which serves many sessions and outlives this one, so a lock left by a session that ended without Step 4 holds until that service restarts. On exit 4 there, also tell the user that such a lock frees on `opencode service restart`, or on `oe lock release` with the `token=` that the ended session printed in its transcript.
 
 ## Step 3: Loop
 
@@ -109,12 +109,12 @@ Pick the first row whose tools you have, by the tool names and parameters you se
 |---|---|---|
 | Claude Code: `Agent` tool | `Agent` with `run_in_background: true`. A plugin install registers the agent as `skills:pr-owner` or `skills:pr-verify`; use the bare name when only that resolves | Bash with `run_in_background: true` |
 | OpenCode V2: `subagent` tool | `subagent` with `agent` set to the agent type and `background: true` | `shell` with `background: true` |
-| OpenCode V1: `task` tool with a `background` parameter | `task` with `subagent_type` set to the agent type and `background: true` | Foreground `bash` with `timeout` 660000 |
-| OpenCode V1: `task` tool without `background` | Batch: start all of this pass's agents as `task` calls in one message | Foreground `bash` with `timeout` 660000 |
+| OpenCode V1: `task` tool with a `background` parameter | `task` with `subagent_type` set to the agent type and `background: true` | Foreground `bash` with `timeout` 720000 |
+| OpenCode V1: `task` tool without `background` | Batch: start all of this pass's agents as `task` calls in one message | Foreground `bash` with `timeout` 720000 |
 
 - OpenCode V1 offers `background` only when it was started with `OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS=true`.
-- The foreground `timeout` of 660000 ms outlasts `oe wait`'s 9-minute limit plus one poll, so the wait exits on its own.
-- A foreground wait blocks your turn, so an agent that ends meanwhile wakes you only after the wait returns, up to 9 minutes late.
+- The foreground `timeout` of 720000 ms outlasts `oe wait`'s 9-minute limit plus one poll and its reads, so the wait normally exits on its own.
+- A foreground wait blocks your turn. A background agent that ends meanwhile arrives as a message in the conversation once the wait returns, up to 9 minutes late, even when you have not ended your turn. Handle each such message as the "An agent ended" wake.
 - In batch, the calls return once every agent of the batch has ended, so the slowest agent delays every other Issue. Handle each returned agent as the "An agent ended" wake below, then go to 3.1 without a wait. Run 3.3 only on a pass that started no agent.
 
 ### 3.3 Wait
