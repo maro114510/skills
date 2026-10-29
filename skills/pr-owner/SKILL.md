@@ -82,7 +82,7 @@ If any of the first four is missing, end without changing anything and say which
    EOF
    ```
 
-7. If `git -C <worktree> rev-list --count origin/<branch>..HEAD` prints 0 and the task is a repair, there is nothing to push: end. For a new task, run `bash <skills-root>/create-pr/scripts/issue-refs.sh origin/<base>` in the worktree first. Exit 3 means an older commit closes the Issue that the newest marks Related: ask about it with `oe question` as in step 6, and push nothing.
+7. If `git -C <worktree> rev-list --count origin/<branch>..HEAD` prints 0 and the task is a repair, there is nothing to push: end. For a new task, first run `git -C <worktree> fetch origin <base>`, because nothing else refreshes `origin/<base>` and a stale one puts the base's own commits and their closing footers in the range, then run `bash <skills-root>/create-pr/scripts/issue-refs.sh origin/<base>` in the worktree. Exit 3 means an older commit closes the Issue that the newest marks Related: ask about it with `oe question` as in step 6, and push nothing.
 8. Push:
 
    ```bash
