@@ -59,7 +59,7 @@ If any of the first four is missing, end without changing anything and say which
    git -C <worktree> merge --no-edit origin/<base>
    ```
 
-   Resolve each conflict so that both sides' intent holds, then commit the merge with `git -C <worktree> commit --no-edit`. If you cannot tell how to resolve one, run `git -C <worktree> merge --abort` and ask about it in step 6.
+   Resolve each conflict so that both sides' intent holds, then commit the merge with `git -C <worktree> commit --no-edit`. If you cannot tell how to resolve one, run `git -C <worktree> merge --abort`, ask about it with `oe question` as in step 6, and end without running implement or pushing.
 5. Read `<skills-root>/implement/SKILL.md` and follow it with these arguments:
 
    ```text
@@ -72,7 +72,7 @@ If any of the first four is missing, end without changing anything and say which
 
    | Status | Action |
    |---|---|
-   | `BLOCKED` | Write its `QUESTIONS`, plus any conflict from step 4, with `oe question` as below. Push nothing |
+   | `BLOCKED` | Write its `QUESTIONS` with `oe question` as below. Push nothing |
    | `FAILED` | Push nothing, and end |
    | `DONE` | Go to step 7 |
 
