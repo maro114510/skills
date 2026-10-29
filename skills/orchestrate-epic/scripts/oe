@@ -2,11 +2,16 @@
 # oe
 #
 # The helper commands of orchestrate-epic.
-# Each subcommand lives in oe-SUBCOMMAND.sh next to this file.
+# Each subcommand lives in oe-SUBCOMMAND.sh next to this file, whose header documents it.
 #
 # | Subcommand | Does |
 # |---|---|
 # | ready | Prints the next action of every child Issue of an Epic |
+# | claim | Creates an Issue's branch on origin and writes the claim record |
+# | attempt | Writes an attempt record before an Owner starts, and refuses one past the cap |
+# | question | Writes an Owner's question on the Issue |
+# | worktree | Creates or removes an Issue branch's worktree outside the shared checkout |
+# | lock | Holds or releases the one session allowed per Epic on this host |
 #
 # An unknown or missing subcommand exits 2.
 set -uo pipefail
@@ -14,13 +19,21 @@ set -uo pipefail
 dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 case "${1:-}" in
-ready)
+ready | claim | attempt | question | worktree | lock)
   sub="$1"
   shift
   exec bash "${dir}/oe-${sub}.sh" "$@"
   ;;
 *)
-  echo "Usage: oe ready <owner/repo> <epic-number> [--running <issue-number>]..." >&2
+  cat >&2 <<'EOF'
+Usage: oe ready <owner/repo> <epic-number> [--running <issue-number>]...
+       oe claim <owner/repo> <issue-number>
+       oe attempt <owner/repo> <issue-number>
+       oe question <owner/repo> <issue-number> < question
+       oe worktree add|remove <issue-number>
+       oe lock acquire <owner/repo> <epic-number> [<token>]
+       oe lock release <owner/repo> <epic-number> <token>
+EOF
   exit 2
   ;;
 esac

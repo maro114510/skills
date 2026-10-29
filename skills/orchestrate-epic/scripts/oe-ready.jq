@@ -1,6 +1,6 @@
 # The decision logic of oe ready.
 # oe-ready.sh passes every GitHub response through these definitions with gh --jq.
-# oe-ready.sh defines these values in front of this file.
+# oe-ready.sh puts oe-records.jq and these values in front of this file.
 #
 # | Name | Value |
 # |---|---|
@@ -16,22 +16,7 @@ def epoch: sub("\\.[0-9]+"; "") | fromdateiso8601;
 # The positions in an array whose element matches f.
 def indexes(f): . as $a | [range(0; length) | select($a[.] | f)];
 
-# Who counts
-#
-# | Signal | Rule |
-# |---|---|
-# | Trusted author | The author association is OWNER, MEMBER, or COLLABORATOR |
-# | Record | A comment by a trusted author whose body starts with the record's marker |
-# | Engineer input | A comment or review by a trusted author whose body does not start with the oe marker prefix |
-#
-# | Record | Marker |
-# |---|---|
-# | Claim | `<!-- oe:claim -->` |
-# | Attempt | `<!-- oe:attempt -->` |
-# | Question | `<!-- oe:question -->` |
-def trusted: (.authorAssociation // "") as $a | $a == "OWNER" or $a == "MEMBER" or $a == "COLLABORATOR";
-def record($kind): trusted and ((.body // "") | startswith("<!-- oe:\($kind) -->"));
-def engineer_input: trusted and ((.body // "") | startswith("<!-- oe:") | not);
+# Who counts: trusted, record, and engineer_input come from oe-records.jq.
 
 # CI
 #

@@ -8,6 +8,9 @@
 # | pulls | none | The open pull request list |
 # | statuses | Commit SHA | The commit statuses on that commit, newest first |
 # | activity | Branch name | The pushes to that branch |
+# | repo | none | The repository, naming its default branch |
+# | ref | Branch name | The head of that branch |
+# | comments | Issue number | The comments on that Issue, oldest first |
 #
 # The state
 #
@@ -29,6 +32,7 @@
 # | closed | Whether the Issue is closed as completed | false |
 # | blocked_by | Dependencies, each with a number and a state of open, completed, or not_planned | None |
 # | branch | Whether the branch feat/issue-N exists | false |
+# | branch_sha | The head of the branch feat/issue-N | None |
 # | comments | Issue comments, oldest first, each with by, at, and body | None |
 # | pull_requests | Pull requests opened from the branch | None |
 # | older_comments | How many older comments GitHub leaves out of the read | 0 |
@@ -120,10 +124,21 @@ def pushes($branch):
       | select((.state // "open") == "open") | {after: pr_sha, timestamp: (.pushed // .opened | time)}]
   end;
 
+def branch_head($branch):
+  if $branch == "main" then {object: {sha: default_sha}}
+  else error("unknown branch \($branch)") end;
+
+def issue_comments($n):
+  [.issues[] | select(.number == $n)] | first // error("Issue #\($n) not found")
+  | [.comments[]? | {author_association: .by, body, created_at: (.at | time)}];
+
 $state
 | if $call == "epic" then epic_response
   elif $call == "issue" then issue_response($arg | tonumber)
   elif $call == "pulls" then open_pull_requests
   elif $call == "statuses" then statuses($arg)
   elif $call == "activity" then pushes($arg)
+  elif $call == "repo" then {full_name: "o/r", default_branch: "main"}
+  elif $call == "ref" then branch_head($arg)
+  elif $call == "comments" then issue_comments($arg | tonumber)
   else error("unknown call \($call)") end

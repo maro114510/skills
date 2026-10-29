@@ -9,3 +9,6 @@ severity=info
 
 # Optional checks
 enable=require-double-brackets
+
+# Follow `source` into files that a source-path directive names, so a file checked alone sees what it sources
+external-sources=true
