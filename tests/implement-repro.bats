@@ -1,13 +1,11 @@
 #!/usr/bin/env bats
 # Tests for the implement reproduction repository under tests/implement-repro: its shell template and the seeded
-# defects that skills/implement/scripts/gate-tests.sh must flag.
+# defects, each shown by running the template's own runner.
 # shellcheck disable=SC2292 # bats fails a test on a mid-test `[[ ]]` only under bash 4.1+; `[ ]` works on every bash.
 
 setup() {
   repro="${BATS_TEST_DIRNAME}/implement-repro"
   repo="${BATS_TEST_TMPDIR}/repo"
-  gate="${BATS_TEST_DIRNAME}/../skills/implement/scripts/gate-tests.sh"
-  unset GATE_TESTS_SEED
 }
 
 # build <seed>... makes $repo from template/, with a bare origin whose main is its first commit, then commits each
@@ -71,34 +69,42 @@ EOF
   [ "${status}" -eq 1 ]
 }
 
-@test "gate-tests flags a regression test that passes on the code without the fix" {
-  build rates-naive-test rates-cache-fix
-  run bash "${gate}" origin/main
-  [ "${status}" -eq 1 ]
-  [[ "${output}" == *"test_convert_uses_the_rate_set_by_rates_set: passed on the parent"* ]]
-  [[ "${output}" == *"before-change: fail"* ]]
-}
-
-@test "a regression test that fills the cache first passes gate-tests" {
-  build rates-regression-test rates-cache-fix
-  run bash "${gate}" origin/main
+@test "a regression test that omits the cache precondition passes on the code without the fix" {
+  build rates-naive-test
+  run bash tests/run.sh --only test_convert_uses_the_rate_set_by_rates_set tests/test_rate_updates.sh
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"failed on the parent"* ]]
-  [[ "${output}" == *"before-change: pass"* ]]
 }
 
-@test "gate-tests flags a test that passes in default order but fails when run alone" {
+@test "a regression test that fills the cache first fails at its assertion without the fix and passes with it" {
+  build rates-regression-test
+  run bash tests/run.sh --only test_convert_uses_a_rate_set_after_the_first_conversion tests/test_rate_updates.sh
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"FAIL: test_convert_uses_a_rate_set_after_the_first_conversion"* ]]
+  [[ "${output}" != *"ERROR:"* ]]
+  tar -C "${repro}/seeds/rates-cache-fix" --exclude=./message -cf - . | tar -xf -
+  run bash tests/run.sh --only test_convert_uses_a_rate_set_after_the_first_conversion tests/test_rate_updates.sh
+  [ "${status}" -eq 0 ]
+}
+
+@test "a test on the shared cart passes in default order but fails when run alone" {
   build cart-remove-stub cart-remove-tests-shared cart-remove
-  run bash "${gate}" origin/main
+  run bash tests/run.sh tests/test_cart_remove.sh
+  [ "${status}" -eq 0 ]
+  run bash tests/run.sh --only test_remove_2_removing_the_last_pen_empties_the_pen_line tests/test_cart_remove.sh
   [ "${status}" -eq 1 ]
-  [[ "${output}" == *"test_remove_2_removing_the_last_pen_empties_the_pen_line: failed when run alone"* ]]
-  [[ "${output}" == *"isolation: fail"* ]]
+  [[ "${output}" == *"FAIL: test_remove_2_removing_the_last_pen_empties_the_pen_line"* ]]
 }
 
-@test "tests that build their own cart pass gate-tests and the whole suite in default and shuffled order" {
+@test "tests that build their own cart pass alone and in the whole suite in default and shuffled order" {
   build cart-remove-stub cart-remove-tests cart-remove
-  run bash "${gate}" origin/main
-  [ "${status}" -eq 0 ]
+  local name
+  for name in test_remove_without_a_quantity_drops_the_whole_line \
+    test_remove_with_a_quantity_drops_only_those_units \
+    test_removing_more_than_the_cart_holds_fails_with_3_and_keeps_the_line \
+    test_removing_an_unknown_sku_fails_with_2; do
+    run bash tests/run.sh --only "${name}" tests/test_cart_remove.sh
+    [ "${status}" -eq 0 ]
+  done
   for seed in "" 1 2 3 4 5; do
     run bash tests/run.sh ${seed:+--seed "${seed}"}
     [ "${status}" -eq 0 ]
