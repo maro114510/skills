@@ -92,7 +92,7 @@ Take the references from Step 1's `== issues` section and write each in the desc
 | Issue only in the branch name or a commit subject | `Closes #NNN`, or `Related #NNN` when the rule below allows it |
 
 - `Related` only when a deferred requirement that still needs implementing is reported in the conversation, commits, or a caller's `SKIPPED`; the user says the implementation is partial; or the issue is only cited in passing. Post-merge verification, QA, E2E, and release work never count.
-- One reference per line. GitHub links only the first issue of `Closes #1, #2`.
+- Write each reference alone on its own line, never inside a sentence or after another reference, because Step 6's script links only a reference that stands alone on its line.
 - For each `Related` issue, state what this PR resolves and what remains.
 
 ## Step 3. Generate the PR Description
@@ -113,8 +113,8 @@ Follow the template contents Step 1 printed, without reading the file. Do not ig
 - Follow any inline comments or section-specific instructions.
 - Check a verification item, such as tests, lint, or a build, only if it ran in this session and passed; adding a test is not running it. Otherwise leave it unchecked with the reason on the same line, e.g. `- [ ] Unit tests pass (not run: no test runner)`.
 - Check any other checklist item based on the actual change.
-- Give each template section the Content that 3.3 gives the section serving the same purpose, such as Summary's for a "What" section.
-- Add useful information that the template does not ask for as extra sections at the end, with headings and Content from 3.3.
+- Write each template section by the 3.3 Content of the section serving the same purpose, such as Summary for "What", Background for "Why", and Test Plan for "How to test".
+- Add a 3.3 section at the end only for useful information that no template section holds, such as implementation details or risks.
 
 ### 3.3 Sections
 
@@ -123,7 +123,7 @@ Each row's Content is the only rule for what its section holds. Without a templa
 | `en` | `ja` | Content |
 |---|---|---|
 | Background | 背景 | Why the change is needed, for a reviewer who lacks the surrounding context: the root problem, constraints, and why it matters now |
-| Summary | 概要 | The outcome in 1-3 sentences: what is different once this merges and the problem it solves, such as "merged skills reach every local Claude Code, whatever branch is checked out" rather than "add X". Never the files touched or settings changed |
+| Summary | 概要 | The outcome in 1-3 sentences: what is different once this merges and the problem it solves, such as "merged skills reach every local Claude Code, whatever branch is checked out" rather than "add X". Never how it is done, or the files touched or settings changed |
 | Implementation Details | 実装方針 | Why this approach was chosen: the tradeoffs accepted and the alternatives rejected. Never what each part does |
 | Changes | 変更内容 | What changed, under `###` group headings by behavior or area rather than by code edit, each bullet giving the change's meaning to a user or reviewer |
 | Impact | 影響範囲 | What merging affects: pages, features, APIs, data formats, configuration, workflows, or users, with breaking changes called out. Facts, not doubts |
@@ -136,7 +136,7 @@ Each row's Content is the only rule for what its section holds. Without a templa
 Reviewers can read the diff. The PR description is valuable because it explains intent, judgment, risk, and context that the diff does not show.
 
 - **One fact, one place**: Each fact, such as a file's purpose or a design decision, goes only in the section whose 3.3 Content it fits. If it seems to fit two, keep it where the Content names it most specifically.
-- **Omission**: Remove a section that would be empty or is genuinely irrelevant.
+- **Omission**: Remove a section that is genuinely irrelevant, unless the template has it.
 
 ### 3.5 Line Breaks
 
