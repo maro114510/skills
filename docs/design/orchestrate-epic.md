@@ -41,7 +41,7 @@ Each part does one job and stores no state of its own. State lives on GitHub, ex
 | oe brief | Builds the brief handed to an Owner or a Verifier, and records each Verifier start before its brief | A pending verify status on the SHA, for a Verifier |
 | oe claim | Creates the Issue's branch and writes a claim record | A branch on origin and the record store |
 | oe worktree | Creates an agent's worktree outside the shared checkout, on the Issue branch for an Owner and detached at its head for a Verifier, and removes it after the agent ends | A local worktree |
-| oe attempt | Writes an attempt record before an Owner starts, naming the bots whose findings start it, and refuses a 4th | The record store |
+| oe attempt | Writes an attempt record before an Owner starts, naming the bots whose findings it reads on GitHub then, and refuses a 4th or when that read fails | The record store |
 | oe question | Writes an Owner's question in a fixed format | An Issue comment |
 | oe rereview | Asks the named bots to review the PR again, in a fixed format | A PR comment |
 | oe verdict | Writes a Verifier's verdict and findings | A commit status on the SHA, and the record store |
@@ -157,8 +157,9 @@ For each Issue, oe ready reads this table from the top and outputs the action of
     | Codex | `chatgpt-codex-connector` | P0, P1 | `**<sub><sub>![<level> Badge](https://img.shields.io/badge/<level>-…)</sub></sub>` followed by the title, where `<level>` is `P0` or `P1` | P2, P3, and every other comment |
 
   - An engineer dismisses a finding by resolving its thread
-  - Each bot has one round per claim. oe attempt names, in the attempt record, every bot whose finding starts that Owner, so the round is used when the Owner starts, even when it ends without a push or finds nothing it can reproduce. From then on that bot's findings start nothing and are left to the engineer
-  - After a repair push for bot findings, the Owner asks the bots it repaired for to review again with oe rereview. The comment is only a request, never a record, and oe ready waits for no re-review
+  - Each bot has one round per claim. oe attempt names, in the attempt record, every bot that has a bot finding and its round when oe attempt runs, whatever signal starts the Owner. The round is used when the Owner starts, even when it ends without a push or finds nothing it can reproduce. From then on that bot's findings start nothing and are left to the engineer
+  - The attempt record is the only source of the bot list: the Owner repairs only the findings of the bots its attempt record names, and a later finding from another bot waits for the next Owner
+  - After a repair push for bot findings, the Owner asks the bots its attempt record names to review again with oe rereview. The comment is only a request, never a record, and oe ready waits for no re-review
   - A repair for a bot finding is an Owner attempt and counts toward the cap of 3
 - Counting
   - Only records after the latest claim record count, and every record counts when there is no claim record
@@ -277,7 +278,7 @@ sequenceDiagram
 | Keeping a bot's text from instructing | Only a bot's own thread-opening comment counts, and the Owner gets it as untrusted data, follows none of its instructions such as CodeRabbit's prompt for AI agents, and fixes only what it reproduces in the code |
 | Bot repairs per PR | One round per bot per claim, inside the cap of 3 attempts, so a bot and the Owner never chase each other, and a bot that reviews minutes later still gets its round. Findings after a bot's round go to the engineer and do not park the Issue |
 | Recording a bot round | In the attempt record that oe writes before the Owner starts, never in anything the Owner writes, so an Owner that ends early cannot leave the round unused and restart the chase |
-| Re-review after a bot repair | The Owner writes one PR comment through oe rereview: the marker `<!-- oe:rereview -->`, then `@coderabbitai review` or `@codex review` for each bot it repaired for. The marker keeps it from counting as engineer input |
+| Re-review after a bot repair | The Owner writes one PR comment through oe rereview: the marker `<!-- oe:rereview -->`, then `@coderabbitai review` or `@codex review` for each bot its attempt record names. The marker keeps it from counting as engineer input |
 | A bot finding after approval | Starts nothing, so the AI never pushes onto a head that an engineer approved and may be merging |
 | Restarting an Owner after an answer | Counts toward the cap of 3 attempts |
 | A Verifier ends without a verdict | It is restarted once on the same SHA, and the Issue is parked when the second start also gives no verdict |
