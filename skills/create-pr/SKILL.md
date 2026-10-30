@@ -63,6 +63,7 @@ It fetches `origin/<base>` and prints everything later steps use. Do not read it
 | `== diff stat`, `== diff` | The stat, and the diff without lockfiles when it fits 20 files and 1,000 lines | Step 2 |
 | `== template <path>` or `== template none` | The PR template's contents, or none | Step 3.2 or 3.3 |
 | `== issues` | `Closes #N` or `Related #N` from the newest commit footer, a tab, and the issue title | Step 2.3 |
+| `== manual checks` | `#N`, a tab, and one manual check of an issue the branch closes, per line | Step 3.3 |
 | `== labels` | One `name<TAB>description` per line | Step 5.2 |
 
 When `== diff` says `omitted`, read only meaningful files with `git diff origin/<base>...HEAD -- <path>`, skipping generated and vendored code.
@@ -127,8 +128,10 @@ Follow the template contents Step 1 printed, without reading the file. Do not ig
 
 - Fill in every section.
 - Follow any inline comments or section-specific instructions.
+- Never check a box that needs a human, such as `Manually tested on macOS`. This overrides the rules below.
 - Check a verification item, such as tests, lint, or a build, only if it ran in this session and passed; adding a test is not running it. Otherwise leave it unchecked with the reason on the same line, e.g. `- [ ] Unit tests pass (not run: no test runner)`.
 - Check any other checklist item based on the actual change.
+- Add the Manual Checks section from 3.3 at the end.
 - Add useful information that the template does not ask for, such as background, implementation details, risks, or future considerations, as extra sections at the end, with headings from the 3.3 table. The how belongs there, not in What.
 
 ### 3.3 Default structure when no template exists
@@ -145,6 +148,7 @@ Use the structure below. For `ja`, replace each heading with its Japanese form; 
 | Concerns | 懸念点 |
 | Future Considerations | 今後の検討事項 |
 | Test Plan | テスト計画 |
+| Manual Checks | 手動確認 |
 
 ```markdown
 ## Background
@@ -181,6 +185,10 @@ Use the structure below. For `ja`, replace each heading with its Japanese form; 
 ## Test Plan
 
 <!-- Describe the verification performed and the result. For UI changes, consider before/after screenshots. -->
+
+## Manual Checks
+
+<!-- One unchecked box per line of Step 1's manual checks, copied verbatim. Add (#N) only when several issues contribute. Omit when there are none. -->
 ```
 
 ### 3.4 Writing principles

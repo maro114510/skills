@@ -89,6 +89,9 @@ A criterion about the state the step leaves, such as a pull request that exists 
 
 A `No evidence` criterion is unsatisfied.
 
+A check under a `Manual checks` or `手動確認` heading in the source's Verification section is the engineer's.
+Report it as `-> manual` without evidence. It is never `No evidence` or deferred, and never fails a verdict. No other check is manual.
+
 ## 5. Report Lines
 
 Each criterion takes one line, quoted verbatim or prefixed `(derived)`.
@@ -99,6 +102,7 @@ Any line this file puts into a report field, including a criterion in `SKIPPED` 
 <criterion> -> [behavior] <command or input>; observed <result>
 <criterion> -> [static] <file:line>
 <criterion> -> none
+<criterion> -> manual
 ```
 
 | Criterion | Kind | Attached | Line |
