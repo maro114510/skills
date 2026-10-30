@@ -198,23 +198,7 @@ Reviewers can read the diff. The PR description is valuable because it explains 
 
 ### 3.5 Line Breaks
 
-GitHub renders every single newline inside a PR/issue body as a hard line break (`<br>`), unlike README files where CommonMark treats a lone newline as a soft break joined by a space. Do not manually wrap prose the way a plain-text commit message is wrapped (for example at ~72 columns) — that convention produces a choppy, broken-looking body on GitHub.
-
-Within one paragraph or one bullet item, write the sentence as a single unbroken line in the source text no matter how long it is. Only start a new line at a real paragraph or bullet boundary.
-
-Bad (manually wrapped, renders as 3 separate lines on GitHub):
-
-```
-Adds `chrome-adapter.js`, a factory that wraps `chrome.tabs` and
-`chrome.bookmarks`, converting every bookmark node into the plain
-`RawNode` shape the domain package already expects.
-```
-
-Good (one line in source, wraps naturally when rendered):
-
-```
-Adds `chrome-adapter.js`, a factory that wraps `chrome.tabs` and `chrome.bookmarks`, converting every bookmark node into the plain `RawNode` shape the domain package already expects.
-```
+Write each paragraph or bullet as a single source line, however long and even when the commit messages break lines, because GitHub renders every newline in a PR body as a line break.
 
 ### 3.6 Compact Pass
 
