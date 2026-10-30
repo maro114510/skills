@@ -22,6 +22,7 @@ gh skill install maro114510/skills --agent claude-code --scope user
 |---|---|
 | `babysit` | Watch a pull request without waking the model until checks, comments, or readiness change, and with `drive` fix and push CI failures and review feedback on your own PR. |
 | `create-pr` | Create a pull request with a useful description. |
+| `diagram-conventions` | Create or review a diagram in the right type's notation without adding or dropping meaning. |
 | `domain-master` | Review domain model and state-transition code for illegal states that bypass validation. |
 | `frame-problem` | Frame a vague problem before implementation and converge on a direction. |
 | `orchestrate-epic` | Turn an Epic's child Issues into verified PRs in dependency order, leaving every merge to a human. |
