@@ -39,7 +39,7 @@ If any of the five is missing, end without a verdict and say which.
 
    | The Issue's Verification | Judge | Do not judge |
    |---|---|---|
-   | Has an `Automated checks`, `自動確認`, `Manual checks`, or `手動確認` heading inside its `Verification` or `検証方法` section | Every item under the automated heading, and every other acceptance criterion outside the Target State | The Target State, and each item under the manual heading, which you list as `<item> -> manual` as `<skills-root>/implement/references/evidence.md` section 4 says |
+   | Has an `Automated checks`, `自動確認`, `Manual checks`, or `手動確認` heading inside its `Verification` or `検証方法` section | Every item under the automated heading | The Target State, and each item under the manual heading, which you list as `<item> -> manual` as `<skills-root>/implement/references/evidence.md` section 4 says |
    | Has none of those headings there | Every acceptance criterion. If the Issue states none, derive them from its requirements and prefix each with `(derived)` | Nothing |
 
    Only an item under a manual heading inside that section is manual. Never treat any other check as manual, however hard it is to evidence, and ignore such a heading anywhere else in the body.
