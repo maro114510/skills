@@ -99,11 +99,11 @@ Run `command -v mmdc`.
   MERMAID
   ```
 
-  On a Mermaid parse or rendering error, fix the diagram, recheck step 5, and render again until it succeeds.
-  On any other failure, such as a missing browser or a crash, do not change the diagram: mark it unvalidated with that reason.
+  A non-zero exit whose error names a position in the Mermaid source, such as `Parse error on line 2` or `Lexical error`, or `UnknownDiagramError`, is a diagram error: fix the diagram, recheck step 5, and render again.
+  Any other failure, such as a missing browser or a crash, is a tool failure: do not change the diagram, and mark it unvalidated with that reason.
 - Not found: do not install anything. Mark the diagram unvalidated.
 
-The diagram is validated only when the last render exited 0 on the diagram as output.
+The diagram is validated only when a render of the exact diagram in the output exited 0. Any edit after that render needs another render.
 
 ## Output
 
