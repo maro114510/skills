@@ -8,27 +8,24 @@ Read {{SKILL_DIR}}/SKILL.md and follow it. `<skill-dir>` is {{SKILL_DIR}}.
 
 ## Harness rules
 
-These are about the sandbox, not the skill; obey them strictly.
+- Run every shell command in {{REPO}} and start it with `export PATH={{BIN}}:$PATH; ` so that `gh` is the sandbox stub
+- The user has approved pushing to this sandbox's `origin`, so push without asking, and add a marker only when a hook stops the push and names one
+- Never set `GH_REPO` or `GH_HOST`, pass `--repo` or `--hostname` to `gh`, or run `gh api` yourself
+- Read nothing under {{SANDBOX}} except `repo/`, and nothing under {{SKILL_DIR}}/eval
+- Nobody can answer you, so stop where the skill would ask the user and report the question
+- Ignore hook banners on push
 
-- Run every shell command in {{REPO}}, through your tool's working-directory option or a leading `cd`, and start it with `export PATH={{BIN}}:$PATH; ` so `gh` resolves to the sandbox's GitHub CLI. `origin` is a local remote.
-- The user has approved pushing the current branch to this sandbox's `origin`. If a hook asks for approval of that push, add the marker the hook names.
-- Never set `GH_REPO` or `GH_HOST`, never pass `--repo` or `--hostname` to `gh`, and never run `gh api` yourself.
-- Do not read anything under {{SANDBOX}} other than `repo/`, and nothing under {{SKILL_DIR}}/eval.
-- You cannot talk to the user. If the skill tells you to ask the user something, stop at that point and report the question you would have asked.
-- Ignore git hook banner output on push.
+## Report
 
-## Task
+Execute the scenario, then report these sections.
 
-1. Follow the target prompt to execute the scenario and produce the deliverable.
-2. On completion, respond with the report structure below.
-
-## Report structure
-
-- Deliverable: the exact title, the full body, the flags you passed, and the script output
-- Requirement achievement: ○ / × / partial (with reason) for each checklist item
-- Trace: tag OK / stuck / skipped for Understanding, Planning, Execution, Formatting, with a one-line reason when not OK; `Trace: all OK` if all OK
-- Unclear points: for each, three lines — Issue / Cause / General Fix Rule
-- Discretionary fill-ins: places not fixed by the instruction that you filled by your own judgment
-- Retries: number of times you redid the same decision and why
-- Commands: the ordered list of every tool call you made, one line each
-- Final message: the message you would show the user at the end, verbatim
+| Section | Content |
+|---|---|
+| Deliverable | The exact title, the full body, the flags you passed, and the script output |
+| Requirement achievement | ○, ×, or partial with a reason, for each checklist item |
+| Trace | OK, stuck, or skipped for Understanding, Planning, Execution, and Formatting, with a reason when not OK |
+| Unclear points | Issue, Cause, and General Fix Rule for each |
+| Discretionary fill-ins | Choices the instructions left to you |
+| Retries | How often you redid a decision, and why |
+| Commands | Every tool call in order, one per line |
+| Final message | The message you would show the user, verbatim |
