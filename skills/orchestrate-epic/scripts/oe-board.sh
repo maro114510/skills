@@ -86,12 +86,17 @@ esac
 
 command -v herdr >/dev/null 2>&1 || fail "herdr is not on PATH"
 top="$(git rev-parse --show-toplevel 2>/dev/null)" || fail "the current directory is in no clone"
+roots="$(worktree_root)" || fail "the current directory is in no clone"
 socket="${HERDR_SOCKET_PATH:-}"
 record="$(state_dir)/boards/$(repo_key "${repo}")/${epic}"
 
 # The shell in the pane runs this line; repo and epic passed the checks above, so only the paths need quoting.
-# env sets the interval, because a VAR=value prefix is not valid in every shell.
-command_line="cd $(printf '%q' "${top}") && env OE_WAIT_INTERVAL=${board_interval} bash $(printf '%q' "${dir}/oe") status ${repo} ${epic} --watch"
+# - The pane's shell starts from the user's environment, not this session's, so the line names the state directory,
+#   which holds the lock the board stops on, and the worktree root, which the AGENT column reads, as this session resolves them.
+# - env sets them, because a VAR=value prefix is not valid in every shell.
+command_line="cd $(printf '%q' "${top}") && env OE_WAIT_INTERVAL=${board_interval}"
+command_line+=" OE_STATE_DIR=$(printf '%q' "$(state_dir)") OE_WORKTREE_ROOT=$(printf '%q' "${roots}")"
+command_line+=" bash $(printf '%q' "${dir}/oe") status ${repo} ${epic} --watch"
 
 # Prints what pane $1 runs: board when this Epic's board, prompt when only its shell, and other otherwise.
 # Prints gone when herdr does not know the pane, and fails with herdr's error otherwise.
