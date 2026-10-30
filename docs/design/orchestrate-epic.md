@@ -81,25 +81,36 @@ An Issue moves through the phases in this diagram.
 flowchart TB
   subgraph Pre["Before claim"]
     Blocked["Waiting on dependencies"] -->|"All dependencies completed"| Ready["Ready"]
+    Blocked -->|"A dependency closed as not planned or duplicate"| Blocked
   end
   subgraph Work["Work"]
     Owner["Owner working"] -->|"Question"| Ask["Waiting for an answer"]
-    Ask -->|"Answer"| Owner
     Owner -->|"Push"| CI["Waiting for CI"]
-    CI -->|"Failure or conflict"| Owner
   end
   subgraph Check["Verification"]
     Verify["Verifier working"] -->|"Success"| Merge["Waiting for the merge"]
   end
+  Repair{"Attempts used?"}
   Ready -->|"Claim"| Owner
   CI -->|"Success"| Verify
-  Verify -->|"Failure"| Owner
-  Merge -->|"Changes requested"| Owner
   Merge -->|"Engineer merges"| Done["Done"]
-  Owner -->|"3 attempts"| Parked["Parked"]
+  Owner -->|"Ends with no PR"| Repair
+  Ask -->|"Answer"| Repair
+  CI -->|"Repair signal"| Repair
+  Verify -->|"Repair signal"| Repair
+  Merge -->|"Repair signal"| Repair
+  Repair -->|"Fewer than 3"| Owner
+  Repair -->|"3 used"| Parked["Parked"]
   CI -->|"No checks after 10 minutes"| Parked
   Verify -->|"No verdict twice"| Parked
+  Parked -->|"Engineer deletes the branch"| Ready
+  Parked -->|"Engineer merges by hand"| Done
+  CI -->|"PR closed without merging"| Engineer["Waiting for an engineer"]
+  Verify -->|"PR closed without merging"| Engineer
+  Merge -->|"PR closed without merging, or merged with the Issue open"| Engineer
 ```
+
+Every edge into the Attempts used check stands for one of the repair signals listed below the table. Row 4 applies to every claimed Issue, and the diagram draws Waiting for an engineer only from Waiting for CI, Verifier working, and Waiting for the merge.
 
 For each Issue, oe ready reads this table from the top and outputs the action of the first row that matches. Rows 1 and 2 are gates on the default branch and apply to every Issue. Claim and attempt records come from the record store.
 
