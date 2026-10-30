@@ -6,6 +6,7 @@
 # |---|---|---|
 # | locks.git | One ref per Epic that a session holds | oe lock; read by oe status through lock_held |
 # | records/<repo-key>/<issue>.jsonl | One Issue's records, oldest first, one JSON object per line | oe claim, oe attempt, oe verdict; dropped by oe forget |
+# | boards/<repo-key>/<epic> | The Herdr pane of the Epic's board and the server it is on, as JSON | oe board, which overwrites it |
 #
 # - The state directory is OE_STATE_DIR when set, and orchestrate-epic under XDG_STATE_HOME or ~/.local/state otherwise.
 #   Either default lies outside every checkout, so no agent's worktree ever holds the state.

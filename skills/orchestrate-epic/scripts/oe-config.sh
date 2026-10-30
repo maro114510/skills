@@ -12,6 +12,8 @@
 # | wait_timeout | 540 | Seconds one oe wait call waits for oe ready's output to change, under the 10-minute limit Claude Code puts on a background command |
 # | wait_interval | 60 | Seconds between two oe ready runs inside oe wait |
 # | idle_limit | 14400 | Seconds the output may stay unchanged with no agent running before the session ends |
+# | board_interval | 180 | Seconds between two refreshes of the board that oe board opens, longer than wait_interval because each refresh reads GitHub as oe ready does |
+# | board_start_timeout | 10 | Seconds oe board waits for the board to start in its pane |
 #
 # oe-records.jq defines which comments count as records when oe reads them, and oe-store.sh where the host-local records live.
 # shellcheck disable=SC2034 # The sourcing subcommand reads these.
@@ -23,6 +25,8 @@ branch_prefix=feat/issue-
 wait_timeout=540
 wait_interval=60
 idle_limit=14400
+board_interval=180
+board_start_timeout=10
 
 # Prints the marker that starts the body of a record of kind $1, such as claim.
 # It must equal marker($kind) in oe-records.jq, which reads what this writes.
