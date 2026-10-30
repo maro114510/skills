@@ -1,7 +1,7 @@
 # Flowchart
 
 Every rule ends with a tag: `[Standard: ISO 5807]` when ISO 5807:1985 states it, `[Convention]` when it is common practice adopted here.
-A review finding names the section of the rule it breaks and quotes that rule.
+A review finding's principle is the heading of the section that holds the rule it breaks, and the finding quotes that rule. A defect that breaks rules in two sections is two findings.
 
 ## Purpose
 
