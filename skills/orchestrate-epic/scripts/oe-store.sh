@@ -51,7 +51,7 @@ record_now() {
 }
 
 # Prints the records of Issue $2 in repository $1 as one JSON array, oldest first, and [] when it has none.
-# Returns 1 with the reason on stderr when the file cannot be read or holds anything but records.
+# Returns 1 with the reason on stderr when the file cannot be read as JSON lines.
 records_read() {
   local file
   file="$(record_path "$1" "$2")" || return 1
@@ -59,8 +59,7 @@ records_read() {
     printf '[]\n'
     return 0
   fi
-  jq -cs 'if all(.[]; type == "object" and (.kind | type) == "string" and (.at | type) == "string")
-    then . else error("not a record") end' "${file}" 2>/dev/null || {
+  jq -cs . "${file}" 2>/dev/null || {
     echo "cannot read the records in ${file}" >&2
     return 1
   }
@@ -71,7 +70,7 @@ records_read() {
 records_add() {
   local file tmp
   file="$(record_path "$1" "$2")" || return 1
-  # Reading first refuses to append to a file that holds anything but records.
+  # Reading first refuses to append to a file that is not JSON lines.
   records_read "$1" "$2" >/dev/null || return 1
   mkdir -p "${file%/*}" 2>/dev/null || {
     echo "cannot create ${file%/*}" >&2
@@ -82,8 +81,7 @@ records_add() {
     return 1
   }
   if { [[ ! -e "${file}" ]] || cat "${file}"; } >"${tmp}" &&
-    jq -ce 'if type == "object" and (.kind | type) == "string" and (.at | type) == "string" then . else error("not a record") end' \
-      <<<"$3" >>"${tmp}" 2>/dev/null &&
+    jq -c . <<<"$3" >>"${tmp}" 2>/dev/null &&
     mv -f "${tmp}" "${file}"; then
     return 0
   fi

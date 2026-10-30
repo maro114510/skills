@@ -321,20 +321,6 @@ JSON
   [ "$(records_of 6)" = '{"kind":"claim","at":"2027-01-15T07:10:00Z"}' ]
 }
 
-@test "a closed child Issue from another repository leaves this repository's records of the same number" {
-  github <<'JSON'
-{
-  "issues": [{"number": 5, "closed": true, "repository": "x/y"}]
-}
-JSON
-  records 5 claim@07:00
-
-  run bash "${oe}" forget o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(records_of 5)" = '{"kind":"claim","at":"2027-01-15T07:00:00Z"}' ]
-}
-
 @test "a failed read of the child Issues drops nothing" {
   github <<'JSON'
 {

@@ -8,7 +8,6 @@
 #
 #   oe forget <owner/repo> <epic-number>
 #
-# - Only the records of child Issues in <owner/repo> are dropped, because records are keyed by repository and Issue.
 #
 # Output
 #
@@ -48,19 +47,17 @@ epic="$2"
 err="$(mktemp)" || fail "mktemp failed"
 trap 'rm -f "${err}"' EXIT
 
-# One line per child Issue: its number, its state, and whether it lives in this repository.
-children="$(gh api "repos/${repo}/issues/${epic}/sub_issues?per_page=100" --paginate --jq '.[]
-  | "\(.number)\t\(.state)\t\((.repository_url // "" | ascii_downcase) == ("https://api.github.com/repos/'"${repo}"'" | ascii_downcase))"' \
-  2>"${err}")" || fail "child Issue read of Epic #${epic} failed: $(head -n1 "${err}")"
+# One line per child Issue: its number and its state.
+children="$(gh api "repos/${repo}/issues/${epic}/sub_issues?per_page=100" --paginate \
+  --jq '.[] | "\(.number)\t\(.state)"' 2>"${err}")" || fail "child Issue read of Epic #${epic} failed: $(head -n1 "${err}")"
 
-mine=()
+issues=()
 open=()
-while IFS=$'\t' read -r n state here; do
+while IFS=$'\t' read -r n state; do
   [[ -n "${n}" ]] || continue
-  [[ "${n}" =~ ^[1-9][0-9]*$ && "${state}" =~ ^(open|closed)$ && "${here}" =~ ^(true|false)$ ]] ||
-    fail "child Issue read of Epic #${epic} unreadable"
+  [[ "${n}" =~ ^[1-9][0-9]*$ && "${state}" =~ ^(open|closed)$ ]] || fail "child Issue read of Epic #${epic} unreadable"
   [[ "${state}" == closed ]] || open+=("#${n}")
-  [[ "${here}" == false ]] || mine+=("${n}")
+  issues+=("${n}")
 done <<<"${children}"
 
 if [[ ${#open[@]} -gt 0 ]]; then
@@ -68,7 +65,7 @@ if [[ ${#open[@]} -gt 0 ]]; then
   exit 4
 fi
 
-for n in ${mine[@]+"${mine[@]}"}; do
+for n in ${issues[@]+"${issues[@]}"}; do
   records_drop "${repo}" "${n}" 2>"${err}" || fail "dropping the records of Issue #${n} failed: $(head -n1 "${err}")"
 done
-printf 'forgot\t%s\n' "${#mine[@]}"
+printf 'forgot\t%s\n' "${#issues[@]}"

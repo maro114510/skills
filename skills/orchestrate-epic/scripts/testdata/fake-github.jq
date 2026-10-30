@@ -11,7 +11,7 @@
 # | repo | none | The repository, naming its default branch |
 # | ref | Branch name | The head of that branch |
 # | comments | Issue number | The comments on that Issue, oldest first |
-# | sub_issues | Epic number | The child Issues, each with its number, state, and repository_url |
+# | sub_issues | Epic number | The child Issues, each with its number and state |
 #
 # The state
 #
@@ -32,7 +32,6 @@
 # |---|---|---|
 # | number | The Issue number | Required |
 # | closed | Whether the Issue is closed as completed | false |
-# | repository | The repository the Issue lives in, as the sub-issue list reports it | o/r |
 # | blocked_by | Dependencies, each with a number and a state of open, completed, or not_planned | None |
 # | branch | Whether the branch feat/issue-N exists | false |
 # | branch_sha | The head of the branch feat/issue-N | None |
@@ -139,8 +138,7 @@ def issue_comments($n):
   | [.comments[]? | {author_association: .by, body, created_at: (.at | time)}];
 
 def sub_issues:
-  [.issues[] | {number, state: (if .closed then "closed" else "open" end),
-    repository_url: "https://api.github.com/repos/\(.repository // "o/r")"}];
+  [.issues[] | {number, state: (if .closed then "closed" else "open" end)}];
 
 $state
 | if $call == "epic" then epic_response
