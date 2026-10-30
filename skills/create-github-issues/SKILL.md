@@ -21,15 +21,8 @@ Write concise, length-capped bodies (requirements separated from specs), model d
 
 ## Step 0: Determine Output Language
 
-Before anything else, run the script below, passing the token after `lang` in `$ARGUMENTS`, or `''` when `lang` is the last token, and nothing when there is no `lang`. `<skills-root>` is the parent of this skill's directory.
-
-```bash
-bash <skills-root>/create-pr/scripts/lang.sh [<value>]
-```
-
-On a non-zero exit, show its output and stop without asking or creating anything. Otherwise show `Language: <its output>` first, and take its first word as `LANG`.
-
-`LANG` is fixed for the rest of this run and governs everything produced from here on — AskUserQuestion prompts, summaries, reviews, warnings, Issue/Epic titles, and Issue/Epic bodies. From Step 1.5 through Step 6, read only `references/templates.<LANG>.md` — never the other language's file, and never switch languages mid-run.
+Before anything else, run `bash <skills-root>/create-pr/scripts/lang.sh [<value after lang in $ARGUMENTS>]`, where `<skills-root>` is the parent of this skill's directory, and on a non-zero exit show its output and stop.
+Otherwise show `Language: <its output>`, then write everything in this run in its first word, `LANG`, reading only `references/templates.<LANG>.md`.
 
 ---
 
