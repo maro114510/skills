@@ -131,7 +131,9 @@ Follow the template contents retained from Step 1.2 without reading the file aga
 
 - Fill in every section.
 - Follow any inline comments or section-specific instructions.
-- Check or leave unchecked checklist items based on the actual change.
+- Check or leave unchecked each checklist item by its kind:
+  - A verification item asks that a check ran, such as unit tests, lint, a build, or a manual test. Check it only when that check ran in this session and its known result satisfies the item. Adding or changing a test is not running it. Otherwise leave it unchecked and append a short reason on the same line, such as `- [ ] Unit tests pass (not run: no test runner configured)` or the failure the run showed.
+  - Any other item, such as "docs updated", is checked or left unchecked based on the actual change.
 - Add useful information that the template does not ask for, such as background, implementation details, risks, or future considerations, as extra sections at the end.
 
 ### 3.3 Default structure when no template exists
