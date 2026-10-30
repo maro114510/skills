@@ -57,7 +57,7 @@ token="${4:-}"
 [[ "${cmd}" == acquire || -n "${token}" ]] || usage "release needs the token that acquire printed"
 
 state="$(state_dir)"
-store="${state}/locks.git"
+store="$(lock_store)"
 
 store_git() {
   git --git-dir="${store}" "$@"
@@ -68,26 +68,9 @@ if [[ ! -d "${store}" ]]; then
   git init --quiet --bare "${store}" || fail "cannot create the lock store ${store}"
 fi
 
-ref="refs/oe-lock/$(repo_key "${repo}")/${epic}"
+ref="$(lock_ref "${repo}" "${epic}")"
 # The all-zero object name tells update-ref that the ref must not exist yet.
 zero="$(store_git hash-object --stdin </dev/null | tr '0-9a-f' '0')"
-
-lstart_of() {
-  ps -o lstart= -p "$1" 2>/dev/null | sed -e 's/^ *//' -e 's/ *$//'
-}
-
-# Prints field $1 of the holder blob $2.
-field() {
-  store_git cat-file -p "$2" 2>/dev/null | sed -n "s/^$1=//p" | head -n1
-}
-
-# Succeeds when the holder recorded in blob $1 is still running.
-running() {
-  local pid lstart
-  pid="$(field pid "$1")"
-  lstart="$(field lstart "$1")"
-  [[ "${pid}" =~ ^[1-9][0-9]*$ && -n "${lstart}" && "$(lstart_of "${pid}")" == "${lstart}" ]]
-}
 
 # Prints the holder blob of the lock, or nothing when the lock is free.
 # Only rev-parse exit 1 means the ref is missing; any other failure means the store itself cannot be read.
@@ -103,21 +86,21 @@ holder() {
 }
 
 refuse() {
-  echo "oe lock: another session holds ${repo}#${epic}: pid=$(field pid "$1") started=$(field started "$1")" >&2
+  echo "oe lock: another session holds ${repo}#${epic}: pid=$(lock_field pid "$1") started=$(lock_field started "$1")" >&2
   exit 4
 }
 
 if [[ "${cmd}" == release ]]; then
   current="$(holder)" || exit 1
   [[ -n "${current}" ]] || exit 0
-  [[ "$(field token "${current}")" == "${token}" ]] || refuse "${current}"
+  [[ "$(lock_field token "${current}")" == "${token}" ]] || refuse "${current}"
   store_git update-ref -d "${ref}" "${current}" || fail "cannot release ${repo}#${epic}"
   exit 0
 fi
 
 pid="${OE_SESSION_PID:-}"
 [[ "${pid}" =~ ^[1-9][0-9]*$ ]] || usage "OE_SESSION_PID must name the session's process"
-lstart="$(lstart_of "${pid}")"
+lstart="$(process_start "${pid}")"
 [[ -n "${lstart}" ]] || usage "OE_SESSION_PID ${pid} is not running"
 
 if [[ -z "${token}" ]]; then
@@ -136,7 +119,7 @@ blob="$(printf 'token=%s\npid=%s\nlstart=%s\nrepo=%s\nepic=%s\nstarted=%s\n' \
 for _ in 1 2 3; do
   current="$(holder)" || exit 1
   if [[ -n "${current}" ]]; then
-    if [[ "$(field token "${current}")" != "${token}" ]] && running "${current}"; then
+    if [[ "$(lock_field token "${current}")" != "${token}" ]] && lock_holder_running "${current}"; then
       refuse "${current}"
     fi
     expected="${current}"

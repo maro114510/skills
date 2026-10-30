@@ -10,8 +10,7 @@
 #   oe worktree remove <issue-number>
 #
 # - Run it from the shared checkout or any worktree of the same clone.
-# - The worktree lives at <root>/issue-<number>, where <root> is OE_WORKTREE_ROOT when set.
-# - Otherwise <root> is a sibling of the main checkout named after it with -oe appended.
+# - The worktree lives at <root>/issue-<number>, where <root> is what worktree_root in oe-config.sh prints.
 #
 # | Subcommand | Does |
 # |---|---|
@@ -63,9 +62,7 @@ fi
 branch="${branch_prefix}${n}"
 
 common="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || usage "Not inside a Git repository"
-main="$(git worktree list --porcelain | sed -n '1s/^worktree //p')"
-[[ -n "${main}" ]] || fail "cannot find the main checkout"
-root="${OE_WORKTREE_ROOT:-${main%/*}/${main##*/}-oe}"
+root="$(worktree_root)" || fail "cannot find the main checkout"
 [[ "${root}" == /* ]] || usage "OE_WORKTREE_ROOT must be an absolute path"
 wt="${root}/issue-${n}"
 
