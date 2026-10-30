@@ -54,7 +54,13 @@ commit() { # message, [file content]
 }
 
 run() {
-  out="$(cd "${clone}" && PATH="${bin}:${PATH}" bash "${target}" "$@" 2>&1)"
+  run_from . "$@"
+}
+
+run_from() { # directory inside the clone, args...
+  local dir="$1"
+  shift
+  out="$(cd "${clone}/${dir}" && PATH="${bin}:${PATH}" bash "${target}" "$@" 2>&1)"
   rc=$?
 }
 
@@ -142,6 +148,14 @@ run
 [[ "${rc}" == 3 && "${out}" == *"CONFLICT #5"* ]] && no_context && r=0 || r=1
 check "older Closes with newer Related exits 3 with CONFLICT and no context" "${r}"
 
+setup
+commit $'feat: a\n\nCloses #5'
+commit $'fix: b\n\nRelated #5'
+commit $'feat: c\n\nCloses #7'
+run
+[[ "${rc}" == 3 && "${out}" == "CONFLICT #5" ]] && r=0 || r=1
+check "CONFLICT alongside a clean Closes prints only the CONFLICT line" "${r}"
+
 # 5. Exact-case template lookup prints exactly one template.
 setup
 mkdir -p "${clone}/.github"
@@ -169,6 +183,17 @@ run
 diff_out="$(section diff)"
 [[ "${rc}" == 0 && "${diff_out}" == *"+visible change"* && "${diff_out}" != *"package-lock.json"* ]] && r=0 || r=1
 check "big lockfile and small change: full diff without the lockfile" "${r}"
+
+setup
+mkdir -p "${clone}/sub"
+seq 1 2000 >"${clone}/package-lock.json"
+echo "visible change" >"${clone}/sub/a.txt"
+g add -A
+commit 'feat: small change with a big root lockfile'
+run_from sub
+diff_out="$(section diff)"
+[[ "${rc}" == 0 && "${diff_out}" == *"+visible change"* && "${diff_out}" != *"package-lock.json"* ]] && r=0 || r=1
+check "run from a subdirectory: root lockfile still excluded from the diff" "${r}"
 
 setup
 for i in $(seq 1 21); do echo "${i}" >"${clone}/f${i}.txt"; done
