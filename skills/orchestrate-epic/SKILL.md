@@ -43,6 +43,8 @@ Parse `$ARGUMENTS`. When the harness left it unexpanded, as OpenCode V2 does for
 
 Confirm `gh auth status` succeeds, and `gh repo view <repo> --json nameWithOwner` names the same repository as `git remote get-url origin`. Otherwise stop and say why.
 
+Run `bash <skills-root>/create-pr/scripts/lang.sh` in the checkout. On a non-zero exit, show its output and stop, because every Owner would push its branch before create-pr reports the same error.
+
 In Codex, agents inherit this session's sandbox, and `oe` needs the network while agents write worktrees outside the checkout. When Codex reports a sandbox other than `danger-full-access`, stop and tell the user to rerun with `--dangerously-bypass-approvals-and-sandbox`.
 
 ## Step 2: Lock
