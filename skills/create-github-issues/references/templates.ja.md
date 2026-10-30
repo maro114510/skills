@@ -82,9 +82,8 @@ flowchart LR
 - 要件: <bullet> / <bullet>
 - 仕様: <bullet>（決定済み事項がなければ「なし」と書く）
 - 理想状態: <完了時に成り立つべき状態を1行で>
-- 自動確認: <bullet>（エージェントがリポジトリか CI で実行するもの。Given X / When Y / Then Z 形式、または手順・アサーション単位の1行ずつ）
-- 手動確認: <bullet>（マージ前に人間が行うもの。なければ「なし」と書く）
-  （2つのリスト合わせて最大5件。上流文書が完全なリストを所有している場合は、失敗系を優先した5件＋その文書への prose 参照1行 — Step 4 参照）
+- 自動確認: <bullet>
+- 手動確認: <bullet>、またはなし
 
 #### T2: <タイトル>（Wave 2 / 依存: T1）
 - 背景: <1行>
@@ -93,7 +92,6 @@ flowchart LR
 - 理想状態: <1行>
 - 自動確認: <bullet>
 - 手動確認: なし
-  （2つのリスト合わせて最大5件。上流文書が完全なリストを所有している場合は、失敗系5件＋prose 参照）
 
 Step 1.5 で統合済み文書が変更され、この Tn の内容が変わった場合は、依存行を単純な「依存: ...」ではなく「（T<doc> に直接）」または「（T<via> を介して推移的）」と書く — サマリーでどちらになるかを承認する必要がある。
 
@@ -236,15 +234,13 @@ flowchart LR
 ### 検証方法
 
 #### 自動確認
-- {A check an agent can run and observe on its own, in the repository or CI: assert what, run which command}
+- {Automated check: assert what, run which command}
 
 #### 手動確認
-- {A check that needs a human, another machine, a real device, an outside account, or production, one line each. Omit this heading and its list when there are none, and likewise the 自動確認 heading when it has none}
+- {Manual check, one line}
 
 {Up to 5 bullets across both lists. If it takes more than 5 to cover the real scenarios, that's a signal this Issue should be split — see Step 2 — unless an upstream authoritative document owns the full list: then keep 5 bullets chosen by failure mode rather than happy path, and add one prose line after the bullets (never a sixth bullet) pointing to that document as the authoritative full list. The pointer option is unavailable when no such document exists.}
 ```
-
-Keep the `#### 自動確認` and `#### 手動確認` headings exactly as written: pr-verify and create-pr find the two lists by them.
 
 **Banned in every section above:** lettered step sequences (`a→b→c→d`), pseudocode, function signatures, multi-level nested bullets. If a task genuinely needs that much detail to specify, split it into more child Issues, or add a single line linking to an existing design doc — never restate the doc inline.
 

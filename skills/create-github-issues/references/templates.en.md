@@ -82,9 +82,8 @@ flowchart LR
 - Requirements: <bullet> / <bullet>
 - Specs: <bullet> (write "none" if nothing was decided)
 - Target state: <what must be true when done, in one line>
-- Automated checks: <bullet> (an agent runs them in the repository or CI; either Given X / When Y / Then Z form, or one line per step/assertion)
-- Manual checks: <bullet> (a human runs them before the merge; write "none" if there are none)
-  (Up to 5 across both lists; if an upstream document owns the full list, keep 5 chosen by failure mode and add a prose pointer to it — see Step 4)
+- Automated checks: <bullet>
+- Manual checks: <bullet>, or none
 
 #### T2: <title> (Wave 2 / Depends on: T1)
 - Background: <one line>
@@ -93,7 +92,6 @@ flowchart LR
 - Target state: <one line>
 - Automated checks: <bullet>
 - Manual checks: none
-  (Up to 5 across both lists; if an upstream document owns the full list, 5 failure-mode items + prose pointer)
 
 When this Tn's content changed because Step 1.5 changed a merged document, write its dependency line as "(directly on T<doc>)" or "(transitively via T<via>)" instead of the plain "Depends on: ..." — the summary must approve which of the two applies.
 
@@ -236,15 +234,13 @@ Both a non-container `Tn` (leaf) and a `Tn.m` (grandchild) use this shape.
 ### Verification
 
 #### Automated checks
-- {A check an agent can run and observe on its own, in the repository or CI: assert what, run which command}
+- {Automated check: assert what, run which command}
 
 #### Manual checks
-- {A check that needs a human, another machine, a real device, an outside account, or production, one line each. Omit this heading and its list when there are none, and likewise the Automated checks heading when it has none}
+- {Manual check, one line}
 
 {Up to 5 bullets across both lists. If it takes more than 5 to cover the real scenarios, that's a signal this Issue should be split — see Step 2 — unless an upstream authoritative document owns the full list: then keep 5 bullets chosen by failure mode rather than happy path, and add one prose line after the bullets (never a sixth bullet) pointing to that document as the authoritative full list. The pointer option is unavailable when no such document exists.}
 ```
-
-Keep the `#### Automated checks` and `#### Manual checks` headings in English exactly as written: pr-verify and create-pr find the two lists by them.
 
 **Banned in every section above:** lettered step sequences (`a→b→c→d`), pseudocode, function signatures, multi-level nested bullets. If a task genuinely needs that much detail to specify, split it into more child Issues, or add a single line linking to an existing design doc — never restate the doc inline.
 
