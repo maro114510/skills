@@ -1,14 +1,17 @@
 #!/usr/bin/env bats
 # Tests for oe ready.
 #
-# - Each test writes the GitHub state it needs as JSON, then runs oe ready against it.
+# - Each test writes the GitHub state it needs as JSON and the host-local records it needs, then runs oe ready against them.
 # - testdata/fake-gh.sh stands in for gh and answers every read from that state.
 # - testdata/fake-github.jq lists every field of the state and its default.
+# - testdata/records.bash writes the host-local records under the test's own OE_STATE_DIR.
 # - Every test runs at 08:00 on the same day.
 # shellcheck disable=SC2292 # bats fails a test on a mid-test `[[ ]]` only under bash 4.1+; `[ ]` works on every bash.
 
 setup() {
   bats_require_minimum_version 1.5.0
+  load testdata/records
+  export OE_STATE_DIR="${BATS_TEST_TMPDIR}/state"
   oe="${BATS_TEST_DIRNAME}/oe"
   mkdir -p "${BATS_TEST_TMPDIR}/bin"
   printf '#!/usr/bin/env bash\nexec bash "%s/testdata/fake-gh.sh" "$@"\n' "${BATS_TEST_DIRNAME}" >"${BATS_TEST_TMPDIR}/bin/gh"
@@ -118,14 +121,11 @@ JSON
   "issues": [{
     "number": 5,
     "branch": true,
-    "comments": [
-      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
-      {"by": "OWNER", "at": "07:01", "body": "<!-- oe:attempt -->"}
-    ],
     "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}}]
   }]
 }
 JSON
+  records 5 claim@07:00 attempt@07:01
   run bash "${oe}" ready o/r 1
   [ "${status}" -eq 0 ]
   [ "$(action_of 5)" = start-verifier ]
@@ -137,6 +137,26 @@ JSON
     [ "${status}" -eq 1 ]
     [ -z "${output}" ]
   done
+}
+
+@test "an unreadable record file fails the read and prints nothing" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{"number": 5, "branch": true}]
+}
+JSON
+  records 5 claim@07:00
+  echo 'not json' >>"$(record_file 5)"
+
+  run --separate-stderr bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 1 ]
+  [ -z "${output}" ]
+  case "${stderr}" in
+  *"record"*) ;;
+  *) return 1 ;;
+  esac
 }
 
 # Before the claim
@@ -201,14 +221,13 @@ JSON
   [ "$(action_of 5)" = wait-dependencies ]
 }
 
-@test "an Issue whose branch exists without a pull request is not ready to claim and gets an Owner" {
+@test "an Issue whose branch exists without a pull request and without any record on this host is not claimed again and gets an Owner" {
   github <<'JSON'
 {
   "default_branch": {"checks": {"test": "success"}},
   "issues": [{
     "number": 5,
-    "branch": true,
-    "comments": [{"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"}]
+    "branch": true
   }]
 }
 JSON
@@ -225,11 +244,11 @@ JSON
   "default_branch": {"checks": {"test": "success"}},
   "issues": [{
     "number": 5,
-    "comments": [{"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"}],
     "pull_requests": [{"number": 50, "state": "merged", "opened": "07:10", "merged": "07:40"}]
   }]
 }
 JSON
+  records 5 claim@07:00
 
   run bash "${oe}" ready o/r 1
 
@@ -243,11 +262,11 @@ JSON
   "default_branch": {"checks": {"test": "success"}},
   "issues": [{
     "number": 5,
-    "comments": [{"by": "OWNER", "at": "07:50", "body": "<!-- oe:claim -->"}],
     "pull_requests": [{"number": 50, "state": "merged", "opened": "07:10", "merged": "07:40"}]
   }]
 }
 JSON
+  records 5 claim@07:50
 
   run bash "${oe}" ready o/r 1
 
@@ -262,11 +281,11 @@ JSON
   "issues": [{
     "number": 5,
     "branch": true,
-    "comments": [{"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"}],
     "pull_requests": [{"number": 50, "state": "closed", "opened": "07:10"}]
   }]
 }
 JSON
+  records 5 claim@07:00
 
   run bash "${oe}" ready o/r 1
 
@@ -316,14 +335,11 @@ JSON
   "issues": [{
     "number": 5,
     "branch": true,
-    "comments": [
-      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
-      {"by": "OWNER", "at": "07:01", "body": "<!-- oe:attempt -->"}
-    ],
     "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"lint": "success", "test": "failure"}}]
   }]
 }
 JSON
+  records 5 claim@07:00 attempt@07:01
 
   run bash "${oe}" ready o/r 1
 
@@ -338,14 +354,11 @@ JSON
   "issues": [{
     "number": 5,
     "branch": true,
-    "comments": [
-      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
-      {"by": "OWNER", "at": "07:01", "body": "<!-- oe:attempt -->"}
-    ],
     "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["failure", "pending"]}]
   }]
 }
 JSON
+  records 5 claim@07:00 attempt@07:01
 
   run bash "${oe}" ready o/r 1
 
@@ -360,14 +373,11 @@ JSON
   "issues": [{
     "number": 5,
     "branch": true,
-    "comments": [
-      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
-      {"by": "OWNER", "at": "07:01", "body": "<!-- oe:attempt -->"}
-    ],
     "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "conflicting": true}]
   }]
 }
 JSON
+  records 5 claim@07:00 attempt@07:01
 
   run bash "${oe}" ready o/r 1
 
@@ -382,14 +392,11 @@ JSON
   "issues": [{
     "number": 5,
     "branch": true,
-    "comments": [
-      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
-      {"by": "OWNER", "at": "07:01", "body": "<!-- oe:attempt -->"}
-    ],
     "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success", "pending"]}]
   }]
 }
 JSON
+  records 5 claim@07:00 attempt@07:01
 
   run bash "${oe}" ready o/r 1
 
@@ -404,14 +411,11 @@ JSON
   "issues": [{
     "number": 5,
     "branch": true,
-    "comments": [
-      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
-      {"by": "OWNER", "at": "07:01", "body": "<!-- oe:attempt -->"}
-    ],
     "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"lint": "success", "test": "in_progress"}}]
   }]
 }
 JSON
+  records 5 claim@07:00 attempt@07:01
 
   run bash "${oe}" ready o/r 1
 
@@ -426,14 +430,11 @@ JSON
   "issues": [{
     "number": 5,
     "branch": true,
-    "comments": [
-      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
-      {"by": "OWNER", "at": "07:01", "body": "<!-- oe:attempt -->"}
-    ],
     "pull_requests": [{"number": 50, "opened": "07:10", "committed": "06:00", "pushed": "07:55"}]
   }]
 }
 JSON
+  records 5 claim@07:00 attempt@07:01
 
   run bash "${oe}" ready o/r 1
 
@@ -448,14 +449,11 @@ JSON
   "issues": [{
     "number": 5,
     "branch": true,
-    "comments": [
-      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
-      {"by": "OWNER", "at": "07:01", "body": "<!-- oe:attempt -->"}
-    ],
     "pull_requests": [{"number": 50, "opened": "07:10", "pushed": "07:40"}]
   }]
 }
 JSON
+  records 5 claim@07:00 attempt@07:01
 
   run bash "${oe}" ready o/r 1
 
@@ -470,14 +468,11 @@ JSON
   "issues": [{
     "number": 5,
     "branch": true,
-    "comments": [
-      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
-      {"by": "OWNER", "at": "07:01", "body": "<!-- oe:attempt -->"}
-    ],
     "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["pending"]}]
   }]
 }
 JSON
+  records 5 claim@07:00 attempt@07:01
 
   run bash "${oe}" ready o/r 1
 
@@ -492,14 +487,11 @@ JSON
   "issues": [{
     "number": 5,
     "branch": true,
-    "comments": [
-      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
-      {"by": "OWNER", "at": "07:01", "body": "<!-- oe:attempt -->"}
-    ],
     "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["pending", "pending"]}]
   }]
 }
 JSON
+  records 5 claim@07:00 attempt@07:01
 
   run bash "${oe}" ready o/r 1
 
@@ -516,16 +508,11 @@ JSON
   "issues": [{
     "number": 5,
     "branch": true,
-    "comments": [
-      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
-      {"by": "OWNER", "at": "07:01", "body": "<!-- oe:attempt -->"},
-      {"by": "OWNER", "at": "07:20", "body": "<!-- oe:attempt -->"},
-      {"by": "OWNER", "at": "07:40", "body": "<!-- oe:attempt -->"}
-    ],
     "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["failure"]}]
   }]
 }
 JSON
+  records 5 claim@07:00 attempt@07:01 attempt@07:20 attempt@07:40
 
   run bash "${oe}" ready o/r 1
 
@@ -540,42 +527,11 @@ JSON
   "issues": [{
     "number": 5,
     "branch": true,
-    "comments": [
-      {"by": "OWNER", "at": "06:00", "body": "<!-- oe:claim -->"},
-      {"by": "OWNER", "at": "06:01", "body": "<!-- oe:attempt -->"},
-      {"by": "OWNER", "at": "06:20", "body": "<!-- oe:attempt -->"},
-      {"by": "OWNER", "at": "06:40", "body": "<!-- oe:attempt -->"},
-      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
-      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:attempt -->"}
-    ],
     "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["failure"]}]
   }]
 }
 JSON
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = start-owner ]
-}
-
-@test "an attempt record by an untrusted author does not count toward the cap" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "comments": [
-      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
-      {"by": "OWNER", "at": "07:01", "body": "<!-- oe:attempt -->"},
-      {"by": "OWNER", "at": "07:20", "body": "<!-- oe:attempt -->"},
-      {"by": "NONE", "at": "07:40", "body": "<!-- oe:attempt -->"}
-    ],
-    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["failure"]}]
-  }]
-}
-JSON
+  records 5 claim@06:00 attempt@06:01 attempt@06:20 attempt@06:40 claim@07:00 attempt@07:00
 
   run bash "${oe}" ready o/r 1
 
@@ -593,13 +549,12 @@ JSON
     "number": 5,
     "branch": true,
     "comments": [
-      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
-      {"by": "OWNER", "at": "07:01", "body": "<!-- oe:attempt -->"},
       {"by": "OWNER", "at": "07:10", "body": "<!-- oe:question -->\nWhich option?"}
     ]
   }]
 }
 JSON
+  records 5 claim@07:00 attempt@07:01
 
   run bash "${oe}" ready o/r 1
 
@@ -615,8 +570,6 @@ JSON
     "number": 5,
     "branch": true,
     "comments": [
-      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
-      {"by": "OWNER", "at": "07:01", "body": "<!-- oe:attempt -->"},
       {"by": "OWNER", "at": "07:10", "body": "<!-- oe:question -->\nWhich option?"},
       {"by": "MEMBER", "at": "07:20", "body": "<!-- oe:note -->\nUse option A"},
       {"by": "NONE", "at": "07:21", "body": "Use option A"},
@@ -625,6 +578,7 @@ JSON
   }]
 }
 JSON
+  records 5 claim@07:00 attempt@07:01
 
   run bash "${oe}" ready o/r 1
 
@@ -640,8 +594,6 @@ JSON
     "number": 5,
     "branch": true,
     "comments": [
-      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
-      {"by": "OWNER", "at": "07:01", "body": "<!-- oe:attempt -->"},
       {"by": "OWNER", "at": "07:10", "body": "<!-- oe:question -->\nWhich option?"},
       {"by": "MEMBER", "at": "07:20", "body": "Use option A"}
     ],
@@ -649,6 +601,7 @@ JSON
   }]
 }
 JSON
+  records 5 claim@07:00 attempt@07:01
 
   run bash "${oe}" ready o/r 1
 
@@ -664,16 +617,14 @@ JSON
     "number": 5,
     "branch": true,
     "comments": [
-      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
-      {"by": "OWNER", "at": "07:01", "body": "<!-- oe:attempt -->"},
       {"by": "OWNER", "at": "07:02", "body": "<!-- oe:question -->\nWhich option?"},
-      {"by": "MEMBER", "at": "07:03", "body": "Use option A"},
-      {"by": "OWNER", "at": "07:04", "body": "<!-- oe:attempt -->"}
+      {"by": "MEMBER", "at": "07:03", "body": "Use option A"}
     ],
     "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"]}]
   }]
 }
 JSON
+  records 5 claim@07:00 attempt@07:01 attempt@07:04
 
   run bash "${oe}" ready o/r 1
 
@@ -688,10 +639,6 @@ JSON
   "issues": [{
     "number": 5,
     "branch": true,
-    "comments": [
-      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
-      {"by": "OWNER", "at": "07:30", "body": "<!-- oe:attempt -->"}
-    ],
     "pull_requests": [{
       "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
       "reviews": [{"by": "MEMBER", "at": "07:40", "body": "Rename this"}]
@@ -699,6 +646,7 @@ JSON
   }]
 }
 JSON
+  records 5 claim@07:00 attempt@07:30
 
   run bash "${oe}" ready o/r 1
 
@@ -713,10 +661,6 @@ JSON
   "issues": [{
     "number": 5,
     "branch": true,
-    "comments": [
-      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
-      {"by": "OWNER", "at": "07:30", "body": "<!-- oe:attempt -->"}
-    ],
     "pull_requests": [{
       "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
       "reviews": [{"by": "MEMBER", "at": "07:20", "body": "Rename this"}]
@@ -724,6 +668,7 @@ JSON
   }]
 }
 JSON
+  records 5 claim@07:00 attempt@07:30
 
   run bash "${oe}" ready o/r 1
 
@@ -738,10 +683,6 @@ JSON
   "issues": [{
     "number": 5,
     "branch": true,
-    "comments": [
-      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
-      {"by": "OWNER", "at": "07:30", "body": "<!-- oe:attempt -->"}
-    ],
     "pull_requests": [{
       "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
       "thread_comments": [{"by": "COLLABORATOR", "at": "07:40", "body": "This leaks the token"}]
@@ -749,6 +690,7 @@ JSON
   }]
 }
 JSON
+  records 5 claim@07:00 attempt@07:30
 
   run bash "${oe}" ready o/r 1
 
@@ -763,10 +705,6 @@ JSON
   "issues": [{
     "number": 5,
     "branch": true,
-    "comments": [
-      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
-      {"by": "OWNER", "at": "07:30", "body": "<!-- oe:attempt -->"}
-    ],
     "pull_requests": [{
       "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
       "thread_comments": [{"by": "NONE", "at": "07:40", "body": "This leaks the token"}]
@@ -774,6 +712,7 @@ JSON
   }]
 }
 JSON
+  records 5 claim@07:00 attempt@07:30
 
   run bash "${oe}" ready o/r 1
 
@@ -791,14 +730,13 @@ JSON
     "number": 5,
     "branch": true,
     "comments": [
-      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
-      {"by": "OWNER", "at": "07:01", "body": "<!-- oe:attempt -->"},
       {"by": "OWNER", "at": "07:30", "body": "<!-- oe:question -->\nWhich option?"}
     ],
     "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "pushed_during_read": true}]
   }]
 }
 JSON
+  records 5 claim@07:00 attempt@07:01
 
   run bash "${oe}" ready o/r 1
 
@@ -813,14 +751,11 @@ JSON
   "issues": [{
     "number": 5,
     "branch": true,
-    "comments": [
-      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
-      {"by": "OWNER", "at": "07:01", "body": "<!-- oe:attempt -->"}
-    ],
     "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "pushed_during_read": true}]
   }]
 }
 JSON
+  records 5 claim@07:00 attempt@07:01
 
   run --separate-stderr bash "${oe}" ready o/r 1
 
@@ -851,16 +786,13 @@ JSON
   "issues": [{
     "number": 5,
     "branch": true,
-    "comments": [
-      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
-      {"by": "OWNER", "at": "07:30", "body": "<!-- oe:attempt -->"}
-    ],
     "pull_requests": [{
       "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"], "older_threads": 100
     }]
   }]
 }
 JSON
+  records 5 claim@07:00 attempt@07:30
 
   run --separate-stderr bash "${oe}" ready o/r 1
 
@@ -875,18 +807,77 @@ JSON
   "issues": [{
     "number": 5,
     "branch": true,
-    "comments": [
-      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
-      {"by": "OWNER", "at": "07:01", "body": "<!-- oe:attempt -->"}
-    ],
     "pull_requests": [{"number": 15, "opened": "07:10", "checks": {"test": "success"}}],
     "older_pull_requests": 100
   }]
 }
 JSON
+  records 5 claim@07:00 attempt@07:01
 
   run --separate-stderr bash "${oe}" ready o/r 1
 
   [ "${status}" -eq 0 ]
   [ "$(action_of 5)" = start-verifier ]
+}
+
+@test "more comments than one read holds fail the read when the claim is older than every comment read" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [{"by": "MEMBER", "at": "07:10", "body": "Looks fine"}],
+    "older_comments": 150
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:01
+
+  run --separate-stderr bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 1 ]
+  [ -z "${output}" ]
+}
+
+@test "more comments than one read holds do not fail the read when every comment since the claim was read" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "MEMBER", "at": "07:00", "body": "Looks fine"},
+      {"by": "OWNER", "at": "07:20", "body": "<!-- oe:question -->\nWhich option?"}
+    ],
+    "older_comments": 150
+  }]
+}
+JSON
+  records 5 claim@07:10 attempt@07:11
+
+  run --separate-stderr bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-answer ]
+}
+
+@test "a question from before the latest claim does not hold a restarted Issue" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [{"by": "OWNER", "at": "06:30", "body": "<!-- oe:question -->\nWhich option?"}]
+  }]
+}
+JSON
+  records 5 claim@06:00 attempt@06:01 claim@07:00
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-owner ]
 }
