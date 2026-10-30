@@ -4,9 +4,9 @@ description: >
   Create GitHub Issues from a conversation, plan, or TODO list.
   Produces one Epic parent Issue and child Issues per task, each with background, requirements, specs, dependency, and acceptance criteria, linked to the Epic as GitHub sub-issues with dependencies recorded as blocked-by/blocking relations.
   Requirements (what) and specs (how) are kept separate and length-capped so bodies stay concise, and the Epic also renders a Mermaid diagram (a compact table for large epics) showing which child Issues block each other and which can run in parallel.
-  Issue titles, bodies, and every interactive prompt are written in Japanese by default; pass `lang en` to generate the whole run in English instead.
+  Issue titles, bodies, and every interactive prompt are written in the language that `lang <ja|en>`, then git config `skills.lang`, then Japanese resolves to, so Issues match the language of PRs.
   Use this skill when the user asks to track tasks with an Epic, turn TODOs or a plan into GitHub Issues, or extract action items from a review or investigation.
-allowed-tools: Bash(gh:*)
+allowed-tools: Bash(gh:*), Bash(git config --get skills.lang)
 argument-hint: "[repo <owner/repo>] [lang <ja|en>] [project <n>]"
 ---
 
@@ -16,6 +16,24 @@ Create a GitHub Epic and child Issues from conversation context.
 Write concise, length-capped bodies (requirements separated from specs), model dependencies explicitly, then link hierarchy and dependencies via native `gh` CLI flags and render the dependency graph in the Epic.
 
 **Core rule that governs every step below: an Issue body may only contain facts already surfaced and approved earlier in this flow (Step 1.5 / Step 2 / Step 3). Step 4 is formatting, not authoring — never introduce a new requirement, spec detail, or dependency for the first time while writing the final Markdown body.** If you notice you need to state something new while writing a body, stop, go back to Step 3, and get it approved there first.
+
+---
+
+## Step 0: Determine Output Language
+
+Resolve `LANG` before anything else, from the first source that is set:
+
+| Source | Read with |
+|---|---|
+| `lang <value>` in `$ARGUMENTS` | The token after `lang`, or none when `lang` is the last token |
+| git config `skills.lang` | `git config --get skills.lang`, run only when `$ARGUMENTS` has no `lang`, so an explicit argument wins over a broken config. Exit 1 means unset |
+| Default | `ja` |
+
+`LANG` must be exactly `ja` or `en`. Stop the run on anything else: a `lang` with no value or another value, an empty or other `skills.lang`, or a non-zero exit from `git config --get` other than 1. Never fall back to `ja` on an invalid value, never ask a question, and never run another command. Report the value and its source in one English line, such as `Invalid language "fr" from git config skills.lang; use ja or en.`
+
+Otherwise, state the result in one English line before any other output, such as `Language: en (git config skills.lang)`, `Language: ja (argument lang)`, or `Language: ja (default)`. It stays English whatever `LANG` is, because a wrong `LANG` is exactly what it must expose.
+
+`LANG` is fixed for the rest of this run and governs everything produced from here on — AskUserQuestion prompts, summaries, reviews, warnings, Issue/Epic titles, and Issue/Epic bodies. From Step 1.5 through Step 6, read only `references/templates.<LANG>.md` — never the other language's file, and never switch languages mid-run.
 
 ---
 
@@ -33,14 +51,6 @@ gh repo view --json nameWithOwner -q .nameWithOwner
 Store the printed `owner/repo` as `REPO`.
 
 Also check `$ARGUMENTS` for `project <number>` and store it as `PROJECT_NUM` — an optional GitHub Project to link the Epic and every created Issue to, added after creation per 5.7. `gh issue create` has no `--project` flag, so linking happens after creation. Without `project`, 5.7 is skipped.
-
----
-
-## Step 1a: Determine Output Language
-
-Check `$ARGUMENTS` for `lang <ja|en>` and store it as `LANG`; default to `ja` if omitted (preserves existing behavior).
-
-`LANG` is fixed for the rest of this run and governs everything produced from here on — AskUserQuestion prompts, summaries, reviews, warnings, Issue/Epic titles, and Issue/Epic bodies. From Step 1.5 through Step 6, read only `references/templates.<LANG>.md` — never the other language's file, and never switch languages mid-run.
 
 ---
 
