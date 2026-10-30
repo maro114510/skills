@@ -92,7 +92,7 @@ Take the references from Step 1's `== issues` section and write each in the desc
 | Issue only in the branch name or a commit subject | `Closes #NNN`, or `Related #NNN` when the rule below allows it |
 
 - `Related` only when a deferred requirement that still needs implementing is reported in the conversation, commits, or a caller's `SKIPPED`; the user says the implementation is partial; or the issue is only cited in passing. Post-merge verification, QA, E2E, and release work never count.
-- Write each reference alone on its own line, never inside a sentence or after another reference, because Step 6's script links only a reference that stands alone on its line.
+- Write each reference alone on its own line, never inside a sentence, as a list item, or after another reference, because Step 6's script links only a reference that stands alone on its line.
 - For each `Related` issue, state what this PR resolves and what remains.
 
 ## Step 3. Generate the PR Description
@@ -113,7 +113,7 @@ Follow the template contents Step 1 printed, without reading the file. Do not ig
 - Follow any inline comments or section-specific instructions.
 - Check a verification item, such as tests, lint, or a build, only if it ran in this session and passed; adding a test is not running it. Otherwise leave it unchecked with the reason on the same line, e.g. `- [ ] Unit tests pass (not run: no test runner)`.
 - Check any other checklist item based on the actual change.
-- Write each template section by the 3.3 Content of the section serving the same purpose, such as Summary for "What", Background for "Why", and Test Plan for "How to test".
+- Write each template section by the 3.3 Content of the section serving the same purpose, such as Summary for "What", Background for "Why", and Test Plan for "How to test". Where the template's own instructions for a section differ, they win.
 - Add a 3.3 section at the end only for useful information that no template section holds, such as implementation details or risks.
 
 ### 3.3 Sections
@@ -144,7 +144,7 @@ Write each paragraph or bullet as a single source line, however long and even wh
 
 ### 3.6 Compact Pass
 
-Before moving to Step 4, re-read the full draft once as a first-time reader with no other context, and check every sentence against the 3.3 Content of the section that holds it, and against 3.4 and 3.5. Move a sentence that fits another section's Content, delete one that restates a fact given earlier, and rejoin a broken line.
+Before moving to Step 4, re-read the full draft once as a first-time reader with no other context, and check every sentence against the 3.3 Content of the section that holds it, and against 3.4 and 3.5. Move a sentence that fits another section's Content, delete one that fits none or restates a fact given earlier, and rejoin a broken line.
 
 If nothing fails, keep the draft as written — depth is intentional for this skill's purpose as a design record, so do not cut content for brevity alone.
 
