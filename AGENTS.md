@@ -90,10 +90,11 @@ Skills read settings from two places, split by who owns the value.
 
 Skills read a key with `git config --get <key>`, so git's own precedence decides between local and global values.
 
-| Key | Values | Read by |
+| Key | Values | Applies to |
 |---|---|---|
 | `skills.lang` | `ja`, `en` | Every skill that takes a `lang` argument |
 
+This is the convention every such skill must follow; a skill that predates it may still resolve only its argument until it is updated.
 A skill resolves `skills.lang` in this order:
 
 1. The `lang <value>` argument
