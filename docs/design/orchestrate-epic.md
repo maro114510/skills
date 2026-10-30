@@ -6,7 +6,7 @@ orchestrate-epic turns an Epic's child Issues into verified PRs in dependency or
 
 ## Responsibilities
 
-Each part does one job and stores no state of its own. State lives on GitHub, except oe's claim, attempt, and findings records, which stay in the host-local record store.
+Each part does one job and stores no state of its own. State lives on GitHub, except oe's claim, attempt, and findings records, which stay in the host-local record store, and the pane of each Epic's board.
 
 ### Coordinator
 
@@ -36,7 +36,8 @@ Each part does one job and stores no state of its own. State lives on GitHub, ex
 | Host-local record store | Keeps each Issue's claim, attempt, and findings records until oe forget drops them | oe lock's directory: `$XDG_STATE_HOME/orchestrate-epic` or `~/.local/state/orchestrate-epic` |
 | oe lock | Refuses a second session for the same Epic | A host-local lock |
 | oe ready | Reads GitHub and the record store and prints each Issue's next action | nothing |
-| oe status | Shows each Issue's step, PR, CI result, verdict and failure reason, attempts, running agent, and time in step. `--watch` refreshes it | nothing |
+| oe status | Shows each Issue's step, PR, CI result, verdict and failure reason, attempts, running agent, and time in step. `--watch` refreshes it, and stops once the session that held the Epic's lock ends | nothing |
+| oe board | Inside Herdr with git config `skills.herdr` true, opens a pane below the session's that runs `oe status --watch` every 3 minutes, or reuses the Epic's pane from an earlier start | A Herdr pane, and the pane's record on this host |
 | oe wait | Waits until oe ready's output changes or 9 minutes pass | nothing |
 | oe brief | Builds the brief handed to an Owner or a Verifier, and records each Verifier start before its brief | A pending verify status on the SHA, for a Verifier |
 | oe claim | Creates the Issue's branch and writes a claim record | A branch on origin and the record store |
@@ -275,6 +276,8 @@ sequenceDiagram
 - A finding in a bot's review body, outside any thread, starts nothing
 - A bot that refuses the re-review on a rate limit leaves the repair unreviewed
 - A bot finding the Owner cannot reproduce still spends an attempt
+- With the board open, oe reads about 80 × (1 + child Issues) GraphQL points an hour, so an Epic of about 60 child Issues reaches the 5,000-point hourly limit that the token shares with every other gh use
+- A board whose session runs in a shared background service, as in OpenCode V2 or an interactive Codex session, keeps refreshing after the session ends without releasing its lock
 
 ## Decisions
 
@@ -305,3 +308,7 @@ sequenceDiagram
 | Record key | Repository and Issue: an Issue has one parent Epic, and no writer is given the Epic |
 | Dropping records | oe forget, when a session ends with every Issue done. It refuses while an Issue is open, and oe ready stays read-only |
 | Acceptance checks | Verification splits automated checks from manual ones, and no agent checks a box that needs a human, template boxes included |
+| The board in Herdr | Opt-in with git config `skills.herdr`, read only inside Herdr, so no other run calls herdr and no Herdr user gets a pane unasked |
+| Board refresh | Every 3 minutes, slower than oe wait's minute, because each refresh repeats oe ready's GitHub reads |
+| Board lifetime | The board stops by itself once its session ends, crash included, and leaves its last view. A later start reuses its pane, but never one the user took over |
+| Notifications | None. A question or a park shows on the board |
