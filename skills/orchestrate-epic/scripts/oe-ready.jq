@@ -10,13 +10,14 @@
 # | max_verifier_starts | Verifier starts on one commit before the Issue parks |
 # | verify_context | The commit status context that holds the verdict |
 # | pr_heads | The verdict, the Verifier starts, and the push time of each open pull request head |
+# | records | The Issue's claim and attempt records from this host, oldest first, each with kind and at |
 
 def epoch: sub("\\.[0-9]+"; "") | fromdateiso8601;
 
 # The positions in an array whose element matches f.
 def indexes(f): . as $a | [range(0; length) | select($a[.] | f)];
 
-# Who counts: trusted, record, and engineer_input come from oe-records.jq.
+# Who counts on GitHub: trusted, record, and engineer_input come from oe-records.jq.
 
 # CI
 #
@@ -92,9 +93,11 @@ def epic_lines:
 #
 # issue_state reduces one Issue response to the facts that next_action decides on.
 #
-# - Only records after the latest claim count.
-#   - Records are ordered by their place in the comment list, because a claim and its first attempt can share a timestamp.
-#   - Every record counts when there is no claim.
+# - Only records and questions after the latest claim count.
+#   - Claim and attempt records are ordered by their place in the record file, because a claim and its first attempt can share a timestamp.
+#   - A question, an answer, or a review counts as after a record by comparing its GitHub time with the record's at.
+#   - Everything counts when there is no claim.
+# - A read cut short by GitHub fails only when the comments it left out may come after the latest claim.
 # - The pull request is the newest one opened from the Issue's branch after the latest claim.
 #   - A pull request from a fork never counts.
 #   - The read holds only the newest pull request with the branch name, so a newer one from a fork hides the Issue's own.
@@ -109,17 +112,18 @@ def issue_state:
   | ($issue.comments.nodes // error("comments unreadable")) as $comments
   | ($r.ref != null) as $branch
   | [($r.pullRequests.nodes // error("pull requests unreadable"))[] | select(.isCrossRepository == false)] as $prs
-  | ($comments | indexes(record("claim")) | last) as $claim
-  | if $issue.comments.totalCount > ($comments | length) and $claim == null and ($branch or ($prs | length) > 0)
-    then error("Issue #\($issue.number) has over \($comments | length) comments and none of the latest is a claim record")
+  | (records | indexes(.kind == "claim") | last) as $claim
+  | (if $claim == null then null else records[$claim].at end) as $claimed_at
+  | [records | .[($claim // -1) + 1:][] | select(.kind == "attempt") | .at] as $attempts
+  | ($comments | first | .createdAt) as $oldest
+  | if $issue.comments.totalCount > ($comments | length) and ($branch or ($prs | length) > 0)
+      and ($claimed_at == null or $oldest == null or $oldest >= $claimed_at)
+    then error("Issue #\($issue.number) has over \($comments | length) comments, and the read does not reach back to its latest claim")
     else . end
-  | (if $claim == null then null else $comments[$claim].createdAt end) as $claimed_at
-  | ($comments | indexes(record("attempt")) | map(select(. > ($claim // -1)))) as $attempts
-  | ($comments | indexes(record("question")) | map(select(. > ($claim // -1))) | last) as $question
-  | ($attempts | last // $claim) as $last_start
-  | (if $last_start == null then null else $comments[$last_start].createdAt end) as $since
+  | ($comments | indexes(record("question") and ($claimed_at == null or .createdAt >= $claimed_at)) | last) as $question
+  | ($attempts | last // $claimed_at) as $since
   | ($comments | indexes(engineer_input) | map(select(. > ($question // infinite)))) as $answers
-  | (if any($answers[]; . > ($last_start // -1)) then ["a trusted answer to the question"] else [] end) as $answered
+  | (if any($answers[]; $comments[.].createdAt > ($since // "")) then ["a trusted answer to the question"] else [] end) as $answered
   | ([$prs[] | select($claimed_at == null or .createdAt >= $claimed_at)] | first) as $pr
   | ([$prs[] | select(.mergedAt != null and ($claimed_at == null or .mergedAt >= $claimed_at))] | first) as $merged
   | (if $branch and $pr.state == "OPEN" then try (

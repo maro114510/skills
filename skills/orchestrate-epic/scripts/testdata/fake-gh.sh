@@ -19,6 +19,7 @@
 # | api repos/o/r | repo |
 # | api repos/o/r/git/ref/heads/BRANCH | ref BRANCH |
 # | api repos/o/r/issues/N/comments | comments N |
+# | api repos/o/r/issues/N/sub_issues | sub_issues N |
 # | api -X POST repos/o/r/git/refs | the write create_ref |
 # | api -X POST repos/o/r/issues/N/comments | the write comment N, where N is an Issue or a pull request |
 # | api -X POST repos/o/r/statuses/SHA | the write status SHA |
@@ -104,6 +105,10 @@ graphql)
 */issues/*/comments*)
   n="${path#*/issues/}"
   call=comments arg="${n%%/*}"
+  ;;
+*/issues/*/sub_issues*)
+  n="${path#*/issues/}"
+  call=sub_issues arg="${n%%/*}"
   ;;
 repos/o/r) call=repo arg="" ;;
 *) unexpected ;;

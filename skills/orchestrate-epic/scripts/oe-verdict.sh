@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # oe verdict
 #
-# Writes a Verifier's verdict on the PR head SHA it checked, with its findings.
+# Writes a Verifier's verdict on the PR head SHA it checked, and keeps its findings on this host.
 # The verdict is a commit status on that SHA, so a push leaves the new head without one and nothing else must reset it.
 #
 # Usage
@@ -13,24 +13,25 @@
 #
 # Writes, in order
 #
-# 1. The findings, as a PR comment that starts with the verdict record marker and names the state and the SHA.
-#    The next Owner reads the latest such comment.
-# 2. The verify_context status on the SHA, whose target URL links that comment.
+# 1. The findings, as a verdict record on this host that names the state and the SHA.
+#    The next Owner reads the latest one for its PR head with oe records.
+# 2. The verify_context status on the SHA.
 #    oe ready reads it as the verdict.
 #
-# The comment goes first, so a verdict never exists without its findings.
-# A comment whose status write failed leaves the SHA without a verdict, which oe ready treats as unverified.
+# The findings go first, so a verdict never exists without its findings.
+# Findings whose status write failed leave the SHA without a verdict, which oe ready treats as unverified.
+# Nothing goes to a PR or Issue comment.
 #
 # Output
 #
-# - On success, one line holding verdict, the state, the SHA, and the findings URL, separated by tabs.
+# - On success, one line holding verdict, the state, and the SHA, separated by tabs.
 #
 # Exit codes
 #
-# | Code | Meaning | Changed on GitHub |
+# | Code | Meaning | Changed |
 # |---|---|---|
-# | 0 | The verdict was written | The findings comment and the status |
-# | 1 | A GitHub read or write failed | Nothing, or only the findings comment when stderr says the status failed |
+# | 0 | The verdict was written | The verdict record and the status |
+# | 1 | A GitHub read or write, or the record store, failed | Nothing, or only the verdict record when stderr says the status failed |
 # | 2 | The arguments are invalid, or the findings are empty | Nothing |
 # | 4 | The Issue's branch has no open PR, or its head is no longer the SHA | Nothing |
 #
@@ -40,6 +41,8 @@ set -uo pipefail
 dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source-path=SCRIPTDIR
 source "${dir}/oe-config.sh"
+# shellcheck source-path=SCRIPTDIR
+source "${dir}/oe-store.sh"
 
 usage() {
   echo "$1" >&2
@@ -82,13 +85,14 @@ if [[ "${head}" != "${sha}" ]]; then
   exit 4
 fi
 
-body="$(record_marker verdict)"$'\n'"Verdict **${state}** on ${sha}."$'\n\n'"${findings}"
-url="$(gh api -X POST "repos/${repo}/issues/${pr}/comments" -f body="${body}" --jq '.html_url' 2>"${err}")" ||
-  fail "writing the findings on PR #${pr} failed, so no verdict was written: $(head -n1 "${err}")"
-[[ "${url}" =~ ^https:// ]] || fail "writing the findings on PR #${pr} returned no URL, so no verdict was written"
+at="$(record_now 2>"${err}")" || usage "$(head -n1 "${err}")"
+record="$(jq -cn --arg at "${at}" --arg sha "${sha}" --arg state "${state}" --arg findings "${findings}" \
+  '{kind: "verdict", at: $at, sha: $sha, state: $state, findings: $findings}')" ||
+  fail "cannot build the verdict record, so no verdict was written"
+records_add "${repo}" "${n}" "${record}" 2>"${err}" ||
+  fail "recording the findings of Issue #${n} failed, so no verdict was written: $(head -n1 "${err}")"
 
 gh api -X POST "repos/${repo}/statuses/${sha}" -f state="${state}" -f context="${verify_context}" \
-  -f description="Verifier ${state}; findings on PR #${pr}" -f target_url="${url}" --jq '.state' \
-  >/dev/null 2>"${err}" ||
-  fail "wrote the findings at ${url}, but writing the ${verify_context} status on ${sha} failed: $(head -n1 "${err}")"
-printf 'verdict\t%s\t%s\t%s\n' "${state}" "${sha}" "${url}"
+  -f description="Verifier ${state} on PR #${pr}" --jq '.state' >/dev/null 2>"${err}" ||
+  fail "recorded the findings, but writing the ${verify_context} status on ${sha} failed: $(head -n1 "${err}")"
+printf 'verdict\t%s\t%s\n' "${state}" "${sha}"

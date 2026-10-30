@@ -11,6 +11,7 @@
 # | repo | none | The repository, naming its default branch |
 # | ref | Branch name | The head of that branch |
 # | comments | Issue number | The comments on that Issue, oldest first |
+# | sub_issues | Epic number | The child Issues, each with its number and state |
 #
 # The state
 #
@@ -136,6 +137,9 @@ def issue_comments($n):
   [.issues[] | select(.number == $n)] | first // error("Issue #\($n) not found")
   | [.comments[]? | {author_association: .by, body, created_at: (.at | time)}];
 
+def sub_issues:
+  [.issues[] | {number, state: (if .closed then "closed" else "open" end)}];
+
 $state
 | if $call == "epic" then epic_response
   elif $call == "issue" then issue_response($arg | tonumber)
@@ -145,4 +149,5 @@ $state
   elif $call == "repo" then {full_name: "o/r", default_branch: "main"}
   elif $call == "ref" then branch_head($arg)
   elif $call == "comments" then issue_comments($arg | tonumber)
+  elif $call == "sub_issues" then sub_issues
   else error("unknown call \($call)") end

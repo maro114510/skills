@@ -16,8 +16,7 @@
 #
 # Storage
 #
-# - One ref per Epic in a bare Git repository under the state directory, so every clone on the host shares it.
-# - The state directory is OE_STATE_DIR when set, and orchestrate-epic under XDG_STATE_HOME or ~/.local/state otherwise.
+# - One ref per Epic in a bare Git repository under the state directory that oe-store.sh defines, so every clone on the host shares it.
 # - Every change is a compare-and-swap on that ref, so two sessions racing for a lock never both get it.
 #
 # Exit codes
@@ -29,6 +28,10 @@
 # | 2 | The arguments are invalid, or OE_SESSION_PID is not a running process |
 # | 4 | Another running session holds the lock |
 set -uo pipefail
+
+dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source-path=SCRIPTDIR
+source "${dir}/oe-store.sh"
 
 usage() {
   echo "$1" >&2
@@ -53,7 +56,7 @@ token="${4:-}"
 [[ -z "${token}" || "${token}" =~ ^[A-Za-z0-9-]+$ ]] || usage "Invalid token"
 [[ "${cmd}" == acquire || -n "${token}" ]] || usage "release needs the token that acquire printed"
 
-state="${OE_STATE_DIR:-${XDG_STATE_HOME:-${HOME}/.local/state}/orchestrate-epic}"
+state="$(state_dir)"
 store="${state}/locks.git"
 
 store_git() {
@@ -65,8 +68,7 @@ if [[ ! -d "${store}" ]]; then
   git init --quiet --bare "${store}" || fail "cannot create the lock store ${store}"
 fi
 
-# A ref component cannot hold every repository name, such as one ending in .lock, so the repository is hashed.
-ref="refs/oe-lock/$(printf '%s' "${repo}" | git hash-object --stdin)/${epic}"
+ref="refs/oe-lock/$(repo_key "${repo}")/${epic}"
 # The all-zero object name tells update-ref that the ref must not exist yet.
 zero="$(store_git hash-object --stdin </dev/null | tr '0-9a-f' '0')"
 

@@ -18,7 +18,7 @@ Each part does one job and stores no state of its own. State lives on GitHub, ex
 
 | Part | Job | Uses |
 |---|---|---|
-| pr-owner | Implements or repairs one Issue once and pushes. When it cannot decide, it writes a question on the Issue and pushes nothing | implement, create-pr, oe question |
+| pr-owner | Implements or repairs one Issue once and pushes. When it cannot decide, it writes a question on the Issue and pushes nothing | implement, create-pr, oe records, oe question |
 | pr-verify | Runs the code at the PR's head SHA and judges only the Issue's automated checks, leaving manual checks to the engineer | oe verdict |
 
 ### Existing skills
@@ -33,7 +33,7 @@ Each part does one job and stores no state of its own. State lives on GitHub, ex
 
 | Part | Job | Writes to |
 |---|---|---|
-| Host-local record store | Keeps an Epic's claim, attempt, and findings records, and drops them once every Issue is done | oe lock's directory: `$XDG_STATE_HOME/orchestrate-epic` or `~/.local/state/orchestrate-epic` |
+| Host-local record store | Keeps each Issue's claim, attempt, and findings records until oe forget drops them | oe lock's directory: `$XDG_STATE_HOME/orchestrate-epic` or `~/.local/state/orchestrate-epic` |
 | oe lock | Refuses a second session for the same Epic | A host-local lock |
 | oe ready | Reads GitHub and the record store and prints each Issue's next action | nothing |
 | oe status | Shows each Issue's step, PR, CI result, verdict and failure reason, attempts, running agent, and time in step. `--watch` refreshes it | nothing |
@@ -44,6 +44,8 @@ Each part does one job and stores no state of its own. State lives on GitHub, ex
 | oe attempt | Writes an attempt record before an Owner starts, and refuses a 4th | The record store |
 | oe question | Writes an Owner's question in a fixed format | An Issue comment |
 | oe verdict | Writes a Verifier's verdict and findings | A commit status on the SHA, and the record store |
+| oe records | Prints an Issue's records from its latest claim on, for an Owner | nothing |
+| oe forget | Drops an Epic's records once every child Issue is closed | The record store |
 
 ### Engineer
 
@@ -256,5 +258,7 @@ sequenceDiagram
 | Implicit invocation | Codex ignores `disable-model-invocation`, so orchestrate-epic, pr-owner, and pr-verify carry `agents/openai.yaml` with `allow_implicit_invocation: false`, because invoking orchestrate-epic is the consent to push |
 | Counting Verifier starts | oe brief writes the pending verify status that oe ready counts, before it prints a Verifier's brief, so no Verifier starts uncounted |
 | Worktrees | An agent's worktree is removed when the agent ends, and unpushed work is discarded |
-| Where records go | The record store, because comments under the user's account cluttered timelines. Only questions stay on GitHub, for the engineer to answer |
+| Where records go | The record store, because comments under the user's account cluttered timelines. Only questions stay on GitHub, for the engineer to answer, in a fixed format that says an agent asks |
+| Record key | Repository and Issue: an Issue has one parent Epic, and no writer is given the Epic |
+| Dropping records | oe forget, when a session ends with every Issue done. It refuses while an Issue is open, and oe ready stays read-only |
 | Acceptance checks | Verification splits automated checks from manual ones, and no agent checks a box that needs a human, template boxes included |

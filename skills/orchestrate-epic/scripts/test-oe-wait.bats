@@ -1,7 +1,8 @@
 #!/usr/bin/env bats
 # Tests for oe wait.
 #
-# - Each test writes the GitHub state it needs as JSON, then runs oe wait against it.
+# - Each test writes the GitHub state it needs as JSON and the host-local records it needs, then runs oe wait against them.
+# - testdata/records.bash writes the host-local records under the test's own OE_STATE_DIR.
 # - testdata/fake-gh.sh stands in for gh and answers every read from that state.
 # - OE_GITHUB_NEXT swaps in a second state at the second poll, so a change lands at a point the test controls.
 # - OE_WAIT_INTERVAL=0 polls without sleeping, so a test waits only as long as its --timeout.
@@ -10,6 +11,8 @@
 
 setup() {
   bats_require_minimum_version 1.5.0
+  load testdata/records
+  export OE_STATE_DIR="${BATS_TEST_TMPDIR}/state"
   oe="${BATS_TEST_DIRNAME}/oe"
   mkdir -p "${BATS_TEST_TMPDIR}/bin"
   printf '#!/usr/bin/env bash\nexec bash "%s/testdata/fake-gh.sh" "$@"\n' "${BATS_TEST_DIRNAME}" >"${BATS_TEST_TMPDIR}/bin/gh"
@@ -33,18 +36,15 @@ github_at_second_poll() {
   cat >"${OE_GITHUB_NEXT}"
 }
 
-# Saves a state where Issue 5's PR 15 still has a check running.
+# Saves a state where Issue 5, claimed and attempted once, has its PR 15 still running a check.
 pr_15_checks_running() {
+  records 5 claim@07:00 attempt@07:01
   github <<'JSON'
 {
   "default_branch": {"checks": {"test": "success"}},
   "issues": [{
     "number": 5,
     "branch": true,
-    "comments": [
-      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
-      {"by": "OWNER", "at": "07:01", "body": "<!-- oe:attempt -->"}
-    ],
     "pull_requests": [{"number": 15, "opened": "07:10", "checks": {"test": "in_progress"}}]
   }]
 }
@@ -68,10 +68,6 @@ action_of() {
   "issues": [{
     "number": 5,
     "branch": true,
-    "comments": [
-      {"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"},
-      {"by": "OWNER", "at": "07:01", "body": "<!-- oe:attempt -->"}
-    ],
     "pull_requests": [{"number": 15, "opened": "07:10", "checks": {"test": "success"}}]
   }]
 }
@@ -85,13 +81,13 @@ JSON
 }
 
 @test "a reason whose elapsed time grows between polls while every action stays the same does not end the wait" {
+  records 5 claim@07:00
   github <<'JSON'
 {
   "default_branch": {"checks": {"test": "success"}},
   "issues": [{
     "number": 5,
     "branch": true,
-    "comments": [{"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"}],
     "pull_requests": [{"number": 15, "opened": "07:55"}]
   }]
 }
@@ -102,7 +98,6 @@ JSON
   "issues": [{
     "number": 5,
     "branch": true,
-    "comments": [{"by": "OWNER", "at": "07:00", "body": "<!-- oe:claim -->"}],
     "pull_requests": [{"number": 15, "opened": "07:54"}]
   }]
 }
