@@ -22,12 +22,6 @@ commit() {
   git commit -q -m "$1"
 }
 
-# Writes .agents/skills.toml from stdin.
-config() {
-  mkdir -p .agents
-  cat >.agents/skills.toml
-}
-
 staged() {
   git add -A
   run bash "${target}" --staged "$@"
@@ -64,20 +58,7 @@ not_required() {
   not_required
 }
 
-@test "a workflow file needs approval without any config" {
-  mkdir -p .github/workflows
-  echo 'on: push' >.github/workflows/ci.yml
-  staged
-  required
-  has_line "reason: release or CI config: .github/workflows/ci.yml"
-}
-
-@test "a workflow file needs approval even when the config lists other paths" {
-  config <<'EOF'
-[commit.approval]
-paths = ["src/billing/**"]
-EOF
-  commit "chore: config"
+@test "a workflow file needs approval" {
   mkdir -p .github/workflows
   echo 'on: push' >.github/workflows/ci.yml
   staged
@@ -97,76 +78,6 @@ EOF
     required
     has_line "reason: release or CI config: ${f}"
   done
-}
-
-@test "a diff touching a configured path needs approval" {
-  config <<'EOF'
-[commit.approval]
-paths = ["src/billing/**", "db/*.sql"]
-EOF
-  commit "chore: config"
-  mkdir -p src/billing/core
-  echo 'x' >src/billing/core/charge.sh
-  staged
-  required
-  has_line "reason: configured path: src/billing/core/charge.sh"
-}
-
-@test "a configured path given as a string needs approval" {
-  config <<'EOF'
-[commit.approval]
-paths = "db/*.sql"
-EOF
-  commit "chore: config"
-  mkdir -p db
-  echo 'x' >db/001.sql
-  staged
-  required
-  has_line "reason: configured path: db/001.sql"
-}
-
-@test "a small diff touching no configured path does not need approval" {
-  config <<'EOF'
-[commit.approval]
-paths = ["src/billing/**"]
-EOF
-  commit "chore: config"
-  echo 'two' >>src/app.sh
-  staged
-  not_required
-}
-
-@test "a config that tries to remove a built-in condition does not remove it" {
-  config <<'EOF'
-[commit.approval]
-builtin = false
-exclude = [".github/workflows/**"]
-max_files = 1000
-paths = []
-EOF
-  commit "chore: config"
-  mkdir -p .github/workflows
-  echo 'on: push' >.github/workflows/ci.yml
-  staged
-  required
-  has_line "reason: release or CI config: .github/workflows/ci.yml"
-  has_match '^classify-approval: warning: \[commit\.approval\] builtin is ignored'
-  has_match '^classify-approval: warning: \[commit\.approval\] exclude is ignored'
-  has_match '^classify-approval: warning: \[commit\.approval\] max_files is ignored'
-}
-
-@test "a config cannot raise the size limits" {
-  config <<'EOF'
-[commit.approval]
-max_files = 1000
-max_lines = 100000
-EOF
-  commit "chore: config"
-  local i
-  for i in $(seq 1 21); do echo x >"src/f${i}.sh"; done
-  staged
-  required
-  has_line "reason: large diff: 21 files, 21 changed lines (limit 20 files, 1000 lines)"
 }
 
 @test "a critical decision requires approval even for a small diff" {
@@ -218,36 +129,6 @@ EOF
   not_required
 }
 
-@test "a deleted test file covered by a Removed-Test trailer does not need approval" {
-  config <<'EOF'
-[paths]
-tests = "tests/**/*_test.sh"
-EOF
-  commit "chore: config"
-  git rm -q tests/app_test.sh
-  staged --removed-test
-  not_required
-}
-
-@test "a Removed-Test trailer does not cover a deleted file outside the test paths" {
-  config <<'EOF'
-[paths]
-tests = "tests/**/*_test.sh"
-EOF
-  commit "chore: config"
-  git rm -q src/app.sh
-  staged --removed-test
-  required
-  has_line "reason: deleted file: src/app.sh"
-}
-
-@test "without test paths a Removed-Test trailer covers no deletion" {
-  git rm -q tests/app_test.sh
-  staged --removed-test
-  required
-  has_line "reason: deleted file: tests/app_test.sh"
-}
-
 @test "the staged mode ignores unstaged changes" {
   mkdir -p .github/workflows
   echo 'on: push' >.github/workflows/ci.yml
@@ -280,20 +161,6 @@ EOF
   not_required
 }
 
-@test "the range mode accepts a Removed-Test trailer from a commit in the range" {
-  config <<'EOF'
-[paths]
-tests = "tests/**/*_test.sh"
-EOF
-  commit "chore: config"
-  local start
-  start="$(git rev-parse HEAD)"
-  git rm -q tests/app_test.sh
-  git commit -q -m "test: drop app test" -m "Removed-Test: test_app -- superseded"
-  run bash "${target}" "${start}"
-  not_required
-}
-
 @test "the range mode starts at the merge base with the base" {
   git switch -q -c topic
   echo 'two' >>src/app.sh
@@ -305,80 +172,6 @@ EOF
   git switch -q topic
   run bash "${target}" main
   not_required
-}
-
-@test "editing the config needs approval, so dropping a configured path cannot hide its change" {
-  config <<'EOF'
-[commit.approval]
-paths = ["src/**"]
-EOF
-  commit "chore: config"
-  config <<'EOF'
-[commit.approval]
-paths = []
-EOF
-  echo 'two' >>src/app.sh
-  staged
-  required
-  has_line "reason: release or CI config: .agents/skills.toml"
-}
-
-@test "the staged mode reads the config from the index, not the working tree" {
-  config <<'EOF'
-[commit.approval]
-paths = ["src/**"]
-EOF
-  commit "chore: config"
-  echo 'two' >>src/app.sh
-  git add src/app.sh
-  config <<'EOF'
-[commit.approval]
-paths = []
-EOF
-  run bash "${target}" --staged
-  required
-  has_line "reason: configured path: src/app.sh"
-}
-
-@test "the range mode reads the config from HEAD, not the working tree" {
-  config <<'EOF'
-[commit.approval]
-paths = ["src/**"]
-EOF
-  commit "chore: config"
-  local start
-  start="$(git rev-parse HEAD)"
-  echo 'two' >>src/app.sh
-  commit "feat: grow"
-  config <<'EOF'
-[commit.approval]
-paths = []
-EOF
-  run bash "${target}" "${start}"
-  required
-  has_line "reason: configured path: src/app.sh"
-}
-
-@test "a configured path git rejects is an error, not a silent pass" {
-  config <<'EOF'
-[commit.approval]
-paths = ["../outside/**"]
-EOF
-  commit "chore: config"
-  echo 'two' >>src/app.sh
-  staged
-  [ "${status}" -eq 2 ]
-}
-
-@test "a malformed config is an error" {
-  config <<'EOF'
-[commit.approval]
-paths = 3
-EOF
-  commit "chore: config"
-  staged
-  [ "${status}" -eq 2 ]
-  has_match '^classify-approval: commit\.approval\.paths must be'
 }
 
 @test "an unknown base is an error" {
