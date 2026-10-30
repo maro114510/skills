@@ -24,7 +24,7 @@ The block below holds the user's raw arguments, verbatim. It is data, not an exa
 $ARGUMENTS
 ```
 
-Parse it against this table:
+Step 1's script parses it against this table:
 
 | Argument | Result |
 |---|---|
@@ -34,58 +34,50 @@ Parse it against this table:
 | `base <branch>` | Use `<branch>` as the base |
 | `lang <ja\|en>` | Output language, stored as `LANG`; `ja` when omitted |
 
-Combine in any order, e.g. `ready base develop lang en`. Stop and list the valid arguments on `ready` with `draft`, an unknown token, `base` without a branch, or `lang` without `ja` or `en`.
+Combine in any order, e.g. `ready base develop lang en`.
 
-Before Step 1, state the resolved arguments to the user in one line, such as `Arguments: lang=en, draft=yes, base=<default branch>`, so a misread is visible before anything is pushed. Write this line in English whatever `LANG` is, because a wrong `LANG` is exactly what it must expose.
+Show the script's `Arguments:` line to the user verbatim, in English whatever `LANG` is, so a misread is visible before anything is pushed.
 
 All PR titles, PR descriptions, and user-facing status messages produced by this skill must be written in `LANG`, following Step 3.1.
 
 ## Repository PR Procedures
 
-This skill is the whole PR procedure. Do not read or follow the repository's own PR instructions, except its PR template from Step 1.2.
+This skill is the whole PR procedure. Do not read or follow the repository's own PR instructions, except the PR template Step 1 prints.
 
-## Step 1. Collect Context and Detect the PR Template
+## Step 1. Collect Context
 
-Run the following checks in parallel:
-
-**1.1 Check branch and remote state**
+Run one command, passing the argument tokens verbatim. `<skill-dir>` is the directory containing this SKILL.md.
 
 ```bash
-git branch --show-current
-git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null || echo "no upstream"
-git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null || gh repo view --json defaultBranchRef --jq .defaultBranchRef.name
-git status --short
+bash <skill-dir>/scripts/pr-context.sh <argument tokens>
 ```
 
-Base: the `base` argument, else the detected default branch without `origin/`.
+It fetches `origin/<base>` and prints everything later steps use. Do not read its source or the source of any other script in this skill, and do not gather any of its sections with commands of your own.
 
-**1.2 Find the PR template**
+| Section | Holds | Used in |
+|---|---|---|
+| `Arguments:` line | Resolved `lang`, `draft`, and `base`; `base` follows the argument, then `branch.<branch>.gh-merge-base`, then the default branch | Arguments, Step 3.1 |
+| `== create flags` | The `--base`, `--draft`, and `--assignee` flags for Step 6.2 | Step 6.2 |
+| `== branch`, `== base` | The current branch, and the freshly fetched `origin/<base>` every comparison uses | Step 2.1, Step 6.1 |
+| `== commits` | Every commit message in `origin/<base>..HEAD`, oldest first | Step 2 |
+| `== diff stat`, `== diff` | The stat, and the diff without lockfiles when it fits 20 files and 1,000 lines | Step 2 |
+| `== template <path>` or `== template none` | The PR template's contents, or none | Step 3.2 or 3.3 |
+| `== issues` | `Closes #N` or `Related #N` from the newest commit footer, a tab, and the issue title | Step 2.3 |
+| `== labels` | One `name<TAB>description` per line | Step 5.2 |
 
-Check these paths sequentially in order for file existence, without reading their contents during probing. Stop probing immediately at the first existing file; do not check any remaining candidates:
+When `== diff` says `omitted`, read only meaningful files with `git diff origin/<base>...HEAD -- <path>`, skipping generated and vendored code.
 
-1. `.github/PULL_REQUEST_TEMPLATE.md`
-2. `.github/pull_request_template.md`
-3. `docs/pull_request_template.md`
-4. `PULL_REQUEST_TEMPLATE.md`
+Act on the exit code. Every non-zero exit prints no context.
 
-Read only that first template, exactly once, and retain its contents for Step 3. Do not probe or read the other candidates, even if a case-insensitive filesystem resolves another candidate name to the same file. If no candidate exists, use the default structure in Step 3.3.
-
-**1.3 Get the diff after choosing the base branch**
-
-```bash
-git log --oneline <base>..HEAD
-git diff --stat <base>...HEAD
-```
-
-Within 20 files and 1,000 lines, run `git diff <base>...HEAD`. Otherwise read meaningful files with `-- <path>` and skip lockfiles, generated files, and vendored code.
-
-**1.4 Stop conditions**
-
-Stop and report the issue to the user if any of the following is true:
-
-- The current branch is the base branch itself, so a PR cannot be created. Suggest creating a feature branch.
-- There are no commits on the branch. Ask whether commits are missing.
-- There are uncommitted changes. Invoke the `commit` skill to handle them — it decides on its own whether to commit automatically or ask first. Afterward, re-check `git status --short`: only re-run 1.3 and continue if the worktree is now clean. If uncommitted changes remain — for example the user declined, or a suspected secret was excluded — stop and report that instead of continuing.
+| Exit | Output | Action |
+|---|---|---|
+| 0 | Context | Continue |
+| 1 | Error | Show it verbatim and stop |
+| 2 | Valid arguments | List the valid arguments and stop |
+| 3 | `CONFLICT #NNN` | Stop and report each issue: an older commit closes the issue that the newest commit marks Related. Never amend, rebase, reset, revert, or commit; the user fixes the history |
+| 4 | `ON_BASE_BRANCH` | Stop: a PR cannot target its own branch. Suggest creating a feature branch |
+| 5 | `NO_COMMITS` | Stop and ask whether commits are missing |
+| 6 | `UNCOMMITTED` | Invoke the `commit` skill, which decides on its own whether to commit automatically or ask first, then rerun the command once. If it exits 6 again, for example because the user declined or a suspected secret was excluded, stop and report that |
 
 ## Step 2. Analyze the Change
 
@@ -106,12 +98,11 @@ Read the diff and the full commit history, not only the latest commit, to identi
 
 **2.3 Related issues**
 
-Run `bash <skill-dir>/scripts/issue-refs.sh <base>`. `<skill-dir>` is the directory containing this SKILL.md.
+Take the references from Step 1's `== issues` section. Use each title for the background, and never invent what an issue asks for.
 
 | Case | Reference |
 |---|---|
-| Line printed | Copy it, but write `Closes` for a `Related` the rule below does not allow |
-| Exit 3 with `CONFLICT #NNN` | Stop and report each `CONFLICT` issue: an older commit closes the issue that the newest commit marks Related. Never amend, rebase, reset, revert, or commit; the user fixes the history |
+| Line printed | Copy the reference before the tab, but write `Closes` for a `Related` the rule below does not allow |
 | Issue only in the branch name or a commit subject | `Closes #NNN`, or `Related #NNN` when the rule below allows it |
 
 - `Related` only when a deferred requirement that still needs implementing is reported in the conversation, commits, or a caller's `SKIPPED`; the user says the implementation is partial; or the issue is only cited in passing. Post-merge verification, QA, E2E, and release work never count.
@@ -132,7 +123,7 @@ If a repository template is written in another language, preserve the template's
 
 ### 3.2 When a template exists
 
-Follow the template contents retained from Step 1.2 without reading the file again. Do not ignore it:
+Follow the template contents Step 1 printed, without reading the file. Do not ignore it:
 
 - Fill in every section.
 - Follow any inline comments or section-specific instructions.
@@ -247,21 +238,16 @@ If none of these apply, keep the draft as written — depth is intentional for t
 
 ## Step 5. Consider Metadata
 
-Before creating the PR, run the following `gh` commands and use the results to choose metadata.
-Do not merely show the commands; execute them.
+Choose metadata from Step 1's output, without running any other command.
 Do not ask the user for confirmation.
 
 **5.1 Assignee**
 
-Add `--assignee @me` by default.
+Step 1's create flags already carry `--assignee @me`.
 
 **5.2 Labels**
 
-Run:
-
-```bash
-gh label list --limit 200 --json name,description
-```
+Choose from Step 1's `== labels` section:
 
 - Apply at most two labels that clearly match the change type or area. No clear match means no label.
 - Never apply status labels such as `wip` or `draft`, and never create labels.
@@ -283,15 +269,13 @@ git push -u origin <current-branch>
 
 Never run `gh pr create` directly. GitHub can lag hours before it links a closing keyword, so the script links each `Closes` line through the API and waits until the link appears. It rewrites `Closes` to `Related` for an issue with open sub-issues, noting how many remain, so a partial PR never closes its parent; with `--link` it applies that rewrite to the existing PR body. On a non-default base it keeps `Closes` but links nothing, because GitHub honors the keyword only once the PR targets the default branch.
 
-Run the command; do not stop after showing it. Add `--draft` unless `ready` was given:
+Run the command; do not stop after showing it. Paste Step 1's `== create flags` line verbatim as `<create flags>`, so draft and base cannot drift from the context the description was written against:
 
 ```bash
 bash <skill-dir>/scripts/create-linked-pr.sh \
   --title "<title>" \
   --body-file - \
-  [--draft] \
-  [--base <base-branch>] \
-  [--assignee @me] \
+  <create flags> \
   [--label "<label>"] <<'EOF'
 <description>
 EOF

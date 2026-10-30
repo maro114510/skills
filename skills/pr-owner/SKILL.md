@@ -90,7 +90,7 @@ If any of the first four is missing, end without changing anything and say which
    ```
 
    If the push is rejected, end without retrying.
-9. For a new task, open the PR. Write its title and body by `<skills-root>/create-pr/SKILL.md` Steps 1.2, 1.3, and 2 to 4 with base `origin/<base>` and `LANG` `ja`, then run in the worktree:
+9. For a new task, open the PR. Write its title and body by `<skills-root>/create-pr/SKILL.md` Steps 1 to 4 with `LANG` `ja`, running Step 1 as `bash <skills-root>/create-pr/scripts/pr-context.sh base <base> lang ja` in the worktree and ending on its non-zero exit, then run in the worktree:
 
    ```bash
    bash <skills-root>/create-pr/scripts/create-linked-pr.sh --repo <repo> --base <base> --head <branch> --draft \
