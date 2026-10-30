@@ -8,7 +8,16 @@
 #
 #   oe question <owner/repo> <issue-number> < question
 #
-# - The question is read from stdin and written after the marker.
+# - The question is read from stdin and written into the fixed format below, after the marker.
+#   The heading says an agent asks, because the comment is posted under the user's account.
+#
+#   <!-- oe:question -->
+#   ### Question from the orchestrate-epic agent working on this Issue
+#
+#   <question>
+#
+#   ---
+#   Answer with a comment on this Issue. The next agent reads it and resumes the work.
 #
 # Exit codes
 #
@@ -46,7 +55,13 @@ question="$(cat)" || usage "Cannot read the question from stdin"
 err="$(mktemp)" || fail "mktemp failed"
 trap 'rm -f "${err}"' EXIT
 
-body="$(record_marker question)"$'\n'"${question}"
+body="$(record_marker question)
+### Question from the orchestrate-epic agent working on this Issue
+
+${question}
+
+---
+Answer with a comment on this Issue. The next agent reads it and resumes the work."
 url="$(gh api -X POST "repos/${repo}/issues/${n}/comments" -f body="${body}" --jq '.html_url' 2>"${err}")" ||
   fail "writing the question on Issue #${n} failed: $(head -n1 "${err}")"
 printf 'question\t%s\n' "${url}"
