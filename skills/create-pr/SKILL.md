@@ -40,6 +40,10 @@ Before Step 1, state the resolved arguments to the user in one line, such as `Ar
 
 All PR titles, PR descriptions, and user-facing status messages produced by this skill must be written in `LANG`, following Step 3.1.
 
+## Repository PR Procedures
+
+This skill is the whole PR procedure. Do not read or follow the repository's own PR instructions, except its PR template from Step 1.2.
+
 ## Step 1. Collect Context and Detect the PR Template
 
 Run the following checks in parallel:
@@ -106,10 +110,11 @@ Run `bash <skill-dir>/scripts/issue-refs.sh <base>`. `<skill-dir>` is the direct
 
 | Case | Reference |
 |---|---|
-| Line printed | Copy it as is |
-| Exit 3 with `CONFLICT #NNN` | Stop. An older commit closes the issue that the newest commit marks Related |
-| Issue only in the branch name or a commit subject | `Closes #NNN`, or `Related #NNN` only when deferred items were reported, the user said the work is partial, or the issue is only cited in passing |
+| Line printed | Copy it, but write `Closes` for a `Related` the rule below does not allow |
+| Exit 3 with `CONFLICT #NNN` | Stop and report each `CONFLICT` issue: an older commit closes the issue that the newest commit marks Related. Never amend, rebase, reset, revert, or commit; the user fixes the history |
+| Issue only in the branch name or a commit subject | `Closes #NNN`, or `Related #NNN` when the rule below allows it |
 
+- `Related` only when a deferred requirement that still needs implementing is reported in the conversation, commits, or a caller's `SKIPPED`; the user says the implementation is partial; or the issue is only cited in passing. Post-merge verification, QA, E2E, and release work never count.
 - One reference per line. GitHub links only the first issue of `Closes #1, #2`.
 - For each `Related` issue, state what this PR resolves and what remains.
 
