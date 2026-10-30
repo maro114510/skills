@@ -2,7 +2,8 @@
 # Creates a PR and links each closing line to its issue through the API.
 # Usage: create-linked-pr.sh --title T --body-file F|- [--base B] [--head H] [--repo R] [--draft] [--assignee A] [--label L]...
 # Usage: create-linked-pr.sh --link PR [--repo R]
-# Exit: 0 ok, 1 gh failed, 2 bad usage or unknown issue, 3 link missing.
+# Before creating, origin's tip of the head branch must equal local HEAD.
+# Exit: 0 ok, 1 gh or git failed, 2 bad usage or unknown issue, 3 link missing, 4 NOT_PUSHED: head not pushed or stale.
 set -uo pipefail
 
 attempts="${LINK_POLL_ATTEMPTS:-10}"
@@ -146,6 +147,21 @@ if [[ -z "${link_pr}" ]]; then
   else
     usage
   fi
+  branch="${head##*:}"
+  [[ -n "${branch}" ]] || branch="$(git branch --show-current 2>/dev/null)"
+  # gh pr create would open the PR at whatever origin holds, even an older commit.
+  if [[ -n "${branch}" ]]; then
+    remote="$(git ls-remote origin "refs/heads/${branch}" 2>"${err}")" || {
+      cat "${err}"
+      exit 1
+    }
+    remote="${remote%%$'\t'*}"
+  fi
+  local_sha="$(git rev-parse HEAD 2>/dev/null)"
+  if [[ -z "${branch}" || -z "${remote:-}" || "${remote}" != "${local_sha}" ]]; then
+    echo "NOT_PUSHED ${branch:-<no branch>}: origin ${remote:-missing}, HEAD ${local_sha:-unknown}"
+    exit 4
+  fi
 fi
 default="$(gh repo view ${repo:+"${repo}"} --json defaultBranchRef --jq .defaultBranchRef.name)" || exit 1
 
@@ -170,8 +186,6 @@ fi
 
 # Same precedence as gh pr create, then passed explicitly so gh cannot pick another base.
 if [[ -z "${base}" ]]; then
-  branch="${head##*:}"
-  [[ -n "${branch}" ]] || branch="$(git branch --show-current 2>/dev/null)"
   [[ -n "${branch}" ]] && base="$(git config --get "branch.${branch}.gh-merge-base" 2>/dev/null)"
   [[ -n "${base}" ]] || base="${default}"
 fi
