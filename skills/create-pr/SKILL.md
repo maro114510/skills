@@ -4,9 +4,10 @@ description: >
   Create a GitHub pull request with a high-signal title and description, written
   in the language that `lang <ja|en>` or git config `skills.lang` selects.
   Analyze the branch diff and complete commit history to explain the motivation,
-  impact, risks, implementation choices, and review focus before running
-  `gh pr create`. Use this skill when the user asks to open, create, submit, or
-  send a PR for review.
+  impact, risks, implementation choices, and review focus, then push the branch
+  and open the PR through the skill's script, as a draft unless `ready` is
+  given. Use this skill when the user asks to open, create, submit, or send a PR
+  for review.
 disable-model-invocation: true
 allowed-tools: Bash, Read, Glob, Grep
 argument-hint: "[ready] [base <branch>] [lang <ja|en>]"
@@ -38,8 +39,6 @@ Combine in any order, e.g. `ready base develop lang en`.
 
 Show the script's `Arguments:` line to the user verbatim, in English whatever `LANG` is, so a misread is visible before anything is pushed.
 
-All PR titles, PR descriptions, and user-facing status messages produced by this skill must be written in `LANG`, following Step 3.1.
-
 ## Repository PR Procedures
 
 This skill is the whole PR procedure. Do not read or follow the repository's own PR instructions, except the PR template Step 1 prints.
@@ -58,11 +57,11 @@ It fetches `origin/<base>` and prints everything later steps use. Do not read it
 |---|---|---|
 | `Arguments:` line | Resolved `lang` with its source, `draft`, and `base`; `base` follows the argument, then `branch.<branch>.gh-merge-base`, then the default branch | Arguments, Step 3.1 |
 | `== create flags` | The `--base`, `--draft`, and `--assignee` flags for Step 6.1 | Step 6.1 |
-| `== branch`, `== base` | The current branch, and the freshly fetched `origin/<base>` every comparison uses | Step 2.1, Step 6.1 |
+| `== branch`, `== base` | The current branch, and the freshly fetched `origin/<base>` every comparison uses | Step 2, Step 6.1 |
 | `== commits` | Every commit message in `origin/<base>..HEAD`, oldest first | Step 2 |
 | `== diff stat`, `== diff` | The stat, and the diff without lockfiles when it fits 20 files and 1,000 lines | Step 2 |
 | `== template <path>` or `== template none` | The PR template's contents, or none | Step 3.2 or 3.3 |
-| `== issues` | `Closes #N` or `Related #N` from the newest commit footer, a tab, and the issue title | Step 2.3 |
+| `== issues` | `Closes #N` or `Related #N` from the newest commit footer, a tab, and the issue title | Step 2.1 |
 | `== labels` | One `name<TAB>description` per line | Step 5.2 |
 
 When `== diff` says `omitted`, read only meaningful files with `git diff origin/<base>...HEAD -- <path>`, skipping generated and vendored code.
@@ -81,24 +80,11 @@ Act on the exit code. Every non-zero exit prints no context.
 
 ## Step 2. Analyze the Change
 
-Read the diff and the full commit history, not only the latest commit, to identify:
+Read the diff and the full commit history, not only the latest commit, together with the branch name. From them, gather what each section in Step 3.3 asks for, and the type and scope Step 4 needs.
 
-**2.1 Change type and motivation**
+**2.1 Related issues**
 
-- Type: feat / fix / refactor / docs / chore / deps / perf
-- Motivation: why this change was needed, inferred from commit messages, code changes, and the branch name
-- Rationale: why this implementation approach was chosen, including tradeoffs or rejected alternatives when visible
-
-**2.2 Impact and risk**
-
-- Impact: which modules, pages, APIs, workflows, or users may be affected
-- Benefit: what improves because of this change
-- Risk: breaking changes, edge cases, performance impact, migration needs, or future maintenance costs
-- Implications: what this change suggests for future direction or follow-up work
-
-**2.3 Related issues**
-
-Take the references from Step 1's `== issues` section. Use each title for the background, and never invent what an issue asks for.
+Take the references from Step 1's `== issues` section and write each in the description. Use each title for the background, and never invent what an issue asks for.
 
 | Case | Reference |
 |---|---|
@@ -108,8 +94,6 @@ Take the references from Step 1's `== issues` section. Use each title for the ba
 - `Related` only when a deferred requirement that still needs implementing is reported in the conversation, commits, or a caller's `SKIPPED`; the user says the implementation is partial; or the issue is only cited in passing. Post-merge verification, QA, E2E, and release work never count.
 - One reference per line. GitHub links only the first issue of `Closes #1, #2`.
 - For each `Related` issue, state what this PR resolves and what remains.
-
-If the diff is large, meaning more than 20 files or more than 1,000 changed lines, organize the description into logical groups.
 
 ## Step 3. Generate the PR Description
 
@@ -129,72 +113,30 @@ Follow the template contents Step 1 printed, without reading the file. Do not ig
 - Follow any inline comments or section-specific instructions.
 - Check a verification item, such as tests, lint, or a build, only if it ran in this session and passed; adding a test is not running it. Otherwise leave it unchecked with the reason on the same line, e.g. `- [ ] Unit tests pass (not run: no test runner)`.
 - Check any other checklist item based on the actual change.
-- Add useful information that the template does not ask for, such as background, implementation details, risks, or future considerations, as extra sections at the end, with headings from the 3.3 table. The how belongs there, not in What.
+- Give each template section the Content that 3.3 gives the section serving the same purpose, such as Summary's for a "What" section.
+- Add useful information that the template does not ask for as extra sections at the end, with headings and Content from 3.3.
 
-### 3.3 Default structure when no template exists
+### 3.3 Sections
 
-Use the structure below. For `ja`, replace each heading with its Japanese form; for `en`, keep the headings as written.
+Each row's Content is the only rule for what its section holds. Without a template, use these sections in this order as `##` headings: the `en` heading for `en`, the `ja` heading for `ja`.
 
-| `en` | `ja` |
-|---|---|
-| Background | 背景 |
-| Summary | 概要 |
-| Implementation Details | 実装方針 |
-| Changes | 変更内容 |
-| Impact | 影響範囲 |
-| Concerns | 懸念点 |
-| Future Considerations | 今後の検討事項 |
-| Test Plan | テスト計画 |
-
-```markdown
-## Background
-
-<!-- Explain why this change is needed. Include the root problem, relevant context, constraints, and why this matters now. -->
-
-## Summary
-
-<!-- State the outcome in 1-3 sentences: what is different once this merges, and the problem it solves. -->
-
-## Implementation Details
-
-<!-- Explain why this implementation approach was chosen, and tradeoffs or rejected alternatives. Do not restate what each file/group does here — that belongs only in Changes. -->
-
-## Changes
-
-<!-- Group meaningful changes by behavior or area, not by low-level code edits. -->
-
-### [Group name]
-- Explain the user-facing or reviewer-relevant meaning of the change.
-
-## Impact
-
-<!-- List affected pages, features, APIs, data formats, configuration, or workflows. Call out breaking changes explicitly. -->
-
-## Concerns
-
-<!-- Note review focus areas, known risks, tradeoffs, uncertainty, and future implications. -->
-
-## Future Considerations
-
-<!-- Describe follow-up work that is intentionally out of scope for this PR. Be specific about what, why, and how it could improve. -->
-
-## Test Plan
-
-<!-- Describe the verification performed and the result. For UI changes, consider before/after screenshots. -->
-```
+| `en` | `ja` | Content |
+|---|---|---|
+| Background | 背景 | Why the change is needed, for a reviewer who lacks the surrounding context: the root problem, constraints, and why it matters now |
+| Summary | 概要 | The outcome in 1-3 sentences: what is different once this merges and the problem it solves, such as "merged skills reach every local Claude Code, whatever branch is checked out" rather than "add X". Never the files touched or settings changed |
+| Implementation Details | 実装方針 | Why this approach was chosen: the tradeoffs accepted and the alternatives rejected. Never what each part does |
+| Changes | 変更内容 | What changed, under `###` group headings by behavior or area rather than by code edit, each bullet giving the change's meaning to a user or reviewer |
+| Impact | 影響範囲 | What merging affects: pages, features, APIs, data formats, configuration, workflows, or users, with breaking changes called out. Facts, not doubts |
+| Concerns | 懸念点 | Unresolved uncertainty or open risk a reviewer should weigh, and where to focus review. Only when one genuinely exists, not merely because the change touches performance, defaults, existing behavior, compatibility, data formats, configuration, or APIs; when unsure, include it. Never an Impact fact restated, and never what was run |
+| Future Considerations | 今後の検討事項 | Follow-up deliberately left out of this PR: what, why, and how it could improve things |
+| Test Plan | テスト計画 | The verification performed and its result as terse evidence: commands run, tool limits hit, automated reviews passed. For UI changes, consider before/after screenshots |
 
 ### 3.4 Writing principles
 
 Reviewers can read the diff. The PR description is valuable because it explains intent, judgment, risk, and context that the diff does not show.
 
-- **Background**: Make the reason for the change clear to a reviewer who lacks the surrounding context.
-- **Summary**: Avoid vague wording like "add X"; prefer "add X to solve Y."
-- **What is the outcome, not the edits**: Say what is different once this merges, such as "merged skills reach every local Claude Code, whatever branch is checked out". Do not list files touched or settings changed; the diff shows those, and the how goes in Changes or Implementation Details. Why is the motivation, not What restated.
-- **Implementation Details**: Explain why this approach was chosen, not what it does — the "what" belongs in Changes.
-- **One fact, one place**: Each fact (a file's purpose, a design decision) belongs in exactly one section. If Implementation Details would restate what Changes already says, keep only the reasoning Changes does not capture.
-- **Concerns**: Include only when genuine unresolved uncertainty, risk, or a deliberate tradeoff actually exists — not merely because the change touches performance, defaults, existing behavior, compatibility, data formats, configuration, or APIs. When unsure whether something qualifies, include it rather than omit it.
-- **Test Plan vs. Concerns**: Execution narration (commands run, tool limitations hit, which automated review already passed) belongs in Test Plan as terse evidence, not in Concerns. Concerns is for judgment calls and open risk, not an execution log.
-- **Omission rule**: Remove sections that are genuinely irrelevant.
+- **One fact, one place**: Each fact, such as a file's purpose or a design decision, goes only in the section whose 3.3 Content it fits. If it seems to fit two, keep it where the Content names it most specifically.
+- **Omission**: Remove a section that would be empty or is genuinely irrelevant.
 
 ### 3.5 Line Breaks
 
@@ -202,14 +144,9 @@ Write each paragraph or bullet as a single source line, however long and even wh
 
 ### 3.6 Compact Pass
 
-Before moving to Step 4, re-read the full draft once as a first-time reader with no other context:
+Before moving to Step 4, re-read the full draft once as a first-time reader with no other context, and check every sentence against the 3.3 Content of the section that holds it, and against 3.4 and 3.5. Move a sentence that fits another section's Content, delete one that restates a fact given earlier, and rejoin a broken line.
 
-- Does What list edits instead of the outcome? Rewrite it and move the edits to Changes.
-- Does any sentence restate a fact already given in an earlier section? Delete the later occurrence.
-- Does anything in Concerns fail the genuine-uncertainty bar above? Move it to Test Plan or delete it.
-- Does any paragraph or bullet contain a newline that is not a real paragraph/bullet boundary? Rejoin it into one line.
-
-If none of these apply, keep the draft as written — depth is intentional for this skill's purpose as a design record, so do not cut content for brevity alone.
+If nothing fails, keep the draft as written — depth is intentional for this skill's purpose as a design record, so do not cut content for brevity alone.
 
 ## Step 4. Choose the PR Title
 
@@ -238,10 +175,6 @@ Choose from Step 1's `== labels` section:
 - Apply at most two labels that clearly match the change type or area. No clear match means no label.
 - Never apply status labels such as `wip` or `draft`, and never create labels.
 - Tell the user the choice and reason in one sentence.
-
-**5.3 Issue links**
-
-Confirm that any issue numbers extracted in Step 2.3 are included in the description using the `Closes`/`Related` choice already made there. Do not ask the user to choose between them.
 
 ## Step 6. Push and Create the PR
 
