@@ -31,6 +31,9 @@ teardown() {
   for pid in ${sessions[@]+"${sessions[@]}"}; do
     { kill "${pid}" && wait "${pid}"; } 2>/dev/null || true
   done
+  if [ -e "${tmp}/detached-session" ]; then
+    kill "$(cat "${tmp}/detached-session")" 2>/dev/null || true
+  fi
 }
 
 # Saves the GitHub state from stdin.
@@ -216,6 +219,32 @@ JSON
   [ "${status}" -eq 0 ]
   steps="$(row_of 5 | while read -r _ step _; do echo "${step}"; done)"
   [ "${steps}" = $'wait-ci\nstart-verifier' ]
+}
+
+@test "--watch that saw a session hold the Epic's lock shows one more view after the session ends, then exits 0" {
+  three_issues
+  # The session is not this shell's child, so it is reaped as soon as it ends and stops counting as running.
+  # teardown ends it through the file if the test stops early.
+  session="$(
+    sleep 600 >/dev/null 2>&1 3>&- &
+    echo "$!"
+  )"
+  echo "${session}" >"${tmp}/detached-session"
+  OE_SESSION_PID="${session}" bash "${oe}" lock acquire o/r 1 >/dev/null
+  # The session ends during the second refresh's Epic read.
+  cat >"${tmp}/bin/gh" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >>"${calls}"
+[ "\$(grep -c 'epic=1' "${calls}")" -ne 2 ] || kill ${session}
+exec bash "${BATS_TEST_DIRNAME}/testdata/fake-gh.sh" "\$@"
+EOF
+  # Refresh 1 sees the session, refresh 2 reads while it ends, and refresh 3 finds it gone and is the last.
+  views_until_end=3
+
+  OE_WAIT_INTERVAL=0 OE_STATUS_REFRESHES=10 run --separate-stderr bash "${oe}" status o/r 1 --watch
+
+  [ "${status}" -eq 0 ]
+  [ "$(printf '%s\n' "${lines[@]}" | grep -c '^ISSUE ')" -eq "${views_until_end}" ]
 }
 
 @test "--watch without a session holding the Epic's lock keeps refreshing" {
