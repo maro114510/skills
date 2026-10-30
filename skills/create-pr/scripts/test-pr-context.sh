@@ -9,7 +9,7 @@ trap 'rm -rf "${work}"' EXIT
 fail=0
 # The user's own hooks and settings must not reach the throwaway repositories, from config files or from git's environment-variable config.
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
-unset GIT_CONFIG_COUNT GIT_CONFIG_PARAMETERS
+unset GIT_CONFIG GIT_CONFIG_COUNT GIT_CONFIG_PARAMETERS
 
 # Stub state files in $STUB_DIR:
 # - default: repo default branch, main when absent

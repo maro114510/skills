@@ -9,7 +9,7 @@ trap 'rm -rf "${work}"' EXIT
 fail=0
 # The user's own skills.lang must not leak into a case, from config files or from git's environment-variable config.
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
-unset GIT_CONFIG_COUNT GIT_CONFIG_PARAMETERS
+unset GIT_CONFIG GIT_CONFIG_COUNT GIT_CONFIG_PARAMETERS
 
 # A fresh repository, so local config set by one case never reaches another.
 repo_with() { # [skills.lang value]
