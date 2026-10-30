@@ -198,7 +198,7 @@ Reviewers can read the diff. The PR description is valuable because it explains 
 
 ### 3.5 Line Breaks
 
-Write each paragraph or bullet as a single source line, however long, because GitHub renders every newline in a PR body as a line break.
+Write each paragraph or bullet as a single source line, however long and even when the commit messages break lines, because GitHub renders every newline in a PR body as a line break.
 
 ### 3.6 Compact Pass
 
