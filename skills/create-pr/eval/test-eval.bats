@@ -301,6 +301,26 @@ EOF
   [[ "${output}" == *"7 PASS"* ]]
 }
 
+@test "in scenario C a Closes #8 only inside a sentence fails item 3" {
+  bash "${eval_dir}/setup.sh" C "${work}/c"
+  body="$(printf '%s\n' '## Summary' '' 'CSV cells are quoted, which closes #8 once merged.')"
+  run reference_run "${work}/c" "feat(export): quote CSV cells" "enhancement" "${body}" lang en
+  [ "${status}" -eq 0 ]
+  run bash "${eval_dir}/grade.sh" C "${work}/c"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"3 FAIL"* ]]
+}
+
+@test "a template line that differs only in trailing whitespace does not fill its section" {
+  bash "${eval_dir}/setup.sh" A "${work}/a"
+  untouched="$(body_a | sed -e 's/ (未実行: テストランナーがない)/ /' -e 's/ (未実行)/ /')"
+  run reference_run "${work}/a" "fix(auth): 期限切れの JWT を SessionExpiredError で通知する" "bug auth" "${untouched}"
+  [ "${status}" -eq 0 ]
+  run bash "${eval_dir}/grade.sh" A "${work}/a"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"4 FAIL missing or empty template sections: 動作確認"* ]]
+}
+
 @test "grading a sandbox where no PR was created fails items 1 and 2" {
   bash "${eval_dir}/setup.sh" A "${work}/a"
   run bash "${eval_dir}/grade.sh" A "${work}/a"
