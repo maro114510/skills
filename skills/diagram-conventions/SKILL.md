@@ -81,7 +81,7 @@ Draw the chosen type with the closest Mermaid diagram. If Mermaid has no dedicat
 
 Check the diagram, not your intent:
 
-- Correctness: map every node and edge to an inventory item; remove anything unmapped. Map every important inventory relation to the diagram; add anything missing.
+- Correctness: map every node and edge to an inventory item; remove anything unmapped. Map every important inventory relation to the diagram; add anything missing. When the notation seems to need an element the source does not state, such as an end event or a return message, leave it out and name the gap after the Trace; never draw it.
 - Conformance: if a rulebook was used, recheck each of its rules. Check that each symbol carries the meaning the diagram type gives it.
 - Clarity: check that labels name what the source names, granularity is uniform, and no edge or branch can be read two ways.
 
@@ -120,6 +120,7 @@ Type: <diagram type> (Mermaid: <Mermaid diagram used>) — <one-sentence reason>
 Rulebook: <references/<file>.md | No rulebook exists for <type>; no conformance is claimed>
 Trace:
 - <node or edge> <- <where it appears in the source>
+<only when step 5 found one: Gaps, one per line, `<element the notation expects> -> not in the source, not drawn`>
 Validation: <validated with mmdc | unvalidated: <reason>>
 ````
 
