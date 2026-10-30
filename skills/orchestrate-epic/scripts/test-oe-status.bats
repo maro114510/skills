@@ -218,6 +218,15 @@ JSON
   [ "${steps}" = $'wait-ci\nstart-verifier' ]
 }
 
+@test "--watch without a session holding the Epic's lock keeps refreshing" {
+  three_issues
+
+  OE_WAIT_INTERVAL=0 OE_STATUS_REFRESHES=3 run --separate-stderr bash "${oe}" status o/r 1 --watch
+
+  [ "${status}" -eq 0 ]
+  [ "$(printf '%s\n' "${lines[@]}" | grep -c '^ISSUE ')" -eq 3 ]
+}
+
 @test "the agent column names the role whose worktree exists while a running session holds the Epic's lock" {
   three_issues
   export GIT_CONFIG_GLOBAL="${tmp}/gitconfig" GIT_CONFIG_NOSYSTEM=1
