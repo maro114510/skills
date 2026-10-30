@@ -93,14 +93,24 @@ STUB
 chmod +x "${bin}/gh"
 
 # git stub: current branch from $STUB_DIR/current, gh-merge-base per branch from $STUB_DIR/merge-base.<branch>.
+# Local HEAD is $LOCAL_SHA. The remote tip of <branch> is $STUB_DIR/remote.<branch>, else $LOCAL_SHA, as if pushed;
+# $STUB_DIR/no_remote.<branch> means origin has no such branch. Each call is logged to $STUB_DIR/git_log.
 cat >"${bin}/git" <<'STUB'
 #!/usr/bin/env bash
 d="${STUB_DIR}"
+local_sha=1111111111111111111111111111111111111111
+printf '%s\n' "$*" >>"${d}/git_log"
 case "$*" in
 "branch --show-current") cat "${d}/current" 2>/dev/null || echo feat-x ;;
 "config --get branch."*".gh-merge-base")
   b="${3#branch.}"
   cat "${d}/merge-base.${b%.gh-merge-base}" 2>/dev/null || exit 1
+  ;;
+"rev-parse HEAD") echo "${local_sha}" ;;
+"ls-remote origin refs/heads/"*)
+  b="${3#refs/heads/}"
+  [[ -f "${d}/no_remote.${b}" ]] && exit 0
+  printf '%s\trefs/heads/%s\n' "$(cat "${d}/remote.${b}" 2>/dev/null || echo "${local_sha}")" "${b}"
   ;;
 *) exit 1 ;;
 esac
@@ -381,5 +391,24 @@ run --title "t"
 r=0
 [[ "${rc}" == 2 ]] || r=1
 check "missing --body-file exits 2" "${r}"
+
+older_sha=2222222222222222222222222222222222222222
+setup $'Closes #12'
+echo "${older_sha}" >"${STUB_DIR}/remote.feat-x"
+create
+r=0
+[[ "${rc}" == 4 ]] || r=1
+grep -q "^NOT_PUSHED" <<<"${out}" || r=1
+called "pr create" && r=1
+check "remote branch at an older commit exits 4 without creating the PR" "${r}"
+
+setup $'Closes #12'
+touch "${STUB_DIR}/no_remote.feat-y"
+create --head feat-y
+r=0
+[[ "${rc}" == 4 ]] || r=1
+grep -q "^NOT_PUSHED" <<<"${out}" || r=1
+called "pr create" && r=1
+check "--head branch missing on origin exits 4 without creating the PR" "${r}"
 
 exit "${fail}"
