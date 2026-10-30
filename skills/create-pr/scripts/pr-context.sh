@@ -3,7 +3,8 @@
 # Usage: pr-context.sh [ready|draft] [base <branch>] [lang <ja|en>]
 # Language: whatever lang.sh resolves, given the lang argument when there is one.
 # Base: the base argument, else git config branch.<current>.gh-merge-base, else the default branch, as create-linked-pr.sh resolves it.
-# Output on exit 0: an "Arguments:" line, then sections headed "== <name>": create flags, branch, base, commits, diff stat, diff, template <path|none>, issues, labels.
+# Output on exit 0: an "Arguments:" line, then sections headed "== <name>": create flags, branch, base, commits, diff stat, diff, template <path|none>, issues, manual checks, labels.
+# Manual checks: "#<n><TAB><item>" for each manual check of an issue the newest footer closes.
 # A stop prints only its reason: ON_BASE_BRANCH <b>, UNCOMMITTED with git status lines, NO_COMMITS origin/<b>, CONFLICT #N lines, or ISSUE_LOOKUP_FAILED #N: <gh error>.
 # Exit: 0 ok, 1 git or gh failed, including an issue gh cannot read, 2 bad arguments or an invalid language, 3 CONFLICT, 4 on the base branch, 5 no commits, 6 uncommitted changes.
 set -uo pipefail
@@ -91,17 +92,46 @@ case $? in
 *) exit 1 ;;
 esac
 
+# Items under a Manual checks heading in the body's Verification section, without the list marker or a checkbox.
+# Bytes, because macOS awk compares strings by collation, which ranks 自動確認 equal to 手動確認 in a UTF-8 locale.
+manual_checks() {
+  LC_ALL=C awk '
+    { sub(/\r$/, "") }
+    /^[ \t]*(```|~~~)/ { fence = !fence; next }
+    fence { next }
+    /^#+[ \t]/ {
+      level = match($0, /[^#]/) - 1
+      h = $0; sub(/^#+[ \t]+/, "", h); sub(/[ \t#]*$/, "", h)
+      if (verification && level <= verification) verification = 0
+      on = verification && (tolower(h) == "manual checks" || h == "手動確認")
+      if (!verification && (tolower(h) == "verification" || h == "検証方法")) verification = level
+      next
+    }
+    on && /^[ \t]*([-*+]|[0-9]+[.)])[ \t]+/ {
+      t = $0; sub(/^[ \t]*([-*+]|[0-9]+[.)])[ \t]+/, "", t); sub(/^\[[ xX]\][ \t]+/, "", t)
+      if (t != "") print t
+    }'
+}
+
 # Collect everything before printing, so a failure never leaves partial context.
-issues=""
+issues="" manual=""
 while IFS= read -r line; do
   [[ -n "${line}" ]] || continue
   n="${line##*#}"
   # create-linked-pr.sh would reject the issue anyway, but only after the push.
-  if ! title="$(gh issue view "${n}" --json title --jq .title 2>&1)"; then
-    echo "ISSUE_LOOKUP_FAILED #${n}: $(tr '\n' ' ' <<<"${title}" | sed 's/[[:space:]]*$//')"
+  if ! view="$(gh issue view "${n}" --json title,body --jq '.title, .body' 2>&1)"; then
+    echo "ISSUE_LOOKUP_FAILED #${n}: $(tr '\n' ' ' <<<"${view}" | sed 's/[[:space:]]*$//')"
     exit 1
   fi
+  # A title holds no newline, so the body is everything after the first line.
+  title="${view%%$'\n'*}" body=""
+  [[ "${view}" == *$'\n'* ]] && body="${view#*$'\n'}"
   issues+="${line}"$'\t'"${title}"$'\n'
+  # A Related issue stays open after the merge, so its checks are not this PR's to run.
+  [[ "${line}" == Closes* ]] || continue
+  while IFS= read -r check; do
+    manual+="#${n}"$'\t'"${check}"$'\n'
+  done < <(manual_checks <<<"${body}")
 done <<<"${refs}"
 
 labels="$(gh label list --limit 200 --json name,description --jq '.[] | "\(.name)\t\(.description)"')" || exit 1
@@ -158,6 +188,8 @@ else
 fi
 echo "== issues"
 printf '%s' "${issues}"
+echo "== manual checks"
+printf '%s' "${manual}"
 echo "== labels"
 [[ -n "${labels}" ]] && echo "${labels}"
 exit 0

@@ -1,7 +1,7 @@
 # implement reproduction repository
 
 A small shell repository that reproduces two failure patterns, to see how an implement run handles them under the test policy in `skills/implement`.
-It shows that `gate-tests.sh` flags the seeded defects, not that the policy is what prevents them; see Limits.
+It shows that the template's runner exposes the seeded defects, not that the policy is what prevents them; see Limits.
 Nothing here is copied from another project.
 
 | Case | Task type | Pattern the policy must prevent |
@@ -11,13 +11,13 @@ Nothing here is copied from another project.
 
 | Path | Role |
 |---|---|
-| `template/` | The repository under test: `src/`, `tests/`, and the `.agents/skills.toml` that `gate-tests.sh` reads |
+| `template/` | The repository under test: `src/` and `tests/` |
 | `cases/<case>.md` | The task text an implement run receives |
 | `seeds/<seed>/` | One ready-made commit: its files and a `message`. Seeds replay a defective or a correct run without an LLM |
 
 ## Rerun
 
-Without an LLM, `bats tests/implement-repro.bats` shows that `gate-tests.sh` flags each seeded defect for the reason the policy names, and that the reference solutions pass.
+Without an LLM, `bats tests/implement-repro.bats` shows that the template's runner exposes each seeded defect for the reason the policy names, and that the reference solutions pass.
 
 With a harness, copy `template/` to a new directory, commit it on `main` with a bare `origin` whose `origin/main` is that commit, and set `refs/remotes/origin/HEAD`.
 Then run implement on a case, from that repository, where `<co>` is this checkout:
@@ -40,7 +40,7 @@ Judge the commits it left, in its worktree, from outside the run:
 
 ```bash
 bash tests/run.sh --seed 1    # also 2 to 5; every run must pass
-bash <checkout>/skills/implement/scripts/gate-tests.sh origin/main
+bash tests/run.sh --only <test> <file>    # each new or changed test must also pass alone
 ```
 
 For `missing-precondition`, also run the final `tests/` against `src/` of `origin/main`: it must fail with a `FAIL:` line and no `ERROR:` line.
@@ -49,7 +49,7 @@ For `missing-precondition`, also run the final `tests/` against `src/` of `origi
 
 One run per row on 2026-10-26, on the last commit of this branch, with Claude Code 2.1.310 in headless mode (`claude -p`) and the model `sonnet`, on this checkout's own `skills/implement/SKILL.md`.
 The recorded runs used the same instructions as the command above, worded a little longer, and also told the agent to use no installed copy of either skill.
-Every run passed all of the checks above: the suite in default order and shuffled for seeds 1 to 5, `gate-tests.sh` with exit 0, and for `missing-precondition` one `FAIL:` and no `ERROR:` on the unfixed `src/`.
+Every run passed the suite in default order and shuffled for seeds 1 to 5, and for `missing-precondition` one `FAIL:` and no `ERROR:` on the unfixed `src/`.
 
 | Harness | Model | Mode | Case | Result | Commits |
 |---|---|---|---|---|---|
@@ -61,6 +61,5 @@ Every run passed all of the checks above: the suite in default order and shuffle
 ## Limits
 
 - This shows no cause. No control run without the skill was made, each case ran once, and every run loaded the user's own configuration, which includes a TDD instruction file, so the policy cannot be told apart from it. Showing the cause needs a control, several runs per arm, and a clean configuration, and waits for #345 to #347, which still change implement's flow.
-- `gate-tests.sh` is advice, not enforcement: it misses a test that pollutes shared state, a `refactor:` commit skips its before-change check, and without `.agents/skills.toml` it checks nothing. #361 tracks the gaps.
 - A run depends on the model, the harness version, and the user's configuration, so a failing run is a result to read, not proof of a regression.
 - "No third-party names" is checked as the absence of URLs, e-mail addresses, licence text, and the words GitHub and GitLab under `template/`, `seeds/`, and `cases/`.

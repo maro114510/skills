@@ -41,7 +41,7 @@ APM deploys `agents/` to multiple harnesses.
 | Agent | Started by | Job |
 |---|---|---|
 | `pr-owner` | `orchestrate-epic` | Implement or repair one Issue's PR, or ask a question on the Issue |
-| `pr-verify` | `orchestrate-epic` | Check one PR head SHA against its Issue's acceptance criteria and record the verdict |
+| `pr-verify` | `orchestrate-epic` | Check one PR head SHA against its Issue's automated checks and record the verdict |
 
 | Rule | Detail |
 |---|---|

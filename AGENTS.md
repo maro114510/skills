@@ -86,16 +86,6 @@ Skills read them with `git config --get <key>`, so git decides between local and
 |---|---|---|
 | `skills.lang` | `ja`, `en` | `skills/create-pr/scripts/lang.sh` only; its header holds the precedence, and skills call it instead of restating it |
 
-Committed repository policy lives in `.agents/skills.toml`, which skill scripts read.
-The `[paths]` section is neutral: no single skill owns it, and every key holds Git glob pathspecs as a string or an array.
-Every other section is named after the skill that reads it.
-
-| Key | Holds | Read by |
-|---|---|---|
-| `[paths] tests` | Test files | `skills/implement/scripts/gate-tests.sh`, `skills/commit/scripts/classify-approval.sh` |
-| `[implement.testing]` | gate-tests's commands and patterns, listed in its header | `skills/implement/scripts/gate-tests.sh` |
-| `[commit.approval] paths` | Paths whose change needs approval, added to the built-in conditions, which no key can remove | `skills/commit/scripts/classify-approval.sh` |
-
 ## Workflow
 
 1. Create or edit `skills/<skill-name>/SKILL.md`

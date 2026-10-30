@@ -15,6 +15,7 @@ unset GIT_CONFIG GIT_CONFIG_COUNT GIT_CONFIG_PARAMETERS
 # - default: repo default branch, main when absent
 # - labels: label lines, printed as gh would after the script's --jq
 # - missing: issue numbers that do not exist
+# - body.<n>: issue n's body, printed after its title when the call asks for the body
 bin="${work}/bin"
 mkdir -p "${bin}"
 cat >"${bin}/gh" <<'STUB'
@@ -28,6 +29,9 @@ case " $* " in
     exit 1
   fi
   echo "Title of $3"
+  if [[ " $* " == *"body"* ]]; then
+    cat "${d}/body.$3" 2>/dev/null || echo
+  fi
   ;;
 *" label list "*) cat "${d}/labels" 2>/dev/null || true ;;
 *) echo "unexpected gh $*" >&2 && exit 1 ;;
@@ -278,5 +282,83 @@ for args in "ready draft" "base" "lang fr" "bogus"; do
   [[ "${rc}" == 2 ]] && no_context
   check "invalid arguments '${args}' exit 2 without context" $?
 done
+
+# 9. Manual checks come from the Manual checks list of each issue the branch closes.
+setup
+cat >"${STUB_DIR}/body.5" <<'BODY'
+## Acceptance Criteria
+
+### Target State
+Setup works on a new Mac.
+
+### Verification
+
+#### Automated checks
+- `make test` passes.
+
+#### Manual checks
+- Follow the README on a new Mac.
+- Apply the PR on a second Mac and see no diff.
+
+## Notes
+- Not a check.
+BODY
+commit $'feat: a\n\nCloses #5' a
+run
+[[ "${rc}" == 0 && "$(section 'manual checks')" == $'#5\tFollow the README on a new Mac.\n#5\tApply the PR on a second Mac and see no diff.' ]] && r=0 || r=1
+check "closed issue with Manual checks: only that list's items, each with its issue number" "${r}"
+[[ "$(section issues)" == $'Closes #5\tTitle of 5' ]] && r=0 || r=1
+check "closed issue with Manual checks: issues section keeps one line per issue" "${r}"
+
+setup
+printf '### 検証方法\r\n\r\n#### 自動確認\r\n- make test が通る\r\n\r\n#### 手動確認\r\n- [ ] 新しい Mac で README に従う\r\n- [x] 別の Mac で差分が出ない\r\n' >"${STUB_DIR}/body.5"
+commit $'feat: a\n\nCloses #5' a
+run
+[[ "${rc}" == 0 && "$(section 'manual checks')" == $'#5\t新しい Mac で README に従う\n#5\t別の Mac で差分が出ない' ]] && r=0 || r=1
+check "Japanese heading, CRLF body, and checkbox items: plain item text without CR or box" "${r}"
+
+setup
+printf '### Verification\n#### Manual checks\n- Check on a real device.\n' >"${STUB_DIR}/body.5"
+printf '### Verification\n#### Manual checks\n- Check the other issue.\n' >"${STUB_DIR}/body.7"
+printf '### Verification\n- make test passes.\n' >"${STUB_DIR}/body.8"
+commit $'feat: a\n\nCloses #5\nRelated #7\nCloses #8' a
+run
+[[ "${rc}" == 0 && "$(section 'manual checks')" == $'#5\tCheck on a real device.' ]] && r=0 || r=1
+check "Related issue and issue without Manual checks: neither adds a manual check" "${r}"
+
+setup
+cat >"${STUB_DIR}/body.5" <<'BODY'
+## Notes
+
+### Manual checks
+- Not part of the acceptance criteria.
+
+## Acceptance Criteria
+
+### Verification
+
+#### Manual checks
+- Run the installer on a new Mac.
+```
+# not a heading
+- not a check
+```
+- Confirm the menu bar icon appears.
+
+## Follow-up
+
+#### Manual checks
+- Also outside Verification.
+BODY
+commit $'feat: a\n\nCloses #5' a
+run
+[[ "${rc}" == 0 && "$(section 'manual checks')" == $'#5\tRun the installer on a new Mac.\n#5\tConfirm the menu bar icon appears.' ]] && r=0 || r=1
+check "Manual checks outside Verification and lines in a code fence: neither is a manual check" "${r}"
+
+setup
+commit 'feat: a' a
+run
+[[ "${rc}" == 0 && "$(grep -c '^== manual checks$' <<<"${out}")" == 1 && -z "$(section 'manual checks')" ]] && r=0 || r=1
+check "no issue: an empty manual checks section" "${r}"
 
 exit "${fail}"

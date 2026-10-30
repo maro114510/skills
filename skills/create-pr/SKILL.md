@@ -62,6 +62,7 @@ It fetches `origin/<base>` and prints everything later steps use. Do not read it
 | `== diff stat`, `== diff` | The stat, and the diff without lockfiles when it fits 20 files and 1,000 lines | Step 2 |
 | `== template <path>` or `== template none` | The PR template's contents, or none | Step 3.2 or 3.3 |
 | `== issues` | `Closes #N` or `Related #N` from the newest commit footer, a tab, and the issue title | Step 2.1 |
+| `== manual checks` | `#N`, a tab, and one manual check of an issue the branch closes, per line | Step 3.3 |
 | `== labels` | One `name<TAB>description` per line | Step 5.2 |
 
 When `== diff` says `omitted`, read only meaningful files with `git diff origin/<base>...HEAD -- <path>`, skipping generated and vendored code.
@@ -111,10 +112,11 @@ Follow the template contents Step 1 printed, without reading the file. Do not ig
 
 - Fill in every section.
 - Follow any inline comments or section-specific instructions.
+- Never check a box that needs a human, such as `Manually tested on macOS`. This overrides the rules below.
 - Check a verification item, such as tests, lint, or a build, only if it ran in this session and passed; adding a test is not running it. Otherwise leave it unchecked with the reason on the same line, e.g. `- [ ] Unit tests pass (not run: no test runner)`.
 - Check any other checklist item based on the actual change.
 - Write each template section by the 3.3 Content of the section serving the same purpose, such as Summary for "What", Background for "Why", and Test Plan for "How to test". Where the template's own instructions for a section explicitly require something else, they win; a prompt that only names the section's topic requires nothing else.
-- Add a 3.3 section at the end only for useful information that no template section holds, such as implementation details or risks.
+- Add the Manual Checks section from 3.3 at the end. Add any other 3.3 section there only for useful information that no template section holds, such as implementation details or risks.
 
 ### 3.3 Sections
 
@@ -130,6 +132,7 @@ Each row's Content is the only rule for what its section holds, except where 3.2
 | Concerns | 懸念点 | Unresolved uncertainty or open risk a reviewer should weigh, and where to focus review. Only when one genuinely exists, not merely because the change touches performance, defaults, existing behavior, compatibility, data formats, configuration, or APIs; when unsure, include it. Never an Impact fact restated, and never what was run |
 | Future Considerations | 今後の検討事項 | Follow-up deliberately left out of this PR: what, why, and how it could improve things |
 | Test Plan | テスト計画 | The verification performed and its result as terse evidence: commands run, tool limits hit, automated reviews passed. For UI changes, consider before/after screenshots |
+| Manual Checks | 手動確認 | One unchecked box per line of Step 1's `== manual checks`, copied verbatim, adding `(#N)` only when several issues contribute. Omit the section when there are none |
 
 ### 3.4 Writing principles
 
@@ -137,6 +140,7 @@ Reviewers can read the diff. The PR description is valuable because it explains 
 
 - **One fact, one place**: Each fact, such as a file's purpose or a design decision, goes only in the section whose 3.3 Content it fits. If it seems to fit two, keep it where the Content names it most specifically.
 - **Omission**: Remove a section that is genuinely irrelevant, unless the template has it.
+- **Large diffs**: When the diff has more than 20 files or 1,000 changed lines, organize the description into logical groups.
 
 ### 3.5 Line Breaks
 

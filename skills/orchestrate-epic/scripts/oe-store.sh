@@ -4,7 +4,7 @@
 #
 # | Path under the state directory | Holds | Written by |
 # |---|---|---|
-# | locks.git | One ref per Epic that a session holds | oe lock |
+# | locks.git | One ref per Epic that a session holds | oe lock; read by oe status through lock_held |
 # | records/<repo-key>/<issue>.jsonl | One Issue's records, oldest first, one JSON object per line | oe claim, oe attempt, oe verdict; dropped by oe forget |
 #
 # - The state directory is OE_STATE_DIR when set, and orchestrate-epic under XDG_STATE_HOME or ~/.local/state otherwise.
@@ -100,4 +100,43 @@ records_drop() {
     return 1
   }
   rmdir "${file%/*}" 2>/dev/null || true
+}
+
+# The lock store: one ref per Epic, whose blob names the holding session.
+# oe lock writes it; every function below only reads it.
+
+# Prints the lock store.
+lock_store() {
+  printf '%s/locks.git' "$(state_dir)"
+}
+
+# Prints the ref of the lock of Epic $2 in repository $1.
+lock_ref() {
+  printf 'refs/oe-lock/%s/%s' "$(repo_key "$1")" "$2"
+}
+
+# Prints field $1 of the holder blob $2.
+lock_field() {
+  git --git-dir="$(lock_store)" cat-file -p "$2" 2>/dev/null | sed -n "s/^$1=//p" | head -n1
+}
+
+# Prints when process $1 started, or nothing when it is not running.
+process_start() {
+  ps -o lstart= -p "$1" 2>/dev/null | sed -e 's/^ *//' -e 's/ *$//'
+}
+
+# Succeeds when the holder recorded in blob $1 is still running: its process exists and started when it did.
+lock_holder_running() {
+  local pid lstart
+  pid="$(lock_field pid "$1")"
+  lstart="$(lock_field lstart "$1")"
+  [[ "${pid}" =~ ^[1-9][0-9]*$ && -n "${lstart}" && "$(process_start "${pid}")" == "${lstart}" ]]
+}
+
+# Succeeds when a running session holds the lock of Epic $2 in repository $1. Creates nothing.
+lock_held() {
+  local blob
+  [[ -d "$(lock_store)" ]] || return 1
+  blob="$(git --git-dir="$(lock_store)" rev-parse --quiet --verify "$(lock_ref "$1" "$2")")" || return 1
+  lock_holder_running "${blob}"
 }
