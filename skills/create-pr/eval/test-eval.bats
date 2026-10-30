@@ -146,7 +146,7 @@ EOF
   bash "${eval_dir}/setup.sh" B "${work}/b" "${work}/other-skill"
   prompt="$(cat "${work}/b/prompt.md")"
   [[ "${prompt}" == *"Read ${work}/other-skill/SKILL.md"* ]]
-  [[ "${prompt}" == *"workdir ${work}/b/repo"* ]]
+  [[ "${prompt}" == *"shell command in ${work}/b/repo"* ]]
   [[ "${prompt}" == *"export PATH=${work}/b/bin:\$PATH"* ]]
   [[ "${prompt}" == *"lang en"* ]]
   [[ "${prompt}" == *"[critical]"* ]]
