@@ -283,7 +283,7 @@ JSON
 
 # oe question
 
-@test "a posted question carries the marker and makes oe ready wait for the answer" {
+@test "a posted question has the fixed format, starts with the marker, and makes oe ready wait for the answer" {
   github <<'JSON'
 {
   "default_branch": {"checks": {"test": "success"}},
@@ -297,7 +297,15 @@ JSON
 
   run bash "${oe}" question o/r 5 <<<"Should the cache key include the locale?"
   [ "${status}" -eq 0 ]
-  [ "$(last_comment 5)" = $'<!-- oe:question -->\nShould the cache key include the locale?' ]
+  expected_body='<!-- oe:question -->
+### Question from the orchestrate-epic agent working on this Issue
+
+Should the cache key include the locale?
+
+---
+Answer with a comment on this Issue. The next agent reads it and resumes the work.'
+  [ "$(last_comment 5)" = "${expected_body}" ]
+  [ "$(comment_count 5)" -eq 1 ]
 
   run bash "${oe}" ready o/r 1
 
