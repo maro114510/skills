@@ -11,6 +11,8 @@
 # - Run it from the clone the session runs in, so the AGENT column can find the agents' worktrees.
 # - --watch redraws the view every wait_interval seconds until interrupted.
 #   A failed read is reported on stderr and retried at the next refresh.
+#   Once a refresh has found a running session holding the Epic's lock, the first refresh that finds none draws the last view and exits 0,
+#   so a board left open after its session ended, crashed or not, stops reading GitHub.
 # - OE_NOW sets the current time in epoch seconds, and OE_WAIT_INTERVAL the seconds between refreshes, as in oe wait.
 # - OE_STATUS_REFRESHES, for tests, ends --watch after that many refreshes.
 #
@@ -149,13 +151,22 @@ if ((! watch)); then
 fi
 
 count=0
+seen=0
 while :; do
+  # The lock is read before the view, so the last view is drawn after the session ended.
+  ended=0
+  if lock_held "${repo}" "${epic}"; then
+    seen=1
+  elif ((seen)); then
+    ended=1
+  fi
   if view="$(render)"; then
     [[ ! -t 1 ]] || printf '\033[H\033[2J'
     printf '%s\n' "${view}"
   else
     echo "oe status: the read failed at $(date -u +%FT%TZ); retrying at the next refresh" >&2
   fi
+  ((! ended)) || exit 0
   count=$((count + 1))
   [[ -z "${refreshes}" || "${count}" -lt "${refreshes}" ]] || exit 0
   sleep "${interval}"
