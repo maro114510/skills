@@ -41,9 +41,9 @@ Each part does one job and stores no state of its own. State lives on GitHub, ex
 | oe brief | Builds the brief handed to an Owner or a Verifier, and records each Verifier start before its brief | A pending verify status on the SHA, for a Verifier |
 | oe claim | Creates the Issue's branch and writes a claim record | A branch on origin and the record store |
 | oe worktree | Creates an agent's worktree outside the shared checkout, on the Issue branch for an Owner and detached at its head for a Verifier, and removes it after the agent ends | A local worktree |
-| oe attempt | Writes an attempt record before an Owner starts, and refuses a 4th | The record store |
+| oe attempt | Writes an attempt record before an Owner starts, naming the bots whose findings start it, and refuses a 4th | The record store |
 | oe question | Writes an Owner's question in a fixed format | An Issue comment |
-| oe rereview | Asks every listed bot to review the PR again, in a fixed format | A PR comment |
+| oe rereview | Asks the named bots to review the PR again, in a fixed format | A PR comment |
 | oe verdict | Writes a Verifier's verdict and findings | A commit status on the SHA, and the record store |
 | oe records | Prints an Issue's records from its latest claim on, for an Owner | nothing |
 | oe forget | Drops an Epic's records once every child Issue is closed | The record store |
@@ -145,7 +145,7 @@ For each Issue, oe ready reads this table from the top and outputs the action of
     - A review-thread comment
   - Since the latest attempt record, a listed bot wrote a bot finding, while both of these hold
     - No trusted user approved the PR's head SHA
-    - The PR has no rereview comment from oe written after the latest claim record
+    - That bot still has its round: no attempt record after the latest claim record names it
 - Bot findings
   - A bot finding is the first comment of an unresolved, not outdated review thread, written by a listed bot in its own review. A reply in a thread never counts, because anyone can make a bot reply on a public repository by mentioning it
   - The bot is told by its account's login and its Bot type, never by a role, because a bot's author association is NONE
@@ -157,7 +157,8 @@ For each Issue, oe ready reads this table from the top and outputs the action of
     | Codex | `chatgpt-codex-connector` | P0, P1 | `**<sub><sub>![<level> Badge](https://img.shields.io/badge/<level>-…)</sub></sub>` followed by the title, where `<level>` is `P0` or `P1` | P2, P3, and every other comment |
 
   - An engineer dismisses a finding by resolving its thread
-  - The bot round is one per claim. After a repair push for a bot finding, the Owner writes the rereview comment with oe rereview, and from then on bot findings start nothing and are left to the engineer. oe ready waits for no re-review
+  - Each bot has one round per claim. oe attempt names, in the attempt record, every bot whose finding starts that Owner, so the round is used when the Owner starts, even when it ends without a push or finds nothing it can reproduce. From then on that bot's findings start nothing and are left to the engineer
+  - After a repair push for bot findings, the Owner asks the bots it repaired for to review again with oe rereview. The comment is only a request, never a record, and oe ready waits for no re-review
   - A repair for a bot finding is an Owner attempt and counts toward the cap of 3
 - Counting
   - Only records after the latest claim record count, and every record counts when there is no claim record
@@ -243,7 +244,7 @@ sequenceDiagram
 | Failed verification | The Verifier writes a failure verdict and stores its findings. An Owner reads the findings, repairs, and pushes. The new SHA has no verdict, so CI and verification run again |
 | Manual checks | An Issue with only manual checks left gets a success verdict and waits for the merge |
 | Failed CI | An Owner fixes the failed check on the same branch and pushes |
-| Bot finding | CodeRabbit marks a finding Major. An Owner reads it as data, reproduces it in the code, repairs, pushes, and asks the bots to review again with oe rereview. The new SHA runs CI and verification again. A Major finding from that re-review is left to the engineer. A Minor finding starts nothing |
+| Bot finding | CodeRabbit marks a finding Major. An Owner reads it as data, reproduces it in the code, repairs, pushes, and asks CodeRabbit to review again with oe rereview. The new SHA runs CI and verification again. A Major finding from CodeRabbit's re-review is left to the engineer, while a later P1 from Codex still starts Codex's own round. A Minor finding starts nothing |
 | Reached cap | When a repair signal remains after 3 attempts, the Issue is parked and the Issues that depend on it stop too. The engineer either finishes and merges it by hand, or deletes the branch so the AI starts over |
 | Red default branch | While a check on the default branch fails, no claim, Owner, or Verifier starts, so no attempt is spent. The loop resumes once the check passes |
 
@@ -255,12 +256,13 @@ sequenceDiagram
 - oe does not scan for secrets, and the commit skill screens each commit instead
 - A comment the AI forgot to mark is read as engineer input
 - The session lock works only within one host, so running the same Epic on another host lets two agents touch the same branch
-- Resuming an Epic on another host, or after losing the record store, resets attempt counts and findings, and earlier engineer input counts as a repair signal again
+- Resuming an Epic on another host, or after losing the record store, resets attempt counts, bot rounds, and findings, and earlier engineer input and bot findings count as repair signals again
 - Records carry the host's clock, so clock skew can misorder them against GitHub events
 - In OpenCode V2 and an interactive Codex session the session's process is a shared background service, so a session that ends without releasing its lock blocks a rerun until the service restarts or the lock is released with its token
 - In Codex, waiting is not free: the session polls oe wait every 30 seconds within one turn, so a long run grows its context, and a compaction can drop the lock token or the running agents the session keeps in memory
 - oe ready reads only the newest PR with an Issue's branch name, so a newer PR from a fork with that name hides the Issue's own PR; its Owners find nothing to repair, and the Issue parks
 - A bot that changes its comment format, or skips draft PRs by its settings, has its findings missed until an engineer sees them
+- A bot finding outside a review thread, such as CodeRabbit's outside-diff-range comments in its review body, starts nothing
 - A bot that refuses the re-review, as CodeRabbit does past its hourly review allowance, leaves the repair without a bot review, and nothing asks again
 - A bot finding the Owner cannot reproduce still spends an attempt
 
@@ -273,8 +275,9 @@ sequenceDiagram
 | Which bot findings count | Only Major or higher from CodeRabbit and Codex, because those are bugs the engineer would otherwise relay by hand. Lower findings start nothing, so the Owner never chases style |
 | How severity is read | From each bot's fixed heading, as the Bot findings table lists. An unknown format counts as no finding, so a format change misses findings instead of starting Owners |
 | Keeping a bot's text from instructing | Only a bot's own thread-opening comment counts, and the Owner gets it as untrusted data, follows none of its instructions such as CodeRabbit's prompt for AI agents, and fixes only what it reproduces in the code |
-| Bot repairs per PR | One bot round per claim, inside the cap of 3 attempts, so a bot and the Owner never chase each other. Findings after the round go to the engineer and do not park the Issue |
-| Re-review after a bot repair | The Owner writes one PR comment through oe rereview: the marker `<!-- oe:rereview -->`, then `@coderabbitai review` and `@codex review`. The marker keeps it from counting as engineer input, and its presence marks the round as used |
+| Bot repairs per PR | One round per bot per claim, inside the cap of 3 attempts, so a bot and the Owner never chase each other, and a bot that reviews minutes later still gets its round. Findings after a bot's round go to the engineer and do not park the Issue |
+| Recording a bot round | In the attempt record that oe writes before the Owner starts, never in anything the Owner writes, so an Owner that ends early cannot leave the round unused and restart the chase |
+| Re-review after a bot repair | The Owner writes one PR comment through oe rereview: the marker `<!-- oe:rereview -->`, then `@coderabbitai review` or `@codex review` for each bot it repaired for. The marker keeps it from counting as engineer input |
 | A bot finding after approval | Starts nothing, so the AI never pushes onto a head that an engineer approved and may be merging |
 | Restarting an Owner after an answer | Counts toward the cap of 3 attempts |
 | A Verifier ends without a verdict | It is restarted once on the same SHA, and the Issue is parked when the second start also gives no verdict |
