@@ -33,7 +33,7 @@ Each part does one job and stores no state of its own. State lives on GitHub, ex
 
 | Part | Job | Writes to |
 |---|---|---|
-| Host-local record store | Keeps each Issue's claim, attempt, and findings records, keyed by repository and Issue, until oe forget drops an Epic's | oe lock's directory: `$XDG_STATE_HOME/orchestrate-epic` or `~/.local/state/orchestrate-epic` |
+| Host-local record store | Keeps each Issue's claim, attempt, and findings records until oe forget drops them | oe lock's directory: `$XDG_STATE_HOME/orchestrate-epic` or `~/.local/state/orchestrate-epic` |
 | oe lock | Refuses a second session for the same Epic | A host-local lock |
 | oe ready | Reads GitHub and the record store and prints each Issue's next action | nothing |
 | oe status | Shows each Issue's step, PR, CI result, verdict and failure reason, attempts, running agent, and time in step. `--watch` refreshes it | nothing |
@@ -45,7 +45,7 @@ Each part does one job and stores no state of its own. State lives on GitHub, ex
 | oe question | Writes an Owner's question in a fixed format | An Issue comment |
 | oe verdict | Writes a Verifier's verdict and findings | A commit status on the SHA, and the record store |
 | oe records | Prints an Issue's records from its latest claim on, for an Owner | nothing |
-| oe forget | Drops an Epic's records once every child Issue is closed, at the end of the session | The record store |
+| oe forget | Drops an Epic's records once every child Issue is closed | The record store |
 
 ### Engineer
 
@@ -248,6 +248,6 @@ sequenceDiagram
 | Counting Verifier starts | oe brief writes the pending verify status that oe ready counts, before it prints a Verifier's brief, so no Verifier starts uncounted |
 | Worktrees | An agent's worktree is removed when the agent ends, and unpushed work is discarded |
 | Where records go | The record store, because comments under the user's account cluttered timelines. Only questions stay on GitHub, for the engineer to answer, in a fixed format that says an agent asks |
-| Record key | Repository and Issue, because an Issue has one parent Epic and no writer is given the Epic |
-| Dropping records | oe forget runs when the session ends with every Issue done, and refuses while any child Issue is open, so oe ready stays read-only |
+| Record key | Repository and Issue: an Issue has one parent Epic, and no writer is given the Epic |
+| Dropping records | oe forget, when a session ends with every Issue done. It refuses while an Issue is open, and oe ready stays read-only |
 | Acceptance checks | Verification splits automated checks from manual ones, and no agent checks a box that needs a human, template boxes included |

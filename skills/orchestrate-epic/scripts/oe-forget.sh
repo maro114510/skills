@@ -1,19 +1,18 @@
 #!/usr/bin/env bash
 # oe forget
 #
-# Drops an Epic's records from this host once every child Issue is closed, so finished Epics leave nothing behind.
-# It refuses while any child Issue is open, because dropping that Issue's records would reset its attempt cap.
+# Drops an Epic's records from this host once every child Issue is closed.
+# It refuses while one is open, because dropping its records would reset its attempt cap.
 #
 # Usage
 #
 #   oe forget <owner/repo> <epic-number>
 #
-# - The child Issues come from GitHub's sub-issue list of the Epic.
 # - Only the records of child Issues in <owner/repo> are dropped, because records are keyed by repository and Issue.
 #
 # Output
 #
-# - On success, one line holding forgot and the number of child Issues whose records were dropped, separated by a tab.
+# - On success, forgot and the number of child Issues dropped, separated by a tab.
 #
 # Exit codes
 #

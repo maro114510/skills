@@ -151,7 +151,7 @@ The harness wakes you when an agent ends or the wait returns, and whichever come
 ## Step 4: End the session
 
 1. Start nothing new. Wait for each running agent to end, in Codex with `wait_agent`, then run `oe worktree remove <n>` for it.
-2. When every Issue is `done`, drop the Epic's records from this host: `oe forget <repo> <epic>`. On a non-zero exit, put its error in the report and go on.
+2. When every Issue is `done`, run `oe forget <repo> <epic>`. Report a non-zero exit and go on.
 3. Release the lock: `oe lock release <repo> <epic> <token>`.
 4. Report to the user in Japanese with the format below, from the last `oe ready` output and the agents' final lines.
 

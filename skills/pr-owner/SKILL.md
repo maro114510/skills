@@ -45,19 +45,19 @@ If any of the first four is missing, end without changing anything and say which
    bash <skills-root>/orchestrate-epic/scripts/oe records <repo> <issue>
    ```
 
-   It prints the records from the latest claim record on, that record included, oldest first, one JSON object per line with `kind` and `at`, the time in the same form GitHub uses. A `verdict` record also has `sha`, `state`, and `findings`. On a non-zero exit, end without pushing and say so.
-   On GitHub, a question is an Issue comment whose body starts with `<!-- oe:question -->`, and engineer input is a trusted comment or review whose body does not start with `<!-- oe:`.
-   - Answers: read the Issue's comments with `gh api repos/<repo>/issues/<issue>/comments --paginate`. Take every question created at or after the claim record's `at`, every question when there is no claim record, and the engineer input after the first of them.
+   It prints the records from the latest claim on, oldest first, as JSON lines with `kind` and `at`; a `verdict` adds `sha`, `state`, and `findings`. On a non-zero exit, end without pushing.
+   Engineer input is a trusted comment or review whose body does not start with `<!-- oe:`.
+   - Answers: in `gh api repos/<repo>/issues/<issue>/comments --paginate`, take the questions, comments starting with `<!-- oe:question -->` from the claim's `at` on, and the engineer input after the first of them.
    - For a repair, also collect each item below, then keep only the items present:
 
      | Item | Source |
      |---|---|
      | Failed checks | `gh pr checks <pr> --repo <repo>`, and `gh run view --job <job-id> --repo <repo> --log-failed` for each failed GitHub Actions job |
      | Conflict | `mergeable` is `CONFLICTING` in step 2 |
-     | Verification findings | The `findings` of the latest `verdict` record whose `sha` is the PR's `headRefOid` from step 2, when its `state` is `failure`. Findings for any other SHA describe code that is no longer the head, so they are absent |
+     | Verification findings | The `findings` of the latest `verdict` on the PR's `headRefOid` from step 2, when it is a `failure`. Findings on another SHA are absent |
      | Review feedback | Engineer input in `CHANGES_REQUESTED` reviews from `gh api repos/<repo>/pulls/<pr>/reviews --paginate` and in review comments from `gh api repos/<repo>/pulls/<pr>/comments --paginate`, posted after the previous Owner started |
 
-     The previous Owner started at the `at` of the second-latest `attempt` record, because the latest one is this Owner's. With fewer than two `attempt` records, use the claim record's `at`; with no claim record, take all feedback.
+     The previous Owner started at the second-latest `attempt`'s `at`, since the latest is this Owner's; with fewer, at the claim's `at`; with no claim, take all feedback.
      If none of these is present and there is no answer, end without pushing, and say so.
 4. For a conflict, merge the base in the worktree, and never rebase:
 

@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # oe records
 #
-# Prints an Issue's records from the record store on this host, so an Owner reads them without knowing where they live.
-# It writes nothing.
+# Prints an Issue's records on this host, so an Owner reads them without knowing where they live. It writes nothing.
 #
 # Usage
 #
@@ -10,8 +9,7 @@
 #
 # Output
 #
-# - The records from the latest claim record on, that record included, oldest first, one JSON object per line.
-# - Every record when there is no claim record, and nothing when the Issue has no records.
+# - The records from the latest claim on, or every record without a claim, oldest first, as JSON lines.
 # - oe-store.sh lists each record's fields.
 #
 # Exit codes
