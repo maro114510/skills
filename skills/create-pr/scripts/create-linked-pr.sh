@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Creates a PR and links each closing line to its issue through the API.
-# Usage: create-linked-pr.sh --title T --body-file F|- [--base B] [--head H] [--repo R] [--draft] [--assignee A] [--label L]...
+# Usage: create-linked-pr.sh --title T --body-file F|- [--base B] [--head H] [--repo R] [--draft] [--web] [--assignee A] [--label L]...
 # Usage: create-linked-pr.sh --link PR [--repo R]
 # Before creating, origin's tip of the head branch must equal local HEAD.
 # Exit: 0 ok, 1 gh or git failed, 2 bad usage or unknown issue, 3 link missing, 4 NOT_PUSHED: head not pushed or stale.
@@ -27,6 +27,7 @@ while [[ $# -gt 0 ]]; do
   --assignee) assignees+=("${2:-}") && shift ;;
   --label) labels+=("${2:-}") && shift ;;
   --draft) draft=1 ;;
+  --web) ;;
   --link) link_pr="${2:-}" && shift ;;
   *) usage ;;
   esac
