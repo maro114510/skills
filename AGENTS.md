@@ -86,8 +86,6 @@ Skills read them with `git config --get <key>`, so git decides between local and
 |---|---|---|
 | `skills.lang` | `ja`, `en` | `skills/create-pr/scripts/lang.sh` only; its header holds the precedence, and skills call it instead of restating it |
 
-A skill passes the resolved value as `lang <value>` to every skill it calls.
-
 Committed repository policy lives in `.agents/skills.toml`, which skill scripts read.
 The `[paths]` section is neutral: no single skill owns it, and every key holds Git glob pathspecs as a string or an array.
 Every other section is named after the skill that reads it.
