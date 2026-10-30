@@ -3,7 +3,7 @@ name: orchestrate-epic
 description: >
   Turn a GitHub Epic's child Issues into verified PRs in dependency order.
   A loop asks oe ready for each Issue's next action, claims ready Issues, starts a fresh pr-owner agent to implement or repair one Issue and a fresh pr-verify agent to check one PR head SHA, and waits for GitHub to change with oe wait, with agents and the wait running in the background where the harness allows, so waiting costs no tokens there.
-  Every state lives on GitHub, so rerunning with the same Epic resumes from anywhere.
+  State lives on GitHub and in host-local records, so rerunning with the same Epic on the same host resumes from anywhere.
   The AI never merges and never enables auto-merge: an engineer or repository automation merges, and a merged dependency starts the next Issue.
   Invoking it is consent to push branches and open PRs; ending the session stops everything.
   Use when the user runs it to implement an Epic — "Epic を実装して", "この Epic を進めて", "Issue 群を順に実装して", "オーケストレーションして".
@@ -16,7 +16,7 @@ argument-hint: "epic <number|url> [repo <owner/repo>] [max-agents <n>]"
 
 This file ends with the line `<!-- end of orchestrate-epic -->`. If you cannot see that line, your harness cut the file short, as Codex does after 8,000 bytes for a skill from a plugin: read the whole file from its path before doing anything else.
 
-Drive an Epic's child Issues to verified PRs, one step per fresh agent, with every state read from GitHub.
+Drive an Epic's child Issues to verified PRs, one step per fresh agent, with every state read from GitHub and from oe's records on this host.
 
 `<skill-dir>` is the directory containing this file, and `<skills-root>` is its parent.
 `oe` below means `bash <skill-dir>/scripts/oe`; each subcommand's header documents its arguments, output, and exit codes.
@@ -151,8 +151,9 @@ The harness wakes you when an agent ends or the wait returns, and whichever come
 ## Step 4: End the session
 
 1. Start nothing new. Wait for each running agent to end, in Codex with `wait_agent`, then run `oe worktree remove <n>` for it.
-2. Release the lock: `oe lock release <repo> <epic> <token>`.
-3. Report to the user in Japanese with the format below, from the last `oe ready` output and the agents' final lines.
+2. When every Issue is `done`, drop the Epic's records from this host: `oe forget <repo> <epic>`. On a non-zero exit, put its error in the report and go on.
+3. Release the lock: `oe lock release <repo> <epic> <token>`.
+4. Report to the user in Japanese with the format below, from the last `oe ready` output and the agents' final lines.
 
 ```markdown
 ## orchestrate-epic: Epic #<epic> を終了しました
@@ -163,7 +164,7 @@ The harness wakes you when an agent ends or the wait returns, and whichever come
 |---|---|---|
 | #<n> | <oe ready の action> | <例: PR #<pr> のレビューと merge / 質問への回答 / parked の理由を見て判断> |
 
-再開するには同じ引数でもう一度実行してください。状態はすべて GitHub から読み直します。
+再開するには同じホストで同じ引数でもう一度実行してください。状態は GitHub とこのホストの記録から読み直します。
 ```
 
 <!-- end of orchestrate-epic -->
