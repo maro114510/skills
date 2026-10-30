@@ -58,20 +58,29 @@ def content(ls):
     return [l for l in text.split("\n") if l.strip() and l.strip() not in ("-", "- [ ]")]
 
 if cmd == "refs":
-    key = re.compile(r"^\s*(close[sd]?|fix(e[sd])?|resolve[sd]?|related):?\s+#(\d+)\s*$", re.I)
+    # GitHub closes from a keyword anywhere in the text, but not inside code; Related counts only on its own line.
+    closing = re.compile(r"(?<![\w-])(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+#(\d+)\b", re.I)
+    related = re.compile(r"^\s*related:?\s+#(\d+)\s*$", re.I)
+    found = set()
     for _, l in out:
-        m = key.match(l)
+        l = re.sub(r"`[^`]*`", "", l)
+        found.update(("Closes", int(n)) for n in closing.findall(l))
+        m = related.match(l)
         if m:
-            print(("Related" if m.group(1).lower() == "related" else "Closes") + " #" + m.group(3))
+            found.add(("Related", int(m.group(1))))
+    for kind, n in sorted(found):
+        print(kind + " #" + str(n))
 elif cmd == "headings":
     for _, l in out:
         m = re.match(r"##\s+(.+?)\s*$", l)
         if m:
             print(m.group(1))
 elif cmd == "unfilled":
+    # args: the template file, then its section headings. A section counts as filled only with a line the template lacks.
+    template = open(args[0], encoding="utf-8").read().split("\n")
     s = sections()
-    for h in args:
-        if h not in s or not content(s[h]):
+    for h in args[1:]:
+        if h not in s or not set(content(s[h])) - set(content(template)):
             print(h)
 elif cmd == "checked":
     for l in sections().get(args[0], []):
@@ -79,9 +88,9 @@ elif cmd == "checked":
             print(l.strip())
 elif cmd == "wraps":
     block = re.compile(r"\s*([-*+>|#]|\d+[.)]\s|<!--|$)")
-    for (i, a), (_, b) in zip(out, out[1:]):
-        if a.strip() and b.strip() and not block.match(b):
-            print(i + 1)
+    for (i, a), (j, b) in zip(out, out[1:]):
+        if j == i + 1 and a.strip() and b.strip() and not block.match(b):
+            print(j)
 PY
 }
 
@@ -97,9 +106,10 @@ creates="$(cat "${pr}/creates" 2>/dev/null || echo 0)"
 title="$(cat "${pr}/title" 2>/dev/null)"
 links="$(sort -un "${pr}/links" 2>/dev/null | tr '\n' ' ' | sed 's/ $//')"
 
-# 1: through create-linked-pr.sh, exactly once.
+# 1: through create-linked-pr.sh, exactly once. The caller must be the script itself, not a shell whose -c text names it.
 caller="$(cat "${pr}/caller" 2>/dev/null)"
-if [[ "${creates}" == 1 && "${caller}" == *create-linked-pr.sh* ]]; then
+script_caller='^(([^ ]*/)?(ba)?sh [^-].*/|([^ ]*/)?(ba)?sh |[^ ]*/)?create-linked-pr\.sh( |$)'
+if [[ "${creates}" == 1 && "${caller}" =~ ${script_caller} ]]; then
   result 1 PASS "one gh pr create, from create-linked-pr.sh"
 else
   result 1 FAIL "gh pr create ran ${creates} times; last caller: ${caller:-none}"
@@ -202,7 +212,10 @@ A)
   fi
   sections=()
   while IFS= read -r h; do sections+=("${h}"); done < <(git -C "${dir}/repo" show HEAD:.github/PULL_REQUEST_TEMPLATE.md | sed -n 's/^##[[:space:]]*//p')
-  unfilled="$(body unfilled "${sections[@]}" | tr '\n' ',' | sed 's/,$//')"
+  template="$(mktemp "${TMPDIR:-/tmp}/grade-template.XXXXXX")"
+  git -C "${dir}/repo" show HEAD:.github/PULL_REQUEST_TEMPLATE.md >"${template}"
+  unfilled="$(body unfilled "${template}" "${sections[@]}" | tr '\n' ',' | sed 's/,$//')"
+  rm -f "${template}"
   if [[ -z "${unfilled}" ]]; then
     result 4 PASS "every template section is present and filled: ${sections[*]}"
   else
