@@ -14,7 +14,7 @@ usage() {
   exit 2
 }
 
-title="" body_file="" base="" head="" repo="" draft=0 link_pr=""
+title="" body_file="" base="" head="" repo="" draft=0 web=0 link_pr=""
 assignees=()
 labels=()
 while [[ $# -gt 0 ]]; do
@@ -27,7 +27,7 @@ while [[ $# -gt 0 ]]; do
   --assignee) assignees+=("${2:-}") && shift ;;
   --label) labels+=("${2:-}") && shift ;;
   --draft) draft=1 ;;
-  --web) ;;
+  --web) web=1 ;;
   --link) link_pr="${2:-}" && shift ;;
   *) usage ;;
   esac
@@ -217,5 +217,13 @@ fi
 cat "${err}" >&2
 url="$(tail -n 1 <<<"${out}")"
 echo "${url}"
-[[ -z "${issues}" ]] && exit 0
-link_and_verify "${url}"
+status=0
+[[ -n "${issues}" ]] && {
+  link_and_verify "${url}"
+  status=$?
+}
+# After linking, so the page shows the links; the PR already exists, so a browser failure is only a warning.
+if [[ "${web}" == 1 ]] && ! gh pr view "${url}" --web >/dev/null 2>"${err}"; then
+  echo "WARN: could not open ${url} in the browser: $(tr '\n' ' ' <"${err}" | sed 's/[[:space:]]*$//')" >&2
+fi
+exit "${status}"
