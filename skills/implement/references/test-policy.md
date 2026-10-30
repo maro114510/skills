@@ -39,7 +39,7 @@ Each rule ends with its source, listed at the bottom. Japanese sources are parap
 
 ## Evidence
 
-- What shows that a test satisfies a criterion is defined in [evidence.md](evidence.md). `scripts/gate-tests.sh` checks part of this policy mechanically, and a passing check is not evidence. Source: Fighting defects
+- What shows that a test satisfies a criterion is defined in [evidence.md](evidence.md). Source: Fighting defects
 
 ## Sources
 

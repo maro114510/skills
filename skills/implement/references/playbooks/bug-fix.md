@@ -10,5 +10,3 @@ Steps only: the rules are in [test-policy.md](../test-policy.md), cited by secti
 4. Refactor while green, without changing an assertion, and commit as `refactor:`. Skip it when nothing needs it.
 
 When no test can reproduce the defect, follow the same steps with a script or manual steps, record why in the decision log, and record each run.
-
-History check: instead of rerunning the test without the fix, rely on `before-change`, which runs the committed step 2 test against its parent and must report it failed there. Passing there means the test relied on something its commit lacks, such as local state: return to step 1. A passing check is never evidence.
