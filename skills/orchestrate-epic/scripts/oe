@@ -25,7 +25,7 @@ set -uo pipefail
 dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 case "${1:-}" in
-ready | status | wait | claim | attempt | question | brief | verdict | records | forget | worktree | lock)
+ready | status | board | wait | claim | attempt | question | brief | verdict | records | forget | worktree | lock)
   sub="$1"
   shift
   exec bash "${dir}/oe-${sub}.sh" "$@"
