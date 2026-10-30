@@ -57,7 +57,7 @@ It fetches `origin/<base>` and prints everything later steps use. Do not read it
 | Section | Holds | Used in |
 |---|---|---|
 | `Arguments:` line | Resolved `lang` with its source, `draft`, and `base`; `base` follows the argument, then `branch.<branch>.gh-merge-base`, then the default branch | Arguments, Step 3.1 |
-| `== create flags` | The `--base`, `--draft`, and `--assignee` flags for Step 6.2 | Step 6.2 |
+| `== create flags` | The `--base`, `--draft`, and `--assignee` flags for Step 6.1 | Step 6.1 |
 | `== branch`, `== base` | The current branch, and the freshly fetched `origin/<base>` every comparison uses | Step 2.1, Step 6.1 |
 | `== commits` | Every commit message in `origin/<base>..HEAD`, oldest first | Step 2 |
 | `== diff stat`, `== diff` | The stat, and the diff without lockfiles when it fits 20 files and 1,000 lines | Step 2 |
@@ -261,49 +261,36 @@ Confirm that any issue numbers extracted in Step 2.3 are included in the descrip
 
 ## Step 6. Push and Create the PR
 
-**6.1 Push**
+**6.1 Run one command**
+
+Run this as one call. Never run `gh pr create` directly, and do not stop after showing the command. Paste Step 1's `== create flags` line verbatim as `<create flags>`:
 
 ```bash
-git push -u origin <current-branch>
-```
-
-**6.2 Create the PR**
-
-Never run `gh pr create` directly. GitHub can lag hours before it links a closing keyword, so the script links each `Closes` line through the API and waits until the link appears. It rewrites `Closes` to `Related` for an issue with open sub-issues, noting how many remain, so a partial PR never closes its parent; with `--link` it applies that rewrite to the existing PR body. On a non-default base it keeps `Closes` but links nothing, because GitHub honors the keyword only once the PR targets the default branch.
-
-Run the command; do not stop after showing it. Paste Step 1's `== create flags` line verbatim as `<create flags>`, so draft and base cannot drift from the context the description was written against:
-
-```bash
-bash <skill-dir>/scripts/create-linked-pr.sh \
-  --title "<title>" \
-  --body-file - \
-  <create flags> \
-  [--label "<label>"] <<'EOF'
+git push -u origin <current-branch> &&
+  bash <skill-dir>/scripts/create-linked-pr.sh \
+    --title "<title>" \
+    --body-file - \
+    <create flags> \
+    [--label "<label>"] \
+    --web <<'EOF'
 <description>
 EOF
 ```
 
-**6.3 Handle the result**
+The `git push` stays visible on the first line so an approval hook can stop it. When a hook asks for approval, get it from the user, then append the hook's marker after the `&&` on that first line, where the comment cuts off nothing.
 
-| Exit | Output | Action |
-|---|---|---|
-| 0 | PR URL, `LINKED #NNN`, `NOTICE` | Continue to 6.4 |
-| 1 | PR already exists | Show its URL and stop. Do not edit it |
-| 1 | Draft not supported | Ask: ready or abort. Ready reruns without `--draft` |
-| 1 | Other | Show the error verbatim and stop |
-| 2 | `ISSUE_NOT_FOUND #NNN` | No PR was created. Name the issues and stop |
-| 3 | PR URL, `LINK_MISSING #NNN` | Rerun once with `--link <url>`. If still missing, ask the user to link it from the Development sidebar |
+**6.2 Handle the result**
 
-Never push again or retry blindly.
+| Exit | Action |
+|---|---|
+| 0 | Continue to 6.3 |
+| 3 | `LINK_MISSING`: rerun once as `create-linked-pr.sh --link <url>`, without the push. If still missing, ask the user to link it from the Development sidebar |
+| 4 | `NOT_PUSHED`: rerun the 6.1 command once, which pushes again |
+| Any other non-zero | Show the output verbatim and stop |
 
-**6.4 Finish**
+**6.3 Finish**
 
-After creating the PR, run:
-
-```bash
-gh pr view --web
-```
-
-Show the PR URL, whether it is draft or ready, every linked issue, and any `NOTICE` line verbatim.
+Run nothing more: the output holds the PR URL and every link, and `--web` already opened it.
+Show the PR URL, whether it is draft or ready, every linked issue, and any `NOTICE` or `WARN` line verbatim.
 If a `NOTICE` rewrote an issue to `Related` while a commit footer still says `Closes` for it, warn that merging would still close the issue through that footer, even with a squash merge under GitHub's default message; edit the squash message or reword the footer before merging.
 If a `NOTICE` kept `Closes` unlinked on a non-default base, tell the user to run `create-linked-pr.sh --link <url>` once the PR is retargeted to the default branch.

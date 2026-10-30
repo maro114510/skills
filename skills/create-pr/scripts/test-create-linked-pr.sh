@@ -15,7 +15,7 @@ fail=0
 # - no_subs: gh too old to know the subIssuesSummary field
 # - subs_fail: the subIssuesSummary query fails for another reason
 # - edited_body: body written by gh pr edit
-# - create_fail, pr_view_fail, link_noop: force that failure
+# - create_fail, pr_view_fail, link_noop, web_fail: force that failure
 # - refs: linked issue numbers. lag: reads that still return the old list
 bin="${work}/bin"
 mkdir -p "${bin}"
@@ -62,6 +62,12 @@ case "${args}" in
   [[ -f "${d}/link_noop" ]] || echo "${issue}" >>"${d}/pending"
   echo '{"data":{"addCloseIssueReferences":{"issue":{"number":'"${issue}"'}}}}'
   ;;
+*" pr view "*"--web"*)
+  [[ -f "${d}/web_fail" ]] && {
+    echo "could not open a browser" >&2
+    exit 1
+  }
+  ;;
 *" pr view "*"closingIssuesReferences"*)
   lag="$(cat "${d}/lag" 2>/dev/null || echo 0)"
   if [[ "${lag}" -gt 0 ]]; then
@@ -93,14 +99,24 @@ STUB
 chmod +x "${bin}/gh"
 
 # git stub: current branch from $STUB_DIR/current, gh-merge-base per branch from $STUB_DIR/merge-base.<branch>.
+# Local HEAD is $LOCAL_SHA. The remote tip of <branch> is $STUB_DIR/remote.<branch>, else $LOCAL_SHA, as if pushed;
+# $STUB_DIR/no_remote.<branch> means origin has no such branch. Each call is logged to $STUB_DIR/git_log.
 cat >"${bin}/git" <<'STUB'
 #!/usr/bin/env bash
 d="${STUB_DIR}"
+local_sha=1111111111111111111111111111111111111111
+printf '%s\n' "$*" >>"${d}/git_log"
 case "$*" in
 "branch --show-current") cat "${d}/current" 2>/dev/null || echo feat-x ;;
 "config --get branch."*".gh-merge-base")
   b="${3#branch.}"
   cat "${d}/merge-base.${b%.gh-merge-base}" 2>/dev/null || exit 1
+  ;;
+"rev-parse HEAD") echo "${local_sha}" ;;
+"ls-remote origin refs/heads/"*)
+  b="${3#refs/heads/}"
+  [[ -f "${d}/no_remote.${b}" ]] && exit 0
+  printf '%s\trefs/heads/%s\n' "$(cat "${d}/remote.${b}" 2>/dev/null || echo "${local_sha}")" "${b}"
   ;;
 *) exit 1 ;;
 esac
@@ -381,5 +397,53 @@ run --title "t"
 r=0
 [[ "${rc}" == 2 ]] || r=1
 check "missing --body-file exits 2" "${r}"
+
+older_sha=2222222222222222222222222222222222222222
+setup $'Closes #12'
+echo "${older_sha}" >"${STUB_DIR}/remote.feat-x"
+create
+r=0
+[[ "${rc}" == 4 ]] || r=1
+grep -q "^NOT_PUSHED" <<<"${out}" || r=1
+called "pr create" && r=1
+check "remote branch at an older commit exits 4 without creating the PR" "${r}"
+
+setup $'Closes #12'
+touch "${STUB_DIR}/no_remote.feat-y"
+create --head feat-y
+r=0
+[[ "${rc}" == 4 ]] || r=1
+grep -q "^NOT_PUSHED" <<<"${out}" || r=1
+called "pr create" && r=1
+check "--head branch missing on origin exits 4 without creating the PR" "${r}"
+
+setup $'Closes #12'
+create --web
+r=0
+[[ "${rc}" == 0 ]] || r=1
+called "pr view https://github.com/o/r/pull/7 --web" || r=1
+check "--web opens the created PR in the browser" "${r}"
+
+setup $'Closes #12'
+touch "${STUB_DIR}/web_fail"
+create --web
+r=0
+[[ "${rc}" == 0 ]] || r=1
+has_line "https://github.com/o/r/pull/7" || r=1
+has_line "LINKED #12" || r=1
+called "pr view https://github.com/o/r/pull/7 --web" || r=1
+check "a failing --web still exits 0 with the PR created and linked" "${r}"
+
+# pr-owner pushes HEAD:refs/heads/<branch> itself, then runs this exact shape from its worktree.
+setup ""
+out="$(printf 'Closes #12\n' | PATH="${bin}:${PATH}" LINK_POLL_ATTEMPTS=3 LINK_POLL_INTERVAL=0 bash "${target}" \
+  --repo o/r --base main --head feat-y --draft --title t --body-file - 2>&1)"
+rc=$?
+r=0
+[[ "${rc}" == 0 ]] || r=1
+has_line "https://github.com/o/r/pull/7" || r=1
+has_line "LINKED #12" || r=1
+grep -q -- "^pr create --repo o/r .*--base main --head feat-y --draft" "${STUB_DIR}/log" || r=1
+check "pr-owner's pushed --repo --base --head --draft call creates and links the PR" "${r}"
 
 exit "${fail}"
