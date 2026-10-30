@@ -21,6 +21,9 @@ setup() {
   unset HERDR_ENV HERDR_PANE_ID HERDR_SOCKET_PATH GIT_CONFIG_COUNT GIT_CONFIG_PARAMETERS
   export GIT_CONFIG_GLOBAL="${tmp}/gitconfig" GIT_CONFIG_NOSYSTEM=1
   export OE_BOARD_START_TIMEOUT=0
+  # The board carries the session's time zone and locale, so each test sets them.
+  export TZ=UTC LANG=C
+  unset LC_ALL LC_TIME
   clone="${tmp}/clone"
   git init -q "${clone}"
   cd "${clone}" || return 1
@@ -78,11 +81,11 @@ calls_starting() {
 }
 
 # The command a board pane runs: oe status --watch for Epic 1 in o/r, from the clone, at the board's refresh interval.
-# The pane's shell does not inherit the session's environment, so the command names the session's state directory
-# and the agents' worktree root, which by default is the clone's sibling with -oe appended.
+# The pane's shell does not inherit the session's environment, so the command carries the session's time zone and locale,
+# names the session's state directory, and names the agents' worktree root, by default the clone's sibling with -oe appended.
 board_interval_seconds=180
 board_command() {
-  printf 'cd %s && env OE_WAIT_INTERVAL=%s OE_STATE_DIR=%s OE_WORKTREE_ROOT=%s bash %s status o/r 1 --watch' \
+  printf 'cd %s && env -u LC_ALL -u LC_TIME TZ=UTC LANG=C OE_WAIT_INTERVAL=%s OE_STATE_DIR=%s OE_WORKTREE_ROOT=%s bash %s status o/r 1 --watch' \
     "${clone}" "${board_interval_seconds}" "${OE_STATE_DIR}" "${tmp}/clone-oe" "${oe}"
 }
 
@@ -163,7 +166,20 @@ board_command() {
   run --separate-stderr bash "${oe}" board o/r 1
 
   [ "${status}" -eq 0 ]
-  grep -qxF "pane run w1:p9 cd ${clone} && env OE_WAIT_INTERVAL=${board_interval_seconds} OE_STATE_DIR=${tmp}/xdg/orchestrate-epic OE_WORKTREE_ROOT=${tmp}/worktrees bash ${oe} status o/r 1 --watch" "${calls}"
+  grep -qxF "pane run w1:p9 cd ${clone} && env -u LC_ALL -u LC_TIME TZ=UTC LANG=C OE_WAIT_INTERVAL=${board_interval_seconds} OE_STATE_DIR=${tmp}/xdg/orchestrate-epic OE_WORKTREE_ROOT=${tmp}/worktrees bash ${oe} status o/r 1 --watch" "${calls}"
+}
+
+@test "the board keeps the session's time zone and locale, which its lock check reads, and unsets those the session leaves unset" {
+  inside_herdr
+  git config skills.herdr true
+  board_starts_on_run
+  export TZ=Asia/Tokyo LC_TIME=ja_JP.UTF-8
+  unset LC_ALL LANG
+
+  run --separate-stderr bash "${oe}" board o/r 1
+
+  [ "${status}" -eq 0 ]
+  grep -qF "pane run w1:p9 cd ${clone} && env -u LC_ALL -u LANG TZ=Asia/Tokyo LC_TIME=ja_JP.UTF-8 OE_WAIT_INTERVAL=" "${calls}"
 }
 
 @test "a second run while the board runs opens no second pane" {
