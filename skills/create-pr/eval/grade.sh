@@ -55,7 +55,8 @@ def sections():
 
 def content(ls):
     text = re.sub(r"<!--.*?-->", "", "\n".join(ls), flags=re.S)
-    return [l for l in text.split("\n") if l.strip() and l.strip() not in ("-", "- [ ]")]
+    stripped = (l.strip() for l in text.split("\n"))
+    return [l for l in stripped if l and l not in ("-", "- [ ]")]
 
 if cmd == "refs":
     # GitHub closes from a keyword anywhere in the text, but not inside code; Related counts only on its own line.
@@ -70,6 +71,12 @@ if cmd == "refs":
             found.add(("Related", int(m.group(1))))
     for kind, n in sorted(found):
         print(kind + " #" + str(n))
+elif cmd == "ownline":
+    # The closing references on a line of their own, the only ones create-linked-pr.sh links.
+    for _, l in out:
+        m = re.match(r"^\s*(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+#(\d+)\s*$", l, re.I)
+        if m:
+            print("Closes #" + m.group(1))
 elif cmd == "headings":
     for _, l in out:
         m = re.match(r"##\s+(.+?)\s*$", l)
@@ -144,6 +151,7 @@ if [[ "${created}" == 0 ]]; then
 fi
 
 refs="$(body refs | tr '\n' ' ' | sed 's/ $//')"
+ownline="$(body ownline)"
 base="$(arg_values --base | tail -n 1)"
 labels="$(arg_values --label)"
 
@@ -205,17 +213,17 @@ wraps() {
 
 case "${scenario}" in
 A)
-  if [[ "${refs}" == "Closes #12" && "${links}" == 12 ]]; then
+  if [[ "${refs}" == "Closes #12" && "${links}" == 12 ]] && grep -qx 'Closes #12' <<<"${ownline}"; then
     result 3 PASS "references: ${refs}; linked: ${links}"
   else
-    result 3 FAIL "references: ${refs:-none}; linked: ${links:-none}"
+    result 3 FAIL "references: ${refs:-none}; on their own line: $(tr '\n' ' ' <<<"${ownline:-none}"); linked: ${links:-none}"
   fi
-  sections=()
-  while IFS= read -r h; do sections+=("${h}"); done < <(git -C "${dir}/repo" show HEAD:.github/PULL_REQUEST_TEMPLATE.md | sed -n 's/^##[[:space:]]*//p')
   template="$(mktemp "${TMPDIR:-/tmp}/grade-template.XXXXXX")"
+  trap 'rm -f "${template}"' EXIT
   git -C "${dir}/repo" show HEAD:.github/PULL_REQUEST_TEMPLATE.md >"${template}"
+  sections=()
+  while IFS= read -r h; do sections+=("${h}"); done < <(sed -n 's/^##[[:space:]]*//p' "${template}")
   unfilled="$(body unfilled "${template}" "${sections[@]}" | tr '\n' ',' | sed 's/,$//')"
-  rm -f "${template}"
   if [[ -z "${unfilled}" ]]; then
     result 4 PASS "every template section is present and filled: ${sections[*]}"
   else
@@ -243,10 +251,10 @@ B)
   wraps 7
   ;;
 C)
-  if [[ "${base}" == feat/export-api && "${refs}" == "Closes #8" && -z "${links}" ]]; then
+  if [[ "${base}" == feat/export-api && "${refs}" == "Closes #8" && -z "${links}" ]] && grep -qx 'Closes #8' <<<"${ownline}"; then
     result 3 PASS "base ${base}; references: ${refs}; nothing linked"
   else
-    result 3 FAIL "base ${base:-default}; references: ${refs:-none}; linked: ${links:-none}"
+    result 3 FAIL "base ${base:-default}; references: ${refs:-none}; on their own line: $(tr '\n' ' ' <<<"${ownline:-none}"); linked: ${links:-none}"
   fi
   order="$(body headings | python3 -c '
 import sys
