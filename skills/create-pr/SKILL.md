@@ -113,12 +113,12 @@ Follow the template contents Step 1 printed, without reading the file. Do not ig
 - Follow any inline comments or section-specific instructions.
 - Check a verification item, such as tests, lint, or a build, only if it ran in this session and passed; adding a test is not running it. Otherwise leave it unchecked with the reason on the same line, e.g. `- [ ] Unit tests pass (not run: no test runner)`.
 - Check any other checklist item based on the actual change.
-- Write each template section by the 3.3 Content of the section serving the same purpose, such as Summary for "What", Background for "Why", and Test Plan for "How to test". Where the template's own instructions for a section differ, they win.
+- Write each template section by the 3.3 Content of the section serving the same purpose, such as Summary for "What", Background for "Why", and Test Plan for "How to test". Where the template's own instructions for a section explicitly require something else, they win; a prompt that only names the section's topic requires nothing else.
 - Add a 3.3 section at the end only for useful information that no template section holds, such as implementation details or risks.
 
 ### 3.3 Sections
 
-Each row's Content is the only rule for what its section holds. Without a template, use these sections in this order as `##` headings: the `en` heading for `en`, the `ja` heading for `ja`.
+Each row's Content is the only rule for what its section holds, except where 3.2 lets a template's own instructions win. Without a template, use these sections in this order as `##` headings: the `en` heading for `en`, the `ja` heading for `ja`.
 
 | `en` | `ja` | Content |
 |---|---|---|
@@ -144,7 +144,7 @@ Write each paragraph or bullet as a single source line, however long and even wh
 
 ### 3.6 Compact Pass
 
-Before moving to Step 4, re-read the full draft once as a first-time reader with no other context, and check every sentence against the 3.3 Content of the section that holds it, and against 3.4 and 3.5. Move a sentence that fits another section's Content, delete one that fits none or restates a fact given earlier, and rejoin a broken line.
+Before moving to Step 4, re-read the full draft once as a first-time reader with no other context, and check every sentence against the rule for the section that holds it, its 3.3 Content or the template's instructions as 3.2 says, and against 3.4 and 3.5. Move a sentence that fits another section's Content, delete one that fits none or restates a fact given earlier, and rejoin a broken line.
 
 If nothing fails, keep the draft as written — depth is intentional for this skill's purpose as a design record, so do not cut content for brevity alone.
 
