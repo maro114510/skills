@@ -10,7 +10,7 @@ Read {{SKILL_DIR}}/SKILL.md and follow it. `<skill-dir>` is {{SKILL_DIR}}.
 
 These are about the sandbox, not the skill; obey them strictly.
 
-- Run every Bash command with workdir {{REPO}} and start it with `export PATH={{BIN}}:$PATH; ` so `gh` resolves to the sandbox's GitHub CLI. `origin` is a local remote.
+- Run every shell command in {{REPO}}, through your tool's working-directory option or a leading `cd`, and start it with `export PATH={{BIN}}:$PATH; ` so `gh` resolves to the sandbox's GitHub CLI. `origin` is a local remote.
 - The user has approved pushing the current branch to this sandbox's `origin`. If a hook asks for approval of that push, add the marker the hook names.
 - Never set `GH_REPO` or `GH_HOST`, never pass `--repo` or `--hostname` to `gh`, and never run `gh api` yourself.
 - Do not read anything under {{SANDBOX}} other than `repo/`, and nothing under {{SKILL_DIR}}/eval.
