@@ -126,7 +126,7 @@ Each row's Content is the only rule for what its section holds, except where 3.2
 |---|---|---|
 | Background | 背景 | Why the change is needed, for a reviewer who lacks the surrounding context: the root problem, constraints, and why it matters now |
 | Summary | 概要 | The outcome in 1-3 sentences: what is different once this merges and the problem it solves, such as "merged skills reach every local Claude Code, whatever branch is checked out" rather than "add X". Never how it is done, or the files touched or settings changed |
-| Implementation Details | 実装方針 | Why this approach was chosen: the tradeoffs accepted and the alternatives rejected. Never what each part does |
+| Implementation Details | 実装方針 | Why this approach was chosen: the tradeoffs accepted and the alternatives rejected, when the diff, commits, or conversation show them. Never what each part does |
 | Changes | 変更内容 | What changed, under `###` group headings by behavior or area rather than by code edit, each bullet giving the change's meaning to a user or reviewer |
 | Impact | 影響範囲 | What merging affects: pages, features, APIs, data formats, configuration, workflows, or users, with breaking changes called out. Facts, not doubts |
 | Concerns | 懸念点 | Unresolved uncertainty or open risk a reviewer should weigh, and where to focus review. Only when one genuinely exists, not merely because the change touches performance, defaults, existing behavior, compatibility, data formats, configuration, or APIs; when unsure, include it. Never an Impact fact restated, and never what was run |
