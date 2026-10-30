@@ -310,5 +310,5 @@ sequenceDiagram
 | Acceptance checks | Verification splits automated checks from manual ones, and no agent checks a box that needs a human, template boxes included |
 | The board in Herdr | Opt-in with git config `skills.herdr`, read only inside Herdr, so no other run calls herdr and no Herdr user gets a pane unasked |
 | Board refresh | Every 3 minutes, slower than oe wait's minute, because each refresh repeats oe ready's GitHub reads |
-| Board lifetime | The board stops by itself once its session ends, crash included, and leaves its last view. A later start reuses its pane, but never one the user took over |
+| Board lifetime | The board stops by itself once its session ends, crash included, and leaves its last view. A later start reuses its pane when the pane runs the board or sits at its shell's prompt, and never sends input to a pane that runs anything else |
 | Notifications | None. A question or a park shows on the board |

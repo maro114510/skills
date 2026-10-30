@@ -55,15 +55,15 @@ OE_SESSION_PID="$PPID" bash <skill-dir>/scripts/oe lock acquire <repo> <epic>
 
 Keep the printed `token=`. Exit 4 means another session runs this Epic on this host: stop and say so. Any other non-zero exit: stop and show the error.
 After the session resumes, as after a restart, acquire again with the token before anything else.
+In OpenCode V2 and in an interactive Codex session, `$PPID` is a shared background service, which serves many sessions and outlives this one, so a lock left by a session that ended without Step 4 holds until that service restarts. On exit 4 there, also tell the user that such a lock frees on `oe lock release` with the `token=` that the ended session printed in its transcript, or on restarting the service with `opencode service restart` or `codex app-server daemon restart`, which also interrupts every other session it runs. `codex exec` runs no shared service, so its lock frees when it exits.
 
-After every acquire, open the board, a Herdr pane that shows `oe status --watch` and stops by itself once this session ends:
+After every acquire that exits 0, open the board, a Herdr pane that shows `oe status --watch` and stops by itself once this session ends:
 
 ```bash
 bash <skill-dir>/scripts/oe board <repo> <epic>
 ```
 
 It opens a pane only inside Herdr with git config `skills.herdr` true, and never a second one for the Epic. On a non-zero exit, show its error and go on, because the board only shows progress.
-In OpenCode V2 and in an interactive Codex session, `$PPID` is a shared background service, which serves many sessions and outlives this one, so a lock left by a session that ended without Step 4 holds until that service restarts. On exit 4 there, also tell the user that such a lock frees on `oe lock release` with the `token=` that the ended session printed in its transcript, or on restarting the service with `opencode service restart` or `codex app-server daemon restart`, which also interrupts every other session it runs. `codex exec` runs no shared service, so its lock frees when it exits.
 
 ## Step 3: Loop
 
