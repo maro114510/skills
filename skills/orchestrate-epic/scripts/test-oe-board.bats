@@ -78,9 +78,12 @@ calls_starting() {
 }
 
 # The command a board pane runs: oe status --watch for Epic 1 in o/r, from the clone, at the board's refresh interval.
+# The pane's shell does not inherit the session's environment, so the command names the session's state directory
+# and the agents' worktree root, which by default is the clone's sibling with -oe appended.
 board_interval_seconds=180
 board_command() {
-  printf 'cd %s && env OE_WAIT_INTERVAL=%s bash %s status o/r 1 --watch' "${clone}" "${board_interval_seconds}" "${oe}"
+  printf 'cd %s && env OE_WAIT_INTERVAL=%s OE_STATE_DIR=%s OE_WORKTREE_ROOT=%s bash %s status o/r 1 --watch' \
+    "${clone}" "${board_interval_seconds}" "${OE_STATE_DIR}" "${tmp}/clone-oe" "${oe}"
 }
 
 @test "outside Herdr, oe board says the board is off and runs no herdr command, even with skills.herdr true" {
@@ -147,6 +150,20 @@ board_command() {
     esac
   done
   grep -qxF "pane run w1:p9 $(board_command)" "${calls}"
+}
+
+@test "the board reads the state directory and the worktree root this session resolves, not the ones the pane's shell would" {
+  inside_herdr
+  git config skills.herdr true
+  board_starts_on_run
+  unset OE_STATE_DIR
+  export XDG_STATE_HOME="${tmp}/xdg"
+  export OE_WORKTREE_ROOT="${tmp}/worktrees"
+
+  run --separate-stderr bash "${oe}" board o/r 1
+
+  [ "${status}" -eq 0 ]
+  grep -qxF "pane run w1:p9 cd ${clone} && env OE_WAIT_INTERVAL=${board_interval_seconds} OE_STATE_DIR=${tmp}/xdg/orchestrate-epic OE_WORKTREE_ROOT=${tmp}/worktrees bash ${oe} status o/r 1 --watch" "${calls}"
 }
 
 @test "a second run while the board runs opens no second pane" {
