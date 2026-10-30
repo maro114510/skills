@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Grades one create-pr evaluation run from what it left behind, never from the executor's report.
 # Usage: grade.sh <A|B|C> <dir>
-# Reads <dir>/state, the stub's records, and <dir>/repo. Prints one line per item of scenarios/<scenario>.md:
-#   <n> PASS|FAIL|MANUAL <evidence>
-# MANUAL means the records cannot settle the item: read the executor's report, or the lines the evidence names.
+# Reads the stub's records in <dir>/state and the clone in <dir>/repo.
+# Prints "<n> PASS|FAIL|MANUAL <evidence>" for each item of scenarios/<scenario>.md.
+# MANUAL means the records cannot settle the item, so read the executor's report or the body lines the evidence names.
 # Exit: 0 no FAIL, 1 at least one FAIL, 2 bad usage or <dir> is not a sandbox.
 set -uo pipefail
 
@@ -28,7 +28,7 @@ result() {
   return 0
 }
 
-# body <subcommand> [args] analyzes the PR body: Markdown structure and Unicode need more than grep.
+# body <subcommand> [args] analyzes the PR body, because Markdown structure and Unicode need more than grep.
 body() {
   python3 - "$@" "${pr}/body" <<'PY'
 import re, sys
@@ -83,7 +83,7 @@ elif cmd == "headings":
         if m:
             print(m.group(1))
 elif cmd == "unfilled":
-    # args: the template file, then its section headings. A section counts as filled only with a line the template lacks.
+    # args are the template file, then its section headings. A section is filled only by a line the template lacks.
     template = open(args[0], encoding="utf-8").read().split("\n")
     s = sections()
     for h in args[1:]:
@@ -113,7 +113,7 @@ creates="$(cat "${pr}/creates" 2>/dev/null || echo 0)"
 title="$(cat "${pr}/title" 2>/dev/null)"
 links="$(sort -un "${pr}/links" 2>/dev/null | tr '\n' ' ' | sed 's/ $//')"
 
-# 1: through create-linked-pr.sh, exactly once. The caller must be the script itself, not a shell whose -c text names it.
+# Item 1 needs one gh pr create whose caller is create-linked-pr.sh itself, not a shell whose -c text names it.
 caller="$(cat "${pr}/caller" 2>/dev/null)"
 script_caller='^(([^ ]*/)?(ba)?sh [^-].*/|([^ ]*/)?(ba)?sh |[^ ]*/)?create-linked-pr\.sh( |$)'
 if [[ "${creates}" == 1 && "${caller}" =~ ${script_caller} ]]; then
@@ -122,7 +122,7 @@ else
   result 1 FAIL "gh pr create ran ${creates} times; last caller: ${caller:-none}"
 fi
 
-# 2: origin's branch equals the local HEAD at creation, and the branch has not moved since.
+# Item 2 needs origin's branch to equal HEAD at creation, and the branch not to have moved since.
 if [[ "${created}" == 1 ]]; then
   branch="$(cat "${pr}/branch")"
   head="$(cat "${pr}/head")"
@@ -173,7 +173,7 @@ metadata() {
   fi
 }
 
-# Conventional Commits under 70 characters; $2=ja also needs a Japanese subject.
+# Conventional Commits under 70 characters, and with $2=ja a Japanese subject.
 title_check() {
   local n="$1" problems="" length
   [[ "${title}" =~ ^(feat|fix|refactor|docs|chore|deps|perf|test|ci|build|style|revert)(\([^\)]+\))?!?:\ [^\ ] ]] ||

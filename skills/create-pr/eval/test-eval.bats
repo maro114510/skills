@@ -1,14 +1,13 @@
 #!/usr/bin/env bats
-# Tests for the create-pr evaluation harness: setup.sh builds the sandboxes, gh-stub.sh records what a run creates,
-# and grade.sh judges the records. A "reference run" drives create-pr's own scripts the way SKILL.md says, without an
-# LLM, so the grader is checked against runs whose outcome the test fixes.
+# Tests for the create-pr evaluation harness, without an LLM.
+# A reference run drives create-pr's own scripts as SKILL.md says, so each grader check meets a run whose outcome the test fixes.
 # shellcheck disable=SC2292 # bats fails a test on a mid-test `[[ ]]` only under bash 4.1+; `[ ]` works on every bash.
 
 setup() {
   eval_dir="${BATS_TEST_DIRNAME}"
   scripts="${BATS_TEST_DIRNAME}/../scripts"
   work="${BATS_TEST_TMPDIR}"
-  # The user's git config and gh target must not reach the sandbox; a run sets them only through the harness.
+  # Neither the user's git config nor a gh target may reach the sandbox.
   export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
   unset GIT_CONFIG GIT_CONFIG_COUNT GIT_CONFIG_PARAMETERS GH_REPO GH_HOST
   export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.invalid
@@ -38,8 +37,7 @@ normalized_snapshot() {
   snapshot "$1" | sed "s|$1|<dir>|g"
 }
 
-# reference_run <dir> <title> <labels> <body> [<argument tokens>...] runs SKILL.md's Step 1 and Step 6 commands in the
-# sandbox, with the stub on PATH, as one correct executor would.
+# reference_run <dir> <title> <labels> <body> [<argument tokens>...] runs SKILL.md's Step 1 and Step 6 commands as a correct executor would.
 reference_run() {
   local d="$1" title="$2" labels="$3" body="$4" context flags_line
   shift 4
@@ -155,7 +153,7 @@ EOF
 
 @test "with the stub off PATH, the scenario's commands make no HTTP request" {
   command -v gh >/dev/null || skip "gh is not installed"
-  # Signed in, so gh would send a request it can send instead of stopping at sign-in; any value serves.
+  # A token makes gh send the request instead of stopping at sign-in.
   token="${BATS_TEST_NAME}"
   for s in A C; do
     bash "${eval_dir}/setup.sh" "${s}" "${work}/${s}"
@@ -172,7 +170,7 @@ EOF
 
 @test "replaying a URL the stub printed with the real gh does not reach github.com" {
   command -v gh >/dev/null || skip "gh is not installed"
-  # Signed in, so gh would send a request it can send instead of stopping at sign-in; any value serves.
+  # A token makes gh send the request instead of stopping at sign-in.
   token="${BATS_TEST_NAME}"
   bash "${eval_dir}/setup.sh" A "${work}/a"
   cd "${work}/a/repo"

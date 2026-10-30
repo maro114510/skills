@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
-# Stub gh that setup.sh installs as <dir>/bin/gh. Answers the calls create-pr makes from files in <dir>/state and
-# records every call, so grading reads what a run did instead of what the executor reports. Never talks to GitHub.
+# Stub gh that setup.sh installs as <dir>/bin/gh, so grading reads what a run did instead of what the executor reports.
+# It answers create-pr's calls from state/issues and state/labels.json, and never talks to GitHub.
 # Every URL it prints is on github.invalid, so replaying one with the real gh cannot reach GitHub either.
-# Reads: state/issues ("<n>:<title>:<open sub-issues>" lines), state/labels.json.
-# Writes: state/gh.log (one line per call); per gh pr create, state/pr/{args,title,body,head,remote,branch,caller};
-# state/pr/creates (count); state/pr/links (issue numbers linked through the API); state/pr/edited_body.
+# Each line of state/issues is <n>:<title>:<open sub-issues>.
+# state/gh.log gets every call, and state/pr gets what gh pr create received, how often it ran, and the issues linked.
 set -uo pipefail
 
 state="$(cd "$(dirname "$0")/.." && pwd)/state"

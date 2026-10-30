@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
 # Builds one create-pr evaluation sandbox from scratch, without network access or a GitHub token.
 # Usage: setup.sh <A|B|C> <dir> [<skill-dir>]
-# <skill-dir> holds the SKILL.md the executor follows; the default is the create-pr directory containing this script.
-# <dir> must be missing, empty, or an earlier sandbox, which is replaced; anything else is refused.
-# Output in <dir>: origin.git (bare origin, so the real gh resolves no GitHub host), repo (the user's clone),
-# bin/gh (gh-stub.sh), state (the stub's data and records), prompt.md (the executor prompt for this scenario).
-# Dates, identities, and git config are fixed, so every build of a scenario has the same commits.
+# <skill-dir> holds the SKILL.md under test and defaults to the create-pr directory above this script.
+# <dir> must be missing, empty, or an earlier sandbox, which is replaced.
+# <dir> receives a bare origin.git, the clone repo, the stub bin/gh, its records in state, and the executor's prompt.md.
+# Fixed dates, identities, and git config give every build of a scenario the same commits.
 # Exit: 0 ok, 1 git or a file operation failed, 2 bad usage or a refused <dir>.
 set -euo pipefail
 
@@ -70,8 +69,8 @@ printf '%s\n' "${labels}" >"${dir}/state/labels.json"
 
 case "${scenario}" in
 A)
-  # Median: a Japanese template, a branch never pushed, one Closes footer. skills.lang is pinned in the clone so a
-  # user's global value cannot change the language.
+  # A Japanese template, an unpushed branch, and one Closes footer.
+  # skills.lang is pinned in the clone, so a global value cannot change the language.
   g config skills.lang ja
   commit .github/PULL_REQUEST_TEMPLATE.md $'## 概要\n\n<!-- 何をなぜ変えたか -->\n\n## 変更点\n\n- \n\n## 動作確認\n\n- [ ] ユニットテスト\n- [ ] 手動確認\n\n## 関連 Issue\n\n<!-- Closes #xxx -->' "chore: add PR template"
   g push -q -u origin main
@@ -81,8 +80,7 @@ A)
   echo "12:Refresh loops forever on an expired JWT:0" >"${dir}/state/issues"
   ;;
 B)
-  # A branch cut from origin/main while local main is stale, whose upstream is behind HEAD; origin/main carries an
-  # unrelated Closes #99.
+  # A stale local main, an upstream behind HEAD, and an unrelated Closes #99 on origin/main.
   g push -q -u origin main
   g checkout -q -b tmp-advance
   commit src/billing/invoice.ts 'export const TAX = 0.1;' $'feat(billing): add tax constant\n\nCloses #99'
@@ -97,7 +95,7 @@ B)
   printf '%s\n' "40:Rate-limit login attempts:0" "99:Billing tax constant:0" >"${dir}/state/issues"
   ;;
 C)
-  # A stacked branch whose gh-merge-base is its parent feature branch, and no template.
+  # A stacked branch whose gh-merge-base is its parent, without a template.
   g push -q -u origin main
   g checkout -q -b feat/export-api
   commit src/export/api.ts 'export function exportCsv() { return ""; }' $'feat(export): add the export API skeleton\n\nCloses #7'
