@@ -67,7 +67,7 @@ For every match found:
 ## Step 4. Compose the message
 
 **Language**: write the subject and body in the language of the repository's history, not the per-user `skills.lang`, because a merged commit cannot be rewritten.
-Count Step 1's `git log -5 --no-merges` subjects: one containing hiragana, katakana, or kanji is Japanese, any other is English.
+Count Step 1's `git log -5 --no-merges` subjects: one containing hiragana, katakana, or kanji outside quoted text, such as backticks, quotation marks, or `「」`, is Japanese, any other is English.
 Use the majority; on a tie, use the language of the most recent subject.
 Only when Step 1 printed no subjects, because the repository has no commits yet, run `bash <skills-root>/create-pr/scripts/lang.sh` with no argument, where `<skills-root>` is the parent of this skill's directory, and use the language it prints; on a non-zero exit, show its output and stop.
 The type, scope, trailers, and `Closes`/`Related` lines stay in English whatever the language.
