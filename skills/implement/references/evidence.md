@@ -89,7 +89,7 @@ A criterion about the state the step leaves, such as a pull request that exists 
 
 A `No evidence` criterion is unsatisfied.
 
-A check the source lists under a `Manual checks` or `手動確認` heading, as create-github-issues writes Verification, is the engineer's to run before the merge.
+A check the source lists under a `Manual checks` or `手動確認` heading inside its `Verification` or `検証方法` section, as create-github-issues writes it, is the engineer's to run before the merge.
 Gather no evidence for it and report it as `-> manual`. It is neither evidenced nor `No evidence`, it never counts as deferred, and it never makes a verdict fail.
 No other check is manual, however hard it is to evidence.
 
