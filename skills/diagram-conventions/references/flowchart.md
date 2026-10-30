@@ -37,6 +37,7 @@ Use these symbols only for the meaning given:
 | A named procedure defined elsewhere | Predefined process | `[[text]]` |
 | A test that selects one of its exits | Decision | `{text}` |
 | Data the procedure takes in or puts out | Data | `[/text/]` |
+| The flow from one symbol to the next | Flowline | `-->`, so every flowline carries an arrowhead |
 
 | ID | Rule | Tag |
 |---|---|---|
@@ -62,5 +63,5 @@ Check the finished diagram:
 - No two exits of a decision can both hold (CON-2)
 - Every loop leaves through a decision (COR-2)
 - Every condition the source states with an outcome is drawn as a decision (COR-3)
-- The diagram declares `TB` or `LR`, and every flowline against that direction has an arrowhead (CON-4)
+- The diagram declares `TB` or `LR`, and every flowline is `-->` (CON-1, CON-4)
 - Every outcome the source does not route is listed as not stated, not drawn as an edge (COR-1, COR-2)
