@@ -327,6 +327,35 @@ run
 check "Related issue and issue without Manual checks: neither adds a manual check" "${r}"
 
 setup
+cat >"${STUB_DIR}/body.5" <<'BODY'
+## Notes
+
+### Manual checks
+- Not part of the acceptance criteria.
+
+## Acceptance Criteria
+
+### Verification
+
+#### Manual checks
+- Run the installer on a new Mac.
+```
+# not a heading
+- not a check
+```
+- Confirm the menu bar icon appears.
+
+## Follow-up
+
+#### Manual checks
+- Also outside Verification.
+BODY
+commit $'feat: a\n\nCloses #5' a
+run
+[[ "${rc}" == 0 && "$(section 'manual checks')" == $'#5\tRun the installer on a new Mac.\n#5\tConfirm the menu bar icon appears.' ]] && r=0 || r=1
+check "Manual checks outside Verification and lines in a code fence: neither is a manual check" "${r}"
+
+setup
 commit 'feat: a' a
 run
 [[ "${rc}" == 0 && "$(grep -c '^== manual checks$' <<<"${out}")" == 1 && -z "$(section 'manual checks')" ]] && r=0 || r=1
