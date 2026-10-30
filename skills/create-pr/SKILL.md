@@ -238,8 +238,7 @@ If none of these apply, keep the draft as written — depth is intentional for t
 
 ## Step 5. Consider Metadata
 
-Before creating the PR, run the following `gh` commands and use the results to choose metadata.
-Do not merely show the commands; execute them.
+Choose metadata from Step 1's output, without running any other command.
 Do not ask the user for confirmation.
 
 **5.1 Assignee**
