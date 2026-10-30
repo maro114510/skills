@@ -13,6 +13,7 @@ export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 # Stub state files in $STUB_DIR:
 # - default: repo default branch, main when absent
 # - labels: label lines, printed as gh would after the script's --jq
+# - missing: issue numbers that do not exist
 bin="${work}/bin"
 mkdir -p "${bin}"
 cat >"${bin}/gh" <<'STUB'
@@ -20,7 +21,13 @@ cat >"${bin}/gh" <<'STUB'
 d="${STUB_DIR}"
 case " $* " in
 *" repo view "*) cat "${d}/default" 2>/dev/null || echo main ;;
-*" issue view "*) echo "Title of $3" ;;
+*" issue view "*)
+  if grep -qx -- "$3" "${d}/missing" 2>/dev/null; then
+    echo "GraphQL: Could not resolve to an issue with the number of $3." >&2
+    exit 1
+  fi
+  echo "Title of $3"
+  ;;
 *" label list "*) cat "${d}/labels" 2>/dev/null || true ;;
 *) echo "unexpected gh $*" >&2 && exit 1 ;;
 esac
@@ -203,6 +210,25 @@ run
 diff_out="$(section diff)"
 [[ "${rc}" == 0 && "${diff_out}" == "omitted: 21 files"* && "${diff_out}" != *"+++"* ]] && r=0 || r=1
 check "21 files: diff omitted" "${r}"
+
+# A footer pointing at an issue gh cannot read stops before any context, naming gh's reason.
+setup
+echo 5 >"${STUB_DIR}/missing"
+commit $'feat: a\n\nCloses #5'
+run
+[[ "${rc}" == 1 && "${out}" == "ISSUE_LOOKUP_FAILED #5: GraphQL: Could not resolve to an issue with the number of 5." ]] && no_context && r=0 || r=1
+check "unreadable footer issue exits 1 with ISSUE_LOOKUP_FAILED and no context" "${r}"
+
+# A valid branch name with shell metacharacters survives pasting the create flags into a shell.
+setup
+metachar_base='release;next'
+g push -q origin "main:${metachar_base}"
+commit 'feat: a' a
+run base "${metachar_base}"
+flags="$(section 'create flags')"
+words="$(eval "printf '%s\n' ${flags}" 2>/dev/null)"
+[[ "${rc}" == 0 && "${words}" == $'--base\nrelease;next\n--draft\n--assignee\n@me' ]] && r=0 || r=1
+check "base with shell metacharacters: create flags parse back to the same base" "${r}"
 
 # 7. Labels arrive as name<TAB>description.
 setup
