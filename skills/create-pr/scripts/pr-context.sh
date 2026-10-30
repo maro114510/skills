@@ -92,14 +92,20 @@ case $? in
 *) exit 1 ;;
 esac
 
-# Items of the body's Manual checks list, as create-github-issues writes it, one per line without the list marker or a checkbox.
+# Items of the Manual checks list inside the body's Verification section, as create-github-issues writes it, one per line without the list marker or a checkbox.
+# A heading elsewhere is not an acceptance check, and code fences hold no headings or items.
 # Bytes, because macOS awk compares strings by collation, which ranks 自動確認 equal to 手動確認 in a UTF-8 locale.
 manual_checks() {
   LC_ALL=C awk '
     { sub(/\r$/, "") }
+    /^[ \t]*(```|~~~)/ { fence = !fence; next }
+    fence { next }
     /^#+[ \t]/ {
+      level = match($0, /[^#]/) - 1
       h = $0; sub(/^#+[ \t]+/, "", h); sub(/[ \t#]*$/, "", h)
-      on = (tolower(h) == "manual checks" || h == "手動確認")
+      if (verification && level <= verification) verification = 0
+      on = verification && (tolower(h) == "manual checks" || h == "手動確認")
+      if (!verification && (tolower(h) == "verification" || h == "検証方法")) verification = level
       next
     }
     on && /^[ \t]*([-*+]|[0-9]+[.)])[ \t]+/ {
