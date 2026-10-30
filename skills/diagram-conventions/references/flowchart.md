@@ -1,7 +1,7 @@
 # Flowchart
 
 Every rule ends with a tag: `[Standard: ISO 5807]` when ISO 5807:1985 states it, `[Convention]` when it is common practice adopted here.
-A review finding's principle is the heading of the section that holds the rule it breaks, and the finding quotes that rule. A defect that breaks rules in two sections is two findings.
+A review finding's principle is the heading of the section that holds the rule it breaks, and the finding quotes that rule. A defect that breaks rules in two sections is two findings. A defect no rule here covers is filed under the SKILL.md principle it breaks.
 
 ## Purpose
 
@@ -20,6 +20,7 @@ Choose another type when the reader must understand something else:
 - Draw a decision for every condition the source states, and for no other. `[Convention]`
 - Draw one exit per outcome the source routes, labeled in the source's words. List an outcome the source does not route as not stated; never infer it from sentence order. `[Convention]`
 - Draw a loop only where the source states a repetition. It leaves through a decision on the exit condition the source states. `[Convention]`
+- Never merge two steps into one node when the merge creates a path the source does not state; draw each where it occurs. `[Convention]`
 - When the source does not say where a condition is tested, place it where the layout needs and list the placement as an assumption. `[Convention]`
 
 ## Conformance
@@ -31,26 +32,31 @@ Choose another type when the reader must understand something else:
 | Predefined process | A named procedure defined elsewhere | `[[text]]` |
 | Decision | A test that selects one exit | `{text}` |
 | Data | Input or output | `[/text/]` |
+| Document | Data a person reads, such as a paper form or a printed report | `@{ shape: doc }` |
+| Manual input | Data a person enters by hand | `@{ shape: manual-input }` |
+| Stored data | Data kept for processing, such as a database | `@{ shape: stored-data }` |
+| Parallel mode | Where parallel operations start together or wait for each other | `@{ shape: fork }` |
 | Flowline | The order from one symbol to the next | `-->` |
 
 - Use each symbol only for its meaning. A state is not an operation, so it is never a process. `[Standard: ISO 5807]`
 - A decision takes exactly one exit, so no two of its exit conditions overlap. `[Standard: ISO 5807]`
-- Every exit of a symbol with several exits is labeled with its condition. `[Standard: ISO 5807]`
+- Every exit of a decision is labeled with its condition. `[Standard: ISO 5807]`
 - Flow runs top to bottom or left to right: declare `flowchart TB` or `flowchart LR`. `[Standard: ISO 5807]`
 - A flowline against that direction has an arrowhead. `[Standard: ISO 5807]`
 - Draw every flowline as `-->`, so no backward line lacks an arrowhead whatever the layout. `[Convention]`
 - Crossing flowlines mean nothing, so avoid them. `[Standard: ISO 5807]`
-- For another ISO 5807 symbol, such as document, use the Mermaid shape documented for it. When Mermaid has none, as for the connector, use the closest shape, name the replacement, and claim no ISO 5807 conformance. `[Convention]`
+- An `@{ shape: }` form needs Mermaid 11.3 or later; say so in the output when the diagram uses one. `[Convention]`
+- For an ISO 5807 symbol not in the table, use the shape the Mermaid flowchart documentation names for it. When it names none, as for the connector, use the closest shape, name the replacement, and claim no ISO 5807 conformance. `[Convention]`
 
 ## Clarity
 
-- Branch only at a decision. Every other symbol has one exit, because several exits from a process read as both a choice and parallel steps. `[Convention]`
+- Branch only at a decision, and run steps in parallel only from a parallel mode. Every other symbol has one exit, because several exits from a process read as both a choice and parallel steps. `[Convention]`
 - Text in a symbol is the shortest phrase that names its function. `[Standard: ISO 5807]`
 
 ## Validation
 
 - Every node is a symbol from the table used for its meaning, or a named replacement
-- Only decisions have more than one exit, and every such exit carries a condition from the source
+- Only decisions and parallel modes have more than one exit, and every exit of a decision carries a condition from the source
 - No two exits of a decision can both hold
 - Every condition the source states is a decision, and every loop leaves through one
 - Every outcome the source does not route is listed as not stated, not drawn
