@@ -15,7 +15,7 @@ fail=0
 # - no_subs: gh too old to know the subIssuesSummary field
 # - subs_fail: the subIssuesSummary query fails for another reason
 # - edited_body: body written by gh pr edit
-# - create_fail, pr_view_fail, link_noop: force that failure
+# - create_fail, pr_view_fail, link_noop, web_fail: force that failure
 # - refs: linked issue numbers. lag: reads that still return the old list
 bin="${work}/bin"
 mkdir -p "${bin}"
@@ -61,6 +61,12 @@ case "${args}" in
   for a in "$@"; do [[ "${a}" == i=I_* ]] && issue="${a#i=I_}"; done
   [[ -f "${d}/link_noop" ]] || echo "${issue}" >>"${d}/pending"
   echo '{"data":{"addCloseIssueReferences":{"issue":{"number":'"${issue}"'}}}}'
+  ;;
+*" pr view "*"--web"*)
+  [[ -f "${d}/web_fail" ]] && {
+    echo "could not open a browser" >&2
+    exit 1
+  }
   ;;
 *" pr view "*"closingIssuesReferences"*)
   lag="$(cat "${d}/lag" 2>/dev/null || echo 0)"
@@ -410,5 +416,22 @@ r=0
 grep -q "^NOT_PUSHED" <<<"${out}" || r=1
 called "pr create" && r=1
 check "--head branch missing on origin exits 4 without creating the PR" "${r}"
+
+setup $'Closes #12'
+create --web
+r=0
+[[ "${rc}" == 0 ]] || r=1
+called "pr view https://github.com/o/r/pull/7 --web" || r=1
+check "--web opens the created PR in the browser" "${r}"
+
+setup $'Closes #12'
+touch "${STUB_DIR}/web_fail"
+create --web
+r=0
+[[ "${rc}" == 0 ]] || r=1
+has_line "https://github.com/o/r/pull/7" || r=1
+has_line "LINKED #12" || r=1
+called "pr view https://github.com/o/r/pull/7 --web" || r=1
+check "a failing --web still exits 0 with the PR created and linked" "${r}"
 
 exit "${fail}"
