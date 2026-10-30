@@ -318,8 +318,8 @@ run
 check "Japanese heading, CRLF body, and checkbox items: plain item text without CR or box" "${r}"
 
 setup
-printf '#### Manual checks\n- Check on a real device.\n' >"${STUB_DIR}/body.5"
-printf '#### Manual checks\n- Check the other issue.\n' >"${STUB_DIR}/body.7"
+printf '### Verification\n#### Manual checks\n- Check on a real device.\n' >"${STUB_DIR}/body.5"
+printf '### Verification\n#### Manual checks\n- Check the other issue.\n' >"${STUB_DIR}/body.7"
 printf '### Verification\n- make test passes.\n' >"${STUB_DIR}/body.8"
 commit $'feat: a\n\nCloses #5\nRelated #7\nCloses #8' a
 run
