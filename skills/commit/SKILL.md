@@ -159,7 +159,7 @@ Never remove a trailer such as `Removed-Test:`.
 ## Step 6. Decide: auto-commit or ask first
 
 One classifier decides, `scripts/classify-approval.sh` in this skill's directory; its header lists the conditions.
-Its path, size, and deletion conditions are mechanical, and a repository can only add paths to them, in `[commit.approval] paths` of `.agents/skills.toml`.
+Its path, size, and deletion conditions are mechanical, and no repository setting changes them.
 Pass what only you can judge as `--require <reason>`, one per finding:
 
 - The diff mixes clearly unrelated concerns, for example an unrelated `fix` bundled with a `feat`.
@@ -167,10 +167,8 @@ Pass what only you can judge as `--require <reason>`, one per finding:
 - A confident Conventional Commits type/scope cannot be determined.
 - The caller reports a critical decision from its decision log; pass it as `--require "critical decision: <decision>"`.
 
-Add `--removed-test` when the message carries a `Removed-Test:` trailer.
-
 ```bash
-bash <skill-dir>/scripts/classify-approval.sh --staged [--removed-test] [--require "<reason>"]...
+bash <skill-dir>/scripts/classify-approval.sh --staged [--require "<reason>"]...
 ```
 
 | Exit | Action |

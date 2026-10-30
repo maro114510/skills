@@ -250,9 +250,6 @@ Write no automated test when any of these holds, record which one in the decisio
 
 Find the CI configuration in `.github/workflows/`, `Makefile`, and `package.json`, then run the equivalent lint, typecheck, test, and build checks. Fix every error before moving on to Phase 6.5.
 
-After the last commit, run `bash <skill-dir>/scripts/gate-tests.sh origin/<base-branch>`, without the base in autonomous mode. A `not-run` line is not a failure; exit 2 or 3 means nothing ran.
-`before-change` judges each commit alone, so a later commit cannot clear its `fail`. Redo that cycle with `git reset --keep`, then replay the later commits, only when `git branch -r --contains <commit>` prints nothing and no merge commit follows it; never fetch for this, since orchestrate-epic forbids workers to. Otherwise fix forward and report the `fail` as unresolved.
-
 ---
 
 ## Phase 6.5: Separate-Context Self-Review

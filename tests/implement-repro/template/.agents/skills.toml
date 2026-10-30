@@ -1,8 +1,0 @@
-[paths]
-tests = ["tests/test_*.sh"]
-
-[implement.testing]
-test_case = '^\s*(test_\w+)\(\)'
-run_one = 'bash tests/run.sh --only "$TEST_NAME" "$TEST_FILE"'
-run_shuffled = 'bash tests/run.sh --seed "$TEST_SEED" "$@"'
-build_failure = '^ERROR: '
