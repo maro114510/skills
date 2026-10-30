@@ -155,14 +155,16 @@ EOF
 
 @test "with the stub off PATH, the scenario's commands make no HTTP request" {
   command -v gh >/dev/null || skip "gh is not installed"
+  # Signed in, so gh would send a request it can send instead of stopping at sign-in; any value serves.
+  token="${BATS_TEST_NAME}"
   for s in A C; do
     bash "${eval_dir}/setup.sh" "${s}" "${work}/${s}"
     cd "${work}/${s}/repo"
-    run env GH_DEBUG=api bash "${scripts}/pr-context.sh" lang en
+    run env GH_TOKEN="${token}" GH_DEBUG=api bash "${scripts}/pr-context.sh" lang en
     [ "${status}" -ne 0 ]
     [[ "${output}" != *"* Request"* ]]
     git push -q -u origin "$(git branch --show-current)"
-    run env GH_DEBUG=api bash "${scripts}/create-linked-pr.sh" --title "t" --body-file - --draft <<<"Closes #12"
+    run env GH_TOKEN="${token}" GH_DEBUG=api bash "${scripts}/create-linked-pr.sh" --title "t" --body-file - --draft <<<"Closes #12"
     [ "${status}" -ne 0 ]
     [[ "${output}" != *"* Request"* ]]
   done
@@ -170,10 +172,12 @@ EOF
 
 @test "replaying a URL the stub printed with the real gh does not reach github.com" {
   command -v gh >/dev/null || skip "gh is not installed"
+  # Signed in, so gh would send a request it can send instead of stopping at sign-in; any value serves.
+  token="${BATS_TEST_NAME}"
   bash "${eval_dir}/setup.sh" A "${work}/a"
   cd "${work}/a/repo"
   url="$("${work}/a/bin/gh" repo view --json url --jq .url)"
-  run env GH_DEBUG=api gh pr view "${url}/pull/101" --json id
+  run env GH_TOKEN="${token}" GH_DEBUG=api gh pr view "${url}/pull/101" --json id
   [ "${status}" -ne 0 ]
   if grep -Eq 'Request to https://([^/]*\.)?github\.com|Host: ([^ ]*\.)?github\.com' <<<"${output}"; then
     return 1
@@ -240,6 +244,18 @@ EOF
   run bash "${eval_dir}/grade.sh" C "${work}/c"
   [ "${status}" -eq 1 ]
   [[ "${output}" == *"3 FAIL"* ]]
+}
+
+@test "scenario C opened against main fails item 3 even when its only reference is Closes #8 and nothing is linked" {
+  bash "${eval_dir}/setup.sh" C "${work}/c"
+  cd "${work}/c/repo"
+  git push -q -u origin feat/export-csv-quoting
+  body_c >"${work}/body"
+  PATH="${work}/c/bin:${PATH}" gh pr create --title "feat(export): quote CSV cells" --body-file "${work}/body" \
+    --base main --draft --assignee @me
+  run bash "${eval_dir}/grade.sh" C "${work}/c"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"3 FAIL base main"* ]]
 }
 
 @test "grading a sandbox where no PR was created fails items 1 and 2" {
