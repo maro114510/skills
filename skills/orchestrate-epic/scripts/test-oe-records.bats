@@ -153,6 +153,9 @@ JSON
 }
 
 @test "without OE_STATE_DIR and XDG_STATE_HOME, a claim records under ~/.local/state" {
+  case "$(command -v jq)" in
+  */mise/shims/*) skip "jq is a mise shim, which fails once HOME moves" ;;
+  esac
   github <<'JSON'
 {
   "default_branch": {"checks": {"test": "success"}},

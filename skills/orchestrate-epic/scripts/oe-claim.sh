@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # oe claim
 #
-# Claims an Issue: creates its branch on origin at the default branch head, then writes the claim record on it.
+# Claims an Issue: creates its branch on origin at the default branch head, then records the claim on this host.
 # GitHub's create-ref API refuses a ref that already exists, so two claims for one Issue never both succeed.
+# The claim record goes to the record store that oe-store.sh defines, never to GitHub.
 #
 # Usage
 #
@@ -14,21 +15,23 @@
 #
 # Exit codes
 #
-# | Code | Meaning | Changed on GitHub |
+# | Code | Meaning | Changed |
 # |---|---|---|
-# | 0 | Claimed | The branch and the claim record |
-# | 1 | A GitHub read or write failed | Nothing, or only the branch when stderr says the record failed |
+# | 0 | Claimed | The branch on GitHub and the claim record |
+# | 1 | A GitHub read or write, or the record store, failed | Nothing, or only the branch when stderr says the record failed |
 # | 2 | The arguments are invalid | Nothing |
 # | 4 | The branch already exists | Nothing |
 #
 # The claim record is written after the branch, so a refused claim never writes one.
 # A record written for a refused claim would reset the attempt count of whoever holds the branch.
-# When only the record fails, oe ready still sees the branch, and counts every attempt record on the Issue.
+# When only the record fails, oe ready still sees the branch, and counts every attempt record of the Issue.
 set -uo pipefail
 
 dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source-path=SCRIPTDIR
 source "${dir}/oe-config.sh"
+# shellcheck source-path=SCRIPTDIR
+source "${dir}/oe-store.sh"
 
 usage() {
   echo "$1" >&2
@@ -58,6 +61,10 @@ sha="$(gh api "repos/${repo}/git/ref/heads/${default}" --jq '.object.sha' 2>"${e
   fail "default branch head read failed: $(head -n1 "${err}")"
 [[ "${sha}" =~ ^[0-9a-f]{40}$ ]] || fail "default branch head unreadable"
 
+at="$(record_now 2>"${err}")" || usage "$(head -n1 "${err}")"
+# A store that cannot take the record must fail before the branch exists, not after.
+records_read "${repo}" "${n}" >/dev/null 2>"${err}" || fail "$(head -n1 "${err}")"
+
 if ! gh api -X POST "repos/${repo}/git/refs" -f ref="refs/heads/${branch}" -f sha="${sha}" --jq '.ref' \
   >/dev/null 2>"${err}"; then
   if grep -q 'Reference already exists' "${err}"; then
@@ -67,7 +74,6 @@ if ! gh api -X POST "repos/${repo}/git/refs" -f ref="refs/heads/${branch}" -f sh
   fail "creating ${branch} failed: $(head -n1 "${err}")"
 fi
 
-body="$(record_marker claim)"$'\n'"Claimed: created \`${branch}\` at ${sha}."
-gh api -X POST "repos/${repo}/issues/${n}/comments" -f body="${body}" --jq '.html_url' >/dev/null 2>"${err}" ||
-  fail "created ${branch}, but writing the claim record on Issue #${n} failed: $(head -n1 "${err}")"
+records_add "${repo}" "${n}" '{"kind":"claim","at":"'"${at}"'"}' 2>"${err}" ||
+  fail "created ${branch}, but recording the claim of Issue #${n} failed: $(head -n1 "${err}")"
 printf 'claimed\t%s\t%s\n' "${branch}" "${sha}"

@@ -2,7 +2,7 @@
 # oe ready
 #
 # Prints the next action of every child Issue of an Epic.
-# It reads GitHub through gh only and writes nothing to GitHub or to any checkout.
+# It reads GitHub through gh and the record store that oe-store.sh defines, and writes nothing anywhere.
 # The actions follow the next-action table in docs/design/orchestrate-epic.md.
 #
 # Usage
@@ -23,7 +23,7 @@
 # | Code | Meaning | Output |
 # |---|---|---|
 # | 0 | Every Issue was classified | One line per Issue |
-# | 1 | A GitHub read failed | Nothing |
+# | 1 | A GitHub read or the record store read failed | Nothing |
 # | 2 | The arguments are invalid | Nothing |
 # | 3 | The default branch head still has no checks after no_checks_grace | One line that starts with end |
 #
@@ -34,8 +34,9 @@
 # | oe-ready-epic.graphql | The Epic read |
 # | oe-ready-issue.graphql | The read of one Issue |
 # | oe-ready.jq | Every rule that turns a response into an action |
-# | oe-records.jq | Which comments count as records and as engineer input |
+# | oe-records.jq | Which comments count as questions and as engineer input |
 # | oe-config.sh | The limits and names shared with oe's writers |
+# | oe-store.sh | Where each Issue's claim and attempt records live on this host |
 #
 # Reads, in order
 #
@@ -43,12 +44,14 @@
 # 2. Repository activity gives the push time of a head that has no checks yet.
 # 3. The open pull request list gives the head of each Issue branch.
 # 4. Commit statuses give the verdict on each head and the number of Verifier starts.
-# 5. One read per Issue gives everything else.
+# 5. One read per Issue, with its claim and attempt records from this host, gives everything else.
 set -uo pipefail
 
 dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source-path=SCRIPTDIR
 source "${dir}/oe-config.sh"
+# shellcheck source-path=SCRIPTDIR
+source "${dir}/oe-store.sh"
 
 usage() {
   echo "$1" >&2
@@ -79,15 +82,16 @@ now="${OE_NOW:-$(date -u +%s)}"
 
 epic_query="$(<"${dir}/oe-ready-epic.graphql")" || fail "cannot read oe-ready-epic.graphql"
 issue_query="$(<"${dir}/oe-ready-issue.graphql")" || fail "cannot read oe-ready-issue.graphql"
-records="$(<"${dir}/oe-records.jq")" || fail "cannot read oe-records.jq"
+trust="$(<"${dir}/oe-records.jq")" || fail "cannot read oe-records.jq"
 rules="$(<"${dir}/oe-ready.jq")" || fail "cannot read oe-ready.jq"
-rules="${records}"$'\n'"${rules}"
+rules="${trust}"$'\n'"${rules}"
 
-# Prints the jq program that runs the entry point $1 of oe-ready.jq, with pr_heads set to $2.
+# Prints the jq program that runs the entry point $1 of oe-ready.jq, with pr_heads set to $2 and records to the JSON array $3.
 program() {
   printf 'def now_s: %s; def no_checks_grace: %s; def max_attempts: %s; def max_verifier_starts: %s;\n' \
     "${now}" "${no_checks_grace}" "${max_attempts}" "${max_verifier_starts}"
-  printf 'def verify_context: "%s"; def pr_heads: {%s};\n%s\n%s\n' "${verify_context}" "${2:-}" "${rules}" "$1"
+  printf 'def verify_context: "%s"; def pr_heads: {%s}; def records: %s;\n%s\n%s\n' \
+    "${verify_context}" "${2:-}" "${3:-[]}" "${rules}" "$1"
 }
 
 err="$(mktemp)" || fail "mktemp failed"
@@ -194,10 +198,14 @@ while IFS=$'\t' read -r n sha; do
 done <<<"${pulls}"
 
 # Read 5: each Issue, classified by rows 3 to 12 in oe-ready.jq.
+# Only the kind and time of claim and attempt records decide an action, so verdict findings stay out of the program.
 for n in ${sorted[@]+"${sorted[@]}"}; do
+  issue_records="$(records_read "${repo}" "${n}" 2>"${err}")" || fail "$(head -n1 "${err}")"
+  issue_records="$(jq -c 'map(select(.kind == "claim" or .kind == "attempt") | {kind, at})' <<<"${issue_records}")" ||
+    fail "records of Issue #${n} unreadable"
   line="$(gh api graphql -f query="${issue_query}" -F owner="${repo%/*}" -F repo="${repo#*/}" -F num="${n}" \
     -f branch="${branch_prefix}${n}" -f ref="refs/heads/${branch_prefix}${n}" \
-    --jq "$(program classify "${pr_heads%,}")" 2>"${err}")" ||
+    --jq "$(program classify "${pr_heads%,}" "${issue_records}")" 2>"${err}")" ||
     fail "Issue #${n} read failed: $(head -n1 "${err}")"
   out+="${line}"$'\n'
 done
