@@ -1,7 +1,7 @@
 # Flowchart
 
 Each rule has an ID and a tag. `[Standard: ISO 5807]` means ISO 5807:1985 states the rule; `[Convention]` means common practice adopted here.
-A review finding names the principle of the section that holds the rule it breaks, and cites the rule's ID, such as `Conformance (CON-2)`.
+A review finding cites the ID of the rule it breaks, and its principle is the one the ID's prefix names: `COR` Correctness, `CON` Conformance, `CLA` Clarity, as in `Conformance (CON-2)`. A defect that breaks rules of two principles is two findings.
 
 ## Purpose
 
