@@ -22,7 +22,7 @@ Write concise, length-capped bodies (requirements separated from specs), model d
 ## Step 0: Determine Output Language
 
 Before anything else, run `bash <skills-root>/create-pr/scripts/lang.sh [<value after lang in $ARGUMENTS>]`, where `<skills-root>` is the parent of this skill's directory, and on a non-zero exit show its output and stop.
-Otherwise show `Language: <its output>`, then write everything in this run in its first word, `LANG`, reading only `references/templates.<LANG>.md`.
+Otherwise show `Language: ` and its whole output line, such as `Language: en (git config)`, then write everything in this run in its first word, `LANG`, reading only `references/templates.<LANG>.md`.
 
 ---
 
