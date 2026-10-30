@@ -133,8 +133,9 @@ def issue_state:
       | if $pr.reviewThreads.totalCount > ($pr.reviewThreads.nodes | length)
         then error("PR #\($pr.number) has more review threads than one read holds") else . end
       | ($target | ci) as $ci
+      | ($facts.pushed // ($target.committedDate | epoch)) as $pushed
       | {sha: $target.oid[0:7], ci: $ci.state, ci_detail: $ci.detail, verdict: $facts.verdict, starts: $facts.starts,
-          age: (now_s - ($facts.pushed // ($target.committedDate | epoch)))}
+          oid: $target.oid, pushed: $pushed, age: (now_s - $pushed)}
     ) catch {unreadable: .}
     else null end) as $head
   | {
@@ -152,6 +153,9 @@ def issue_state:
       end),
       question_open: ($question != null and ($answers | length) == 0),
       attempts: ($attempts | length),
+      since: $since,
+      question_at: (if $question == null then null else $comments[$question].createdAt end),
+      pr: $pr.number,
       head: $head,
       repairs: (if $pr == null then $answered + ["no PR yet"]
         elif $head == null or $head.unreadable != null then []
@@ -225,3 +229,34 @@ def next_action:
 def classify:
   if .data.repository.issue.state == "CLOSED" then .data.repository.issue | act("done"; "closed")
   else issue_state | next_action end;
+
+# Facts for oe status
+#
+# facts describes one Issue as a JSON object, with the action and reason classify gives it.
+#
+# | Field | Holds |
+# |---|---|
+# | number, action, reason | The Issue number, and the action and reason classify gives |
+# | pr | The pull request opened from the branch after the latest claim, or null |
+# | head | The full SHA of that pull request's open head, or null |
+# | ci, verdict | The CI state and the oe/verify state of that head, or null |
+# | attempts | Owner attempts after the latest claim, or null for a closed Issue |
+# | started | Epoch seconds when the Issue entered its step, or null when no read shows it |
+#
+# | Action | Started at |
+# |---|---|
+# | wait-answer | The latest question |
+# | wait-ci, start-verifier, wait-merge | The push of the head |
+# | start-owner, parked | The latest attempt, or the latest claim without one |
+# | Any other | null |
+def facts:
+  if .data.repository.issue.state == "CLOSED" then .data.repository.issue | {number, action: "done", reason: "closed"}
+  else issue_state
+    | (next_action | split("\t")) as [$n, $action, $reason]
+    | {number, action: $action, reason: $reason, pr, head: .head.oid, ci: .head.ci, verdict: .head.verdict, attempts,
+        started: (
+          if $action == "wait-answer" then .question_at | epoch
+          elif $action == "wait-ci" or $action == "start-verifier" or $action == "wait-merge" then .head.pushed
+          elif $action == "start-owner" or $action == "parked" then .since // null | if . then epoch else null end
+          else null end)}
+  end;

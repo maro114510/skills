@@ -7,6 +7,7 @@
 # | Subcommand | Does |
 # |---|---|
 # | ready | Prints the next action of every child Issue of an Epic |
+# | status | Shows each child Issue's step, PR, CI result, verdict, attempts, running agent, and time in step |
 # | wait | Blocks until oe ready's output changes, a timeout passes, or the session has idled too long |
 # | claim | Creates an Issue's branch on origin and records the claim on this host |
 # | attempt | Records an Owner attempt on this host before the Owner starts, and refuses one past the cap |
@@ -24,14 +25,15 @@ set -uo pipefail
 dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 case "${1:-}" in
-ready | wait | claim | attempt | question | brief | verdict | records | forget | worktree | lock)
+ready | status | wait | claim | attempt | question | brief | verdict | records | forget | worktree | lock)
   sub="$1"
   shift
   exec bash "${dir}/oe-${sub}.sh" "$@"
   ;;
 *)
   cat >&2 <<'EOF'
-Usage: oe ready <owner/repo> <epic-number> [--running <issue-number>]...
+Usage: oe ready <owner/repo> <epic-number> [--running <issue-number>]... [--facts]
+       oe status <owner/repo> <epic-number> [--watch]
        oe wait <owner/repo> <epic-number> [--running <issue-number>]... [--timeout <seconds>] [--idle-since <epoch>]
        oe claim <owner/repo> <issue-number>
        oe attempt <owner/repo> <issue-number>

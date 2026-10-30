@@ -7,9 +7,11 @@
 #
 # Usage
 #
-#   oe ready <owner/repo> <epic-number> [--running <issue-number>]...
+#   oe ready <owner/repo> <epic-number> [--running <issue-number>]... [--facts]
 #
 # - --running leaves out an Issue whose agent already runs in this session.
+# - --facts, for oe status, prints each line as the JSON object that facts in oe-ready.jq describes.
+#   It changes only the format: the same reads run, and the same action is decided.
 # - OE_NOW sets the current time in epoch seconds.
 #
 # Output
@@ -55,7 +57,7 @@ source "${dir}/oe-store.sh"
 
 usage() {
   echo "$1" >&2
-  echo "Usage: oe ready <owner/repo> <epic-number> [--running <issue-number>]..." >&2
+  echo "Usage: oe ready <owner/repo> <epic-number> [--running <issue-number>]... [--facts]" >&2
   exit 2
 }
 
@@ -71,7 +73,13 @@ repo="$1"
 epic="$2"
 shift 2
 running=" "
+entry=classify
 while [[ $# -gt 0 ]]; do
+  if [[ "$1" == --facts ]]; then
+    entry='facts | tojson'
+    shift
+    continue
+  fi
   [[ "$1" == --running && "${2:-}" =~ ^[1-9][0-9]*$ ]] || usage "Expected --running <issue-number>, got: $*"
   running+="$2 "
   shift 2
@@ -156,7 +164,12 @@ fi
 out=""
 if [[ -n "${gate_reason}" ]]; then
   for n in ${sorted[@]+"${sorted[@]}"}; do
-    out+="${n}"$'\t'wait-base$'\t'"${gate_reason}"$'\n'
+    if [[ "${entry}" == classify ]]; then
+      out+="${n}"$'\t'wait-base$'\t'"${gate_reason}"$'\n'
+    else
+      out+="$(jq -cn --argjson n "${n}" --arg reason "${gate_reason}" \
+        '{number: $n, action: "wait-base", reason: $reason}')"$'\n' || fail "cannot format Issue #${n}"
+    fi
   done
   printf '%s' "${out}"
   exit 0
@@ -205,7 +218,7 @@ for n in ${sorted[@]+"${sorted[@]}"}; do
     fail "records of Issue #${n} unreadable"
   line="$(gh api graphql -f query="${issue_query}" -F owner="${repo%/*}" -F repo="${repo#*/}" -F num="${n}" \
     -f branch="${branch_prefix}${n}" -f ref="refs/heads/${branch_prefix}${n}" \
-    --jq "$(program classify "${pr_heads%,}" "${issue_records}")" 2>"${err}")" ||
+    --jq "$(program "${entry}" "${pr_heads%,}" "${issue_records}")" 2>"${err}")" ||
     fail "Issue #${n} read failed: $(head -n1 "${err}")"
   out+="${line}"$'\n'
 done

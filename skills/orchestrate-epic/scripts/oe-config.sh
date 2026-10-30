@@ -58,3 +58,13 @@ open_pr_head() {
     return 0
   done <<<"${prs}"
 }
+
+# Prints the directory that holds the agents' worktrees: OE_WORKTREE_ROOT when set,
+# and otherwise a sibling of the main checkout named after it with -oe appended.
+# Returns 1 when the current directory is in no clone.
+worktree_root() {
+  local main
+  main="$(git worktree list --porcelain 2>/dev/null | sed -n '1s/^worktree //p')"
+  [[ -n "${main}" ]] || return 1
+  printf '%s' "${OE_WORKTREE_ROOT:-${main%/*}/${main##*/}-oe}"
+}
