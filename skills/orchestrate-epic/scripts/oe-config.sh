@@ -13,7 +13,7 @@
 # | wait_interval | 60 | Seconds between two oe ready runs inside oe wait |
 # | idle_limit | 14400 | Seconds the output may stay unchanged with no agent running before the session ends |
 #
-# oe-records.jq defines which comments count as records when oe reads them.
+# oe-records.jq defines which comments count as records when oe reads them, and oe-store.sh where the host-local records live.
 # shellcheck disable=SC2034 # The sourcing subcommand reads these.
 no_checks_grace=600
 max_attempts=3
