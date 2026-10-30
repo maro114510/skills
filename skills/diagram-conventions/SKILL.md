@@ -128,7 +128,7 @@ Keep the two status lines at the end in English, verbatim apart from the placeho
 
 <diagram type, the Mermaid diagram used, the question from step 4 stated explicitly, and why this type answers it>
 <the organization from step 4: what one node stands for, the grouping and its basis, the reading order>
-<only when step 6 found any: one line each for an element not drawn, a value not stated, or an assumption, saying which; never list a relation or value the source simply never mentions>
+<only when step 6 found any: one line each for an element not drawn, a value not stated, or an assumption, saying which; list nothing else>
 
 Rulebook: <references/<file>.md | No rulebook exists for <type>; no conformance is claimed>
 Validation: <validated with mmdc | unvalidated: <reason>>
