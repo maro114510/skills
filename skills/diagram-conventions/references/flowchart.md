@@ -17,7 +17,7 @@ Choose another type when the reader must understand something else:
 
 ## Correctness
 
-- Draw a decision for every condition the source states, and for no other. `[Convention]`
+- Draw a decision for every condition the source states, and for no other. A step the source makes optional, with words such as "may", is a decision on whether it happens. `[Convention]`
 - Draw one exit per outcome the source routes, labeled in the source's words. List an outcome the source does not route as not stated; never infer it from sentence order. `[Convention]`
 - Draw a loop only where the source states a repetition. It leaves through a decision on the exit condition the source states. `[Convention]`
 - Never merge two steps into one node when the merge creates a path the source does not state; draw each where it occurs. `[Convention]`
@@ -39,7 +39,8 @@ Choose another type when the reader must understand something else:
 | Flowline | The order from one symbol to the next | `-->` |
 
 - Use each symbol only for its meaning. A state is not an operation, so it is never a process. `[Standard: ISO 5807]`
-- A decision takes exactly one exit, so no two of its exit conditions overlap. `[Standard: ISO 5807]`
+- Exactly one exit of a decision applies in any case, so no two of its exit conditions overlap. `[Standard: ISO 5807]`
+- A decision may show only one exit when the source routes only one outcome; the others are listed as not stated. `[Convention]`
 - Every exit of a decision is labeled with its condition. `[Standard: ISO 5807]`
 - Flow runs top to bottom or left to right: declare `flowchart TB` or `flowchart LR`. `[Standard: ISO 5807]`
 - A flowline against that direction has an arrowhead. `[Standard: ISO 5807]`
