@@ -18,6 +18,7 @@
 # | verdict | kind, at, sha, state, findings |
 #
 # - at is this host's UTC time in ISO 8601 without fractions, the form GitHub uses, so a record and a GitHub event compare as strings.
+#   The comparison assumes a synced clock; the Design Doc accepts the risk of skew.
 # - A record file is replaced whole through a rename, so a reader never sees half of a write.
 #   Only one writer touches an Issue's file at a time, because oe lock admits one session per Epic and one agent runs per Issue.
 

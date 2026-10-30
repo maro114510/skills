@@ -44,7 +44,7 @@ Each part does one job and stores no state of its own. State lives on GitHub, ex
 | oe attempt | Writes an attempt record before an Owner starts, and refuses a 4th | The record store |
 | oe question | Writes an Owner's question in a fixed format | An Issue comment |
 | oe verdict | Writes a Verifier's verdict and findings | A commit status on the SHA, and the record store |
-| oe records | Prints an Issue's records since its latest claim, for an Owner | nothing |
+| oe records | Prints an Issue's records from its latest claim on, for an Owner | nothing |
 | oe forget | Drops an Epic's records once every child Issue is closed, at the end of the session | The record store |
 
 ### Engineer

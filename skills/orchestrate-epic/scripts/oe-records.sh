@@ -10,7 +10,7 @@
 #
 # Output
 #
-# - The records since the latest claim record, oldest first, one JSON object per line.
+# - The records from the latest claim record on, that record included, oldest first, one JSON object per line.
 # - Every record when there is no claim record, and nothing when the Issue has no records.
 # - oe-store.sh lists each record's fields.
 #

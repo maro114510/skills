@@ -13,7 +13,7 @@
 # | question | Writes an Owner's question on the Issue |
 # | brief | Builds an Owner's or a Verifier's brief, recording each Verifier start on its SHA |
 # | verdict | Writes a Verifier's verdict on the PR head SHA it checked, keeping its findings on this host |
-# | records | Prints an Issue's records on this host since its latest claim |
+# | records | Prints an Issue's records on this host from its latest claim on |
 # | forget | Drops an Epic's records from this host once every child Issue is closed |
 # | worktree | Creates or removes an Issue branch's worktree outside the shared checkout |
 # | lock | Holds or releases the one session allowed per Epic on this host |

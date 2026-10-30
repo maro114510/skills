@@ -45,7 +45,7 @@ If any of the first four is missing, end without changing anything and say which
    bash <skills-root>/orchestrate-epic/scripts/oe records <repo> <issue>
    ```
 
-   It prints the records since the latest claim record, oldest first, one JSON object per line with `kind` and `at`, the time in the same form GitHub uses. A `verdict` record also has `sha`, `state`, and `findings`. On a non-zero exit, end without pushing and say so.
+   It prints the records from the latest claim record on, that record included, oldest first, one JSON object per line with `kind` and `at`, the time in the same form GitHub uses. A `verdict` record also has `sha`, `state`, and `findings`. On a non-zero exit, end without pushing and say so.
    On GitHub, a question is an Issue comment whose body starts with `<!-- oe:question -->`, and engineer input is a trusted comment or review whose body does not start with `<!-- oe:`.
    - Answers: read the Issue's comments with `gh api repos/<repo>/issues/<issue>/comments --paginate`. Take every question created at or after the claim record's `at`, every question when there is no claim record, and the engineer input after the first of them.
    - For a repair, also collect each item below, then keep only the items present:

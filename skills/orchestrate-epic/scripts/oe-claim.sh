@@ -62,7 +62,7 @@ sha="$(gh api "repos/${repo}/git/ref/heads/${default}" --jq '.object.sha' 2>"${e
 [[ "${sha}" =~ ^[0-9a-f]{40}$ ]] || fail "default branch head unreadable"
 
 at="$(record_now 2>"${err}")" || usage "$(head -n1 "${err}")"
-# A store that cannot take the record must fail before the branch exists, not after.
+# A store that cannot even be read fails before the branch exists; a failed write after it is the exit 1 case above.
 records_read "${repo}" "${n}" >/dev/null 2>"${err}" || fail "$(head -n1 "${err}")"
 
 if ! gh api -X POST "repos/${repo}/git/refs" -f ref="refs/heads/${branch}" -f sha="${sha}" --jq '.ref' \
