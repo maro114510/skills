@@ -434,4 +434,16 @@ has_line "LINKED #12" || r=1
 called "pr view https://github.com/o/r/pull/7 --web" || r=1
 check "a failing --web still exits 0 with the PR created and linked" "${r}"
 
+# pr-owner pushes HEAD:refs/heads/<branch> itself, then runs this exact shape from its worktree.
+setup ""
+out="$(printf 'Closes #12\n' | PATH="${bin}:${PATH}" LINK_POLL_ATTEMPTS=3 LINK_POLL_INTERVAL=0 bash "${target}" \
+  --repo o/r --base main --head feat-y --draft --title t --body-file - 2>&1)"
+rc=$?
+r=0
+[[ "${rc}" == 0 ]] || r=1
+has_line "https://github.com/o/r/pull/7" || r=1
+has_line "LINKED #12" || r=1
+grep -q -- "^pr create --repo o/r .*--base main --head feat-y --draft" "${STUB_DIR}/log" || r=1
+check "pr-owner's pushed --repo --base --head --draft call creates and links the PR" "${r}"
+
 exit "${fail}"
