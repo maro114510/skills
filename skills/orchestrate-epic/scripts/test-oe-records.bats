@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# Tests for the oe subcommands that write records: claim, attempt, and question.
+# Tests for the oe subcommands that write and read records: claim, attempt, records, and question.
 #
 # - Each test writes the GitHub state it needs as JSON and the host-local records it needs, then runs oe against them.
 # - testdata/fake-gh.sh stands in for gh, answers every read from that state, and applies every write to it.
@@ -240,6 +240,45 @@ JSON
   *) return 1 ;;
   esac
   [ "$(cat "$(record_file 5)")" = "${before}" ]
+}
+
+# oe records
+
+@test "oe records prints only the records since the latest claim, oldest first, with each verdict's findings" {
+  records 5 claim@06:00 attempt@06:01 claim@07:00 attempt@07:01
+  printf '%s\n' '{"kind":"verdict","at":"2027-01-15T07:30:00Z","sha":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb15","state":"failure","findings":"criterion 1 -> none"}' \
+    >>"$(record_file 5)"
+
+  run bash "${oe}" records o/r 5
+
+  [ "${status}" -eq 0 ]
+  [ "${#lines[@]}" -eq 3 ]
+  [ "${lines[0]}" = '{"kind":"claim","at":"2027-01-15T07:00:00Z"}' ]
+  [ "${lines[1]}" = '{"kind":"attempt","at":"2027-01-15T07:01:00Z"}' ]
+  [ "${lines[2]}" = '{"kind":"verdict","at":"2027-01-15T07:30:00Z","sha":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb15","state":"failure","findings":"criterion 1 -> none"}' ]
+}
+
+@test "oe records prints every record when there is no claim, and nothing for an Issue without records" {
+  records 5 attempt@07:01
+
+  run bash "${oe}" records o/r 5
+  [ "${status}" -eq 0 ]
+  [ "${output}" = '{"kind":"attempt","at":"2027-01-15T07:01:00Z"}' ]
+
+  run bash "${oe}" records o/r 6
+
+  [ "${status}" -eq 0 ]
+  [ -z "${output}" ]
+}
+
+@test "oe records on an unreadable record file exits 1 and prints nothing" {
+  records 5 claim@07:00
+  echo 'not json' >>"$(record_file 5)"
+
+  run --separate-stderr bash "${oe}" records o/r 5
+
+  [ "${status}" -eq 1 ]
+  [ -z "${output}" ]
 }
 
 # oe question
