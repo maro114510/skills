@@ -63,6 +63,7 @@ It fetches `origin/<base>` and prints everything later steps use. Do not read it
 | `== diff stat`, `== diff` | The stat, and the diff without lockfiles when it fits 20 files and 1,000 lines | Step 2 |
 | `== template <path>` or `== template none` | The PR template's contents, or none | Step 3.2 or 3.3 |
 | `== issues` | `Closes #N` or `Related #N` from the newest commit footer, a tab, and the issue title | Step 2.3 |
+| `== manual checks` | `#N`, a tab, and one item of the Manual checks list of an issue the branch closes, per line; empty when there are none | Step 3.4 |
 | `== labels` | One `name<TAB>description` per line | Step 5.2 |
 
 When `== diff` says `omitted`, read only meaningful files with `git diff origin/<base>...HEAD -- <path>`, skipping generated and vendored code.
@@ -127,6 +128,7 @@ Follow the template contents Step 1 printed, without reading the file. Do not ig
 
 - Fill in every section.
 - Follow any inline comments or section-specific instructions.
+- Never check a box that needs a human, such as manual testing, a manual review, or a sign-off like `Manually tested on macOS`, even when you ran something like it yourself. Leave it unchecked for the human. This overrides the two rules below.
 - Check a verification item, such as tests, lint, or a build, only if it ran in this session and passed; adding a test is not running it. Otherwise leave it unchecked with the reason on the same line, e.g. `- [ ] Unit tests pass (not run: no test runner)`.
 - Check any other checklist item based on the actual change.
 - Add useful information that the template does not ask for, such as background, implementation details, risks, or future considerations, as extra sections at the end, with headings from the 3.3 table. The how belongs there, not in What.
@@ -145,6 +147,7 @@ Use the structure below. For `ja`, replace each heading with its Japanese form; 
 | Concerns | 懸念点 |
 | Future Considerations | 今後の検討事項 |
 | Test Plan | テスト計画 |
+| Manual Checks | 手動確認 |
 
 ```markdown
 ## Background
@@ -181,9 +184,20 @@ Use the structure below. For `ja`, replace each heading with its Japanese form; 
 ## Test Plan
 
 <!-- Describe the verification performed and the result. For UI changes, consider before/after screenshots. -->
+
+## Manual Checks
+
+<!-- Only when Step 1 printed manual checks; see 3.4. -->
 ```
 
-### 3.4 Writing principles
+### 3.4 Manual Checks
+
+When Step 1's `== manual checks` section has lines, add a Manual Checks section, after Test Plan or at the end of a template's sections, with one `- [ ] <item>` per line.
+Copy each item verbatim, never translated or reworded, and append ` (#N)` only when the lines come from more than one issue.
+Every box stays unchecked, because the engineer runs these checks before the merge and checks each one.
+Without lines, omit the section.
+
+### 3.5 Writing principles
 
 Reviewers can read the diff. The PR description is valuable because it explains intent, judgment, risk, and context that the diff does not show.
 
@@ -196,7 +210,7 @@ Reviewers can read the diff. The PR description is valuable because it explains 
 - **Test Plan vs. Concerns**: Execution narration (commands run, tool limitations hit, which automated review already passed) belongs in Test Plan as terse evidence, not in Concerns. Concerns is for judgment calls and open risk, not an execution log.
 - **Omission rule**: Remove sections that are genuinely irrelevant.
 
-### 3.5 Line Breaks
+### 3.6 Line Breaks
 
 GitHub renders every single newline inside a PR/issue body as a hard line break (`<br>`), unlike README files where CommonMark treats a lone newline as a soft break joined by a space. Do not manually wrap prose the way a plain-text commit message is wrapped (for example at ~72 columns) — that convention produces a choppy, broken-looking body on GitHub.
 
@@ -216,7 +230,7 @@ Good (one line in source, wraps naturally when rendered):
 Adds `chrome-adapter.js`, a factory that wraps `chrome.tabs` and `chrome.bookmarks`, converting every bookmark node into the plain `RawNode` shape the domain package already expects.
 ```
 
-### 3.6 Compact Pass
+### 3.7 Compact Pass
 
 Before moving to Step 4, re-read the full draft once as a first-time reader with no other context:
 
@@ -224,6 +238,7 @@ Before moving to Step 4, re-read the full draft once as a first-time reader with
 - Does any sentence restate a fact already given in an earlier section? Delete the later occurrence.
 - Does anything in Concerns fail the genuine-uncertainty bar above? Move it to Test Plan or delete it.
 - Does any paragraph or bullet contain a newline that is not a real paragraph/bullet boundary? Rejoin it into one line.
+- Is any box that needs a human checked, or a manual check missing? Fix it as 3.2 and 3.4 say.
 
 If none of these apply, keep the draft as written — depth is intentional for this skill's purpose as a design record, so do not cut content for brevity alone.
 
