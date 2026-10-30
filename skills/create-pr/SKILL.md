@@ -261,11 +261,9 @@ Confirm that any issue numbers extracted in Step 2.3 are included in the descrip
 
 ## Step 6. Push and Create the PR
 
-Never run `gh pr create` directly. GitHub can lag hours before it links a closing keyword, so the script links each `Closes` line through the API and waits until the link appears. It rewrites `Closes` to `Related` for an issue with open sub-issues, noting how many remain, so a partial PR never closes its parent; with `--link` it applies that rewrite to the existing PR body. On a non-default base it keeps `Closes` but links nothing, because GitHub honors the keyword only once the PR targets the default branch. It refuses to create the PR unless origin's tip of the head branch equals local HEAD, so a PR never opens unpushed or at a stale head.
-
 **6.1 Run one command**
 
-Push and create in this one call; do not split it, and do not stop after showing it. Paste Step 1's `== create flags` line verbatim as `<create flags>`, so draft and base cannot drift from the context the description was written against:
+Run this as one call. Never run `gh pr create` directly, and do not stop after showing the command. Paste Step 1's `== create flags` line verbatim as `<create flags>`:
 
 ```bash
 git push -u origin <current-branch> &&
