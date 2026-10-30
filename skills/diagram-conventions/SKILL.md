@@ -28,10 +28,11 @@ When a principle conflicts with looking complete or tidy, the principle wins.
 
 ## Rulebooks
 
-A rulebook is a Markdown file in `references/`, relative to this skill's directory, one per diagram type.
+`<skill-dir>` is the directory containing this SKILL.md, the base directory the harness gives for this skill; use its absolute path.
+A rulebook is a Markdown file in `<skill-dir>/references/`, one per diagram type.
 Its `## Purpose` section says what that diagram type expresses and when to choose it; the rest holds the type's rules.
 This file never lists diagram types: the set of rulebooks present is the set of types with rules.
-If `references/` is missing or empty, no rulebook exists.
+If `<skill-dir>/references/` is missing or empty, no rulebook exists.
 
 ## Procedure
 
@@ -54,7 +55,7 @@ This inventory is the only material the diagram may use. Keep it as working note
 
 ### 3. Choose the Diagram Type
 
-1. Glob `references/*.md` in this skill's directory and read only the `## Purpose` section of each.
+1. Glob `<skill-dir>/references/*.md`, never a path relative to the working directory, and read only the `## Purpose` section of each.
 2. Decide what the reader must understand from the inventory: ordering of steps and branches, messages between actors over time, states and transitions, data structure, dependencies, schedule, and so on.
 3. Choose the type:
 
