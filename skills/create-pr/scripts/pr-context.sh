@@ -81,7 +81,7 @@ refs="$(bash "${script_dir}/issue-refs.sh" "${remote}")"
 case $? in
 0) ;;
 3)
-  printf '%s\n' "${refs}"
+  grep '^CONFLICT' <<<"${refs}"
   exit 3
   ;;
 *) exit 1 ;;
@@ -102,8 +102,8 @@ commits="$(git log --reverse --format='--- %h%n%B' "${remote}..HEAD")" || exit 1
 stat="$(git diff --stat "${remote}...HEAD")" || exit 1
 
 lockfiles=(
-  ':(exclude,glob)**/*.lock' ':(exclude,glob)**/*.lockb' ':(exclude,glob)**/package-lock.json'
-  ':(exclude,glob)**/npm-shrinkwrap.json' ':(exclude,glob)**/pnpm-lock.yaml' ':(exclude,glob)**/go.sum'
+  ':(exclude,top,glob)**/*.lock' ':(exclude,top,glob)**/*.lockb' ':(exclude,top,glob)**/package-lock.json'
+  ':(exclude,top,glob)**/npm-shrinkwrap.json' ':(exclude,top,glob)**/pnpm-lock.yaml' ':(exclude,top,glob)**/go.sum'
 )
 read -r files lines < <(git diff --numstat "${remote}...HEAD" -- ':/' "${lockfiles[@]}" |
   awk '{ f++; if ($1 != "-") l += $1 + $2 } END { print f + 0, l + 0 }')
