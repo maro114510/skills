@@ -18,7 +18,7 @@ argument-hint: "[optional hint, e.g. an issue number or message override]"
 git status --short
 git diff --staged
 git diff
-git log -5 --format="%s"
+git log -5 --no-merges --format="%s"
 git log --format="--- %h%n%B" origin/HEAD..HEAD 2>/dev/null
 ```
 
@@ -65,6 +65,10 @@ For every match found:
 - After staging, re-run `git diff --staged` — Steps 4 and 6 must work from this refreshed staged diff, not the one read in Step 1.
 
 ## Step 4. Compose the message
+
+**Language**: write the subject and body in the language most of Step 1's subjects use, ignoring quoted text.
+With no commits yet, use the language `bash <skills-root>/create-pr/scripts/lang.sh` prints, where `<skills-root>` is the parent of this skill's directory.
+The type, scope, trailers, and `Closes`/`Related` lines stay in English.
 
 **Type and scope**: infer the type from the diff content and changed paths, choosing one of:
 
