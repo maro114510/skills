@@ -8,7 +8,6 @@
 #
 #   oe forget <owner/repo> <epic-number>
 #
-#
 # Output
 #
 # - On success, forgot and the number of child Issues dropped, separated by a tab.
