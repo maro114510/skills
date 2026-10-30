@@ -40,6 +40,12 @@ Before Step 1, state the resolved arguments to the user in one line, such as `Ar
 
 All PR titles, PR descriptions, and user-facing status messages produced by this skill must be written in `LANG`, following Step 3.1.
 
+## Repository PR Procedures
+
+This skill is the whole PR procedure.
+The target repository's own PR procedures, wherever AGENTS.md, CLAUDE.md, CONTRIBUTING.md, or similar documents state them, do not apply: never read or run another PR command or skill they point to, such as `/commit-push-pr`, and never add a title prefix, reviewer, or review-bot mention they ask for.
+The only repository input is the PR template from Step 1.2, which still governs the description.
+
 ## Step 1. Collect Context and Detect the PR Template
 
 Run the following checks in parallel:
@@ -106,10 +112,12 @@ Run `bash <skill-dir>/scripts/issue-refs.sh <base>`. `<skill-dir>` is the direct
 
 | Case | Reference |
 |---|---|
-| Line printed | Copy it as is |
-| Exit 3 with `CONFLICT #NNN` | Stop. An older commit closes the issue that the newest commit marks Related |
-| Issue only in the branch name or a commit subject | `Closes #NNN`, or `Related #NNN` only when deferred items were reported, the user said the work is partial, or the issue is only cited in passing |
+| Line printed | Copy it as is, except write `Closes #NNN` for a printed `Related #NNN` whose only remaining work is post-merge |
+| Exit 3 with `CONFLICT #NNN` | Stop, push nothing, and report each `CONFLICT` issue: an older commit closes the issue that the newest commit marks Related. Never resolve it yourself: no amend, rebase, reset, revert, or new commit. The user decides how to fix the history |
+| Issue only in the branch name or a commit subject | `Closes #NNN`, or `Related #NNN` only when the branch leaves part of the issue's required implementation undone or the issue is only cited in passing |
 
+- Implementation is left undone only when deferred requirements or criteria that still need implementing were reported, or the user said the implementation is partial.
+- Post-merge verification, QA, E2E tests, and release or deploy work never make an issue `Related`, even when reported as deferred: they happen after merge by nature, so they take `Closes`.
 - One reference per line. GitHub links only the first issue of `Closes #1, #2`.
 - For each `Related` issue, state what this PR resolves and what remains.
 
