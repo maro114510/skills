@@ -72,3 +72,13 @@ assert_allowed() {
   run bash "${hook}" <<<'not json'
   [ "${status}" -eq 1 ]
 }
+
+@test "create-pr's documented push-and-create call is blocked until its push line carries the marker" {
+  local documented
+  documented="$(awk '/^\*\*6\.1 Run one command\*\*/ { s = 1 } s && /^```bash/ { b = 1; next } b && /^```$/ { exit } b' \
+    "${BATS_TEST_DIRNAME}/../skills/create-pr/SKILL.md")"
+  [ "${documented#git push }" != "${documented}" ]
+  [ "${documented#*create-linked-pr.sh}" != "${documented}" ]
+  assert_blocked "${documented}"
+  assert_allowed "${documented/&&/&& # user-approved}"
+}
