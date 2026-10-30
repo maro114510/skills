@@ -58,7 +58,7 @@ WORKTREE: <absolute worktree path, or UNKNOWN if unavailable>
 HEAD_SHA: <commit SHA of the worker's final commit, or UNKNOWN if unavailable>
 CHANGED_FILES: <one path per line; empty if BLOCKED before implementing>
 CHECKS: <one per line, `<command> -> exit <code>`>
-CRITERIA: <every criterion from Phase 6.9, one per line, `<criterion verbatim from the source, or (derived) text> -> [behavior|static] <evidence>` as references/evidence.md defines; a criterion with no evidence is still listed, with `-> none`>
+CRITERIA: <every criterion from Phase 6.9, one per line, `<criterion verbatim from the source, or (derived) text> -> [behavior|static] <evidence>` as references/evidence.md defines; a criterion with no evidence is still listed, with `-> none`, and a manual check with `-> manual`>
 SKIPPED: <criteria and requirements deferred rather than met, one per line, `<criterion> -> <what was done instead, and why>`; empty if none>
 FOUND: <defects found outside scope but not fixed, one per line; empty if none>
 SUMMARY: <what was implemented, then each decision-log entry one per line, `<decision> -> <basis>; rejected: <alternative>`>
@@ -149,6 +149,8 @@ An item is open only if it survives the Phase 1 lookup and its remaining reading
 | 2 | Premise in doubt | The request conflicts with what you observed: the bug does not reproduce, the target does not exist or already behaves as desired, or the change cannot achieve its stated goal |
 | 3 | Sources contradict | The Issue body, comments, Epic, repository instructions, caller prompt, or criteria disagree with each other, and no later statement by the same author resolves it |
 | 4 | Unsettled critical decision | No source settles a decision where a wrong choice could cause a security exposure, data loss or corruption, financial harm, an irreversible change, or a broken public interface. Only an explicit statement or an established repository convention settles one, never your own inference |
+
+A manual check, as references/evidence.md section 4 defines, is the engineer's to run, so it never fires trigger 1 however hard it is to verify.
 
 Decide everything else yourself. Follow repository conventions, prefer the smallest reversible option within scope, and record the choice in the decision log.
 
@@ -269,7 +271,7 @@ This phase runs in both modes. Phase 2's criteria live in context, and context d
 1. Re-fetch the source: the Issue body, linked spec, and caller's prompt. If it changed since Phase 2, say so first.
 2. Quote each acceptance criterion verbatim, because paraphrasing is where a criterion gets softened. A criterion derived from the request's intent has no source text, so prefix it with `(derived)` and never present it as a quote.
 3. Read `references/evidence.md`, relative to this skill's directory. Classify each criterion, attach evidence tagged `[behavior]` or `[static]` as it defines, and classify the outcome. A behavior criterion needs `[behavior]` evidence. A green CI run is never behavior evidence for a criterion that does not name that check.
-4. Treat a `No evidence` criterion as unsatisfied. Deferring a criterion is the user's call, and surfacing it is yours.
+4. Treat a `No evidence` criterion as unsatisfied. Deferring a criterion is the user's call, and surfacing it is yours. A manual check takes `manual` as its evidence, as evidence.md section 4 says, and is never deferred.
 
 ```
 | Criterion (verbatim, or `(derived)`) | Evidence |
@@ -277,6 +279,7 @@ This phase runs in both modes. Phase 2's criteria live in context, and context d
 | <behavior criterion> | `[behavior]` <command or input>; observed <result> |
 | <structure or content criterion> | `[static]` <file:line> |
 | <criterion without evidence> | none |
+| <manual check> | manual |
 
 Deferred, not satisfied: <criterion> -> <what was done instead, and why>
 No evidence: <criterion>
@@ -292,7 +295,7 @@ Deferred, not satisfied: unit <n>, <its one sentence> -> not done in this run: <
   constraints: <what the next run must keep>
 ```
 
-Lead with the last two lines whenever either has content. In autonomous mode, every table row becomes a `CRITERIA` line in the form references/evidence.md defines, with `-> none` for each `No evidence` criterion, and each `Deferred` line becomes a `SKIPPED` line. A deferred criterion stays in the table as `No evidence`, so it appears in both.
+Lead with the last two lines whenever either has content. In autonomous mode, every table row becomes a `CRITERIA` line in the form references/evidence.md defines, with `-> none` for each `No evidence` criterion and `-> manual` for each manual check, and each `Deferred` line becomes a `SKIPPED` line. A deferred criterion stays in the table as `No evidence`, so it appears in both.
 
 ---
 
