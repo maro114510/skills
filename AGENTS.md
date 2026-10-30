@@ -79,7 +79,16 @@ argument-hint: "[ready] [base <branch>]"
 
 ## Target Repository Config
 
-Skill scripts read the target repository's `.agents/skills.toml`.
+Per-user or per-clone settings live in git config and are never committed.
+Skills read them with `git config --get <key>`, so git decides between local and global.
+
+| git config key | Values | Resolution |
+|---|---|---|
+| `skills.lang` | `ja`, `en` | `lang <value>` argument, then `skills.lang`, then `ja` |
+
+An invalid value stops the skill instead of falling back, and the skill passes the resolved value as `lang <value>` to every skill it calls.
+
+Committed repository policy lives in `.agents/skills.toml`, which skill scripts read.
 The `[paths]` section is neutral: no single skill owns it, and every key holds Git glob pathspecs as a string or an array.
 Every other section is named after the skill that reads it.
 
