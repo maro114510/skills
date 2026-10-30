@@ -35,17 +35,10 @@ If any of the five is missing, end without a verdict and say which.
    gh issue view <issue> --repo <repo> --json title,body
    ```
 
-   List the checks to judge, verbatim:
-
-   | The Issue's Verification | Judge | Do not judge |
-   |---|---|---|
-   | Has an `Automated checks`, `自動確認`, `Manual checks`, or `手動確認` heading inside its `Verification` or `検証方法` section | Every item under the automated heading | The Target State, and each item under the manual heading, which you list as `<item> -> manual` as `<skills-root>/implement/references/evidence.md` section 4 says |
-   | Has none of those headings there | Every acceptance criterion. If the Issue states none, derive them from its requirements and prefix each with `(derived)` | Nothing |
-
-   Only an item under a manual heading inside that section is manual. Never treat any other check as manual, however hard it is to evidence, and ignore such a heading anywhere else in the body.
+   List the checks to judge verbatim. When the `Verification` or `検証方法` section has an `Automated checks`, `自動確認`, `Manual checks`, or `手動確認` heading, judge only the items under the automated one, and list each manual item as `<item> -> manual`. Otherwise judge every acceptance criterion; if the Issue states none, derive them from its requirements and prefix each with `(derived)`.
 3. Find what changed with `git -C <worktree> diff "$(git -C <worktree> merge-base origin/<base> HEAD)"`. If it fails, end without a verdict.
 4. Read `<skills-root>/implement/references/evidence.md` and gather evidence for each check to judge in the worktree as it defines. Write one line per check in its section 5 form, the step 2 manual lines included. For a check with no evidence, write `-> none: <the evidence that would settle it>`. Put an input too long for its line after all check lines.
-5. Decide the verdict. It is `success` only when every check to judge is evidenced, so an Issue whose checks are all manual gets `success`. Otherwise it is `failure`. A behavior check that nothing available can exercise, such as a UI no tool can drive, has no evidence, so it makes the verdict `failure` unless the Issue lists it as manual.
+5. Decide the verdict. It is `success` only when every judged check is evidenced, including when none is judged. Otherwise it is `failure`. A behavior check that nothing available can exercise, such as a UI no tool can drive, has no evidence, so it makes the verdict `failure`.
 6. Confirm `git -C <worktree> rev-parse HEAD` still prints `<sha>`, then record the verdict with the step 4 lines as findings:
 
    ```bash

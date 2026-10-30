@@ -4,7 +4,7 @@
 # Language: whatever lang.sh resolves, given the lang argument when there is one.
 # Base: the base argument, else git config branch.<current>.gh-merge-base, else the default branch, as create-linked-pr.sh resolves it.
 # Output on exit 0: an "Arguments:" line, then sections headed "== <name>": create flags, branch, base, commits, diff stat, diff, template <path|none>, issues, manual checks, labels.
-# Manual checks: "#<n><TAB><item>" for each item under a "Manual checks" or "手動確認" heading in the body of an issue the newest footer closes.
+# Manual checks: "#<n><TAB><item>" for each manual check of an issue the newest footer closes.
 # A stop prints only its reason: ON_BASE_BRANCH <b>, UNCOMMITTED with git status lines, NO_COMMITS origin/<b>, CONFLICT #N lines, or ISSUE_LOOKUP_FAILED #N: <gh error>.
 # Exit: 0 ok, 1 git or gh failed, including an issue gh cannot read, 2 bad arguments or an invalid language, 3 CONFLICT, 4 on the base branch, 5 no commits, 6 uncommitted changes.
 set -uo pipefail
@@ -92,8 +92,7 @@ case $? in
 *) exit 1 ;;
 esac
 
-# Items of the Manual checks list inside the body's Verification section, as create-github-issues writes it, one per line without the list marker or a checkbox.
-# A heading elsewhere is not an acceptance check, and code fences hold no headings or items.
+# Items under a Manual checks heading in the body's Verification section, without the list marker or a checkbox.
 # Bytes, because macOS awk compares strings by collation, which ranks 自動確認 equal to 手動確認 in a UTF-8 locale.
 manual_checks() {
   LC_ALL=C awk '

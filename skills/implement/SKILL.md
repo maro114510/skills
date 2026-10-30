@@ -150,7 +150,7 @@ An item is open only if it survives the Phase 1 lookup and its remaining reading
 | 3 | Sources contradict | The Issue body, comments, Epic, repository instructions, caller prompt, or criteria disagree with each other, and no later statement by the same author resolves it |
 | 4 | Unsettled critical decision | No source settles a decision where a wrong choice could cause a security exposure, data loss or corruption, financial harm, an irreversible change, or a broken public interface. Only an explicit statement or an established repository convention settles one, never your own inference |
 
-A manual check, as references/evidence.md section 4 defines, is the engineer's to run, so it never fires trigger 1 however hard it is to verify.
+A manual check, as references/evidence.md section 4 defines, never fires trigger 1.
 
 Decide everything else yourself. Follow repository conventions, prefer the smallest reversible option within scope, and record the choice in the decision log.
 
@@ -271,7 +271,7 @@ This phase runs in both modes. Phase 2's criteria live in context, and context d
 1. Re-fetch the source: the Issue body, linked spec, and caller's prompt. If it changed since Phase 2, say so first.
 2. Quote each acceptance criterion verbatim, because paraphrasing is where a criterion gets softened. A criterion derived from the request's intent has no source text, so prefix it with `(derived)` and never present it as a quote.
 3. Read `references/evidence.md`, relative to this skill's directory. Classify each criterion, attach evidence tagged `[behavior]` or `[static]` as it defines, and classify the outcome. A behavior criterion needs `[behavior]` evidence. A green CI run is never behavior evidence for a criterion that does not name that check.
-4. Treat a `No evidence` criterion as unsatisfied. Deferring a criterion is the user's call, and surfacing it is yours. A manual check takes `manual` as its evidence, as evidence.md section 4 says, and is never deferred.
+4. Treat a `No evidence` criterion as unsatisfied. Deferring a criterion is the user's call, and surfacing it is yours. A manual check is never deferred.
 
 ```
 | Criterion (verbatim, or `(derived)`) | Evidence |
