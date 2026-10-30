@@ -2,11 +2,14 @@
 
 ## Purpose
 
-orchestrate-epic turns an Epic's child Issues into verified PRs in dependency order. It reads every state from GitHub, and an engineer or repository automation does the merging.
+orchestrate-epic turns an Epic's child Issues into verified PRs in dependency order. It reads its state from GitHub and from records kept on the host that runs it, and an engineer or repository automation does the merging.
 
 ## Responsibilities
 
-Each part does one job and stores no state of its own. All state lives on GitHub.
+Each part does one job and stores no state of its own. The state lives in two places:
+
+- GitHub holds what an engineer reads or acts on: Issues, branches, PRs, CI checks, the verify status on each SHA, and an Owner's questions.
+- The host-local record store holds oe's machine records: claim records, attempt records, and verdict findings. No record is written to GitHub as a comment, so Issue and PR timelines carry only questions and engineer input.
 
 ### Coordinator
 
@@ -19,7 +22,7 @@ Each part does one job and stores no state of its own. All state lives on GitHub
 | Part | Job | Uses |
 |---|---|---|
 | pr-owner | Implements or repairs one Issue once and pushes. When it cannot decide, it writes a question on the Issue and pushes nothing | implement, create-pr, oe question |
-| pr-verify | Runs the code at the PR's head SHA to check that it meets every acceptance criterion of the Issue | oe verdict |
+| pr-verify | Runs the code at the PR's head SHA and judges only the Issue's automated checks, the ones runnable in the repository or CI. Manual checks, the ones only a human can do, are left to the engineer and never fail a verdict | oe verdict |
 
 ### Existing skills
 
@@ -33,20 +36,23 @@ Each part does one job and stores no state of its own. All state lives on GitHub
 
 | Part | Job | Writes to |
 |---|---|---|
+| Host-local record store | Holds the claim records, attempt records, and verdict findings of one Epic, keyed by repository and Epic, under the same directory as oe lock: `$XDG_STATE_HOME/orchestrate-epic`, or `~/.local/state/orchestrate-epic`. It sits outside every Git working tree, and an Epic's records are removed once every Issue is done | A host-local directory |
 | oe lock | Refuses a second session for the same Epic | A host-local lock |
-| oe ready | Reads GitHub and prints each Issue's next action | nothing |
+| oe ready | Reads GitHub and the host-local records and prints each Issue's next action | nothing |
+| oe status | Shows, per Issue, its step, PR, CI result, verdict with the reason of a failure, attempt count, whether an agent is running, and the time in the current step. `--watch` refreshes the view. It is read-only | nothing |
 | oe wait | Waits until oe ready's output changes or 9 minutes pass | nothing |
 | oe brief | Builds the brief handed to an Owner or a Verifier, and records each Verifier start before its brief | A pending verify status on the SHA, for a Verifier |
-| oe claim | Creates the Issue's branch and writes a claim record | A branch on origin and an Issue comment |
+| oe claim | Creates the Issue's branch and writes a claim record | A branch on origin and the host-local record store |
 | oe worktree | Creates an agent's worktree outside the shared checkout, on the Issue branch for an Owner and detached at its head for a Verifier, and removes it after the agent ends | A local worktree |
-| oe attempt | Writes an attempt record before an Owner starts, and refuses a 4th | An Issue comment |
-| oe question | Writes an Owner's question | An Issue comment |
-| oe verdict | Writes a Verifier's verdict and findings | A commit status on the SHA and a PR comment |
+| oe attempt | Writes an attempt record before an Owner starts, and refuses a 4th | The host-local record store |
+| oe question | Writes an Owner's question in a fixed, readable format | An Issue comment |
+| oe verdict | Writes a Verifier's verdict and findings | A commit status on the SHA, and the findings in the host-local record store |
 
 ### Engineer
 
 - Answers an Owner's question with a comment on the Issue
 - Reviews the PR's code and submits Changes requested when something must change
+- Runs the Issue's manual checks, which the PR lists as unchecked boxes that no agent checks
 - Approves and merges the PR
 - Deletes a parked Issue's branch so the AI starts it over
 - Removes or replaces a dependency that was closed as not planned or duplicate
@@ -61,7 +67,7 @@ Each part does one job and stores no state of its own. All state lives on GitHub
 | A verdict is written as a commit status on the SHA that was checked, and is not written once that SHA is no longer the PR's head | Verdict bound to the SHA |
 | A Verifier receives only the Issue, the SHA, and the base branch, never the PR body or the Owner's report | Verifier never sees the worker's report |
 | Every Owner and Verifier starts fresh for one job and ends when the job is done | A fresh agent per step |
-| Owner attempts are counted from the attempt records on GitHub, and a 4th start is refused | Retry cap survives restarts |
+| Owner attempts are counted from the attempt records in the host-local record store, and a 4th start is refused | Retry cap survives restarts on the same host |
 | Each agent works only in its own worktree and never touches the shared checkout | Never touch the shared checkout |
 | Engineer input is only an unmarked comment or review by someone with the OWNER, MEMBER, or COLLABORATOR role, and labels mean nothing | Trusted input only |
 | When any GitHub read fails, oe ready prints nothing and exits with an error | A failed read decides nothing |
@@ -98,9 +104,9 @@ flowchart TB
   Verify -->|"No verdict twice"| Parked
 ```
 
-For each Issue, oe ready reads this table from the top and outputs the action of the first row that matches. Rows 1 and 2 are gates on the default branch and apply to every Issue.
+For each Issue, oe ready reads this table from the top and outputs the action of the first row that matches. Rows 1 and 2 are gates on the default branch and apply to every Issue. Claim and attempt records come from the host-local record store; every other state comes from GitHub.
 
-| Row | Phase | State on GitHub | Next action |
+| Row | Phase | State | Next action |
 |---|---|---|---|
 | 1 | Gate | The default branch's head SHA still has no checks after 10 minutes | End the session |
 | 2 | Gate | A check on the default branch's head SHA is pending or failed, or the SHA has had no checks for less than 10 minutes | Start nothing and wait |
@@ -125,6 +131,7 @@ For each Issue, oe ready reads this table from the top and outputs the action of
     - A Changes requested review
     - A review-thread comment
 - Counting
+  - Claim records, attempt records, and verdict findings are read from the host-local record store, and questions from the Issue's comments
   - Only records after the latest claim record count, and every record counts when there is no claim record
   - The PR means the latest PR opened from the branch after the latest claim record
   - Verifier starts are counted by the pending statuses that oe puts on the SHA before each start
@@ -155,7 +162,8 @@ sequenceDiagram
     E->>G: Read the state
     E-->>O: Claim A
     O->>E: claim and attempt
-    E->>G: Create the branch and records
+    E->>G: Create the branch
+    Note over E: Write the claim and attempt records on the host
   end
   rect rgba(0,200,120,0.08)
     Note over O,G: Implementation
@@ -183,7 +191,7 @@ sequenceDiagram
     Note over O,G: Verification
     O->>E: brief
     O->>+V: Start with only the Issue, the SHA, and the base branch
-    Note over V: Runs the code to check each acceptance criterion of the Issue
+    Note over V: Runs the code to check each automated check of the Issue
     V->>E: Write success with verdict
     E->>G: Put a success status on the SHA
     V-->>-O: End
@@ -204,7 +212,8 @@ sequenceDiagram
 | Case | What happens |
 |---|---|
 | Lost agent | The Owner ends without a PR, or the session dies. GitHub has no record of completion, so the next oe ready starts the next attempt on the same branch |
-| Failed verification | The Verifier writes a failure verdict and a findings comment. An Owner reads the findings, repairs, and pushes. The new SHA has no verdict, so CI and verification run again |
+| Failed verification | The Verifier writes a failure verdict, and its findings go to the host-local record store. An Owner reads the findings, repairs, and pushes. The new SHA has no verdict, so CI and verification run again |
+| Manual checks | The Verifier judges only the automated checks, so an Issue whose remaining checks are manual gets a success verdict and waits for the merge. The PR lists the manual checks as unchecked boxes for the engineer |
 | Failed CI | An Owner fixes the failed check on the same branch and pushes |
 | Reached cap | When a repair signal remains after 3 attempts, the Issue is parked and the Issues that depend on it stop too. The engineer either finishes and merges it by hand, or deletes the branch so the AI starts over |
 | Red default branch | While a check on the default branch fails, no claim, Owner, or Verifier starts, so no attempt is spent. The loop resumes once the check passes |
@@ -217,6 +226,7 @@ sequenceDiagram
 - oe does not scan for secrets, and the commit skill screens each commit instead
 - A comment the AI forgot to mark is read as engineer input
 - The session lock works only within one host, so running the same Epic on another host lets two agents touch the same branch
+- Claim records, attempt records, and verdict findings stay on the host that wrote them, so resuming an Epic on another host resets its attempt count and loses earlier findings
 - In OpenCode V2 and an interactive Codex session the session's process is a shared background service, so a session that ends without releasing its lock blocks a rerun until the service restarts or the lock is released with its token
 - In Codex, waiting is not free: the session polls oe wait every 30 seconds within one turn, so a long run grows its context, and a compaction can drop the lock token or the running agents the session keeps in memory
 - oe ready reads only the newest PR with an Issue's branch name, so a newer PR from a fork with that name hides the Issue's own PR; its Owners find nothing to repair, and the Issue parks
@@ -238,4 +248,7 @@ sequenceDiagram
 | Implicit invocation | Codex ignores `disable-model-invocation`, so orchestrate-epic, pr-owner, and pr-verify carry `agents/openai.yaml` with `allow_implicit_invocation: false`, because invoking orchestrate-epic is the consent to push |
 | Counting Verifier starts | oe brief writes the pending verify status that oe ready counts, before it prints a Verifier's brief, so no Verifier starts uncounted |
 | Worktrees | An agent's worktree is removed when the agent ends, and unpushed work is discarded |
-| Where findings go | A marked PR comment, which the next Owner reads |
+| Where findings go | The host-local record store, which the next Owner reads. Nothing about a verdict is written to GitHub except the verify status |
+| Where machine records go | Claim records, attempt records, and findings stay in the host-local record store, because comments under the user's account made Issue and PR timelines noisy. Questions stay as Issue comments, because an engineer must read and answer them |
+| Acceptance checks | An Issue's Verification lists automated checks, runnable in the repository or CI, apart from manual checks, done by a human. The Verifier judges only the automated checks, the PR lists the manual ones unchecked, and no agent checks a box that needs a human, including template boxes |
+| Watching progress | oe status shows the board from the GitHub state and the host-local records, and writes to neither |
