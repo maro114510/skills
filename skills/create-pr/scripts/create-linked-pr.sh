@@ -4,6 +4,9 @@
 # Usage: create-linked-pr.sh --link PR [--repo R]
 # Before creating, origin's tip of the head branch must equal local HEAD.
 # Exit: 0 ok, 1 gh or git failed, 2 bad usage or unknown issue, 3 link missing, 4 NOT_PUSHED: head not pushed or stale.
+# Why not gh pr create alone: GitHub can lag hours before it links a closing keyword, so each closing line is linked through the API and polled until it appears.
+# An issue with open sub-issues gets Related instead of Closes, naming how many remain, so a partial PR never closes its parent; --link applies that rewrite to an existing PR body.
+# On a non-default base, Closes stays but nothing is linked, because GitHub honors the keyword only once the PR targets the default branch.
 set -uo pipefail
 
 attempts="${LINK_POLL_ATTEMPTS:-10}"
