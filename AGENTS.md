@@ -79,34 +79,16 @@ argument-hint: "[ready] [base <branch>]"
 
 ## Target Repository Config
 
-Skills read settings from two places, split by who owns the value.
+Per-user or per-clone settings live in git config and are never committed.
+Skills read them with `git config --get <key>`, so git decides between local and global.
 
-| Place | Holds | Committed |
+| git config key | Values | Resolution |
 |---|---|---|
-| git config | Per-user or per-clone preferences | Never |
-| `.agents/skills.toml` | Repository policy shared by everyone who works in the repository | Yes |
+| `skills.lang` | `ja`, `en` | `lang <value>` argument, then `skills.lang`, then `ja` |
 
-### git config
+An invalid value stops the skill instead of falling back, and the skill passes the resolved value as `lang <value>` to every skill it calls.
 
-Skills read a key with `git config --get <key>`, so git's own precedence decides between local and global values.
-
-| Key | Values | Applies to |
-|---|---|---|
-| `skills.lang` | `ja`, `en` | Every skill that takes a `lang` argument |
-
-This is the convention every such skill must follow; a skill that predates it may still resolve only its argument until it is updated.
-A skill resolves `skills.lang` in this order:
-
-1. The `lang <value>` argument
-2. `git config --get skills.lang`
-3. `ja`
-
-An invalid value from the argument or from git config stops the skill with the valid values listed, and never falls back to the next source.
-A skill passes the resolved value as `lang <value>` to every skill the run calls, so the whole run writes in one language.
-
-### `.agents/skills.toml`
-
-Skill scripts read the target repository's `.agents/skills.toml`.
+Committed repository policy lives in `.agents/skills.toml`, which skill scripts read.
 The `[paths]` section is neutral: no single skill owns it, and every key holds Git glob pathspecs as a string or an array.
 Every other section is named after the skill that reads it.
 
