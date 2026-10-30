@@ -5,7 +5,7 @@
 `allowed-tools` grants Bash commands one subcommand at a time: Claude Code splits a compound command on `&&`, `||`, `;`, `|`, `&`, and newlines, then matches each subcommand against the declared patterns. `Bash(gh:*)` matches only a subcommand whose first token is `gh`.
 
 - Never add a top-level variable assignment, function, loop, or non-`gh` utility such as `mktemp`, `awk`, `printf`, `echo`, `grep`, or `cat`; none match `Bash(gh:*)`.
-- A command that does not start with `gh` needs a matching grant in `allowed-tools`.
+- A command that does not start with `gh` needs a matching grant in `allowed-tools`. The one exception is Step 0's `lang.sh`, left ungranted because its path differs per install and a wildcard rule would also approve arbitrary commands, so it asks for permission once.
 - Keep Issue bodies inline via heredoc; writing them to files would also require a `Write` grant.
 
 ## Step 5: Creating Issues

@@ -2,7 +2,7 @@
 name: create-pr
 description: >
   Create a GitHub pull request with a high-signal title and description, written
-  in Japanese by default; pass `lang en` to write it in English instead.
+  in the language that `lang <ja|en>` or git config `skills.lang` selects.
   Analyze the branch diff and complete commit history to explain the motivation,
   impact, risks, implementation choices, and review focus before running
   `gh pr create`. Use this skill when the user asks to open, create, submit, or
@@ -14,7 +14,7 @@ argument-hint: "[ready] [base <branch>] [lang <ja|en>]"
 
 # create-pr
 
-Analyze the branch changes and create a reviewer-focused GitHub pull request, in the language the arguments select.
+Analyze the branch changes and create a reviewer-focused GitHub pull request, in the language Step 1 resolves.
 
 ## Arguments
 
@@ -32,7 +32,7 @@ Step 1's script parses it against this table:
 | `ready` | Ready-for-review PR |
 | `draft` | Same as none; kept for compatibility |
 | `base <branch>` | Use `<branch>` as the base |
-| `lang <ja\|en>` | Output language, stored as `LANG`; `ja` when omitted |
+| `lang <ja\|en>` | Output language, stored as `LANG`; the `Arguments:` line shows the resolved one and its source |
 
 Combine in any order, e.g. `ready base develop lang en`.
 
@@ -56,7 +56,7 @@ It fetches `origin/<base>` and prints everything later steps use. Do not read it
 
 | Section | Holds | Used in |
 |---|---|---|
-| `Arguments:` line | Resolved `lang`, `draft`, and `base`; `base` follows the argument, then `branch.<branch>.gh-merge-base`, then the default branch | Arguments, Step 3.1 |
+| `Arguments:` line | Resolved `lang` with its source, `draft`, and `base`; `base` follows the argument, then `branch.<branch>.gh-merge-base`, then the default branch | Arguments, Step 3.1 |
 | `== create flags` | The `--base`, `--draft`, and `--assignee` flags for Step 6.2 | Step 6.2 |
 | `== branch`, `== base` | The current branch, and the freshly fetched `origin/<base>` every comparison uses | Step 2.1, Step 6.1 |
 | `== commits` | Every commit message in `origin/<base>..HEAD`, oldest first | Step 2 |
@@ -73,7 +73,7 @@ Act on the exit code. Every non-zero exit prints no context.
 |---|---|---|
 | 0 | Context | Continue |
 | 1 | Error | Show it verbatim and stop |
-| 2 | Valid arguments | List the valid arguments and stop |
+| 2 | Valid arguments, or an invalid language | Show it verbatim and stop |
 | 3 | `CONFLICT #NNN` | Stop and report each issue: an older commit closes the issue that the newest commit marks Related. Never amend, rebase, reset, revert, or commit; the user fixes the history |
 | 4 | `ON_BASE_BRANCH` | Stop: a PR cannot target its own branch. Suggest creating a feature branch |
 | 5 | `NO_COMMITS` | Stop and ask whether commits are missing |
@@ -115,7 +115,7 @@ If the diff is large, meaning more than 20 files or more than 1,000 changed line
 
 ### 3.1 Language
 
-Write the PR title, PR description, and user-facing status messages in `LANG`: Japanese for `ja` (the default), English for `en`. Do not auto-detect another language from previous PRs or commit messages.
+Write the PR title, PR description, and user-facing status messages in `LANG`: Japanese for `ja`, English for `en`. Do not auto-detect another language from previous PRs or commit messages.
 
 These stay in English regardless of `LANG`: the Conventional Commits type and scope in the title, the `Closes #NNN` / `Related #NNN` lines, code identifiers, commands, and paths, and script output that Step 6 says to show verbatim.
 

@@ -7,8 +7,9 @@ target="${script_dir}/pr-context.sh"
 work="$(mktemp -d)"
 trap 'rm -rf "${work}"' EXIT
 fail=0
-# The user's own hooks and settings must not reach the throwaway repositories.
+# The user's own hooks and settings must not reach the throwaway repositories, from config files or from git's environment-variable config.
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
+unset GIT_CONFIG GIT_CONFIG_COUNT GIT_CONFIG_PARAMETERS
 
 # Stub state files in $STUB_DIR:
 # - default: repo default branch, main when absent
@@ -115,7 +116,7 @@ run
 check "gh-merge-base=develop: base section says develop" "${r}"
 [[ "$(section 'create flags')" == "--base develop --draft --assignee @me" ]] && r=0 || r=1
 check "gh-merge-base=develop: create flags say develop" "${r}"
-[[ "${out}" == "Arguments: lang=ja, draft=yes, base=develop"* ]] && r=0 || r=1
+[[ "${out}" == "Arguments: lang=ja (default), draft=yes, base=develop"* ]] && r=0 || r=1
 check "gh-merge-base=develop: arguments line says develop" "${r}"
 
 # 3. The base argument wins over gh-merge-base, and ready drops --draft.
@@ -126,8 +127,38 @@ commit 'feat: a' a
 run ready base main lang en
 [[ "${rc}" == 0 && "$(section 'create flags')" == "--base main --assignee @me" ]] && r=0 || r=1
 check "base argument over gh-merge-base, ready: flags have main and no --draft" "${r}"
-[[ "${out}" == "Arguments: lang=en, draft=no, base=main"* ]] && r=0 || r=1
+[[ "${out}" == "Arguments: lang=en (argument), draft=no, base=main"* ]] && r=0 || r=1
 check "ready base main lang en: arguments line" "${r}"
+
+# 3b. The language comes from lang.sh: git config when no argument, and an invalid value stops first.
+setup
+g config skills.lang en
+commit 'feat: a' a
+run
+[[ "${rc}" == 0 && "${out}" == "Arguments: lang=en (git config), draft=yes, base=main"* ]] && r=0 || r=1
+check "skills.lang=en and no lang argument: arguments line says en from git config" "${r}"
+
+setup
+g config skills.lang en
+commit 'feat: a' a
+run lang ja
+[[ "${rc}" == 0 && "${out}" == "Arguments: lang=ja (argument), draft=yes, base=main"* ]] && r=0 || r=1
+check "lang ja with skills.lang=en: the argument wins" "${r}"
+
+setup
+g config skills.lang fr
+commit 'feat: a' a
+run
+[[ "${rc}" == 2 && "${out}" == 'Invalid language "fr" from git config skills.lang; use ja or en.' ]] && no_context && r=0 || r=1
+check "skills.lang=fr: exit 2 naming the key and value, no context" "${r}"
+
+setup
+g config skills.lang fr
+commit 'feat: a' a
+echo dirty >"${clone}/dirty.txt"
+run
+[[ "${rc}" == 2 ]] && no_context && r=0 || r=1
+check "skills.lang=fr with uncommitted changes: the language stops first, before the commit skill would run" "${r}"
 
 # 4. Stop conditions exit with their own code and print no context.
 setup

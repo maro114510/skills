@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Prints everything create-pr needs to write a PR. Fetches origin/<base>, and otherwise changes no branch, worktree, or GitHub state.
 # Usage: pr-context.sh [ready|draft] [base <branch>] [lang <ja|en>]
+# Language: whatever lang.sh resolves, given the lang argument when there is one.
 # Base: the base argument, else git config branch.<current>.gh-merge-base, else the default branch, as create-linked-pr.sh resolves it.
 # Output on exit 0: an "Arguments:" line, then sections headed "== <name>": create flags, branch, base, commits, diff stat, diff, template <path|none>, issues, labels.
 # A stop prints only its reason: ON_BASE_BRANCH <b>, UNCOMMITTED with git status lines, NO_COMMITS origin/<b>, CONFLICT #N lines, or ISSUE_LOOKUP_FAILED #N: <gh error>.
-# Exit: 0 ok, 1 git or gh failed, including an issue gh cannot read, 2 bad arguments, 3 CONFLICT, 4 on the base branch, 5 no commits, 6 uncommitted changes.
+# Exit: 0 ok, 1 git or gh failed, including an issue gh cannot read, 2 bad arguments or an invalid language, 3 CONFLICT, 4 on the base branch, 5 no commits, 6 uncommitted changes.
 set -uo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -14,7 +15,7 @@ usage() {
   exit 2
 }
 
-draft="" base="" lang=""
+draft="" base="" lang_args=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
   ready)
@@ -30,15 +31,18 @@ while [[ $# -gt 0 ]]; do
     base="$2" && shift
     ;;
   lang)
-    [[ "${2:-}" == ja || "${2:-}" == en ]] || usage
-    lang="$2" && shift
+    # lang.sh alone judges the value; only a missing one is a parsing error.
+    [[ $# -ge 2 ]] || usage
+    lang_args=("$2") && shift
     ;;
   *) usage ;;
   esac
   shift
 done
 draft="${draft:-yes}"
-lang="${lang:-ja}"
+
+# First, so an invalid language stops before the commit skill or a push could act on another stop.
+lang="$(bash "${script_dir}/lang.sh" ${lang_args[@]+"${lang_args[@]}"})" || exit $?
 
 branch="$(git branch --show-current 2>/dev/null)"
 if [[ -z "${branch}" ]]; then
