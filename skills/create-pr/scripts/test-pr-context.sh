@@ -7,6 +7,8 @@ target="${script_dir}/pr-context.sh"
 work="$(mktemp -d)"
 trap 'rm -rf "${work}"' EXIT
 fail=0
+# The user's own hooks and settings must not reach the throwaway repositories.
+export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 
 # Stub state files in $STUB_DIR:
 # - default: repo default branch, main when absent
@@ -19,7 +21,7 @@ d="${STUB_DIR}"
 case " $* " in
 *" repo view "*) cat "${d}/default" 2>/dev/null || echo main ;;
 *" issue view "*) echo "Title of $3" ;;
-*" label list "*) cat "${d}/labels" 2>/dev/null ;;
+*" label list "*) cat "${d}/labels" 2>/dev/null || true ;;
 *) echo "unexpected gh $*" >&2 && exit 1 ;;
 esac
 STUB
@@ -56,9 +58,9 @@ run() {
   rc=$?
 }
 
-# Lines between "== <name>" and the next "== " header.
+# Lines between the exact header "== <name>" and the next "== " header.
 section() {
-  awk -v h="== $1" '/^== / { on = ($0 == h || index($0, h " ") == 1); next } on' <<<"${out}"
+  awk -v h="== $1" '/^== / { on = ($0 == h); next } on' <<<"${out}"
 }
 
 check() { # name, condition result (0 pass)
@@ -148,7 +150,7 @@ commit 'feat: template' a
 run
 [[ "${rc}" == 0 && "$(grep -c '^== template' <<<"${out}")" == 1 ]] && r=0 || r=1
 check "lowercase template only: exactly one template section" "${r}"
-[[ "$(grep '^== template' <<<"${out}")" == "== template .github/pull_request_template.md" && "$(section template)" == "lower template" ]] && r=0 || r=1
+[[ "$(grep '^== template' <<<"${out}")" == "== template .github/pull_request_template.md" && "$(section 'template .github/pull_request_template.md')" == "lower template" ]] && r=0 || r=1
 check "lowercase template only: printed with its exact path and content" "${r}"
 
 setup
