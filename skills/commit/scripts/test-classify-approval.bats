@@ -396,3 +396,11 @@ EOF
   run bash "${target}" --staged --require
   [ "${status}" -eq 2 ]
 }
+
+@test "--removed-test is an unknown option, so a deleted test file cannot be exempted" {
+  git rm -q tests/app_test.sh
+  git add -A
+  run bash "${target}" --staged --removed-test
+  [ "${status}" -eq 2 ]
+  has_match '^classify-approval: Usage: '
+}
