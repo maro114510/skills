@@ -18,7 +18,7 @@ Each part does one job and stores no state of its own. State lives on GitHub, ex
 
 | Part | Job | Uses |
 |---|---|---|
-| pr-owner | Implements or repairs one Issue once and pushes. When it cannot decide, it writes a question on the Issue and pushes nothing | implement, create-pr, oe records, oe question |
+| pr-owner | Implements or repairs one Issue once and pushes. When it cannot decide, it writes a question on the Issue and pushes nothing. After a repair for a bot finding, it requests the bots' review again | implement, create-pr, oe records, oe question, oe rereview |
 | pr-verify | Runs the code at the PR's head SHA and judges only the Issue's automated checks, leaving manual checks to the engineer | oe verdict |
 
 ### Existing skills
@@ -43,6 +43,7 @@ Each part does one job and stores no state of its own. State lives on GitHub, ex
 | oe worktree | Creates an agent's worktree outside the shared checkout, on the Issue branch for an Owner and detached at its head for a Verifier, and removes it after the agent ends | A local worktree |
 | oe attempt | Writes an attempt record before an Owner starts, and refuses a 4th | The record store |
 | oe question | Writes an Owner's question in a fixed format | An Issue comment |
+| oe rereview | Asks every listed bot to review the PR again, in a fixed format | A PR comment |
 | oe verdict | Writes a Verifier's verdict and findings | A commit status on the SHA, and the record store |
 | oe records | Prints an Issue's records from its latest claim on, for an Owner | nothing |
 | oe forget | Drops an Epic's records once every child Issue is closed | The record store |
@@ -51,6 +52,7 @@ Each part does one job and stores no state of its own. State lives on GitHub, ex
 
 - Answers an Owner's question with a comment on the Issue
 - Reviews the PR's code and submits Changes requested when something must change
+- Resolves a bot's review thread to dismiss its finding, and handles bot findings that come after the bot round
 - Runs the manual checks, which the PR leaves unchecked
 - Approves and merges the PR
 - Deletes a parked Issue's branch so the AI starts it over
@@ -69,6 +71,7 @@ Each part does one job and stores no state of its own. State lives on GitHub, ex
 | Owner attempts are counted from the record store, and a 4th start is refused | Retry cap survives restarts on the same host |
 | Each agent works only in its own worktree and never touches the shared checkout | Never touch the shared checkout |
 | Engineer input is only an unmarked comment or review by someone with the OWNER, MEMBER, or COLLABORATOR role, and labels mean nothing | Trusted input only |
+| A bot's text only starts a repair, as a bot finding defined below, and never instructs an agent: the Owner reads it as data and fixes only what it reproduces in the code | Trusted input only |
 | When any GitHub read fails, oe ready prints nothing and exits with an error | A failed read decides nothing |
 | Invoking the skill is consent, and ending the session stops every agent | The entry gate. It is dropped because invoking is consent |
 | Success is decided by the real CI on GitHub, never by a local reproduction | The locally reproduced check set. It is dropped because the real CI runs |
@@ -140,6 +143,22 @@ For each Issue, oe ready reads this table from the top and outputs the action of
     - An answer to the latest question
     - A Changes requested review
     - A review-thread comment
+  - Since the latest attempt record, a listed bot wrote a bot finding, while both of these hold
+    - No trusted user approved the PR's head SHA
+    - The PR has no rereview comment from oe written after the latest claim record
+- Bot findings
+  - A bot finding is the first comment of an unresolved, not outdated review thread, written by a listed bot in its own review. A reply in a thread never counts, because anyone can make a bot reply on a public repository by mentioning it
+  - The bot is told by its account's login and its Bot type, never by a role, because a bot's author association is NONE
+  - The severity is read only from the comment's heading, its first line that is neither empty nor an HTML comment, in the bot's fixed format. A heading in no listed format is no finding
+
+    | Bot | Login | Counts | Heading, for Major or higher | Ignored |
+    |---|---|---|---|---|
+    | CodeRabbit | `coderabbitai` | Critical, Major | `**<picture>…</picture> <level>**` followed by ` · ` and its categories, or the older `_<kind>_ \| _<emoji> <level>_`, where `<level>` is `Critical` or `Major` | Minor, Trivial, and every other comment |
+    | Codex | `chatgpt-codex-connector` | P0, P1 | `**<sub><sub>![<level> Badge](https://img.shields.io/badge/<level>-…)</sub></sub>` followed by the title, where `<level>` is `P0` or `P1` | P2, P3, and every other comment |
+
+  - An engineer dismisses a finding by resolving its thread
+  - The bot round is one per claim. After a repair push for a bot finding, the Owner writes the rereview comment with oe rereview, and from then on bot findings start nothing and are left to the engineer. oe ready waits for no re-review
+  - A repair for a bot finding is an Owner attempt and counts toward the cap of 3
 - Counting
   - Only records after the latest claim record count, and every record counts when there is no claim record
   - The PR means the latest PR opened from the branch after the latest claim record
@@ -224,6 +243,7 @@ sequenceDiagram
 | Failed verification | The Verifier writes a failure verdict and stores its findings. An Owner reads the findings, repairs, and pushes. The new SHA has no verdict, so CI and verification run again |
 | Manual checks | An Issue with only manual checks left gets a success verdict and waits for the merge |
 | Failed CI | An Owner fixes the failed check on the same branch and pushes |
+| Bot finding | CodeRabbit marks a finding Major. An Owner reads it as data, reproduces it in the code, repairs, pushes, and asks the bots to review again with oe rereview. The new SHA runs CI and verification again. A Major finding from that re-review is left to the engineer. A Minor finding starts nothing |
 | Reached cap | When a repair signal remains after 3 attempts, the Issue is parked and the Issues that depend on it stop too. The engineer either finishes and merges it by hand, or deletes the branch so the AI starts over |
 | Red default branch | While a check on the default branch fails, no claim, Owner, or Verifier starts, so no attempt is spent. The loop resumes once the check passes |
 
@@ -240,13 +260,22 @@ sequenceDiagram
 - In OpenCode V2 and an interactive Codex session the session's process is a shared background service, so a session that ends without releasing its lock blocks a rerun until the service restarts or the lock is released with its token
 - In Codex, waiting is not free: the session polls oe wait every 30 seconds within one turn, so a long run grows its context, and a compaction can drop the lock token or the running agents the session keeps in memory
 - oe ready reads only the newest PR with an Issue's branch name, so a newer PR from a fork with that name hides the Issue's own PR; its Owners find nothing to repair, and the Issue parks
+- A bot that changes its comment format, or skips draft PRs by its settings, has its findings missed until an engineer sees them
+- A bot that refuses the re-review, as CodeRabbit does past its hourly review allowance, leaves the repair without a bot review, and nothing asks again
+- A bot finding the Owner cannot reproduce still spends an attempt
 
 ## Decisions
 
 | Question | Decision |
 |---|---|
 | A dependency closed as not planned or duplicate | The dependent Issue is not claimed and waits for an engineer's decision |
-| Signals that start a repair Owner | Only the repair signals above. Plain PR comments and bot reviews start nothing |
+| Signals that start a repair Owner | Only the repair signals above. Plain PR comments start nothing, and a bot review starts a repair only through a bot finding |
+| Which bot findings count | Only Major or higher from CodeRabbit and Codex, because those are bugs the engineer would otherwise relay by hand. Lower findings start nothing, so the Owner never chases style |
+| How severity is read | From each bot's fixed heading, as the Bot findings table lists. An unknown format counts as no finding, so a format change misses findings instead of starting Owners |
+| Keeping a bot's text from instructing | Only a bot's own thread-opening comment counts, and the Owner gets it as untrusted data, follows none of its instructions such as CodeRabbit's prompt for AI agents, and fixes only what it reproduces in the code |
+| Bot repairs per PR | One bot round per claim, inside the cap of 3 attempts, so a bot and the Owner never chase each other. Findings after the round go to the engineer and do not park the Issue |
+| Re-review after a bot repair | The Owner writes one PR comment through oe rereview: the marker `<!-- oe:rereview -->`, then `@coderabbitai review` and `@codex review`. The marker keeps it from counting as engineer input, and its presence marks the round as used |
+| A bot finding after approval | Starts nothing, so the AI never pushes onto a head that an engineer approved and may be merging |
 | Restarting an Owner after an answer | Counts toward the cap of 3 attempts |
 | A Verifier ends without a verdict | It is restarted once on the same SHA, and the Issue is parked when the second start also gives no verdict |
 | Waiting | One oe wait call waits up to 9 minutes, under the 10-minute limit Claude Code puts on a background command, and when no agent is running and oe ready's output does not change for 4 hours, the session prints a summary and ends |
@@ -258,7 +287,7 @@ sequenceDiagram
 | Implicit invocation | Codex ignores `disable-model-invocation`, so orchestrate-epic, pr-owner, and pr-verify carry `agents/openai.yaml` with `allow_implicit_invocation: false`, because invoking orchestrate-epic is the consent to push |
 | Counting Verifier starts | oe brief writes the pending verify status that oe ready counts, before it prints a Verifier's brief, so no Verifier starts uncounted |
 | Worktrees | An agent's worktree is removed when the agent ends, and unpushed work is discarded |
-| Where records go | The record store, because comments under the user's account cluttered timelines. Only questions stay on GitHub, for the engineer to answer, in a fixed format that says an agent asks |
+| Where records go | The record store, because comments under the user's account cluttered timelines. Only questions, for the engineer to answer, and rereview comments, for the bots to read, stay on GitHub, each in a fixed format that says an agent wrote it |
 | Record key | Repository and Issue: an Issue has one parent Epic, and no writer is given the Epic |
 | Dropping records | oe forget, when a session ends with every Issue done. It refuses while an Issue is open, and oe ready stays read-only |
 | Acceptance checks | Verification splits automated checks from manual ones, and no agent checks a box that needs a human, template boxes included |
