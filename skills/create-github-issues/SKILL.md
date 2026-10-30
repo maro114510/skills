@@ -4,7 +4,7 @@ description: >
   Create GitHub Issues from a conversation, plan, or TODO list.
   Produces one Epic parent Issue and child Issues per task, each with background, requirements, specs, dependency, and acceptance criteria, linked to the Epic as GitHub sub-issues with dependencies recorded as blocked-by/blocking relations.
   Requirements (what) and specs (how) are kept separate and length-capped so bodies stay concise, and the Epic also renders a Mermaid diagram (a compact table for large epics) showing which child Issues block each other and which can run in parallel.
-  Issue titles, bodies, and every interactive prompt are written in Japanese by default; pass `lang en` to generate the whole run in English instead.
+  Issue titles, bodies, and every interactive prompt are written in the language that `lang <ja|en>` or git config `skills.lang` selects.
   Use this skill when the user asks to track tasks with an Epic, turn TODOs or a plan into GitHub Issues, or extract action items from a review or investigation.
 allowed-tools: Bash(gh:*)
 argument-hint: "[repo <owner/repo>] [lang <ja|en>] [project <n>]"
@@ -16,6 +16,20 @@ Create a GitHub Epic and child Issues from conversation context.
 Write concise, length-capped bodies (requirements separated from specs), model dependencies explicitly, then link hierarchy and dependencies via native `gh` CLI flags and render the dependency graph in the Epic.
 
 **Core rule that governs every step below: an Issue body may only contain facts already surfaced and approved earlier in this flow (Step 1.5 / Step 2 / Step 3). Step 4 is formatting, not authoring — never introduce a new requirement, spec detail, or dependency for the first time while writing the final Markdown body.** If you notice you need to state something new while writing a body, stop, go back to Step 3, and get it approved there first.
+
+---
+
+## Step 0: Determine Output Language
+
+Before anything else, run the script below, passing the token after `lang` in `$ARGUMENTS`, or `''` when `lang` is the last token, and nothing when there is no `lang`. `<skills-root>` is the parent of this skill's directory.
+
+```bash
+bash <skills-root>/create-pr/scripts/lang.sh [<value>]
+```
+
+On a non-zero exit, show its output and stop without asking or creating anything. Otherwise show `Language: <its output>` first, and take its first word as `LANG`.
+
+`LANG` is fixed for the rest of this run and governs everything produced from here on — AskUserQuestion prompts, summaries, reviews, warnings, Issue/Epic titles, and Issue/Epic bodies. From Step 1.5 through Step 6, read only `references/templates.<LANG>.md` — never the other language's file, and never switch languages mid-run.
 
 ---
 
@@ -33,14 +47,6 @@ gh repo view --json nameWithOwner -q .nameWithOwner
 Store the printed `owner/repo` as `REPO`.
 
 Also check `$ARGUMENTS` for `project <number>` and store it as `PROJECT_NUM` — an optional GitHub Project to link the Epic and every created Issue to, added after creation per 5.7. `gh issue create` has no `--project` flag, so linking happens after creation. Without `project`, 5.7 is skipped.
-
----
-
-## Step 1a: Determine Output Language
-
-Check `$ARGUMENTS` for `lang <ja|en>` and store it as `LANG`; default to `ja` if omitted (preserves existing behavior).
-
-`LANG` is fixed for the rest of this run and governs everything produced from here on — AskUserQuestion prompts, summaries, reviews, warnings, Issue/Epic titles, and Issue/Epic bodies. From Step 1.5 through Step 6, read only `references/templates.<LANG>.md` — never the other language's file, and never switch languages mid-run.
 
 ---
 

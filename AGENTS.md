@@ -82,11 +82,11 @@ argument-hint: "[ready] [base <branch>]"
 Per-user or per-clone settings live in git config and are never committed.
 Skills read them with `git config --get <key>`, so git decides between local and global.
 
-| git config key | Values | Resolution |
+| git config key | Values | Resolved by |
 |---|---|---|
-| `skills.lang` | `ja`, `en` | `lang <value>` argument, then `skills.lang`, then `ja` |
+| `skills.lang` | `ja`, `en` | `skills/create-pr/scripts/lang.sh` only; its header holds the precedence, and skills call it instead of restating it |
 
-An invalid value stops the skill instead of falling back, and the skill passes the resolved value as `lang <value>` to every skill it calls.
+A skill passes the resolved value as `lang <value>` to every skill it calls.
 
 Committed repository policy lives in `.agents/skills.toml`, which skill scripts read.
 The `[paths]` section is neutral: no single skill owns it, and every key holds Git glob pathspecs as a string or an array.
