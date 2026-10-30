@@ -42,7 +42,7 @@ All PR titles, PR descriptions, and user-facing status messages produced by this
 
 ## Repository PR Procedures
 
-This skill is the whole PR procedure. Never read or run a PR command the repository's docs point to, such as `/commit-push-pr`, and never add the title prefix, reviewer, or bot mention they ask for. Of the repository's PR conventions, only the Step 1.2 template applies.
+This skill is the whole PR procedure. Do not read or follow the repository's own PR instructions, except its PR template from Step 1.2.
 
 ## Step 1. Collect Context and Detect the PR Template
 
