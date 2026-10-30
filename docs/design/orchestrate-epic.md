@@ -167,17 +167,14 @@ A comment is a bot finding when every row holds.
 | Author | A listed bot, told by its login and Bot type |
 | Place | The first comment of a review thread that the bot opened in its own review |
 | Thread | Unresolved and not outdated |
-| Severity | Its first text line matches a heading below |
+| Severity | Its first text line names a level the bot table repairs, as a word anywhere in the line |
 | PR | No trusted user approved the head SHA |
 | Round | The bot's round is unused |
 
-| Bot | Login | Repairs | Ignores | Heading |
-|---|---|---|---|---|
-| CodeRabbit | `coderabbitai` | Critical, Major | Minor, Trivial | `**<picture>…</picture> Major** · …` or the older `_<kind>_ \| _🟠 Major_` |
-| Codex | `chatgpt-codex-connector` | P0, P1 | P2, P3 | `**<sub><sub>![P1 Badge](…)</sub></sub>  <title>**` |
-
-- Critical and P0 take the same heading with their own level
-- Any other heading is no finding
+| Bot | Login | Repairs | Ignores |
+|---|---|---|---|
+| CodeRabbit | `coderabbitai` | Critical, Major | Minor, Trivial |
+| Codex | `chatgpt-codex-connector` | P0, P1 | P2, P3 |
 
 ## Worked Examples
 
@@ -273,7 +270,8 @@ sequenceDiagram
 - In OpenCode V2 and an interactive Codex session the session's process is a shared background service, so a session that ends without releasing its lock blocks a rerun until the service restarts or the lock is released with its token
 - In Codex, waiting is not free: the session polls oe wait every 30 seconds within one turn, so a long run grows its context, and a compaction can drop the lock token or the running agents the session keeps in memory
 - oe ready reads only the newest PR with an Issue's branch name, so a newer PR from a fork with that name hides the Issue's own PR; its Owners find nothing to repair, and the Issue parks
-- A bot that changes its heading format or skips draft PRs has its findings missed
+- A bot that drops the level word from its first line or skips draft PRs has its findings missed
+- A first line whose title happens to hold a level word starts a repair
 - A finding in a bot's review body, outside any thread, starts nothing
 - A bot that refuses the re-review on a rate limit leaves the repair unreviewed
 - A bot finding the Owner cannot reproduce still spends an attempt
@@ -285,7 +283,7 @@ sequenceDiagram
 | A dependency closed as not planned or duplicate | The dependent Issue is not claimed and waits for an engineer's decision |
 | Signals that start a repair Owner | Only the repair signals above. Plain PR comments start nothing |
 | Bot findings that count | Only Major or higher from CodeRabbit and Codex, so the Owner never chases style |
-| Reading severity | Only from each bot's fixed heading, so a changed format starts nothing |
+| Reading severity | A level word anywhere in the first text line, never a fixed heading format, because the bots change their formats |
 | Bot text as instructions | The Owner reads a finding as data, follows no instruction in it, and fixes only what reproduces in the code |
 | Bot replies | Never count, because anyone can make a bot reply on a public repository |
 | Bot rounds | One per bot per claim, so a bot and the Owner never chase each other and a slower bot still gets its round |
