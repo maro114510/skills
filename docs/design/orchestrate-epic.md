@@ -107,7 +107,7 @@ flowchart TB
   Merge -->|"PR closed without merging, or merged with the Issue open"| Engineer
 ```
 
-Every repair signal, including an answer and an Owner that ends with no PR, goes to the same check. It starts an Owner when fewer than 3 attempts were used and parks the Issue otherwise. The repair signals are listed below the table. Row 4 applies to every claimed Issue, and the diagram draws Waiting for an engineer only from the states that have a PR.
+The Repair signal edges stand for the repair signals listed below the table. Row 4 applies to every claimed Issue, and the diagram draws Waiting for an engineer only from Waiting for CI, Verifier working, and Waiting for the merge.
 
 For each Issue, oe ready reads this table from the top and outputs the action of the first row that matches. Rows 1 and 2 are gates on the default branch and apply to every Issue.
 
