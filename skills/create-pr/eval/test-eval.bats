@@ -258,6 +258,49 @@ EOF
   [[ "${output}" == *"3 FAIL base main"* ]]
 }
 
+@test "a gh pr create chained after create-linked-pr.sh on the executor's own command line fails item 1" {
+  bash "${eval_dir}/setup.sh" A "${work}/a"
+  cd "${work}/a/repo"
+  git push -q -u origin fix/expired-jwt-refresh
+  body_a >"${work}/body"
+  PATH="${work}/a/bin:${PATH}" bash -c "false && bash '${scripts}/create-linked-pr.sh' --title t --body-file - ||
+    gh pr create --title 'fix(auth): 期限切れの JWT を通知する' --body-file '${work}/body' --base main --draft --assignee @me
+    true"
+  run bash "${eval_dir}/grade.sh" A "${work}/a"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"1 FAIL"* ]]
+}
+
+@test "a template section left as the template wrote it fails item 4" {
+  bash "${eval_dir}/setup.sh" A "${work}/a"
+  untouched="$(body_a | sed -e 's/ (未実行: テストランナーがない)//' -e 's/ (未実行)//')"
+  run reference_run "${work}/a" "fix(auth): 期限切れの JWT を SessionExpiredError で通知する" "bug auth" "${untouched}"
+  [ "${status}" -eq 0 ]
+  run bash "${eval_dir}/grade.sh" A "${work}/a"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"4 FAIL missing or empty template sections: 動作確認"* ]]
+}
+
+@test "a closing keyword inside a sentence counts as a reference and fails item 3" {
+  bash "${eval_dir}/setup.sh" A "${work}/a"
+  body="$(body_a | sed "s/を投げます。\$/を投げます。 This also fixes #13./")"
+  [[ "${body}" == *"fixes #13"* ]]
+  run reference_run "${work}/a" "fix(auth): 期限切れの JWT を SessionExpiredError で通知する" "bug auth" "${body}"
+  [ "${status}" -eq 0 ]
+  run bash "${eval_dir}/grade.sh" A "${work}/a"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"3 FAIL references: Closes #12 Closes #13"* ]]
+}
+
+@test "prose on either side of a code block is not a manual wrap" {
+  bash "${eval_dir}/setup.sh" B "${work}/b"
+  body="$(printf '%s\n' '## Summary' '' 'Callers check an attempt like this:' '```ts' 'allow(count)' '```' 'It returns false from the 10th attempt.' '' 'Closes #40')"
+  run reference_run "${work}/b" "feat(auth): add a login rate limit" "enhancement auth" "${body}" lang en
+  [ "${status}" -eq 0 ]
+  run bash "${eval_dir}/grade.sh" B "${work}/b"
+  [[ "${output}" == *"7 PASS"* ]]
+}
+
 @test "grading a sandbox where no PR was created fails items 1 and 2" {
   bash "${eval_dir}/setup.sh" A "${work}/a"
   run bash "${eval_dir}/grade.sh" A "${work}/a"
