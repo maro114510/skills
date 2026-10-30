@@ -3,8 +3,8 @@
 # Usage: pr-context.sh [ready|draft] [base <branch>] [lang <ja|en>]
 # Base: the base argument, else git config branch.<current>.gh-merge-base, else the default branch, as create-linked-pr.sh resolves it.
 # Output on exit 0: an "Arguments:" line, then sections headed "== <name>": create flags, branch, base, commits, diff stat, diff, template <path|none>, issues, labels.
-# A stop prints only its reason: ON_BASE_BRANCH <b>, UNCOMMITTED with git status lines, NO_COMMITS origin/<b>, or CONFLICT #N lines.
-# Exit: 0 ok, 1 git or gh failed, 2 bad arguments, 3 CONFLICT, 4 on the base branch, 5 no commits, 6 uncommitted changes.
+# A stop prints only its reason: ON_BASE_BRANCH <b>, UNCOMMITTED with git status lines, NO_COMMITS origin/<b>, CONFLICT #N lines, or ISSUE_LOOKUP_FAILED #N: <gh error>.
+# Exit: 0 ok, 1 git or gh failed, including an issue gh cannot read, 2 bad arguments, 3 CONFLICT, 4 on the base branch, 5 no commits, 6 uncommitted changes.
 set -uo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -92,7 +92,11 @@ issues=""
 while IFS= read -r line; do
   [[ -n "${line}" ]] || continue
   n="${line##*#}"
-  title="$(gh issue view "${n}" --json title --jq .title 2>/dev/null)" || title="(title unavailable)"
+  # create-linked-pr.sh would reject the issue anyway, but only after the push.
+  if ! title="$(gh issue view "${n}" --json title --jq .title 2>&1)"; then
+    echo "ISSUE_LOOKUP_FAILED #${n}: $(tr '\n' ' ' <<<"${title}" | sed 's/[[:space:]]*$//')"
+    exit 1
+  fi
   issues+="${line}"$'\t'"${title}"$'\n'
 done <<<"${refs}"
 
@@ -123,7 +127,9 @@ for candidate in .github/PULL_REQUEST_TEMPLATE.md .github/pull_request_template.
   fi
 done
 
-flags="--base ${base}"
+# Step 6.2 pastes this line into a shell, and a valid branch name can hold ; & $ or backquotes.
+printf -v quoted_base '%q' "${base}"
+flags="--base ${quoted_base}"
 [[ "${draft}" == yes ]] && flags+=" --draft"
 flags+=" --assignee @me"
 
