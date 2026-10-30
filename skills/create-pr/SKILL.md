@@ -116,7 +116,7 @@ Run `bash <skill-dir>/scripts/issue-refs.sh <base>`. `<skill-dir>` is the direct
 | Exit 3 with `CONFLICT #NNN` | Stop, push nothing, and report each `CONFLICT` issue: an older commit closes the issue that the newest commit marks Related. Never resolve it yourself: no amend, rebase, reset, revert, or new commit. The user decides how to fix the history |
 | Issue only in the branch name or a commit subject | `Closes #NNN`, or `Related #NNN` only when the branch leaves part of the issue's required implementation undone or the issue is only cited in passing |
 
-- Implementation is left undone only when deferred requirements or criteria that still need implementing were reported, or the user said the implementation is partial.
+- Implementation is left undone only when deferred requirements or criteria that still need implementing were reported, or the user said the implementation is partial. Judge what remains from the commit messages, the conversation, and any caller report, such as `SKIPPED`.
 - Post-merge verification, QA, E2E tests, and release or deploy work never make an issue `Related`, even when reported as deferred: they happen after merge by nature, so they take `Closes`.
 - One reference per line. GitHub links only the first issue of `Closes #1, #2`.
 - For each `Related` issue, state what this PR resolves and what remains.
