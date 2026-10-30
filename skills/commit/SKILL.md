@@ -18,7 +18,7 @@ argument-hint: "[optional hint, e.g. an issue number or message override]"
 git status --short
 git diff --staged
 git diff
-git log -5 --format="%s"
+git log -5 --no-merges --format="%s"
 git log --format="--- %h%n%B" origin/HEAD..HEAD 2>/dev/null
 ```
 
@@ -65,6 +65,12 @@ For every match found:
 - After staging, re-run `git diff --staged` — Steps 4 and 6 must work from this refreshed staged diff, not the one read in Step 1.
 
 ## Step 4. Compose the message
+
+**Language**: write the subject and body in the language of the repository's history, not the per-user `skills.lang`, because a merged commit cannot be rewritten.
+Count Step 1's `git log -5 --no-merges` subjects: one containing hiragana, katakana, or kanji is Japanese, any other is English.
+Use the majority; on a tie, use the language of the most recent subject.
+Only when Step 1 printed no subjects, because the repository has no commits yet, run `bash <skills-root>/create-pr/scripts/lang.sh` with no argument, where `<skills-root>` is the parent of this skill's directory, and use the language it prints; on a non-zero exit, show its output and stop.
+The type, scope, trailers, and `Closes`/`Related` lines stay in English whatever the language.
 
 **Type and scope**: infer the type from the diff content and changed paths, choosing one of:
 
