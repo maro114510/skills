@@ -129,7 +129,7 @@ Follow the template contents Step 1 printed, without reading the file. Do not ig
 - Follow any inline comments or section-specific instructions.
 - Check a verification item, such as tests, lint, or a build, only if it ran in this session and passed; adding a test is not running it. Otherwise leave it unchecked with the reason on the same line, e.g. `- [ ] Unit tests pass (not run: no test runner)`.
 - Check any other checklist item based on the actual change.
-- Add useful information that the template does not ask for, such as background, implementation details, risks, or future considerations, as extra sections at the end.
+- Add useful information that the template does not ask for, such as background, implementation details, risks, or future considerations, as extra sections at the end, with headings from the 3.3 table. The how belongs there, not in What.
 
 ### 3.3 Default structure when no template exists
 
@@ -153,7 +153,7 @@ Use the structure below. For `ja`, replace each heading with its Japanese form; 
 
 ## Summary
 
-<!-- Explain what changed and how it solves the problem in 1-3 sentences. -->
+<!-- State the outcome in 1-3 sentences: what is different once this merges, and the problem it solves. -->
 
 ## Implementation Details
 
@@ -189,6 +189,7 @@ Reviewers can read the diff. The PR description is valuable because it explains 
 
 - **Background**: Make the reason for the change clear to a reviewer who lacks the surrounding context.
 - **Summary**: Avoid vague wording like "add X"; prefer "add X to solve Y."
+- **What is the outcome, not the edits**: Say what is different once this merges, such as "merged skills reach every local Claude Code, whatever branch is checked out". Do not list files touched or settings changed; the diff shows those, and the how goes in Changes or Implementation Details. Why is the motivation, not What restated.
 - **Implementation Details**: Explain why this approach was chosen, not what it does — the "what" belongs in Changes.
 - **One fact, one place**: Each fact (a file's purpose, a design decision) belongs in exactly one section. If Implementation Details would restate what Changes already says, keep only the reasoning Changes does not capture.
 - **Concerns**: Include only when genuine unresolved uncertainty, risk, or a deliberate tradeoff actually exists — not merely because the change touches performance, defaults, existing behavior, compatibility, data formats, configuration, or APIs. When unsure whether something qualifies, include it rather than omit it.
@@ -219,6 +220,7 @@ Adds `chrome-adapter.js`, a factory that wraps `chrome.tabs` and `chrome.bookmar
 
 Before moving to Step 4, re-read the full draft once as a first-time reader with no other context:
 
+- Does What list edits instead of the outcome? Rewrite it and move the edits to Changes.
 - Does any sentence restate a fact already given in an earlier section? Delete the later occurrence.
 - Does anything in Concerns fail the genuine-uncertainty bar above? Move it to Test Plan or delete it.
 - Does any paragraph or bullet contain a newline that is not a real paragraph/bullet boundary? Rejoin it into one line.
