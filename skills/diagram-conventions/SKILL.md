@@ -8,7 +8,7 @@ description: >
   of this", "make a flowchart", "turn this into a sequence diagram", "review this diagram",
   "fix this Mermaid diagram", "図にして", "フローチャートを書いて", "シーケンス図にして",
   "この図をレビューして", "この図を直して".
-allowed-tools: Read, Glob, Grep, Write, Edit, Bash(command -v mmdc:*), Bash(mmdc:*)
+allowed-tools: Read, Glob, Grep, Bash(command -v mmdc:*), Bash(mmdc:*)
 argument-hint: "[source text | file path | diagram to review] [type <diagram-type>]"
 ---
 
@@ -91,8 +91,19 @@ Repeat until every check passes.
 
 Run `command -v mmdc`.
 
-- Found: render the diagram with `mmdc --input - --output - --outputFormat svg`, passing the Mermaid source on standard input, and discard the SVG. Fix every syntax or rendering error and render again until it succeeds.
-- Not found, or rendering cannot run: do not install anything. Mark the diagram unvalidated.
+- Found: render the diagram from standard input and discard the SVG:
+
+  ```bash
+  mmdc --quiet --input - --output - --outputFormat svg > /dev/null <<'MERMAID'
+  <the Mermaid source>
+  MERMAID
+  ```
+
+  On a Mermaid parse or rendering error, fix the diagram, recheck step 5, and render again until it succeeds.
+  On any other failure, such as a missing browser or a crash, do not change the diagram: mark it unvalidated with that reason.
+- Not found: do not install anything. Mark the diagram unvalidated.
+
+The diagram is validated only when the last render exited 0 on the diagram as output.
 
 ## Output
 
