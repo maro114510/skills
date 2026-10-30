@@ -1,7 +1,7 @@
 # Flowchart
 
 Each rule has an ID and a tag. `[Standard: ISO 5807]` means ISO 5807:1985 states the rule; `[Convention]` means common practice adopted here.
-A review finding cites the ID of the rule it breaks, such as `CON-2`.
+A review finding names the principle of the section that holds the rule it breaks, and cites the rule's ID, such as `Conformance (CON-2)`.
 
 ## Purpose
 
@@ -24,6 +24,7 @@ Do not choose it when the reader must understand something other than the order 
 |---|---|---|
 | COR-1 | Draw a branch only where the source states a condition. Draw an exit only for an outcome the source routes, and label it with the source's condition. Never infer where an outcome goes from sentence order; list an outcome the source does not route as not stated | [Convention] |
 | COR-2 | Draw a loop only where the source states a repetition. It leaves through a decision whose exit is the condition the source states; if the source states none, list the exit condition as not stated | [Convention] |
+| COR-3 | Draw every check the source states. If the source does not say where a check runs, place it where the layout needs and list the placement as an assumption | [Convention] |
 
 ## Conformance
 
@@ -60,4 +61,5 @@ Check the finished diagram:
 - Every exit of a node with more than one exit carries a condition from the source, and only decisions have more than one exit (COR-1, CON-3, CLA-1)
 - No two exits of a decision can both hold (CON-2)
 - Every loop leaves through a decision (COR-2)
+- Every check the source states is drawn (COR-3)
 - Every outcome the source does not route is listed as not stated, not drawn as an edge (COR-1, COR-2)
