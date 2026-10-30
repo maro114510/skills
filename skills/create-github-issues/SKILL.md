@@ -31,7 +31,7 @@ Resolve `LANG` before anything else, from the first source that is set:
 
 `LANG` must be exactly `ja` or `en`. Stop the run on anything else: a `lang` with no value or another value, an empty or other `skills.lang`, or a non-zero exit from `git config --get` other than 1. Never fall back to `ja` on an invalid value, never ask a question, and never run another command. Report the value and its source in one English line, such as `Invalid language "fr" from git config skills.lang; use ja or en.`
 
-Otherwise, state the result in one English line before any other output, such as `Language: en (git config skills.lang)`, `Language: ja (argument lang)`, or `Language: ja (default)`. It stays English whatever `LANG` is, because a wrong `LANG` is exactly what it must expose.
+Otherwise, state the result before any other output as exactly `Language: <LANG> (<source>)`, where `<source>` is `argument`, `git config`, or `default`, the same words create-pr uses, such as `Language: en (git config)`. It stays English whatever `LANG` is, because a wrong `LANG` is exactly what it must expose.
 
 `LANG` is fixed for the rest of this run and governs everything produced from here on — AskUserQuestion prompts, summaries, reviews, warnings, Issue/Epic titles, and Issue/Epic bodies. From Step 1.5 through Step 6, read only `references/templates.<LANG>.md` — never the other language's file, and never switch languages mid-run.
 
