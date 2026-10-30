@@ -4,7 +4,7 @@ description: >
   Create GitHub Issues from a conversation, plan, or TODO list.
   Produces one Epic parent Issue and child Issues per task, each with background, requirements, specs, dependency, and acceptance criteria, linked to the Epic as GitHub sub-issues with dependencies recorded as blocked-by/blocking relations.
   Requirements (what) and specs (how) are kept separate and length-capped so bodies stay concise, and the Epic also renders a Mermaid diagram (a compact table for large epics) showing which child Issues block each other and which can run in parallel.
-  Issue titles, bodies, and every interactive prompt are written in the language that `lang <ja|en>`, then git config `skills.lang`, then Japanese resolves to, so Issues match the language of PRs.
+  Issue titles, bodies, and every interactive prompt are written in the language set by `lang <ja|en>`, else git config `skills.lang`, else Japanese.
   Use this skill when the user asks to track tasks with an Epic, turn TODOs or a plan into GitHub Issues, or extract action items from a review or investigation.
 allowed-tools: Bash(gh:*), Bash(git config --get skills.lang)
 argument-hint: "[repo <owner/repo>] [lang <ja|en>] [project <n>]"
