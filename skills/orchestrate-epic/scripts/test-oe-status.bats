@@ -247,6 +247,33 @@ EOF
   [ "$(printf '%s\n' "${lines[@]}" | grep -c '^ISSUE ')" -eq "${views_until_end}" ]
 }
 
+@test "--watch whose first read after its session ended fails retries, and exits 0 after it draws the last view" {
+  three_issues
+  session="$(
+    sleep 600 >/dev/null 2>&1 3>&- &
+    echo "$!"
+  )"
+  echo "${session}" >"${tmp}/detached-session"
+  OE_SESSION_PID="${session}" bash "${oe}" lock acquire o/r 1 >/dev/null
+  # The session ends during the second refresh's Epic read, and the third refresh's Epic read fails.
+  cat >"${tmp}/bin/gh" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >>"${calls}"
+reads="\$(grep -c 'epic=1' "${calls}")"
+[ "\${reads}" -ne 2 ] || kill ${session}
+[ "\${reads}" -ne 3 ] || exit 1
+exec bash "${BATS_TEST_DIRNAME}/testdata/fake-gh.sh" "\$@"
+EOF
+  # Refreshes 1 and 2 draw views, refresh 3 fails, and refresh 4 draws the last view.
+  views_until_end=3
+
+  OE_WAIT_INTERVAL=0 OE_STATUS_REFRESHES=10 run --separate-stderr bash "${oe}" status o/r 1 --watch
+
+  [ "${status}" -eq 0 ]
+  [ "$(printf '%s\n' "${lines[@]}" | grep -c '^ISSUE ')" -eq "${views_until_end}" ]
+  [ "$(grep -c 'epic=1' "${calls}")" -eq 4 ]
+}
+
 @test "--watch without a session holding the Epic's lock keeps refreshing" {
   three_issues
 
