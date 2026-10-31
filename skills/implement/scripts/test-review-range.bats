@@ -134,6 +134,24 @@ ${started}; ${closed}; [ \"\$clean\" = yes ] || cat \"\${STORE}\"" 'exit 1'
   expect_result "status=interrupted"
 }
 
+@test "script terminated while the window is open exits 3 and still reports the result" {
+  local bin pid rc=0
+  bin="$(mktemp -d "${work}/bin.XXXXXX")"
+  printf '#!/bin/sh\n%s\nexec sleep 30\n' "${started}" >"${bin}/difit"
+  printf '#!/bin/sh\nexit 1\n' >"${bin}/npx"
+  chmod +x "${bin}/difit" "${bin}/npx"
+  env TMPDIR="${work}" PATH="${bin}:/usr/bin:/bin" "${BASH}" "${target}" HEAD base >"${work}/result" 2>&1 &
+  pid=$!
+  for _ in $(seq 1 100); do
+    grep -qs "server started" "${work}"/review-range.* && break
+    sleep 0.1
+  done
+  kill -TERM "${pid}"
+  wait "${pid}" || rc=$?
+  [ "${rc}" -eq 3 ]
+  grep -q "^DIFIT_RESULT status=interrupted comments=n/a launcher=difit" "${work}/result"
+}
+
 @test "launcher gets the range and --clean" {
   run_stub "printf '%s\\n' \"\$@\" >\"\${ARGS_FILE}\"; ${started}; ${closed}" 'exit 1'
   [ "${status}" -eq 0 ]
