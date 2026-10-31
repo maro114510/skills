@@ -107,6 +107,12 @@ has_line() {
   expect_result "status=closed comments=present launcher=difit"
 }
 
+@test "a large volume of comments still exits 10" {
+  run_stub "${started}; ${closed}; yes 'src/a.sh:L3 a long review comment that fills the pipe buffer' | head -n 20000" 'exit 1'
+  [ "${status}" -eq 10 ]
+  expect_result "status=closed comments=present launcher=difit"
+}
+
 @test "comments stored by an earlier run are not this run's result" {
   echo "src/a.sh:L1 stale comment from an earlier run" >"${store}"
   # Mirrors difit, which keeps stored comments unless it starts with --clean.
