@@ -27,12 +27,14 @@ closed_marker='Client disconnected, shutting down server...'
 
 out="$(mktemp "${TMPDIR:-/tmp}/review-range.XXXXXX")"
 log="${out}.log"
+rest="${out}.rest"
 run_id="${out##*.}"
-trap 'rm -f "${out}" "${log}"' EXIT
+trap 'rm -f "${out}" "${log}" "${rest}"' EXIT
 
 child=""
 stopped=no
-# Stopping this script stops difit, which ends the run as interrupted instead of leaving a server behind.
+# Stopping this script signals the launcher it started, which ends the run as interrupted. For `npx` that is
+# the wrapper, and whether it forwards the signal to the server is up to npx.
 trap 'stopped=yes; [[ -z "${child}" ]] || kill "${child}" 2>/dev/null' INT TERM HUP
 
 diagnostics=""
@@ -89,7 +91,10 @@ if [[ "${rc}" -ne 0 ]] || ! grep -qxF -- "${closed_marker}" "${out}"; then
   exit 3
 fi
 # Whatever difit prints after the closing message is the comments of this run.
-if sed -n "/^${closed_marker//./\\.}\$/,\$p" "${out}" | tail -n +2 | grep -q '[^[:space:]]'; then
+# It goes to a file first: `grep -q` at the end of a pipe stops early, and the SIGPIPE it causes
+# fails the pipeline under pipefail, which would report comments as none.
+sed -n "/^${closed_marker//./\\.}\$/,\$p" "${out}" | tail -n +2 >"${rest}"
+if grep -q '[^[:space:]]' "${rest}"; then
   echo "DIFIT_RESULT status=closed comments=present launcher=${opened_by} run=${run_id}"
   exit 10
 fi
