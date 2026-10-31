@@ -179,6 +179,8 @@ bash <skill-dir>/scripts/classify-approval.sh --staged [--require "<reason>"]...
 When the caller reports that it classifies the whole `base..HEAD` range with this classifier before push and gets human approval when the range needs it, as implement does in normal mode, leave out the caller's critical decisions here and do not ask about the mechanical `reason:` lines: commit, and list them in Step 8.
 The range classification covers them, since a path counts when any commit in the range touches it, and the caller passes its critical decisions to it.
 Still ask about your own findings above, because they concern how this commit is cut, which the range review cannot fix; for a type/scope you cannot determine confidently, ask about the message only.
+A difit window you opened that closed with no comments approves the diff it showed, provided `git status --porcelain` and the hash of `git diff HEAD`, both recorded when it opened, are unchanged at commit time.
+Then commit without asking about the `reason:` lines or the caller's critical decisions, and list them in Step 8; your own findings above are still asked about.
 A failing-test-only change is not by itself a reason to ask; commit it as `test:`.
 
 ## Step 7. Commit
