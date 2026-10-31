@@ -75,7 +75,7 @@ argument-hint: "[ready] [base <branch>]"
 - Japanese stays only in `description` trigger phrases and user-facing output templates
 - Convert an older Japanese body only when already editing it for another reason
 - Declare only the tools a skill needs; prefer scoped `Bash(cmd:*)` when the command set is small and predictable
-- This repository relies on the `PreToolUse` hook in `.claude/settings.json` to stop an unapproved `git push`; that stop is intended behavior
+- This repository relies on the `PreToolUse` hook in `.claude/settings.json` to stop an unapproved `git push`; that stop is intended behavior. A range that `implement` Phase 7 approved counts as approved for a push of its `approved-head`, so `create-pr` appends the marker without asking
 
 ## Target Repository Config
 

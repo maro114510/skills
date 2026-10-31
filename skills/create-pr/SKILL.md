@@ -198,7 +198,8 @@ git push -u origin <current-branch> &&
 EOF
 ```
 
-The `git push` stays visible on the first line so an approval hook can stop it. When a hook asks for approval, get it from the user, then append the hook's marker after the `&&` on that first line, where the comment cuts off nothing.
+The `git push` stays visible on the first line so an approval hook can stop it. When a hook asks for approval, append the hook's marker after the `&&` on that first line, where the comment cuts off nothing.
+Ask the user first, unless this conversation holds implement's Phase 7 approval report and its `approved-head` equals `git rev-parse HEAD` run in the worktree being pushed: that approval already covers this push, so append the marker without asking. A different HEAD, such as one after a new commit, an amend, or a rebase, is not covered.
 
 **6.2 Handle the result**
 
