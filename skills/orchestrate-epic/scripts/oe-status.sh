@@ -163,10 +163,11 @@ while :; do
   if view="$(render)"; then
     [[ ! -t 1 ]] || printf '\033[H\033[2J'
     printf '%s\n' "${view}"
+    # Only a drawn view ends the watch, so a failed read after the session ended is retried like any other.
+    ((! ended)) || exit 0
   else
     echo "oe status: the read failed at $(date -u +%FT%TZ); retrying at the next refresh" >&2
   fi
-  ((! ended)) || exit 0
   count=$((count + 1))
   [[ -z "${refreshes}" || "${count}" -lt "${refreshes}" ]] || exit 0
   sleep "${interval}"
