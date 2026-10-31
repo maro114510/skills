@@ -85,6 +85,7 @@ Skills read them with `git config --get <key>`, so git decides between local and
 | git config key | Values | Resolved by |
 |---|---|---|
 | `skills.lang` | `ja`, `en` | `skills/create-pr/scripts/lang.sh` only; its header holds the precedence, and skills call it instead of restating it |
+| `skills.herdr` | `true`, `false`; unset means `false` | `skills/orchestrate-epic/scripts/oe-board.sh` only, and only inside Herdr; `true` opens the Epic's board pane |
 
 ## Workflow
 
