@@ -160,13 +160,23 @@ Approval covers the full push range once, the range Phase 6.5's first pass revie
    | 0 | Do not open difit. The range is approved; show the user the `approval: not-required` line |
    | 10 or any other | Restate the decision log and the printed `reason:` lines, then have the user review the range in difit |
 
-3. Open difit on the whole range, from the merge base to HEAD. Use `difit` if `command -v difit` succeeds, otherwise use `npx difit`.
+3. Open difit on the whole range with the script, from the merge base to HEAD, and wait until it ends. It runs until the user closes the window, so background it through the harness when possible. If `npx difit` would need network access in a sandbox without it, request escalated permissions first. Never start `difit` or `npx difit` any other way, and never read comments from an earlier run, a stored comment file, or `difit comment get`.
 
    ```bash
-   difit HEAD "$(git merge-base origin/<base-branch> HEAD)"
+   cd <worktree-path> && bash <skill-dir>/scripts/review-range.sh HEAD "$(git merge-base origin/<base-branch> HEAD)"
    ```
 
-   - If review comments come back, address them, rerun Phase 6 and Phase 6.9 so the evidence comes from the final state, and repeat this phase from step 1.
-   - If difit exits without comments, the range is approved.
+   Its last line is `DIFIT_RESULT status=<closed|not-opened|interrupted> ...`. Only exit 0 approves the range, and a run with no such line is not approval either.
+
+   | Exit | Meaning | Action |
+   |---|---|---|
+   | 0 | `closed`, no comments: a window opened in this run and was closed | The range is approved |
+   | 10 | `closed`, with comments printed above the result line | Address them, rerun Phase 6 and Phase 6.9 so the evidence comes from the final state, and repeat this phase from step 1 |
+   | 1 | `not-opened`: no launcher started a server | Not approved. Show the printed diagnostics and ask the user how to proceed |
+   | 3 | `interrupted`: a server started but no window closed | Not approved. Say so and run the script again |
+   | any other, or no result line | The script did not finish | Not approved. Show the output and ask the user |
+
+   - While the range is not approved, do not release the Issue Claim and do not continue toward a push or `create-pr`.
+   - Quote the `DIFIT_RESULT` line in the approval report, so the user sees whether difit opened.
 4. If Phase 6.9 left anything deferred and a branch commit carries `Closes #<N>`, tell the user, because create-pr copies that keyword into the PR.
 5. After the range is approved, release the Issue Claim. Never release it before.
