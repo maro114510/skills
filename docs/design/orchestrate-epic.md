@@ -276,8 +276,8 @@ sequenceDiagram
 - A finding in a bot's review body, outside any thread, starts nothing
 - A bot that refuses the re-review on a rate limit leaves the repair unreviewed
 - A bot finding the Owner cannot reproduce still spends an attempt
-- With the board open, oe reads about 80 × (1 + child Issues) GraphQL points an hour, so an Epic of about 60 child Issues reaches the 5,000-point hourly limit that the token shares with every other gh use
-- A board whose session runs in a shared background service, as in OpenCode V2 or an interactive Codex session, keeps refreshing after the session ends without releasing its lock
+- The board adds GitHub reads, so a large Epic reaches the rate limit sooner
+- A board keeps refreshing while a session's lock outlives it
 
 ## Decisions
 
