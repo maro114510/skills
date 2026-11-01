@@ -3,13 +3,10 @@
 # Usage: self-review.sh <claude|codex|opencode> <worktree-path> [<base>]
 # With <base>, the review covers the commits from the merge base of <base> and HEAD to HEAD, and ignores
 # uncommitted changes. Without it, the review covers the uncommitted changes.
-# Exit: 0 review ran, returned output, and left the worktree unchanged, 1 review failed, 2 usage error or no
-# commits after <base>, 3 reviewer changed the worktree or HEAD, 4 reviewer returned empty or whitespace-only
-# output with a clean worktree (a review that may never have run, so never a clean pass).
-# Exit 3 wins over 4 and 1. Every run that reached the reviewer ends with one line:
+# Exit: 0 reviewed, 1 failed, 2 usage error or no commits after <base>, 3 reviewer changed the worktree or HEAD,
+# 4 reviewer returned no output. 3 wins over 1 and 4.
+# Every run that reached the reviewer ends with:
 #   SELF_REVIEW status=<reviewed|empty|failed|changed> range=<merge-base>..<head>|uncommitted head=<sha> bytes=<n>
-# `head` is the HEAD the review started on; `bytes` counts the output's non-whitespace bytes.
-# Exit 2 happens before any review and prints no such line.
 set -uo pipefail
 
 harness="${1:-}"
