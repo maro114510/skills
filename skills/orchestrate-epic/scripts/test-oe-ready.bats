@@ -732,7 +732,7 @@ JSON
     "pull_requests": [{
       "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
       "threads": [{"comments": [{"login": "coderabbitai", "type": "Bot", "at": "07:40",
-        "body": "_⚠️ Potential issue_ | _🟠 Major_\n\n`brew install chezmoi` runs before `brew` is on PATH."}]}]
+        "body": "This is a Major finding: `brew install chezmoi` runs before `brew` is on PATH."}]}]
     }]
   }]
 }
@@ -759,7 +759,7 @@ JSON
     "pull_requests": [{
       "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
       "threads": [{"comments": [{"login": "chatgpt-codex-connector", "type": "Bot", "at": "07:40",
-        "body": "**P1 Badge** The retry count is off by one.\n\nUse `max_attempts` here."}]}]
+        "body": "P1: the retry count is off by one."}]}]
     }]
   }]
 }
@@ -782,7 +782,7 @@ JSON
     "pull_requests": [{
       "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
       "threads": [{"comments": [{"login": "coderabbitai", "type": "Bot", "at": "07:40",
-        "body": "_🟡 Minor_ Prefer a shorter name here."}]}]
+        "body": "Minor: prefer a shorter name here."}]}]
     }]
   }]
 }
@@ -804,7 +804,7 @@ JSON
     "branch": true,
     "pull_requests": [{
       "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
-      "threads": [{"comments": [{"login": "stylebot", "type": "Bot", "at": "07:40", "body": "**Major** Rename this."}]}]
+      "threads": [{"comments": [{"login": "stylebot", "type": "Bot", "at": "07:40", "body": "Major: rename this."}]}]
     }]
   }]
 }
@@ -828,7 +828,7 @@ JSON
       "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
       "threads": [{"comments": [
         {"by": "MEMBER", "at": "07:30", "body": "Is this safe?"},
-        {"login": "coderabbitai", "type": "Bot", "at": "07:40", "body": "_🟠 Major_ No, it is not."}
+        {"login": "coderabbitai", "type": "Bot", "at": "07:40", "body": "Major: no, it is not."}
       ]}]
     }]
   }]
@@ -852,7 +852,7 @@ JSON
     "pull_requests": [{
       "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
       "threads": [{"resolved": true, "comments": [{"login": "coderabbitai", "type": "Bot", "at": "07:40",
-        "body": "_🟠 Major_ Fix this."}]}]
+        "body": "Major: fix this."}]}]
     }]
   }]
 }
@@ -875,7 +875,7 @@ JSON
     "pull_requests": [{
       "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
       "threads": [{"outdated": true, "comments": [{"login": "coderabbitai", "type": "Bot", "at": "07:40",
-        "body": "_🟠 Major_ Fix this."}]}]
+        "body": "Major: fix this."}]}]
     }]
   }]
 }
@@ -899,7 +899,7 @@ JSON
       "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
       "approvals": [{"by": "MEMBER", "at": "07:50"}],
       "threads": [{"comments": [{"login": "coderabbitai", "type": "Bot", "at": "07:40",
-        "body": "_🟠 Major_ Fix this."}]}]
+        "body": "Major: fix this."}]}]
     }]
   }]
 }
@@ -922,7 +922,7 @@ JSON
     "pull_requests": [{
       "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
       "threads": [{"comments": [{"login": "coderabbitai", "type": "Bot", "at": "07:20",
-        "body": "_🟠 Major_ Fix this."}]}]
+        "body": "Major: fix this."}]}]
     }]
   }]
 }
@@ -945,7 +945,7 @@ JSON
     "pull_requests": [{
       "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
       "threads": [{"comments": [{"login": "coderabbitai", "type": "Bot", "at": "07:40",
-        "body": "_🟠 Major_ Fix this."}]}]
+        "body": "Major: fix this."}]}]
     }]
   }]
 }
@@ -969,7 +969,7 @@ JSON
     "pull_requests": [{
       "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
       "threads": [{"comments": [{"login": "coderabbitai", "type": "Bot", "at": "07:40",
-        "body": "_🟠 Major_ Fix this."}]}]
+        "body": "Major: fix this."}]}]
     }]
   }]
 }

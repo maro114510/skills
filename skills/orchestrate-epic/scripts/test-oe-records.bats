@@ -251,7 +251,7 @@ JSON
     "pull_requests": [{
       "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
       "threads": [{"comments": [{"login": "coderabbitai", "type": "Bot", "at": "07:40",
-        "body": "_🟠 Major_ `brew install chezmoi` runs before `brew` is on PATH."}]}]
+        "body": "Major: `brew install chezmoi` runs before `brew` is on PATH."}]}]
     }]
   }]
 }
@@ -274,8 +274,8 @@ JSON
     "pull_requests": [{
       "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
       "threads": [
-        {"comments": [{"login": "chatgpt-codex-connector", "type": "Bot", "at": "07:40", "body": "**P0** Do not drop the token."}]},
-        {"comments": [{"login": "coderabbitai", "type": "Bot", "at": "07:41", "body": "_🔴 Critical_ Unquoted expansion."}]}
+        {"comments": [{"login": "chatgpt-codex-connector", "type": "Bot", "at": "07:40", "body": "P0: do not drop the token."}]},
+        {"comments": [{"login": "coderabbitai", "type": "Bot", "at": "07:41", "body": "Critical: unquoted expansion."}]}
       ]
     }]
   }]
@@ -298,7 +298,7 @@ JSON
     "pull_requests": [{
       "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
       "threads": [{"comments": [{"login": "coderabbitai", "type": "Bot", "at": "07:40",
-        "body": "_🟠 Major_ Fix this."}]}]
+        "body": "Major: fix this."}]}]
     }]
   }]
 }
@@ -321,7 +321,7 @@ JSON
     "pull_requests": [{
       "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
       "threads": [{"comments": [{"login": "coderabbitai", "type": "Bot", "at": "07:40",
-        "body": "_🟡 Minor_ Prefer a shorter name."}]}]
+        "body": "Minor: prefer a shorter name."}]}]
     }]
   }]
 }
@@ -344,7 +344,7 @@ JSON
       "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
       "approvals": [{"by": "OWNER", "at": "07:50"}],
       "threads": [{"comments": [{"login": "coderabbitai", "type": "Bot", "at": "07:40",
-        "body": "_🟠 Major_ Fix this."}]}]
+        "body": "Major: fix this."}]}]
     }]
   }]
 }
