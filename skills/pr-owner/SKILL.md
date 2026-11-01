@@ -57,7 +57,7 @@ If any of the first four is missing, end without changing anything and say which
      | Conflict | `mergeable` is `CONFLICTING` in step 2 |
      | Verification findings | The `findings` of the latest `verdict` on the PR's `headRefOid` from step 2. Findings on another SHA are absent |
      | Review feedback | Engineer input in `CHANGES_REQUESTED` reviews from `gh api repos/<repo>/pulls/<pr>/reviews --paginate` and in review comments from `gh api repos/<repo>/pulls/<pr>/comments --paginate`, posted after the previous Owner started |
-     | Bot findings | The review comments from `gh api repos/<repo>/pulls/<pr>/comments --paginate` whose `user.login` is a bot the latest `attempt` record's `bots` names and whose `in_reply_to_id` is null |
+     | Bot findings | The root review comments from `gh api repos/<repo>/pulls/<pr>/comments --paginate`: `in_reply_to_id` null, posted since the claim's `at`, and written by a bot the latest `attempt` record's `bots` names, where REST's `[bot]` suffix is dropped before comparing the login |
 
      The previous Owner started at the second-latest `attempt`'s `at`, since the latest is this Owner's; with fewer, at the claim's `at`; with no claim, take all feedback.
      The latest `attempt` record names the bots whose findings this Owner repairs, one round per bot per claim. A finding from any other bot stays with the engineer, and this Owner neither fixes nor answers it.
