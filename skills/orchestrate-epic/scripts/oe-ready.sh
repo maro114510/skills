@@ -36,6 +36,7 @@
 # | oe-ready-epic.graphql | The Epic read |
 # | oe-ready-issue.graphql | The read of one Issue |
 # | oe-ready.jq | Every rule that turns a response into an action |
+# | oe-bots.jq | The review bots whose findings start a repair, and how a finding is read |
 # | oe-records.jq | Which comments count as questions and as engineer input |
 # | oe-config.sh | The limits and names shared with oe's writers |
 # | oe-store.sh | Where each Issue's claim and attempt records live on this host |
@@ -91,8 +92,9 @@ now="${OE_NOW:-$(date -u +%s)}"
 epic_query="$(<"${dir}/oe-ready-epic.graphql")" || fail "cannot read oe-ready-epic.graphql"
 issue_query="$(<"${dir}/oe-ready-issue.graphql")" || fail "cannot read oe-ready-issue.graphql"
 trust="$(<"${dir}/oe-records.jq")" || fail "cannot read oe-records.jq"
+bots="$(<"${dir}/oe-bots.jq")" || fail "cannot read oe-bots.jq"
 rules="$(<"${dir}/oe-ready.jq")" || fail "cannot read oe-ready.jq"
-rules="${trust}"$'\n'"${rules}"
+rules="${trust}"$'\n'"${bots}"$'\n'"${rules}"
 
 # Prints the jq program that runs the entry point $1 of oe-ready.jq, with pr_heads set to $2 and records to the JSON array $3.
 program() {
@@ -211,10 +213,10 @@ while IFS=$'\t' read -r n sha; do
 done <<<"${pulls}"
 
 # Read 5: each Issue, classified by rows 3 to 12 in oe-ready.jq.
-# Only the kind and time of claim and attempt records decide an action, so verdict findings stay out of the program.
+# Only the kind, time, and bots of claim and attempt records decide an action, so verdict findings stay out of the program.
 for n in ${sorted[@]+"${sorted[@]}"}; do
   issue_records="$(records_read "${repo}" "${n}" 2>"${err}")" || fail "$(head -n1 "${err}")"
-  issue_records="$(jq -c 'map(select(.kind == "claim" or .kind == "attempt") | {kind, at})' <<<"${issue_records}")" ||
+  issue_records="$(jq -c 'map(select(.kind == "claim" or .kind == "attempt") | {kind, at, bots})' <<<"${issue_records}")" ||
     fail "records of Issue #${n} unreadable"
   line="$(gh api graphql -f query="${issue_query}" -F owner="${repo%/*}" -F repo="${repo#*/}" -F num="${n}" \
     -f branch="${branch_prefix}${n}" -f ref="refs/heads/${branch_prefix}${n}" \

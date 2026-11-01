@@ -106,6 +106,7 @@ def epic_lines:
 # - A head that cannot be read fails the read only when the action depends on the head.
 #   - A push between the reads is the usual cause.
 #   - next_action raises it right before row 8, the first row that needs the head.
+# - A bot finding is a repair signal only while its bot's round is unused, and only when a trusted user has not approved the head.
 def issue_state:
   .data.repository as $r
   | ($r.issue // error("Issue not found")) as $issue
@@ -115,6 +116,7 @@ def issue_state:
   | (records | indexes(.kind == "claim") | last) as $claim
   | (if $claim == null then null else records[$claim].at end) as $claimed_at
   | [records | .[($claim // -1) + 1:][] | select(.kind == "attempt") | .at] as $attempts
+  | ([records | .[($claim // -1) + 1:][] | select(.kind == "attempt") | (.bots // [])[]]) as $used_bots
   | ($comments | first | .createdAt) as $oldest
   | if $issue.comments.totalCount > ($comments | length) and ($branch or ($prs | length) > 0)
       and ($claimed_at == null or $oldest == null or $oldest >= $claimed_at)
@@ -138,6 +140,9 @@ def issue_state:
           oid: $target.oid, pushed: $pushed, age: (now_s - $pushed)}
     ) catch {unreadable: .}
     else null end) as $head
+  | (if $head == null or $head.unreadable != null then []
+     else [$pr.reviewThreads.nodes[] | bot_finding($since; $used_bots; bot_approved(($pr.approvals.nodes // []); $head.oid))]
+     end) as $bot_findings
   | {
       number: $issue.number,
       closed: ($issue.state == "CLOSED"),
@@ -166,7 +171,9 @@ def issue_state:
           if any($pr.reviews.nodes[]?; engineer_input and ($since == null or .submittedAt > $since))
           then "a trusted Changes requested review" else empty end,
           if any($pr.reviewThreads.nodes[]?.comments.nodes[]?; engineer_input and ($since == null or .createdAt > $since))
-          then "a trusted review-thread comment" else empty end
+          then "a trusted review-thread comment" else empty end,
+          if ($bot_findings | length) > 0
+          then ($bot_findings | map("\(.level) finding from \(.login)") | join(", ")) else empty end
         ] end)
     };
 
@@ -202,6 +209,7 @@ def issue_state:
 #   - An answer to the latest question
 #   - A Changes requested review
 #   - A review-thread comment
+# - A listed bot wrote a finding after the latest attempt, its round is unused, and no trusted user approved the head
 def act($action; $reason): "\(.number)\t\($action)\t\($reason)";
 def next_action:
   if .closed then act("done"; "closed")
