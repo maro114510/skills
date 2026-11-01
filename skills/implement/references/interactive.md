@@ -145,7 +145,7 @@ The first pass covers that full range. A second pass after a fix covers only the
 
 ### Outcome
 
-Phase 6.5 ends in exactly one outcome. Record it with the reviewed HEAD, the `head=` value of the last `SELF_REVIEW` line that has `status=reviewed`, or none when nothing reviewed. A fix-delta pass moves the reviewed HEAD only when the pass before it also returned `reviewed`; otherwise the earlier reviewed HEAD stays, because the delta alone does not cover the range.
+Phase 6.5 ends in exactly one outcome. Record it with the reviewed HEAD: the `head=` of the latest `status=reviewed` pass, provided every pass from the first full-range pass up to it also returned `reviewed`. A break in that chain leaves the reviewed HEAD at the last pass before the break, or none, because a delta alone does not cover the range.
 
 | Outcome | Meaning |
 |---|---|
