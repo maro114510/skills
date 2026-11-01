@@ -2,22 +2,24 @@
 # oe-ready.sh and oe attempt put this file in front of their own jq program, next to oe-records.jq,
 # so the two never disagree on which bot counts or on what asks it to review again.
 #
-# | Bot | Login | Repairs | Asks again with |
-# |---|---|---|---|
-# | CodeRabbit | coderabbitai | Critical, Major | @coderabbitai review |
-# | Codex | chatgpt-codex-connector | P0, P1 | @codex review |
+# | Bot | Login | Asks again with |
+# |---|---|---|
+# | CodeRabbit | coderabbitai | @coderabbitai review |
+# | Codex | chatgpt-codex-connector | @codex review |
 #
 # - The login is the GraphQL one a Bot author carries, without the [bot] suffix REST shows.
-# - The level is a word anywhere in the finding's first line, because the bots change their formats.
-#   - A word ends at a character that is not a letter or a digit, so `_Major_` and `**P1**` count but `majority` does not.
+# - A finding counts when its first line holds one repair_levels word, whoever wrote it.
+#   - The set is shared by every listed bot, because a per-bot list goes stale the moment a bot relabels its findings.
+#   - A word ends where a letter or a digit starts or ends, so "majority" never counts.
 # - A bot's round is one repair per claim: once an attempt record holds the bot, its later findings go to the engineer.
 def bots: {
-  "coderabbitai": {levels: ["critical", "major"], mention: "@coderabbitai review"},
-  "chatgpt-codex-connector": {levels: ["p0", "p1"], mention: "@codex review"}
+  "coderabbitai": {mention: "@coderabbitai review"},
+  "chatgpt-codex-connector": {mention: "@codex review"}
 };
 
-# Prints the levels bot $1 repairs, or null for a bot that is not listed.
-def bot_levels($login): (bots[$login] // {}).levels;
+# The level words that mark a repair. CodeRabbit writes Critical and Major, Codex P0 and P1;
+# Minor, Trivial, P2, and P3 stay out, so the Owner never chases style.
+def repair_levels: ["critical", "major", "p0", "p1"];
 
 # Prints what asks bot $1 to review again, or null for a bot that is not listed.
 def bot_mention($login): (bots[$login] // {}).mention;
@@ -40,11 +42,10 @@ def bot_finding($since; $used; $approved):
   | (($comment.author // {})) as $author
   | ($author.login // "") as $login
   | select(($author.__typename // "") == "Bot")
+  | select(bots[$login] != null)
   | select(($used | index($login)) == null)
   | select($since == null or $comment.createdAt > $since)
-  | (bot_levels($login)) as $levels
-  | select($levels != null)
   | (($comment.body // "") | split("\n") | first) as $line
-  | ([$levels[] | . as $level | select($line | test("(^|[^[:alnum:]])" + $level + "([^[:alnum:]]|$)"; "i"))] | first) as $level
+  | ([repair_levels[] | . as $level | select($line | test("(^|[^[:alnum:]])" + $level + "([^[:alnum:]]|$)"; "i"))] | first) as $level
   | select($level != null)
   | {login: $login, level: $level, at: $comment.createdAt};
