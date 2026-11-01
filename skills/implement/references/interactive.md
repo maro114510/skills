@@ -145,7 +145,7 @@ The first pass covers that full range. A second pass after a fix covers only the
 
 ### Outcome
 
-Phase 6.5 ends in exactly one outcome. Record it with the reviewed HEAD, the `head=` value of the last `SELF_REVIEW` line that has `status=reviewed`, or none when nothing reviewed.
+Phase 6.5 ends in exactly one outcome. Record it with the reviewed HEAD, the `head=` value of the last `SELF_REVIEW` line that has `status=reviewed`, or none when nothing reviewed. A fix-delta pass moves the reviewed HEAD only when the pass before it also returned `reviewed`; otherwise the earlier reviewed HEAD stays, because the delta alone does not cover the range.
 
 | Outcome | Meaning |
 |---|---|
@@ -192,7 +192,7 @@ Approval covers the full push range once, the range Phase 6.5's first pass revie
    | 3 | `interrupted`: a server started but no window closed | Not approved. Say so and run the script again |
    | any other, or no result line | The script did not finish | Not approved. Show the output and ask the user |
 
-   - Whenever difit runs, and in the report when step 2 exits 0, state the Phase 6.5 outcome and its reviewed HEAD. Name every commit in `<reviewed-head>..HEAD` as unreviewed, from `git log --oneline <reviewed-head>..HEAD`, and say all of the range is unreviewed when the outcome is `not-run`.
+   - Whenever difit runs, and in the report when step 2 exits 0, state the Phase 6.5 outcome and its reviewed HEAD. Name every commit in `<reviewed-head>..HEAD` as unreviewed, from `git log --oneline <reviewed-head>..HEAD`, and say all of the range is unreviewed when the outcome is `not-run` or when `git merge-base --is-ancestor <reviewed-head> HEAD` fails, as after a rebase or reset.
    - While the range is not approved, do not release the Issue Claim and do not continue toward a push or `create-pr`.
    - Quote the `DIFIT_RESULT` line in the approval report, so the user sees whether difit opened.
 4. If Phase 6.9 left anything deferred and a branch commit carries `Closes #<N>`, tell the user, because create-pr copies that keyword into the PR.

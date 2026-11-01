@@ -423,7 +423,7 @@ result_line() {
 }
 
 @test "reviewed output exits 0 with range, head, and bytes" {
-  local repo head
+  local head
   run_stub 'printf hello'
   [ "${status}" -eq 0 ]
   head="$(git rev-parse HEAD)"
