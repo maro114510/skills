@@ -126,7 +126,7 @@ The first pass covers that full range. A second pass after a fix covers only the
    | Exit | Meaning | Action |
    |---|---|---|
    | 0 | `status=reviewed`; worktree and HEAD unchanged | Evaluate the findings, since exit 0 does not mean clean |
-   | 1 or 4 | `failed`, or `empty` (no output, which is never "no findings") | Show the printed log tail and retry once, through the harness's escalation if a sandbox blocked it. Then `not-run (<cause>)` |
+   | 1 or 4 | `failed`, or `empty` (no output, which is never "no findings") | Show the printed log tail and retry once, through the harness's escalation if a sandbox blocked it. If the retry also fails, `not-run (<cause>)`; if it exits 0 with `status=reviewed`, treat it as a completed review (exit 0 row) |
    | 2 | Unsupported harness, bad path or base, or no commits in the range | `not-run (<printed reason>)` |
    | 3 | Reviewer modified the worktree or moved HEAD | Stop, show `git status` and `git log -1`, and ask the user |
 
