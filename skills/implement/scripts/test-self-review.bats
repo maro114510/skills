@@ -154,7 +154,7 @@ expect_permission() {
 }
 
 @test "gitignored output is not a change" {
-  run_stub 'echo out/ >> .git/info/exclude; mkdir out; touch out/x'
+  run_stub 'echo out/ >> .git/info/exclude; mkdir out; touch out/x; echo ok'
   [ "${status}" -eq 0 ]
 }
 
@@ -401,4 +401,73 @@ run_range_base() {
 @test "directory outside a Git worktree exits 2" {
   run bash "${target}" claude "$(mktemp -d "${work}/nogit.XXXXXX")"
   [ "${status}" -eq 2 ]
+}
+
+# The last line is the machine-readable outcome, so the caller never has to read the reviewer's prose.
+result_line() {
+  printf '%s\n' "${lines[@]}" | grep '^SELF_REVIEW ' | tail -n 1
+}
+
+@test "empty output exits 4, reports status=empty, and shows the log tail" {
+  run_stub 'echo "reviewer log line" >&2'
+  [ "${status}" -eq 4 ]
+  has_line "reviewer log line"
+  [[ "$(result_line)" == "SELF_REVIEW status=empty "* ]]
+  [ "${lines[-1]}" = "$(result_line)" ]
+}
+
+@test "whitespace-only output counts as empty" {
+  run_stub 'printf " \n\t\n"'
+  [ "${status}" -eq 4 ]
+  [[ "$(result_line)" == *"status=empty "*"bytes=0" ]]
+}
+
+@test "reviewed output exits 0 with range, head, and bytes" {
+  local repo head
+  run_stub 'printf hello'
+  [ "${status}" -eq 0 ]
+  head="$(git rev-parse HEAD)"
+  [ "$(result_line)" = "SELF_REVIEW status=reviewed range=uncommitted head=${head} bytes=5" ]
+}
+
+@test "range mode names the merge base and the reviewed HEAD" {
+  run_range_stub 'printf hello'
+  [ "${status}" -eq 0 ]
+  [ "$(result_line)" = "SELF_REVIEW status=reviewed range=${mb}..$(git rev-parse HEAD) head=$(git rev-parse HEAD) bytes=5" ]
+}
+
+@test "reviewer failure reports status=failed" {
+  run_stub 'echo boom; exit 3'
+  [ "${status}" -eq 1 ]
+  [[ "$(result_line)" == "SELF_REVIEW status=failed "* ]]
+}
+
+@test "unsupported opencode CLI reports status=failed" {
+  # shellcheck disable=SC2016 # expanded by the stub, not here
+  run_stub "$(opencode_stub none 'true')" '' opencode
+  [ "${status}" -eq 1 ]
+  [[ "$(result_line)" == "SELF_REVIEW status=failed "* ]]
+}
+
+@test "worktree change reports status=changed" {
+  run_stub 'echo c >> tracked.txt; echo finding'
+  [ "${status}" -eq 3 ]
+  [[ "$(result_line)" == "SELF_REVIEW status=changed "* ]]
+}
+
+@test "a reviewer that changes the worktree and prints nothing exits 3, not 4" {
+  run_stub 'touch pwned.txt'
+  [ "${status}" -eq 3 ]
+  [[ "$(result_line)" == "SELF_REVIEW status=changed "* ]]
+}
+
+@test "a reviewer that fails with no output still exits 1" {
+  run_stub 'exit 2'
+  [ "${status}" -eq 1 ]
+}
+
+@test "usage errors print no result line" {
+  run bash "${target}" gemini "$(new_repo)"
+  [ "${status}" -eq 2 ]
+  [ -z "$(result_line)" ]
 }

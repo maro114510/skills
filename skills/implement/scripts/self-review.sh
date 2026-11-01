@@ -3,8 +3,13 @@
 # Usage: self-review.sh <claude|codex|opencode> <worktree-path> [<base>]
 # With <base>, the review covers the commits from the merge base of <base> and HEAD to HEAD, and ignores
 # uncommitted changes. Without it, the review covers the uncommitted changes.
-# Exit: 0 review ran and the worktree is unchanged, 1 review failed, 2 usage error or no commits after <base>,
-# 3 reviewer changed the worktree or HEAD.
+# Exit: 0 review ran, returned output, and left the worktree unchanged, 1 review failed, 2 usage error or no
+# commits after <base>, 3 reviewer changed the worktree or HEAD, 4 reviewer returned empty or whitespace-only
+# output with a clean worktree (a review that may never have run, so never a clean pass).
+# Exit 3 wins over 4 and 1. Every run that reached the reviewer ends with one line:
+#   SELF_REVIEW status=<reviewed|empty|failed|changed> range=<merge-base>..<head>|uncommitted head=<sha> bytes=<n>
+# `head` is the HEAD the review started on; `bytes` counts the output's non-whitespace bytes.
+# Exit 2 happens before any review and prints no such line.
 set -uo pipefail
 
 harness="${1:-}"
@@ -45,6 +50,15 @@ if [[ -n "${base_ref}" ]]; then
   range="${mb}..HEAD"
 fi
 
+reviewed_head="$(git rev-parse HEAD)"
+bytes=0
+shown_range=uncommitted
+[[ -z "${range}" ]] || shown_range="${mb}..${reviewed_head}"
+# Prints the outcome line the caller reads instead of the reviewer's free text.
+result() {
+  echo "SELF_REVIEW status=$1 range=${shown_range} head=${reviewed_head} bytes=${bytes}"
+}
+
 # Gitignored paths are left out so build output from local checks does not count as a change.
 # HEAD is included so a commit or reset by the reviewer counts as a change.
 fingerprint() {
@@ -72,6 +86,7 @@ if [[ "${harness}" == opencode ]]; then
     echo "Unsupported OpenCode CLI: 'opencode run --help' lists no --standalone, and no --command on a 1.x version" >&2
     head -n 5 <<<"${opencode_help}" >&2
     if [[ "${help_rc}" -ne 0 ]]; then echo "REVIEWER_EXIT=${help_rc}"; else echo "REVIEWER_EXIT=unsupported"; fi
+    result failed
     exit 1
   fi
 fi
@@ -124,13 +139,24 @@ after="$(fingerprint)"
 
 cat "${out}"
 echo
+bytes="$(tr -d '[:space:]' <"${out}" | wc -c | tr -d ' ')"
 if [[ "${before}" != "${after}" ]]; then
   echo "REVIEWER_CHANGED_WORKTREE"
+  result changed
   exit 3
 fi
 if [[ "${reviewer_rc}" -ne 0 ]]; then
   tail -n 20 "${log}"
   echo "REVIEWER_EXIT=${reviewer_rc}"
+  result failed
   exit 1
 fi
+if [[ "${bytes}" -eq 0 ]]; then
+  # The log is deleted on exit, so this is the only chance to see why nothing came back.
+  tail -n 20 "${log}"
+  echo "REVIEWER_EMPTY_OUTPUT"
+  result empty
+  exit 4
+fi
+result reviewed
 exit 0
