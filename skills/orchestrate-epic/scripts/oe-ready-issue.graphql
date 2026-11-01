@@ -30,9 +30,19 @@ query($owner: String!, $repo: String!, $num: Int!, $branch: String!, $ref: Strin
         reviews(last: 100, states: [CHANGES_REQUESTED]) {
           nodes { authorAssociation body submittedAt }
         }
+        # An approval of the head starts no repair, so its commit decides which head it covers.
+        approvals: reviews(last: 100, states: [APPROVED]) {
+          nodes { authorAssociation commit { oid } }
+        }
         reviewThreads(last: 100) {
           totalCount
-          nodes { comments(last: 20) { nodes { authorAssociation body createdAt } } }
+          nodes {
+            isResolved
+            isOutdated
+            # Only a thread's first comment says who opened it, and a reply never counts as a finding.
+            root: comments(first: 1) { nodes { author { login __typename } body createdAt } }
+            comments(last: 20) { nodes { authorAssociation body createdAt } }
+          }
         }
         headRef { target { ... on Commit { ...HeadChecks } } }
       }

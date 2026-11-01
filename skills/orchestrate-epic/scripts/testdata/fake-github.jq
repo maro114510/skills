@@ -56,11 +56,16 @@
 # | checks | Check name to result on its head | No checks |
 # | verdicts | oe/verify states on its head, newest first | None |
 # | reviews | Changes requested reviews, each with by, at, and body | None |
+# | approvals | Approved reviews, each with by, at, and the sha it approved | None |
 # | thread_comments | Review-thread comments, each with by, at, and body | None |
+# | threads | Whole review threads, each with resolved, outdated, and comments | One thread of thread_comments |
 # | older_threads | How many older review threads GitHub leaves out of the read | 0 |
 #
 # - A check result is success, failure, cancelled, or in_progress.
 # - The by field is an author association such as OWNER, MEMBER, or NONE.
+# - A comment in threads holds by, at, body, and, for a bot, login and type.
+#   Its by field defaults to NONE and its type to User, so a bot says type Bot.
+# - An approval approves the pull request's head unless it names another sha.
 
 def time: "2027-01-15T\(.):00Z";
 def default_sha: "a" * 40;
@@ -92,14 +97,35 @@ def epic_response:
 # The head the Issue read sees, which differs from the listed head after a push during the read.
 def read_sha: if .pushed_during_read then "c" * 40 else pr_sha end;
 
+# A review-thread comment as the Issue read returns it, with the Bot type a listed bot carries.
+def thread_comment:
+  {authorAssociation: (.by // "NONE"), author: {login: (.login // ""), __typename: (.type // "User")},
+    body, createdAt: (.at | time)};
+
+# A review thread with its root comment apart from the comments a trusted reply can appear in.
+def review_thread:
+  {isResolved: (.resolved // false), isOutdated: (.outdated // false),
+    root: {nodes: [(.comments // [])[0]? | thread_comment]},
+    comments: {nodes: [.comments[]? | thread_comment]}};
+
+# The review threads of a pull request: its threads, or one thread of its thread_comments.
+def review_threads:
+  if .threads then [.threads[] | review_thread]
+  else [{isResolved: false, isOutdated: false,
+    root: {nodes: [(.thread_comments // [])[0]? | thread_comment]},
+    comments: {nodes: [.thread_comments[]? | thread_comment]}}]
+  end;
+
 def pull_request:
-  {number, isCrossRepository: (.from_fork // false), headRefOid: read_sha,
+  (read_sha) as $sha
+  | {number, isCrossRepository: (.from_fork // false), headRefOid: $sha,
     state: (.state // "open" | ascii_upcase), createdAt: (.opened | time),
     mergedAt: (if .merged then .merged | time else null end),
     mergeable: (if .conflicting then "CONFLICTING" else "MERGEABLE" end),
     reviews: {nodes: [.reviews[]? | author + {submittedAt: (.at | time)}]},
-    reviewThreads: {totalCount: (1 + (.older_threads // 0)), nodes: [{comments: {nodes: [.thread_comments[]? | author + {createdAt: (.at | time)}]}}]},
-    headRef: {target: {oid: read_sha, committedDate: (.committed // .opened | time), statusCheckRollup: rollup}}};
+    approvals: {nodes: [.approvals[]? | {authorAssociation: (.by // "NONE"), commit: {oid: (.sha // $sha)}}]},
+    reviewThreads: {totalCount: ((review_threads | length) + (.older_threads // 0)), nodes: review_threads},
+    headRef: {target: {oid: $sha, committedDate: (.committed // .opened | time), statusCheckRollup: rollup}}};
 
 def issue_response($n):
   (.issues[] | select(.number == $n)) as $i

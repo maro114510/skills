@@ -242,6 +242,141 @@ JSON
   [ "$(cat "$(record_file 5)")" = "${before}" ]
 }
 
+@test "an attempt whose Major bot finding counts records the bot's round" {
+  github <<'JSON'
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{
+      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
+      "threads": [{"comments": [{"login": "coderabbitai", "type": "Bot", "at": "07:40",
+        "body": "Major: `brew install chezmoi` runs before `brew` is on PATH."}]}]
+    }]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:30
+
+  run bash "${oe}" attempt o/r 5
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = $'attempt\t2\t3' ]
+  [ "$(records_of 5 | tail -n1)" = '{"kind":"attempt","at":"2027-01-15T08:00:00Z","bots":["coderabbitai"]}' ]
+}
+
+@test "an attempt records each listed bot whose finding counts" {
+  github <<'JSON'
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{
+      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
+      "threads": [
+        {"comments": [{"login": "chatgpt-codex-connector", "type": "Bot", "at": "07:40", "body": "P0: do not drop the token."}]},
+        {"comments": [{"login": "coderabbitai", "type": "Bot", "at": "07:41", "body": "Critical: unquoted expansion."}]}
+      ]
+    }]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:30
+
+  run bash "${oe}" attempt o/r 5
+
+  [ "${status}" -eq 0 ]
+  [ "$(records_of 5 | tail -n1)" = '{"kind":"attempt","at":"2027-01-15T08:00:00Z","bots":["chatgpt-codex-connector","coderabbitai"]}' ]
+}
+
+@test "an attempt records no round for a bot whose round is used" {
+  github <<'JSON'
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{
+      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
+      "threads": [{"comments": [{"login": "coderabbitai", "type": "Bot", "at": "07:40",
+        "body": "Major: fix this."}]}]
+    }]
+  }]
+}
+JSON
+  records 5 claim@07:00
+  printf '%s\n' '{"kind":"attempt","at":"2027-01-15T07:30:00Z","bots":["coderabbitai"]}' >>"$(record_file 5)"
+
+  run bash "${oe}" attempt o/r 5
+
+  [ "${status}" -eq 0 ]
+  [ "$(records_of 5 | tail -n1)" = '{"kind":"attempt","at":"2027-01-15T08:00:00Z"}' ]
+}
+
+@test "an attempt records no round for a Minor finding" {
+  github <<'JSON'
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{
+      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
+      "threads": [{"comments": [{"login": "coderabbitai", "type": "Bot", "at": "07:40",
+        "body": "Minor: prefer a shorter name."}]}]
+    }]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:30
+
+  run bash "${oe}" attempt o/r 5
+
+  [ "${status}" -eq 0 ]
+  [ "$(records_of 5 | tail -n1)" = '{"kind":"attempt","at":"2027-01-15T08:00:00Z"}' ]
+}
+
+@test "an attempt records no round for a Major finding on an approved head" {
+  github <<'JSON'
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{
+      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
+      "approvals": [{"by": "OWNER", "at": "07:50"}],
+      "threads": [{"comments": [{"login": "coderabbitai", "type": "Bot", "at": "07:40",
+        "body": "Major: fix this."}]}]
+    }]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:30
+
+  run bash "${oe}" attempt o/r 5
+
+  [ "${status}" -eq 0 ]
+  [ "$(records_of 5 | tail -n1)" = '{"kind":"attempt","at":"2027-01-15T08:00:00Z"}' ]
+}
+
+@test "a failed GitHub read starts no attempt and records nothing" {
+  github <<'JSON'
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{
+      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"]
+    }]
+  }]
+}
+JSON
+  records 5 claim@07:00
+
+  GH_FAIL="num=5" run --separate-stderr bash "${oe}" attempt o/r 5
+
+  [ "${status}" -eq 1 ]
+  [ "$(records_of 5 | wc -l)" -eq 1 ]
+}
+
 # oe records
 
 @test "oe records prints only the records since the latest claim, oldest first, with each verdict's findings" {

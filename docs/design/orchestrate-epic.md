@@ -300,7 +300,7 @@ sequenceDiagram
 | How the loop waits | Agents and oe wait run in the background where the harness can, and the session ends its turn, so waiting costs no tokens. A blocking oe wait would miss an ended agent, because oe ready leaves running Issues out |
 | Harnesses | The skill text, not a fork, maps each harness's tools onto the loop. OpenCode V1 waits in the foreground and sees an ended agent up to 9 minutes late; without background agents it starts each pass as one batch. Codex wakes no idle session, so it never ends its turn and polls oe wait every 30 seconds, stopping it with Ctrl-C when an agent ends. Codex agents start with `fork_turns: "none"`, so they never see the session's conversation |
 | Agent mode | The agents declare `mode: subagent`, because OpenCode V2 refuses to start an agent without it as a subagent. APM drops the key for Codex |
-| Codex skill size | Codex cuts a plugin's skill at 8,000 bytes, so orchestrate-epic ends with a marker and tells the model to read the whole file when the marker is missing |
+| Codex skill size | Codex cuts a plugin's skill at 8,000 bytes, so a skill that can reach it, orchestrate-epic and pr-owner, ends with a marker and tells the model to read the whole file when the marker is missing |
 | Implicit invocation | Codex ignores `disable-model-invocation`, so orchestrate-epic, pr-owner, and pr-verify carry `agents/openai.yaml` with `allow_implicit_invocation: false`, because invoking orchestrate-epic is the consent to push |
 | Counting Verifier starts | oe brief writes the pending verify status that oe ready counts, before it prints a Verifier's brief, so no Verifier starts uncounted |
 | Worktrees | An agent's worktree is removed when the agent ends, and unpushed work is discarded |
