@@ -720,6 +720,270 @@ JSON
   [ "$(action_of 5)" = wait-merge ]
 }
 
+# Bot findings
+
+@test "a Major CodeRabbit finding after the latest attempt gets an Owner that names the bot" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{
+      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
+      "threads": [{"comments": [{"login": "coderabbitai", "type": "Bot", "at": "07:40",
+        "body": "_⚠️ Potential issue_ | _🟠 Major_\n\n`brew install chezmoi` runs before `brew` is on PATH."}]}]
+    }]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:30
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-owner ]
+  case "${lines[0]}" in
+  *"coderabbitai"*) ;;
+  *) return 1 ;;
+  esac
+}
+
+@test "a P1 Codex finding after the latest attempt gets an Owner" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{
+      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
+      "threads": [{"comments": [{"login": "chatgpt-codex-connector", "type": "Bot", "at": "07:40",
+        "body": "**P1 Badge** The retry count is off by one.\n\nUse `max_attempts` here."}]}]
+    }]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:30
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-owner ]
+}
+
+@test "a Minor CodeRabbit finding starts nothing" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{
+      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
+      "threads": [{"comments": [{"login": "coderabbitai", "type": "Bot", "at": "07:40",
+        "body": "_🟡 Minor_ Prefer a shorter name here."}]}]
+    }]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:30
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-merge ]
+}
+
+@test "a Major finding from a bot that is not listed starts nothing" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{
+      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
+      "threads": [{"comments": [{"login": "stylebot", "type": "Bot", "at": "07:40", "body": "**Major** Rename this."}]}]
+    }]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:30
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-merge ]
+}
+
+@test "a Major finding in a reply to a trusted thread starts nothing" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{
+      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
+      "threads": [{"comments": [
+        {"by": "MEMBER", "at": "07:30", "body": "Is this safe?"},
+        {"login": "coderabbitai", "type": "Bot", "at": "07:40", "body": "_🟠 Major_ No, it is not."}
+      ]}]
+    }]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:30
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-merge ]
+}
+
+@test "a resolved Major finding starts nothing" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{
+      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
+      "threads": [{"resolved": true, "comments": [{"login": "coderabbitai", "type": "Bot", "at": "07:40",
+        "body": "_🟠 Major_ Fix this."}]}]
+    }]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:30
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-merge ]
+}
+
+@test "an outdated Major finding starts nothing" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{
+      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
+      "threads": [{"outdated": true, "comments": [{"login": "coderabbitai", "type": "Bot", "at": "07:40",
+        "body": "_🟠 Major_ Fix this."}]}]
+    }]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:30
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-merge ]
+}
+
+@test "a Major finding on a head a trusted user approved starts nothing" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{
+      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
+      "approvals": [{"by": "MEMBER", "at": "07:50"}],
+      "threads": [{"comments": [{"login": "coderabbitai", "type": "Bot", "at": "07:40",
+        "body": "_🟠 Major_ Fix this."}]}]
+    }]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:30
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-merge ]
+}
+
+@test "a Major finding from before the latest attempt starts nothing" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{
+      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
+      "threads": [{"comments": [{"login": "coderabbitai", "type": "Bot", "at": "07:20",
+        "body": "_🟠 Major_ Fix this."}]}]
+    }]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:30
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-merge ]
+}
+
+@test "a Major finding from a bot whose round is used starts nothing" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{
+      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
+      "threads": [{"comments": [{"login": "coderabbitai", "type": "Bot", "at": "07:40",
+        "body": "_🟠 Major_ Fix this."}]}]
+    }]
+  }]
+}
+JSON
+  records 5 claim@07:00
+  printf '%s\n' '{"kind":"attempt","at":"2027-01-15T07:30:00Z","bots":["coderabbitai"]}' >>"$(record_file 5)"
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-merge ]
+}
+
+@test "a bot round recorded before the latest claim does not count against the new claim" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{
+      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
+      "threads": [{"comments": [{"login": "coderabbitai", "type": "Bot", "at": "07:40",
+        "body": "_🟠 Major_ Fix this."}]}]
+    }]
+  }]
+}
+JSON
+  records 5 claim@06:00
+  printf '%s\n' '{"kind":"attempt","at":"2027-01-15T06:30:00Z","bots":["coderabbitai"]}' >>"$(record_file 5)"
+  records 5 claim@07:00 attempt@07:30
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-owner ]
+}
+
 # A push during the read
 
 @test "a push during the read does not hide a pending question" {
