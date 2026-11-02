@@ -8,7 +8,6 @@ description: >
   and open the PR through the skill's script, as a draft unless `ready` is
   given. Use this skill when the user asks to open, create, submit, or send a PR
   for review.
-disable-model-invocation: true
 allowed-tools: Bash, Read, Glob, Grep
 argument-hint: "[ready] [base <branch>] [lang <ja|en>]"
 ---
