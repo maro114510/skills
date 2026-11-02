@@ -1,7 +1,6 @@
 ---
 name: babysit
 description: Watch a PR and wake only when checks, comments, or readiness change; in drive mode, also fix and push CI failures and review feedback on your own PR.
-disable-model-invocation: true
 allowed-tools: Bash, Read, Edit, Write, Glob, Grep
 argument-hint: "<pr-url | owner/repo#n | n> [check | watch | drive]"
 ---

@@ -66,7 +66,7 @@ argument-hint: "[ready] [base <branch>]"
 | Key | Rule |
 |---|---|
 | `description` | Matched against user requests; include phrasings users naturally say |
-| `disable-model-invocation` | Optional; `true` only stops Claude from loading the skill automatically. It does not disable the agentic loop: the skill still runs through `/name` and calls its tools normally, as in `create-pr` |
+| `disable-model-invocation` | Optional; `true` only stops Claude from loading the skill automatically. It does not disable the agentic loop: the skill still runs through `/name` and calls its tools normally, as in `orchestrate-epic` |
 | `allowed-tools` | Comma-separated; pre-approves the listed tools for the turn that invokes the skill. It does not restrict which tools are available, so unlisted tools stay governed by normal permissions and `Bash(gh pr view:*)` does not block other Bash commands; use `disallowed-tools` or deny rules to block |
 | `argument-hint` | Shown on `/help` |
 
