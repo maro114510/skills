@@ -6,8 +6,8 @@ description: >
   failing checks, before any work on it starts. Use whenever a PR or Issue URL
   arrives without the worktree named, such as a pasted URL alone, "pick this PR
   back up", "find the worktree for this PR", "address the review on <url>",
-  "このPRのworktreeどこ", or "このIssueの続きをやって". Not for a request to
-  implement an Issue: implement resolves its own worktree.
+  "このPRのworktreeどこ", or "このIssueの続きをやって". Not inside implement,
+  which resolves its own worktree.
 allowed-tools: Bash, Read
 argument-hint: "<pr-url | issue-url>"
 ---
@@ -32,12 +32,13 @@ It only reads: never create, switch, reset, or remove a worktree or branch.
 3. Begin the first reply with the resolution, before any other action:
 
    ```
-   <kind> <repo>#<number>: <state>
+   <PR or Issue> <repo>#<number>: <state>
    Worktree: <path> (branch <branch>)
    Threads unresolved: <unresolvedThreads> / Checks failing: <failingChecks names, or none> / Pending: <pendingChecks>
    ```
 
-   The thread and check line is for a PR only. For an Issue, add `stateReason` when it is set.
+   - Write one `Worktree:` line per entry in `worktrees`. With none, write `Worktree: none (branches <branches, or none>)`.
+   - The thread and check line is for a PR only. For an Issue, add `stateReason` when it is set.
 
 4. Act on `match` and `state` together, top row first:
 
