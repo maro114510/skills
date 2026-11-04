@@ -1,7 +1,7 @@
 # Sequence Diagram
 
 Every rule ends with a tag: `[Standard: UML 2.5.1]` when OMG UML 2.5.1 states it, `[Convention]` when it is common practice adopted here.
-A review finding's principle is the heading of the section that holds the rule it breaks, and the finding quotes that rule. A defect that breaks rules in two sections is two findings. A defect no rule here covers is filed under the SKILL.md principle it breaks.
+A review finding's principle is the heading of the section that holds the rule it breaks, and the finding's evidence quotes that rule as well as the source. A defect that breaks rules in two sections is two findings. A defect no rule here covers is filed under the SKILL.md principle it breaks.
 
 ## Purpose
 
