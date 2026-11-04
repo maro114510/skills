@@ -51,7 +51,7 @@ flowchart LR
 | Layer | Does | Never does |
 |---|---|---|
 | `pr-state <owner/repo> <pr>` | Runs one paginated GraphQL query and prints normalized JSON with no truncation | Keeps state or judges |
-| `wait <owner/repo> <pr> --max <min> --session <token>` | Polls `pr-state`, compares it with the ledger, and exits with one event line or `idle` | Repairs or marks items handled |
+| `wait <owner/repo> <pr> --max <min> --session <token>` | Polls `pr-state`, compares it with the ledger through `evaluate`, and exits with one event line or `idle` | Repairs or marks items handled |
 | `drive <PR>` | Owns the lock and the loop, runs the deterministic actions, filters comments, and invokes the agent CLI once for each event that needs it | Repairs, replies, or uses a model to decide whether to stop |
 | agent | Follows the skill's single-event entry for one event, records the outcome, and exits | Loops, re-arms `wait`, or takes or clears the lock |
 | gate | Decides whether a push may go out | Uses LLM judgment |
@@ -63,7 +63,7 @@ flowchart LR
 - Base ref, head ref, head SHA, and conflict state
 - Latest run of each check with its run id and attempt
 - Review threads, reviews, issue comments, and review requests
-- Id, author, `authorAssociation`, and body hash of every comment
+- Id, author, `authorAssociation`, body, and body hash of every comment
 - Author, state, and reviewed commit of each reviewer's latest opinionated review
 
 `check <owner/repo> <pr>` reads GitHub and the ledger once and reports without writing anything.
@@ -182,15 +182,15 @@ Event rules follow.
 1. Resolve the PR and read `pr-state` once. When the PR is not drivable, as defined in [Entry](#entry), print the `check` report and the reason, then exit 1.
 2. Read the agent command from `git config --get skills.babysit.agent`, such as `claude -p`. Exit 2 when it is unset, before taking the lock.
 3. Make a session token and take the lock with `ledger.sh start`. Exit 3 when another live session holds the PR.
-4. Run `wait.sh` and act on the event as the [Events](#events) table says. The loop owns re-arming.
+4. Run `wait.sh` with `--max 60` and act on the event as the [Events](#events) table says. The loop owns re-arming. `idle` re-arms at no cost, so `--max` only bounds one call, and `wait` still shortens it to the 8-hour mark.
 5. On a stop, remove the worktree first when the event is `merged` or `closed`, then run `ledger.sh stop`, print the final report, and exit with the event's code.
 
-The loop stops on `merged`, `closed`, `approved`, `ready`, `stalled`, or `limit` at the rounds cap. A draft is never READY, so a draft PR ends only in `approved` or `merged` unless it stops short. `limit` with `rounds` below 5 is a time limit: the driver stops the session, makes a new token, and starts the next session, with no bound on the number of sessions. `ready` is a stop too, because restarting on it would return it again at once.
+The loop stops on `merged`, `closed`, `approved`, `ready`, `stalled`, or `limit` at the rounds cap. A draft is never READY, so a draft PR ends only in `approved` or `merged` unless it stops short. `limit` with `rounds` below 5 is a time limit: the driver runs `ledger.sh stop`, makes a new token, and runs `ledger.sh start` again, with no bound on the number of sessions. `ready` is a stop too, because restarting on it would return it again at once.
 
 ### Invoking the agent
 
 - The driver invokes the agent once per event that needs one, and never for `idle`, a deterministic action, or a comment the filter or Jev settled.
-- The command is split on whitespace with no shell evaluation, and one prompt is appended as its last argument. The prompt names the skill's single-event entry, a file holding the event line, the PR, and the session token.
+- The command is split on whitespace with no shell evaluation, and one prompt is appended as its last argument. An argument that holds a space needs a wrapper script. The prompt names the skill's single-event entry, a file holding the event line, the PR, and the session token.
 - The agent command must run without prompts, with permission to edit the worktree and run babysit's scripts. Its permission rules must block a direct `git push` and any GitHub write outside `push` and `reply`. The driver cannot check either.
 - The agent takes the action the event names, records the outcome, and exits. It never runs `wait`, takes or clears the lock, or removes the worktree.
 - An item the agent leaves unsettled returns from `wait`. The driver invokes the agent for it at most twice with the same key and hash, then parks it with the reason `the agent left the item unrecorded`. This allows one retry, as after a reply that failed to post, and bounds agent calls on an item the agent cannot settle. An item left behind because the head moved never returns, since its check or conflict key names the old head.
