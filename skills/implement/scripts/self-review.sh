@@ -4,9 +4,10 @@
 # With <base>, the review covers the commits from the merge base of <base> and HEAD to HEAD, and ignores
 # uncommitted changes. Without it, the review covers the uncommitted changes.
 # Exit: 0 reviewed, 1 failed, 2 usage error or no commits after <base>, 3 reviewer changed the worktree or HEAD,
-# 4 reviewer returned no output. 3 wins over 1 and 4.
+# 4 reviewer returned no output, 5 OpenCode output ended without a verdict line. 3 wins over 1, 4, and 5.
 # Every run that reached the reviewer ends with:
-#   SELF_REVIEW status=<reviewed|empty|failed|changed> range=<merge-base>..<head>|uncommitted head=<sha> bytes=<n>
+#   SELF_REVIEW status=<reviewed|empty|failed|changed|incomplete> range=<merge-base>..<head>|uncommitted head=<sha> bytes=<n>
+# A reviewed OpenCode run appends ` verdict=<findings|none>` to that line.
 set -uo pipefail
 
 harness="${1:-}"
@@ -53,7 +54,7 @@ shown_range=uncommitted
 [[ -z "${range}" ]] || shown_range="${mb}..${reviewed_head}"
 # Prints the outcome line the caller reads instead of the reviewer's free text.
 result() {
-  echo "SELF_REVIEW status=$1 range=${shown_range} head=${reviewed_head} bytes=${bytes}"
+  echo "SELF_REVIEW status=$1 range=${shown_range} head=${reviewed_head} bytes=${bytes}${2:+ verdict=$2}"
 }
 
 # Gitignored paths are left out so build output from local checks does not count as a change.
@@ -128,7 +129,7 @@ opencode)
     "go *-exec*":"deny","go *-toolexec*":"deny","go vet*-vettool*":"deny","rg*--pre*":"deny",
     "rg*--hostname-bin*":"deny",
     "*--output*":"deny","*>*":"deny"}}}' \
-    opencode run "${opencode_flags[@]}" "${opencode_prompt} Run exactly one command per bash call, with no pipes, &&, ;, or redirects such as 2>&1." </dev/null >"${out}" 2>"${log}"
+    opencode run "${opencode_flags[@]}" "${opencode_prompt} Run exactly one command per bash call, with no pipes, &&, ;, or redirects such as 2>&1. End your final message with exactly one line, \`REVIEW_VERDICT: findings\` or \`REVIEW_VERDICT: none\`, and never end a turn with a progress message." </dev/null >"${out}" 2>"${log}"
   ;;
 esac
 reviewer_rc=$?
@@ -155,5 +156,21 @@ if [[ "${bytes}" -eq 0 ]]; then
   result empty
   exit 4
 fi
-result reviewed
+# `opencode run` ends when a step stops without a tool call, so narration alone can look like a finished review.
+# Claude and Codex run built-in reviews with their own prompts, so only OpenCode is asked for a verdict.
+verdict=""
+if [[ "${harness}" == opencode ]]; then
+  last_line="$(grep -v '^[[:space:]]*$' "${out}" | tail -n 1 | tr -d '\r' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+  case "${last_line}" in
+  "REVIEW_VERDICT: findings") verdict=findings ;;
+  "REVIEW_VERDICT: none") verdict=none ;;
+  *)
+    tail -n 20 "${log}"
+    echo "REVIEWER_NO_VERDICT"
+    result incomplete
+    exit 5
+    ;;
+  esac
+fi
+result reviewed "${verdict}"
 exit 0
