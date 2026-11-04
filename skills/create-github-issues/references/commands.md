@@ -19,6 +19,13 @@ The Epic is created first: `gh issue create --parent` needs the parent to exist,
 - A failed create prints an error, not a URL, so it gets no number; treat it as failed and continue.
 - To resume an interrupted run, recover a number with `gh issue list --repo <owner/repo> --state all --search "in:title <Tn title>" --json number,title,url,state`, continuing only when exactly one returned title matches `<Tn title>`; otherwise stop rather than attach an ambiguous Issue to the dependency graph.
 
+**Failures and the Step 6 report**
+
+- Neither a failed `Tn` nor a failed `Tn.m` aborts the rest of the run.
+- A failed `Tn`/`Tn.m` never gets a real number, so any not-yet-created sibling whose `depends_on` names it must drop that id from its own `--blocked-by` list — never pass a number that doesn't exist. Note the dropped edge in the Step 6 report so the user knows that dependency was never wired, rather than silently creating an Issue that was supposed to wait but isn't blocked on anything.
+- Before each `gh issue edit` in 5.4 and 5.5, confirm no token remains in that body's scope; if one does and a failed create doesn't explain it, the substitution missed it — fix it before submitting.
+- Note in the Step 6 report that the Epic's number is lowest, `Tn` numbers come next in wave order, and each container's `Tn.m` numbers come after their parent.
+
 ### 5.1 Create the Epic
 
 `{{Tn}}` placeholders stay in the body; record the number from the printed URL as the Epic number.
