@@ -6,8 +6,7 @@
 #   kind, repo, number, url, state, branches, worktrees ([{path, branch}]), and match (one, none, many).
 #   A pull request adds isDraft, isCrossRepository, unresolvedThreads, failingChecks ([{name, url}]), pendingChecks.
 #   An Issue adds stateReason.
-# Candidate branches: a pull request's head branch; for an Issue, the branches GitHub links to it plus local
-# branches whose name carries issue-<n>, as orchestrate-epic names them without linking.
+# Candidate branches: a pull request's head branch; for an Issue, the branches GitHub links to it.
 # Pull request state comes from babysit's pr-state.sh, which pages every thread and check; LOCATE_PR_STATE
 # overrides its path.
 # Exit: 0 printed, 1 GitHub could not be read, 2 usage error, 3 the URL belongs to another repository than origin.
@@ -64,9 +63,7 @@ else
   info="$(jq -c --arg repo "${repo}" --argjson n "${num}" \
     '{kind: "issue", repo: $repo, number: $n, url, state, stateReason}' <<<"${state}")" ||
     fail "unexpected Issue state"
-  local_branches="$(git for-each-ref --format='%(refname:lstrip=2)' refs/heads |
-    grep -E "(^|/)issue-${num}(-|\$)")"
-  branches="$(printf '%s\n%s\n' "$(cut -f1 <<<"${linked}")" "${local_branches}" | sed '/^$/d' | LC_ALL=C sort -u)"
+  branches="$(cut -f1 <<<"${linked}" | sed '/^$/d' | LC_ALL=C sort -u)"
 fi
 
 # Every worktree of this clone, as <branch>\t<path>; a detached worktree has no branch line and never matches.
