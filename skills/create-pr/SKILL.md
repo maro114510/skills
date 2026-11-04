@@ -57,16 +57,16 @@ It fetches `origin/<base>` and prints everything later steps use. Do not read th
 | `== manual checks` | `#N`, a tab, and one manual check of an issue the branch closes, per line | 3 |
 | `== labels` | One `name<TAB>description` per line | 5.2 |
 
-When `== diff` says `omitted`, read only meaningful files with `git diff origin/<base>...HEAD -- <path>`, skipping generated and vendored code.
+When `== diff` says `omitted`, read only meaningful files with `git diff origin/<base>...HEAD -- <path>...`, skipping generated and vendored code.
 
-Every non-zero exit prints no context.
+Every non-zero exit prints no context and no `Arguments:` line, so write the message of an exit that stops in the conversation's language: quote the output verbatim, then give the cause and the user's next step, and name a secret's file but never its value.
 
 | Exit | Output | Action |
 |---|---|---|
 | 0 | Context | Continue |
 | 1 | Error | Show it verbatim and stop |
 | 2 | Valid arguments, or an invalid language | Show it verbatim and stop |
-| 3 | `CONFLICT #NNN` | Stop and report each issue: an older commit closes the issue that the newest commit marks Related. Never amend, rebase, reset, revert, or commit; the user fixes the history |
+| 3 | `CONFLICT #NNN` | Stop and report each issue: an older commit closes the issue that the newest commit marks Related. Never amend, rebase, reset, revert, or commit; the user fixes the history, so the newest commit also closes it or the older one stops closing it |
 | 4 | `ON_BASE_BRANCH` | Stop: a PR cannot target its own branch. Suggest creating a feature branch |
 | 5 | `NO_COMMITS` | Stop and ask whether commits are missing |
 | 6 | `UNCOMMITTED` | Invoke the `commit` skill, then rerun the command once. If it exits 6 again, for example because the user declined or a suspected secret was excluded, stop and report that |
@@ -85,8 +85,9 @@ Write each reference from `== issues` in the description. Use each title for the
 | Issue only in the branch name or a commit subject | `Closes #NNN`, or `Related #NNN` when the rule below allows it |
 
 - `Related` only when a deferred requirement that still needs implementing is reported in the conversation, commits, or a caller's `SKIPPED`; the user says the implementation is partial; or the issue is only cited in passing. Post-merge verification, QA, E2E, and release work never count.
+- An umbrella issue still takes `Closes`: Step 6's script rewrites one with open sub-issues.
 - Write each reference alone on its own line, never inside a sentence, as a list item, or after another reference, because Step 6's script links only a reference that stands alone on its line.
-- For each `Related` issue, state what this PR resolves and what remains.
+- For each `Related` issue, state what this PR resolves and what remains, next to its reference.
 
 ## Step 3. Generate the PR Description
 
@@ -96,15 +97,16 @@ Read `<skill-dir>/references/description.md` in full before writing: it holds th
 
 Write the PR title, description, and user-facing status messages in `LANG`: Japanese for `ja`, English for `en`. Never auto-detect another language from previous PRs or commit messages.
 
-These stay in English regardless of `LANG`: the Conventional Commits type and scope in the title, the `Closes #NNN` / `Related #NNN` lines, code identifiers, commands, and paths, and script output shown verbatim.
+These stay in English regardless of `LANG`: the Conventional Commits type and scope in the title, the `Closes #NNN` / `Related #NNN` lines, code identifiers, commands, and paths, and script output shown verbatim, such as the `Arguments:` line.
 
 ### 3.2 Checkboxes
 
-These override every other rule, including a template's:
+These govern the boxes a template brings, and override every other rule, including a template's. Never add a box of your own.
 
 - Never check a box that needs a human, such as `Manually tested on macOS`.
-- Check a verification item, such as tests, lint, or a build, only if it ran in this session and passed; adding a test is not running it. Otherwise leave it unchecked with the reason on the same line, e.g. `- [ ] Unit tests pass (not run: no test runner)`.
+- Check a verification item, such as tests, lint, or a build, only if it ran in this session and passed; adding a test is not running it.
 - Check any other checklist item based on the actual change.
+- Give every template box left unchecked its reason on the same line, e.g. `- [ ] Unit tests pass (not run: no test runner)`.
 
 ## Step 4. Choose the PR Title
 
