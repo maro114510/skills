@@ -209,19 +209,11 @@ note() {
 RE_CI='^\.github/|^\.gitlab-ci\.ya?ml$|^\.gitlab/|^\.circleci/|^\.buildkite/|^\.travis\.ya?ml$|^\.drone\.ya?ml$|^\.woodpecker|^\.?appveyor\.ya?ml$|^azure-pipelines|^\.azure-pipelines/|^bitbucket-pipelines\.ya?ml$|^cloudbuild\.ya?ml$|^\.?codecov\.ya?ml$|(^|/)jenkinsfile|(^|/)(gnu)?makefile$|\.mk$|(^|/)dockerfile|\.dockerfile$|(^|/)(docker-)?compose[^/]*\.ya?ml$|(^|/)justfile$|(^|/)taskfile\.ya?ml$|(^|/)prek\.toml$|(^|/)\.pre-commit-config\.ya?ml$|(^|/)lefthook[^/]*\.ya?ml$|^\.husky/|^\.githooks/|(^|/)\.envrc$|^\.devcontainer/|^\.claude/|^\.codex/|^\.opencode/|^\.cursor/|^\.agents/|^\.mcp\.json$|(^|/)(agents|claude)\.md$|(^|/)tox\.ini$|(^|/)noxfile\.py$|(^|/)\.?mise\.toml$|(^|/)\.tool-versions$'
 RE_DEPS='(^|/)(package(-lock)?\.json|npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.ya?ml|pnpm-workspace\.ya?ml|bun\.lockb?|\.yarnrc(\.ya?ml)?|\.npmrc|\.pypirc|pip\.conf|go\.(mod|sum|work|work\.sum)|cargo\.(toml|lock)|pyproject\.toml|poetry\.lock|uv\.lock|pipfile(\.lock)?|setup\.(py|cfg)|gemfile(\.lock)?|composer\.(json|lock)|pom\.xml|build\.gradle(\.kts)?|settings\.gradle(\.kts)?|gradle\.properties|gradle-wrapper\.(properties|jar)|mix\.(exs|lock)|package\.swift|package\.resolved|podfile(\.lock)?|cartfile(\.resolved)?|pubspec\.(ya?ml|lock)|flake\.(nix|lock)|deno\.(jsonc?|lock)|brewfile(\.lock\.json)?|renovate\.json5?|nuget\.config|directory\.(packages|build)\.(props|targets)|packages\.lock\.json|\.gitmodules)$|(^|/)requirements[^/]*\.(txt|in)$|(^|/)constraints[^/]*\.txt$|\.(gemspec|csproj|fsproj|vbproj)$|^vendor/|/vendor/|(^|/)node_modules/|^third_party/'
 RE_TESTFILE='(^|/)(tests?|__tests__|specs?|e2e|spec_helper)/|(^|/)[^/]*[._-](test|spec)\.[a-z0-9]+$|(^|/)test_[^/]*\.[a-z0-9]+$|_test\.[a-z0-9]+$|\.bats$|(^|/)[^/]*tests?\.(java|kt|cs|scala|swift)$|(^|/)conftest\.py$'
-RE_SECRETFILE='(^|/)\.env(\..+)?$|(^|/)\.netrc$|(^|/)\.git-credentials$|(^|/)id_(rsa|dsa|ecdsa|ed25519)$|(^|/)credentials(\.json)?$|\.(pem|key|p12|pfx|jks|keystore|kdbx)$|(^|/)secrets?\.(ya?ml|json|toml|env)$'
-RE_SECRETFILE_OK='\.env\.(example|sample|template|dist)$'
+# The secret patterns, path and line, live in skills/shared so another skill's scanner reads the same list.
+# shellcheck source-path=SCRIPTDIR disable=SC1091 # CI does not follow sources.
+source "${script_dir}/../../shared/secret-patterns.sh"
 
 # Line patterns for grep -E
-dq='"'
-sq="'"
-bt='`'
-quote="[${dq}${sq}${bt}]"
-RE_KEYHDR='-----BEGIN [A-Z ]*PRIVATE KEY'
-RE_TOKEN='(^|[^[:alnum:]])(gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{22,}|AKIA[0-9A-Z]{16}|ASIA[0-9A-Z]{16}|xox[abprs]-[A-Za-z0-9-]{10,}|sk-[A-Za-z0-9_-]{20,}|[sr]k_live_[A-Za-z0-9]{16,}|AIza[0-9A-Za-z_-]{35}|glpat-[A-Za-z0-9_-]{20,}|npm_[A-Za-z0-9]{36}|SG\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}|eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})'
-RE_ASSIGN="(key|token|secret|passw(or)?d|credentials?)[A-Za-z0-9_]*${quote}?[[:space:]]*(:=|=|:)[[:space:]]*${quote}[^${dq}${sq}${bt}\$[:space:]{<(][^${dq}${sq}${bt}]{5,}${quote}"
-# An unquoted literal that ends the line or a # comment, with punctuation allowed. A reference, a call, a bracketed value, and prose after the value do not match.
-RE_ASSIGN_BARE='(key|token|secret|passw(or)?d|credentials?)[A-Za-z0-9_]*[[:space:]]*(:=|=|:)[[:space:]]*[A-Za-z0-9+/_.~@!#%^&*?|:,-][A-Za-z0-9+/_.=~@!#%^&*?|:,-]{7,};?[[:space:]]*(#.*)?$'
 RE_URL='(https?|ftp|ssh|sftp|git|wss?)://|(^|[^[:alnum:]_.-])git@[A-Za-z0-9.-]+:'
 RE_NETCMD='(^|[^[:alnum:]_.-])(curl|wget|nc|ncat|netcat|telnet|ssh|scp|sftp|rsync)([^[:alnum:]_-]|$)'
 RE_NETAPI='(^|[^[:alnum:]_.])fetch[[:space:]]*\(|axios|XMLHttpRequest|requests\.(get|post|put|patch|delete|head|request|session)|urllib|httpx|aiohttp|http\.(Get|Post|Head|PostForm|NewRequest|DefaultClient)|net/http|(^|[^[:alnum:]_.])https?2?\.(get|post|put|patch|delete|head|request|connect)[[:space:]]*\(|(^|[^[:alnum:]_.])(net|tls)\.(connect|createConnection)[[:space:]]*\(|http\.client|(require[[:space:]]*\(|from|import)[[:space:]]*.?(node:)?https?2?([^[:alnum:]_]|$)|HttpClient|Net::HTTP|URLSession|okhttp|reqwest|WebSocket|socket\.(connect|create_connection)|net\.Dial|Invoke-(WebRequest|RestMethod)'
