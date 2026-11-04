@@ -65,7 +65,7 @@ Choose another type when the reader must understand something else:
 
 - All classes sit at one level of abstraction, such as all domain types. `[Convention]`
 - Name each class, member, and relationship with the source's term, as briefly as possible. When a name holds spaces or non-ASCII characters, give it an ASCII identifier with `class C["name"]`. `[Convention]`
-- Write every generalization and realization with the superclass or interface on the left, `Super <|-- Sub` or `I <|.. C`, because Mermaid places the left class above, so supertypes sit above their subtypes. `[Convention]`
+- Write every generalization and realization with the superclass or interface on the left, `Super <|-- Sub` or `I <|.. C`, because Mermaid's layout ranks the left class of an edge above the right one, which keeps supertypes above their subtypes. `[Convention]`
 
 ## Validation
 
