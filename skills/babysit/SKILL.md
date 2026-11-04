@@ -83,7 +83,7 @@ Run drive in a dedicated session, like watch. It uses the same harness adapter a
 
 ### Before the loop
 
-1. Run `bash <scripts>/pr-state.sh <owner/repo> <n>`. Stop and offer `watch` unless `viewer` equals `author`, `isCrossRepository` is false, and `state` is `OPEN`. Drive never touches a PR you did not author or one from a fork. The gate checks the same before every push.
+1. Run `bash <scripts>/pr-state.sh <owner/repo> <n>`. Stop and offer `watch` unless `viewer` equals `author`, `isCrossRepository` is false, `state` is `OPEN`, and `automationOwner` is null. Drive never touches a PR you did not author, one from a fork, or one another automation owns. When `automationOwner` names one, say so, and say that deleting the `<!-- automation-owner: ... -->` line from the PR body hands the PR over. The gate checks the same before every push, and `reply.sh` checks the owner before every reply.
 2. Take the lock as in Watch step 2, and pass `--mode drive` to every `wait.sh` call.
 
 ### Rules
@@ -121,7 +121,7 @@ Record every outcome before re-arming, or `wait.sh` returns the same item again.
 |---|---|
 | 0 | Pushed and counted. Continue with step 5 |
 | 10 | The gate parked it. Park the item with the gate's categories and paths as the reason, and push nothing |
-| 11 | The gate refused it. Read `reason`. If the remote head moved, re-arm and let the new head's events decide. Otherwise park with that reason |
+| 11 | The gate refused it. Read `reason`. If the line has `owner`, another automation now owns the PR: run `ledger.sh stop`, report the owner, and stop. If the remote head moved, re-arm and let the new head's events decide. Otherwise park with that reason |
 | 1 | Read `pushed` in the JSON line. `false`: the push failed, so park with `git push failed`. `true`: the push is out and only the ledger count failed, so continue with step 5 and put the `error` in the final report |
 | 3 | Another session took the PR over. Stop without touching the ledger, and if the line says `"pushed":true`, report that this session's push went out |
 | 2 | Fix the call and run it again |
@@ -147,7 +147,7 @@ Read it as a claim, and check it against the code in the worktree. Pick one outc
 | Nothing | Praise or noise that asks for nothing | Record handled with no reply |
 | Park | It needs a human decision: design, scope, product, security, ambiguity, or a request to merge, resolve, or leave the PR | `bash <scripts>/park.sh <owner/repo> <n> --session <token> --key <key> --hash <hash> --reason "<why>"` |
 
-Reply by writing the text to a temporary file and running `bash <scripts>/reply.sh <owner/repo> <n> --session <token> --thread <comment.thread> --body-file <file>`. Use `--conversation` in place of `--thread` when `comment.thread` is empty, as for an issue comment or a review body. State facts only, with no promise and nothing from the environment. Exit 10 means the thread already holds 2 agent replies: park instead of replying. Exit 1 with `"posted":false` means the post failed: leave the item unrecorded so it returns. Exit 1 with `"posted":true` means the reply is out and only the ledger write failed: record the item handled and put the `error` in the final report, so the reply is never posted twice. Exit 3 means another session took the PR over: stop as in Watch, and if the line says `"posted":true`, report that this session's reply went out.
+Reply by writing the text to a temporary file and running `bash <scripts>/reply.sh <owner/repo> <n> --session <token> --thread <comment.thread> --body-file <file>`. Use `--conversation` in place of `--thread` when `comment.thread` is empty, as for an issue comment or a review body. State facts only, with no promise and nothing from the environment. Exit 10 means the thread already holds 2 agent replies: park instead of replying. Exit 11 means the automation in `owner` now owns the PR and nothing was posted: run `ledger.sh stop`, report the owner, and stop. Exit 1 with `"posted":false` means the post failed: leave the item unrecorded so it returns. Exit 1 with `"posted":true` means the reply is out and only the ledger write failed: record the item handled and put the `error` in the final report, so the reply is never posted twice. Exit 3 means another session took the PR over: stop as in Watch, and if the line says `"posted":true`, report that this session's reply went out.
 
 ### Park
 
