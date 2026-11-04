@@ -16,7 +16,7 @@ Choose another type when the reader must understand something else:
 - The states of one thing and the events between them: state diagram
 - Stored data with keys and cardinality: ER diagram
 - Types with attributes, operations, or inheritance: class diagram
-- How several separately run applications, services, or data stores relate, with no parts inside one of them: C4 container diagram
+- How several separately run applications, services, or data stores relate, with no parts inside one of them: C4 container diagram. A source that places no component inside one container makes this type clearly unfit, even when the user asks for a component diagram, because it would show no components
 
 ## Correctness
 
