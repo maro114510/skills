@@ -3,7 +3,7 @@
 ## Purpose
 
 - babysit moves your own PR to its goal
-  - The goal is a merge, or a human approval on the head commit while every check passes and nothing conflicts
+  - The goal is a merge, or a human approval on the head commit while every check passes and GitHub reports it as mergeable
   - Scripts compute the goal from GitHub state, never a model
 - Scripts do every step whose result is fixed by its input, and the agent is invoked only for judgment
 - babysit never merges, marks a PR ready, requests reviews, resolves a thread, or asks a bot to approve
@@ -108,14 +108,15 @@ flowchart TD
 - The prompt names the goal, the event file, the worktree, and the result file
 - The agent writes one of these outcomes, and `babysit.sh` acts on it
 
-| Outcome | `babysit.sh` does |
-|---|---|
-| `fixed`, with commits and an optional reply | Gate and push, then reply, then record handled |
-| `reply`, with the text | Reply, then record handled |
-| `none` | Record handled |
-| `park`, with the reason | Park |
+| Outcome | Allowed for | `babysit.sh` does |
+|---|---|---|
+| `fixed`, with commits and an optional reply | Every event | Gate and push, then reply, then record handled |
+| `reply`, with the text | `comment` | Reply, then record handled |
+| `none` | `comment` | Record handled |
+| `park`, with the reason | Every event | Park |
 
-- A missing or unreadable result leaves the item unsettled, and the second time it is parked
+- A missing, unreadable, or disallowed result leaves the item unsettled, and the second time it is parked
+  - A check or conflict is never recorded handled while it still fails
 - A gate park parks the item, and a gate refusal waits for the next event when the remote head moved, otherwise parks
 - `babysit.sh` refreshes the heartbeat every minute while the agent runs
 - `merged` and `closed` remove the worktree before the lock is cleared
@@ -129,7 +130,7 @@ flowchart TD
 |---|---|---|---|
 | 1 | `merged` | The PR is merged | Stop, exit 0 |
 | 2 | `closed` | The PR is closed without merging | Stop, exit 1 |
-| 3 | `goal` | A human's latest review approves the head commit, no latest review requests changes, every check on the head passes, and the head does not conflict | Stop, exit 0 |
+| 3 | `goal` | A human's latest review approves the head commit, no latest review requests changes, every check on the head passes, and GitHub reports the head as `MERGEABLE` | Stop, exit 0 |
 | 4 | `budget` | The push budget is spent while a conflict, failing check, or comment is pending | Stop, exit 1 |
 | 5 | `conflict` | The head conflicts with the base | Merge the base, and invoke the agent only for conflicts |
 | 6 | `check_failed` | A check fails on the head | Invoke the agent to repair |
@@ -281,7 +282,7 @@ The first one that fails is the reason.
 | Topic | Decision |
 |---|---|
 | Interface | One command, one PR URL, and one optional flag, and anything else is an error |
-| Goal | A merge, or a human approval on the head with every check passing and no conflict |
+| Goal | A merge, or a human approval on the head with every check passing and a known `MERGEABLE` state, so an unknown state waits |
 | Loop owner | `babysit.sh`, so the loop depends on neither a harness nor the model |
 | Agent scope | Judgment and edits in the worktree only, while pushes, replies, and records stay in scripts |
 | Autonomous push | `babysit.sh` only, for failing checks, review feedback, and conflicts, always a gated plain fast-forward of the start SHA, never a force push or merge |
