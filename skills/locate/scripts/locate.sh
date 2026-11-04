@@ -76,12 +76,13 @@ fi
 all_worktrees="$(git worktree list --porcelain | awk '
   /^worktree / { path = substr($0, 10) }
   /^branch refs\/heads\// { print substr($0, 19) "\t" path }')"
+# A branch can be checked out in several worktrees (git worktree add --force), and each one is a candidate.
 worktrees="$(while IFS= read -r b; do
   [[ -n "${b}" ]] || continue
-  path="$(awk -F '\t' -v b="${b}" '$1 == b { print $2; exit }' <<<"${all_worktrees}")"
-  [[ -n "${path}" ]] || continue
-  path="$(cd "${path}" 2>/dev/null && pwd -P || printf '%s' "${path}")"
-  jq -nc --arg path "${path}" --arg branch "${b}" '{path: $path, branch: $branch}'
+  awk -F '\t' -v b="${b}" '$1 == b { print $2 }' <<<"${all_worktrees}" | while IFS= read -r path; do
+    path="$(cd "${path}" 2>/dev/null && pwd -P || printf '%s' "${path}")"
+    jq -nc --arg path "${path}" --arg branch "${b}" '{path: $path, branch: $branch}'
+  done
 done <<<"${matchable}" | jq -sc '.')"
 
 jq -c --argjson worktrees "${worktrees}" --arg branches "${branches}" '
