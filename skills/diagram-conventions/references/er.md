@@ -19,7 +19,7 @@ Choose another type when the reader must understand something else:
 ## Correctness
 
 - Draw only the entities, attributes, keys, and relationships the source states. Never add an ID, a foreign key, a timestamp, or a junction entity to make the model look complete; a many-to-many relationship the source states stays one relationship. `[Convention]`
-- Take both ends of every relationship from the source: at each end, the minimum (zero or one) and the maximum (one or many). When the source leaves any of the four values unstated, ask for it before drawing; zero-or-more is a constraint, never a stand-in for "unknown". `[Convention]`
+- Take both ends of every relationship from the source: at each end, the minimum (zero or one) and the maximum (one or many). "At most" and "may" state a minimum of zero; a verb alone, such as "places", states no bound. When the source leaves any of the four values unstated, ask for it before drawing; zero-or-more is a constraint, never a stand-in for "unknown". `[Convention]`
 - Draw `--` only where the source says the child is identified through the parent, such as "a line is numbered within its order". When the source does not say, draw `..` and list the choice as an assumption. `[Convention]`
 - When the source states an attribute without its type, write the type as `unknown` and list the type as not stated; never infer one from the name. `[Convention]`
 
@@ -47,7 +47,7 @@ The markers, left-end form then right-end form:
 - The marker next to an entity counts that entity's instances for one instance at the other end, so `A ||..o{ B` reads "one A has zero or more B, and each B belongs to exactly one A". Read every relationship in both directions against the source. `[Convention]`
 - The line style means identification only, never optional or mandatory participation. `[Convention]`
 - Write every relationship as `A <marker><line><marker> B : label`; Mermaid requires the label. Use the source's verb, read from `A` to `B`, or `""` when the source names none. `[Convention]`
-- When the source states something these symbols cannot carry, such as a subtype, state it in the output as a substitute and claim no conformance for it. `[Convention]`
+- When the source states something these symbols cannot carry, such as a subtype or a bound like "at most 3", list it as not drawn and claim no conformance for it. `[Convention]`
 
 ## Clarity
 
