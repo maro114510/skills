@@ -26,7 +26,7 @@ sequenceDiagram
 - <Related Design Docs, ADRs, or specifications>
 ````
 
-- Use only these sections, and only with real content.
+- Use only these sections, and leave out any without real content; never write "None".
 - State each fact once: Domain Model names concepts and their states, diagrams show flows and state changes, and Invariants hold guarantees, including what a quantity counts.
 - A scenario's diagram shows the actors, the conditions that change the flow, the state changes, and the outcome. Participants are roles, not services. When interaction order adds nothing, draw the one diagram that fits instead. Draw no step, branch, or concurrency the design does not state.
 - Invariants hold only guarantees whose omission would materially mislead an implementation, such as consistency under concurrency, security, or irreversible state.
