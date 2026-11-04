@@ -6,13 +6,13 @@ orchestrate-epic turns an Epic's child Issues into verified PRs in dependency or
 
 ## Responsibilities
 
-Each part does one job and stores no state of its own. State lives on GitHub, except oe's claim, attempt, and findings records, which stay in the host-local record store, and the pane of each Epic's board.
+Each part does one job and stores no state of its own. State lives on GitHub, except oe's records, which stay in the host-local record store, and the pane of each Epic's board.
 
 ### Coordinator
 
 | Part | Job | Uses |
 |---|---|---|
-| Runner | Woken by a schedule. Gets each Issue's next action from oe ready, starts the agents it needs, records the action, and exits, as `development-pipeline.md` defines | oe, pr-owner, pr-verify |
+| Runner | Woken by a schedule. Gets each Issue's next action from oe ready, starts the agents it needs, waits for them to end, and exits, as `development-pipeline.md` defines | oe, pr-owner, pr-verify |
 
 ### Agents
 
@@ -33,7 +33,7 @@ Each part does one job and stores no state of its own. State lives on GitHub, ex
 
 | Part | Job | Writes to |
 |---|---|---|
-| Host-local record store | Keeps the repository list and Modes, each Issue's claim, attempt, findings, and last next-action records until oe forget drops them, and the Runner lock | `$XDG_STATE_HOME/orchestrate-epic` or `~/.local/state/orchestrate-epic` |
+| Host-local record store | Keeps the Epic list and Modes, the starts that `observe` recorded, each Issue's claim, attempt, and findings records until oe forget drops them, and the Runner lock | `$XDG_STATE_HOME/orchestrate-epic` or `~/.local/state/orchestrate-epic` |
 | oe lock | Refuses a second Runner on the same host | A host-local lock |
 | oe ready | Reads GitHub and the record store and prints each Issue's next action | nothing |
 | oe status | Shows each Issue's step, PR, CI result, verdict and failure reason, attempts, running agent, Wait state, and time in step. `--watch` refreshes it until stopped | nothing |
@@ -73,7 +73,7 @@ Each part does one job and stores no state of its own. State lives on GitHub, ex
 | Engineer input is only an unmarked comment or review by someone with the OWNER, MEMBER, or COLLABORATOR role, and labels mean nothing | Trusted input only |
 | A bot's text can start a repair but never instructs an agent | Trusted input only |
 | When any GitHub read fails, oe ready prints nothing and exits with an error | A failed read decides nothing |
-| Listing a repository in Mode `auto` is consent, and removing it stops new starts | The entry gate. It is dropped because listing is consent |
+| Listing an Epic in Mode `auto` is consent, and removing it stops new starts | The entry gate. It is dropped because listing is consent |
 | Success is decided by the real CI on GitHub, never by a local reproduction | The locally reproduced check set. It is dropped because the real CI runs |
 
 The secret-scan safety condition is handled as an accepted risk.
@@ -158,7 +158,6 @@ For each Issue, oe ready reads this table from the top and outputs the action of
   - The PR means the latest PR opened from the branch after the latest claim record
   - Verifier starts are counted by the pending statuses that oe puts on the SHA before each start
   - The verify status that oe writes, whether pending, success, or failure, is never counted as a CI check
-  - An Issue with an agent the Runner started still running is left out of oe ready's output
 
 A comment is a bot finding when every row holds.
 
@@ -264,10 +263,10 @@ sequenceDiagram
 - Workflows the AI changed run with the repository's secrets
 - oe does not scan for secrets, and the commit skill screens each commit instead
 - A comment the AI forgot to mark is read as engineer input
-- The Runner lock works only within one host, so listing the same repository on another host lets two agents touch the same branch
+- The Runner lock works only within one host, so listing the same Epic on another host lets two agents touch the same branch
 - Resuming an Epic on another host, or after losing the record store, resets attempt counts, bot rounds, and findings, and earlier engineer input and bot findings count as repair signals again
 - Records carry the host's clock, so clock skew can misorder them against GitHub events
-- A Runner that dies holding the lock blocks the next wake until the lock is released with its token
+- A Runner killed while its agents run leaves them running, and the next wake can start a second agent on the same Issue
 - oe ready reads only the newest PR with an Issue's branch name, so a newer PR from a fork with that name hides the Issue's own PR; its Owners find nothing to repair, and the Issue parks
 - A bot that drops the level word from its first line or skips draft PRs has its findings missed
 - A first line whose title happens to hold a level word starts a repair
@@ -293,7 +292,7 @@ sequenceDiagram
 | Bot findings after approval | Start nothing, so the AI never pushes onto a head being merged |
 | Restarting an Owner after an answer | Counts toward the cap of 3 attempts |
 | A Verifier ends without a verdict | It is restarted once on the same SHA, and the Issue is parked when the second start also gives no verdict |
-| Waiting | The Runner does not wait. A schedule wakes it, and it starts an agent only for an Issue whose next action differs from the recorded one |
+| Waiting | The Runner waits only for the agents it started. A schedule wakes it, and a wake that starts no agent exits at once |
 | Agents running at once | 3 Owners and Verifiers combined per host, changeable in the record store |
 | Harnesses | One Adapter per harness maps the Executor contract of `development-pipeline.md` onto that harness. Agents start with no view of any other session |
 | Agent mode | The agents declare `mode: subagent`, because OpenCode V2 refuses to start an agent without it as a subagent. APM drops the key for Codex |
