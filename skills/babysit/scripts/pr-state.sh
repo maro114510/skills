@@ -4,8 +4,9 @@
 # Usage: pr-state.sh <owner/repo> <pr>
 #        pr-state.sh --normalize <file|->   normalize one saved, complete response of the same query
 # Output fields: repo, number, url, state, isDraft, author, viewer, isCrossRepository, baseRef,
-# headRef, head, mergeable, mergeStateStatus, reviewDecision, checks, reviewRequests, latestReviews,
-# threads, reviews, comments. Each comment carries id, author, authorAssociation, body, bodyHash,
+# headRef, head, mergeable, mergeStateStatus, reviewDecision, automationOwner, checks, reviewRequests,
+# latestReviews, threads, reviews, comments. automationOwner is the id of the first PR body line that
+# holds only <!-- automation-owner: <id> -->, or null. Each comment carries id, author, authorAssociation, body, bodyHash,
 # createdAt, url, and isMinimized. Each check is the latest run of its key.
 # Exit: 0 printed, 1 GitHub could not be read completely, 2 usage error.
 set -uo pipefail
@@ -39,7 +40,7 @@ QUERY='query($owner: String!, $repo: String!, $num: Int!,
   repository(owner: $owner, name: $repo) {
     pullRequest(number: $num) {
       number url state isDraft isCrossRepository mergeable mergeStateStatus reviewDecision
-      baseRefName headRefName headRefOid author { login }
+      baseRefName headRefName headRefOid body author { login }
       reviewThreads(first: '"${PAGE}"', after: $cThreads) @include(if: $wThreads) {
         totalCount pageInfo { hasNextPage endCursor }
         nodes { id isResolved isOutdated path line
@@ -145,6 +146,8 @@ NORMALIZE='
       author: ($p.author.login // null), viewer: .viewer, isCrossRepository: $p.isCrossRepository,
       baseRef: $p.baseRefName, headRef: $p.headRefName, head: $p.headRefOid,
       mergeable: $p.mergeable, mergeStateStatus: $p.mergeStateStatus, reviewDecision: $p.reviewDecision,
+      automationOwner: ([($p.body // "") | splits("\n")
+        | capture("^\\s*<!--\\s*automation-owner:\\s*(?<id>[A-Za-z0-9._-]+)\\s*-->\\s*$").id] | first),
       checks: ([.conns.checks.nodes[] | check] | group_by(.key)
         | map(sort_by([.startedAt == null, .startedAt // "", .runId // 0]) | last)),
       reviewRequests: [.conns.reviewRequests.nodes[] | .requestedReviewer
