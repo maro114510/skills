@@ -21,7 +21,7 @@ Read the repository instructions, the related Design Docs and ADRs, and the code
 
 - If the request changes the concepts, responsibilities, boundaries, behavior, state, or guarantees of a system or domain, update the Design Doc that covers them. Create one only when none does, never one per feature or Issue.
 - If it makes a choice that has real alternatives and is costly to reverse, write an ADR. If it replaces or retracts an existing ADR, delete that ADR as section 3 says, and list it as an alternative in any new one.
-- Otherwise write nothing, and say why.
+- Otherwise, as for a routine feature or an implementation edit, write nothing, and say why.
 
 Never change the design to match code or an Issue. Where they differ in what the request concerns, ask which is wrong; report other differences. Code that does not implement the design yet is not a difference.
 
