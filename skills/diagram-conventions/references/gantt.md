@@ -18,14 +18,14 @@ Choose another type when the reader must understand something else:
 
 ## Correctness
 
-- Draw a task or milestone only for one the source names. A phase or team the source uses to group tasks is a section, never a task. `[Convention]`
+- Draw a task or milestone only for one the source names. A phase or team the source uses only to group tasks is a section, never a task. When the source also states a phase's own start and end or duration, draw the phase as a section and as a task at the top of it, because a section carries no dates. `[Convention]`
 - Take every start, end, and duration from the source. Never derive one from a typical length, from today's date, or from the order the source lists tasks in. `[Convention]`
 - Give every task an explicit start: a date the source states, or `after <id>` for a predecessor the source states. A task written with only an end or a duration starts where the line above it ends, which states a sequence the source may not. `[Convention]`
 - When the source states a task but not its start, or not its end or duration, ask for the missing value before drawing; Mermaid has no bar without both. Never draw the task as a milestone and never drop it. The same holds when the source gives the plan no calendar date at all. `[Convention]`
 - Use `after` only for a dependency the source states as finish-to-start, such as "after X" or "once X is done". For another kind, such as "starts with X", draw the dates the source states and list the dependency as not drawn. `[Convention]`
 - Draw a milestone only for an instant the source names, such as a deadline or a release. `[Convention]`
 - Tag `done` or `active` only for progress the source states, and `crit` only for a task the source calls critical; never compute a critical path. `[Convention]`
-- Use `excludes` only for non-working days the source states, such as "business days" or a named holiday. When the source does not say whether a duration counts working or calendar days, count calendar days and list that as an assumption. `[Convention]`
+- Use `excludes` only for non-working days the source states, such as "business days" or a named holiday. When the source does not say whether a duration counts working or calendar days, count calendar days and list that as an assumption. `excludes` skips its days in every duration in the chart, so when some durations count working days and others calendar days, ask how to draw them before drawing; never convert one kind into the other. `[Convention]`
 - Declare `todayMarker off` unless the source asks for progress as of today, because the marker is a date the source does not state and it moves with each render. `[Convention]`
 
 ## Conformance
@@ -42,7 +42,7 @@ Choose another type when the reader must understand something else:
 | Non-working days | Days a duration skips | `excludes weekends` or `excludes <date>` |
 
 - Use each element only for its meaning. A milestone takes `0d`, because Mermaid centers a milestone in its duration. `[Convention]`
-- Declare `dateFormat` in the form the source writes its dates. `[Convention]`
+- Declare `dateFormat YYYY-MM-DD` and write each date the source states in that form, keeping its value. A chart takes one date form, and Mermaid separates task metadata with commas, so a source form such as `March 2, 2026` does not parse. `[Convention]`
 - Mermaid draws no dependency line: `after` and `until` only place a bar against another. Name this substitute in the output and claim no conformance for the dependency. `until` needs Mermaid 10.9 or later; say so when used. `[Convention]`
 
 ## Clarity
@@ -55,5 +55,7 @@ Choose another type when the reader must understand something else:
 
 - Every task, milestone, and section maps to the source, and every start, end, and duration is stated in it
 - Every task has an explicit start, and every `after` is a finish-to-start dependency the source states
-- Every `done`, `active`, `crit`, and `excludes` is stated, `todayMarker` is `off` unless progress as of today was asked, and every milestone is `0d`
+- Every phase with stated dates is drawn as a task as well as a section
+- Every `done`, `active`, `crit`, and `excludes` is stated, no `excludes` appears when durations mix working and calendar days, `todayMarker` is `off` unless progress as of today was asked, and every milestone is `0d`
+- `dateFormat` is `YYYY-MM-DD`, and every date keeps the value the source states
 - The output names dependencies as bar positions only and claims no conformance for them
