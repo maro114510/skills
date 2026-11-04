@@ -121,17 +121,25 @@ lock_field() {
   git --git-dir="$(lock_store)" cat-file -p "$2" 2>/dev/null | sed -n "s/^$1=//p" | head -n1
 }
 
-# Prints when process $1 started, or nothing when it is not running.
-process_start() {
+# Prints when process $1 started, as ps prints it under the caller's TZ and locale, or nothing when it is not running.
+process_start_local() {
   ps -o lstart= -p "$1" 2>/dev/null | sed -e 's/^ *//' -e 's/ *$//'
 }
 
+# Prints when process $1 started, or nothing when it is not running.
+# The text is fixed to UTC and the C locale, so every session reads the same text whatever TZ and locale it runs with.
+process_start() {
+  LC_ALL=C TZ=UTC0 process_start_local "$1"
+}
+
 # Succeeds when the holder recorded in blob $1 is still running: its process exists and started when it did.
+# A lock taken before process_start fixed TZ and the locale holds the text in its taker's, so it still matches a reader with the same ones.
 lock_holder_running() {
   local pid lstart
   pid="$(lock_field pid "$1")"
   lstart="$(lock_field lstart "$1")"
-  [[ "${pid}" =~ ^[1-9][0-9]*$ && -n "${lstart}" && "$(process_start "${pid}")" == "${lstart}" ]]
+  [[ "${pid}" =~ ^[1-9][0-9]*$ && -n "${lstart}" ]] || return 1
+  [[ "$(process_start "${pid}")" == "${lstart}" || "$(process_start_local "${pid}")" == "${lstart}" ]]
 }
 
 # Succeeds when a running session holds the lock of Epic $2 in repository $1. Creates nothing.

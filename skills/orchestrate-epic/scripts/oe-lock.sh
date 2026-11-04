@@ -12,6 +12,8 @@
 # - OE_SESSION_PID is the process that lives as long as the session, normally the harness: pass "$PPID" from its shell.
 # - acquire prints token=<token>. The session keeps it, and passes it again to re-acquire after a resume or to release.
 # - The holder is running while its process exists and started when it did, so a reused PID never keeps a lock.
+# - The start time is recorded in UTC and the C locale, so whether the holder runs does not depend on the reader's TZ or locale.
+#   A lock taken before that holds its taker's TZ and locale, and is read correctly only under the same ones until its holder acquires again or ends.
 # - A lock whose holder is no longer running is taken over by the next acquire.
 #
 # Storage

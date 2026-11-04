@@ -92,7 +92,7 @@ record="$(state_dir)/boards/$(repo_key "${repo}")/${epic}"
 
 # The shell in the pane runs this line; repo and epic passed the checks above, so only the values need quoting.
 # The pane's shell starts from the user's environment, not this session's, so the line carries what the board must share with the session:
-# - TZ and the locale as this session has them, set or unset, because the lock check compares ps start times, whose text follows them.
+# - TZ and the locale as this session has them, set or unset, because a lock taken before oe lock fixed both holds its start time in the taker's.
 # - The state directory, which holds the lock the board stops on, and the worktree root, which the AGENT column reads.
 # env sets them, because a VAR=value prefix is not valid in every shell.
 unset_vars=""
