@@ -39,7 +39,7 @@ When several rows apply, take every action they name.
 
 The Design Doc is normative. Code that does not implement part of it yet does not contradict it; code that behaves otherwise does. When the user says the design changes, change it. Otherwise, when code, an Issue, or another document contradicts it, ask whether the design changes or the other side is wrong, and never rewrite the design to match code or let an Issue override it.
 
-Ask with AskUserQuestion, giving concrete options, only when the intended design cannot be determined uniquely, or when an unresolved premise or missing guarantee could cause data corruption, a security exposure, a broken contract, or an irreversible change. Never invent a domain rule. Decide everything else yourself.
+Beyond such a contradiction, ask with AskUserQuestion, giving concrete options, only when the intended design cannot be determined uniquely, or when an unresolved premise or missing guarantee could cause data corruption, a security exposure, a broken contract, or an irreversible change. Never invent a domain rule: leave out a rule the request does not state and that meets neither condition. Decide everything else yourself.
 
 ## 3. Write
 
@@ -100,7 +100,7 @@ sequenceDiagram
 
 Put the resulting design in the Design Doc and list the ADR in its References; keep the rationale only in the ADR.
 
-Before finishing, remove every section, sentence, and diagram that has no purpose, repeats another, or states something the table at the top forbids.
+Before finishing, remove every section, sentence, and diagram you wrote that has no purpose, repeats another, or states something the table at the top forbids.
 
 ## 4. Revise and Delete
 
