@@ -36,7 +36,7 @@ When several rows apply, take every action they name.
 
 The Design Doc is normative. Code that does not implement part of it yet does not contradict it; code that behaves otherwise does. When the user says the design changes, change it. Otherwise, when code, an Issue, or another document contradicts the part of it the request concerns, ask whether the design changes or the other side is wrong, and never rewrite the design to match code or let an Issue override it. Report any other contradiction you find without editing.
 
-Beyond such a contradiction, ask with AskUserQuestion, giving concrete options, only when the design the request needs cannot be determined uniquely from the request and the sources section 1 reads, or when an unresolved premise or missing guarantee could cause data corruption, a security exposure, a broken contract, or an irreversible change. Never invent a domain rule: leave out a rule those sources do not state and that meets neither condition, and do not count its absence as ambiguity.
+Beyond such a contradiction, ask with AskUserQuestion, giving concrete options, only when the design the request needs cannot be determined uniquely from the request and the sources section 1 reads, or when an unresolved premise or missing guarantee could cause data corruption, a security exposure, a broken contract, or an irreversible change. Never invent a domain rule: leave out a rule those sources do not state and that meets neither condition, and do not count its absence as ambiguity. Ask every such question in one round, most consequential first.
 
 ## 3. Write
 
