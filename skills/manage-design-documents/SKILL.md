@@ -44,61 +44,7 @@ Beyond such a contradiction, ask with AskUserQuestion, giving concrete options, 
 
 Write a new document in the language that `bash <skills-root>/create-pr/scripts/lang.sh` prints, where `<skills-root>` is the parent of this skill's directory; on a non-zero exit, show its output and stop. Write an edit in the language of the document it edits.
 
-### Design Doc
-
-````markdown
-# <Subject>
-
-## Overview
-<Purpose, responsibilities, and boundaries>
-
-## Domain Model
-<Essential concepts, their definitions, data, and relationships; conceptual, not a physical schema>
-
-## Scenarios
-
-### <Scenario>
-<One sentence: who wants what, and why>
-
-```mermaid
-sequenceDiagram
-    <participants and messages>
-```
-
-## Invariants
-- <A guarantee that holds in every scenario>
-
-## References
-- <Related current Design Docs, ADRs, or specifications>
-````
-
-- Use only these sections, each only when it has content; never write a placeholder.
-- State each fact once, in the section that owns it: a guarantee in Invariants, a flow or state change in its diagram. Overview and Domain Model never restate either.
-- A scenario's diagram shows the actors, their interactions, the conditions that change the flow, the changes to data or domain state, and the outcome. Participants are conceptual responsibilities, not necessarily services or classes. Prose never restates the diagram.
-- When interaction order adds nothing, as in some system-level documents, draw the one diagram type that fits instead of inventing scenarios.
-- Draw and check each diagram with the `diagram-conventions` skill, and put only its Mermaid block into the document. Never add a step, order, branch, or concurrency the design does not state.
-- Invariants hold only domain-wide guarantees whose omission could mislead an implementation, including critical consistency, concurrency, security, and irreversible-state guarantees. State what must hold, not the mechanism. A condition local to one scenario stays in that scenario. A diagram that reads a balance and then updates it does not establish that concurrent grants respect a balance cap; that cap is an invariant.
-- In every normative sentence and diagram message, make the acting subject, the action, its object, each condition and what it applies to, and the result unambiguous whenever the distinction matters. Use one term per concept. Never leave "appropriately", "as needed", or "etc." without the condition it stands for.
-
-### ADR
-
-```markdown
-# <The decision, as a short statement>
-
-## Context
-<The problem and the forces that require a decision>
-
-## Decision
-<The chosen approach>
-
-## Rationale
-<The decisive reasons, and each material alternative with why it lost>
-
-## Consequences
-<Benefits, costs, limitations, and accepted risks>
-```
-
-Use exactly these four sections. Put the resulting design in the Design Doc and list the ADR in its References; keep the rationale only in the ADR.
+Read and follow `references/design-doc.md` for a Design Doc and `references/adr.md` for an ADR, relative to this skill's directory.
 
 Before finishing, remove every section, sentence, and diagram you wrote that has no purpose, repeats another, or states something the table at the top forbids.
 
