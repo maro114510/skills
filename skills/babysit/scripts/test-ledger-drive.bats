@@ -113,16 +113,18 @@ expect() {
   expect "$(bash "${scripts}/ledger.sh" replies o/r 7 T1)" 0
 }
 
-@test "a new session resets the round, repair, and reply counts but keeps own pushes and replies" {
+@test "a new session keeps the round and repair counts, restarts the clock, and resets the reply counts" {
   ledger_cmd own-push "${sha}"
   ledger_cmd count-push "${check_key}"
+  ledger_cmd count-push
   ledger_cmd reply-begin T1 --hash h1
   ledger_cmd reply-done T1 --hash h1 --id TC9
   ledger_cmd stop
   BABYSIT_NOW=$((BABYSIT_NOW + 5)) run bash "${scripts}/ledger.sh" start o/r 7 tok-2
   [ "${status}" -eq 0 ]
-  expect "$(ledger .rounds)" 0
-  expect "$(ledger '.repairs | length')" 0
+  expect "$(ledger .rounds)" 2
+  expect "$(ledger ".repairs[\"${check_key}\"]")" 1
+  expect "$(ledger .started_at)" 1000005
   expect "$(bash "${scripts}/ledger.sh" replies o/r 7 T1)" 0
   expect "$(ledger '.own.pushes | length')" 1
   expect "$(ledger '.own.replies | length')" 1
