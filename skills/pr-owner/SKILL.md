@@ -102,7 +102,7 @@ If any of the first four is missing, end without changing anything and say which
    ```
 
    If the push is rejected, end without retrying.
-9. For a new task, open the PR. Write its title, body, and metadata by `<skills-root>/create-pr/SKILL.md` Steps 1 to 5, in the language its `Arguments:` line resolves, running Step 1 as `bash <skills-root>/create-pr/scripts/pr-context.sh base <base>` in the worktree and ending on its non-zero exit. Check no box that needs a human, as its Step 3.2 says. Then run in the worktree, pasting Step 1's `== create flags` line verbatim as `<create flags>`, which carries `--base`, `--draft`, and `--assignee @me`, and adding one `--label` for each label Step 5.2 chose:
+9. For a new task, open the PR. Write its title, body, and metadata by `<skills-root>/create-pr/SKILL.md` Steps 1 to 5, in the language its `Arguments:` line resolves, running Step 1 as `bash <skills-root>/create-pr/scripts/pr-context.sh base <base>` in the worktree and ending on its non-zero exit. Check no box that needs a human, as its Step 3.2 says. End the body with the line `<!-- automation-owner: orchestrate-epic -->`, alone on its line and exactly as written, then one sentence in the body's language saying that orchestrate-epic owns this PR and that deleting that line hands it over; other automations that honor the marker then neither push nor reply here. Then run in the worktree, pasting Step 1's `== create flags` line verbatim as `<create flags>`, which carries `--base`, `--draft`, and `--assignee @me`, and adding one `--label` for each label Step 5.2 chose:
 
    ```bash
    bash <skills-root>/create-pr/scripts/create-linked-pr.sh --repo <repo> --head <branch> <create flags> \
