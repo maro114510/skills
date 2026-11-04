@@ -1,10 +1,8 @@
 ---
 name: manage-design-documents
 description: >
-  Decide whether a change needs a Design Doc, an ADR, both, or neither, then create, revise, delete, or review them in a Git repository.
-  A Design Doc states the intended design of a system or domain; an ADR records one consequential decision and why.
-  Use for "write a design doc", "add an ADR", "update the design doc", "does this need an ADR", "設計ドキュメントを書いて", "ADR を書いて", "Design Doc を更新して", "ADR が必要か判断して".
-  Not for hunting fatal design defects (pr-doc-review-pe).
+  Decide whether a change needs a Design Doc, an ADR, both, or neither, then create, revise, delete, or review them.
+  Use for "write a design doc", "add an ADR", "update the design doc", "設計ドキュメントを書いて", "ADR を書いて", "Design Doc を更新して".
 allowed-tools: Read, Glob, Grep, Edit, Write, AskUserQuestion, Bash(git grep:*, git rm:*)
 argument-hint: "[change or decision to document | document path to review]"
 ---
