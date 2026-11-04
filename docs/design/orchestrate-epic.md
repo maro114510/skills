@@ -6,13 +6,13 @@ orchestrate-epic turns an Epic's child Issues into verified PRs in dependency or
 
 ## Responsibilities
 
-Each part does one job and stores no state of its own. State lives on GitHub, except oe's claim, attempt, and findings records, which stay in the host-local record store, and the pane of each Epic's board.
+Each part does one job and stores no state of its own. State lives on GitHub, except oe's records, which stay in the host-local record store, and the pane of each Epic's board.
 
 ### Coordinator
 
 | Part | Job | Uses |
 |---|---|---|
-| orchestrate-epic | Gets each Issue's next action from oe ready, starts the agents it needs in the background, and waits in the background for an agent to end or GitHub to change with oe wait, in a loop | oe, pr-owner, pr-verify |
+| Runner | Woken by a schedule. Gets each Issue's next action from oe ready, starts the agents it needs, waits for them to end, and exits, as `development-pipeline.md` defines | oe, pr-owner, pr-verify |
 
 ### Agents
 
@@ -33,12 +33,11 @@ Each part does one job and stores no state of its own. State lives on GitHub, ex
 
 | Part | Job | Writes to |
 |---|---|---|
-| Host-local record store | Keeps each Issue's claim, attempt, and findings records until oe forget drops them | oe lock's directory: `$XDG_STATE_HOME/orchestrate-epic` or `~/.local/state/orchestrate-epic` |
-| oe lock | Refuses a second session for the same Epic | A host-local lock |
+| Host-local record store | Keeps the Epic list and Modes, the starts that `observe` recorded, each Issue's claim, attempt, and findings records until oe forget drops them, and the Runner lock | `$XDG_STATE_HOME/orchestrate-epic` or `~/.local/state/orchestrate-epic` |
+| oe lock | Refuses a second Runner on the same host | A host-local lock |
 | oe ready | Reads GitHub and the record store and prints each Issue's next action | nothing |
-| oe status | Shows each Issue's step, PR, CI result, verdict and failure reason, attempts, running agent, and time in step. `--watch` refreshes it, and stops once the session that held the Epic's lock ends | nothing |
-| oe board | Inside Herdr with git config `skills.herdr` true, opens a pane below the session's that runs `oe status --watch` every 3 minutes, or reuses the Epic's pane from an earlier start | A Herdr pane, and the pane's record on this host |
-| oe wait | Waits until oe ready's output changes or 9 minutes pass | nothing |
+| oe status | Shows each Issue's step, PR, CI result, verdict and failure reason, attempts, running agent, Wait state, and time in step. `--watch` refreshes it until stopped | nothing |
+| oe board | Inside Herdr with git config `skills.herdr` true, opens a pane that runs `oe status --watch` every 3 minutes, or reuses the Epic's pane from an earlier start | A Herdr pane, and the pane's record on this host |
 | oe brief | Builds the brief handed to an Owner or a Verifier, and records each Verifier start before its brief | A pending verify status on the SHA, for a Verifier |
 | oe claim | Creates the Issue's branch and writes a claim record | A branch on origin and the record store |
 | oe worktree | Creates an agent's worktree outside the shared checkout, on the Issue branch for an Owner and detached at its head for a Verifier, and removes it after the agent ends | A local worktree |
@@ -75,7 +74,7 @@ Each part does one job and stores no state of its own. State lives on GitHub, ex
 | Engineer input is only an unmarked comment or review by someone with the OWNER, MEMBER, or COLLABORATOR role, and labels mean nothing | Trusted input only |
 | A bot's text can start a repair but never instructs an agent | Trusted input only |
 | When any GitHub read fails, oe ready prints nothing and exits with an error | A failed read decides nothing |
-| Invoking the skill is consent, and ending the session stops every agent | The entry gate. It is dropped because invoking is consent |
+| Listing an Epic in Mode `auto` is consent, and removing it stops new starts | The entry gate. It is dropped because listing is consent |
 | Success is decided by the real CI on GitHub, never by a local reproduction | The locally reproduced check set. It is dropped because the real CI runs |
 
 The secret-scan safety condition is handled as an accepted risk.
@@ -123,7 +122,7 @@ For each Issue, oe ready reads this table from the top and outputs the action of
 
 | Row | Phase | State | Next action |
 |---|---|---|---|
-| 1 | Gate | The default branch's head SHA still has no checks after 10 minutes | End the session |
+| 1 | Gate | The default branch's head SHA still has no checks after 10 minutes | Start nothing in this repository |
 | 2 | Gate | A check on the default branch's head SHA is pending or failed, or the SHA has had no checks for less than 10 minutes | Start nothing and wait |
 | 3 | Before claim | The Issue is closed | Mark it done |
 | 4 | Before claim | A PR merged after the latest claim record, or the branch exists and its PR was closed without merging | Wait for an engineer |
@@ -160,7 +159,6 @@ For each Issue, oe ready reads this table from the top and outputs the action of
   - The PR means the latest PR opened from the branch after the latest claim record
   - Verifier starts are counted by the pending statuses that oe puts on the SHA before each start
   - The verify status that oe writes, whether pending, success, or failure, is never counted as a CI check
-  - An Issue with an agent running in this session is left out of oe ready's output
 
 A comment is a bot finding when every row holds.
 
@@ -186,8 +184,9 @@ The normal path. Issue B depends on Issue A.
 sequenceDiagram
   autonumber
   actor H as Engineer
+  participant S as Schedule
   box rgb(235,242,255) AI
-    participant O as orchestrate-epic
+    participant O as Runner
     participant E as oe
     participant W as pr-owner
     participant I as implement
@@ -195,7 +194,7 @@ sequenceDiagram
     participant V as pr-verify
   end
   participant G as GitHub
-  H->>O: Invoke
+  S->>O: Wake
   rect rgba(0,120,255,0.08)
     Note over O,G: Claim
     O->>E: ready
@@ -220,11 +219,11 @@ sequenceDiagram
     W-->>-O: End
   end
   rect rgba(120,120,120,0.08)
-    Note over O,G: CI watch
-    loop Until oe ready's output changes
-      O->>E: wait
-      E->>G: Check CI
-    end
+    Note over S,G: CI watch
+    O-->>S: Exit
+    S->>O: Wake
+    O->>E: ready
+    E->>G: Check CI
     E-->>O: Verify A
   end
   rect rgba(255,160,0,0.08)
@@ -238,26 +237,25 @@ sequenceDiagram
   end
   rect rgba(160,80,255,0.08)
     Note over H,G: Approval and merge
-    loop Until oe ready's output changes
-      O->>E: wait
-      E->>G: Check the PR
-    end
+    O-->>S: Exit
     H->>G: Review and approve
     H->>G: Merge
-    G-->>E: A closes
+    S->>O: Wake
+    O->>E: ready
+    E->>G: A closed
     E-->>O: Claim B
   end
 ```
 
 | Case | What happens |
 |---|---|
-| Lost agent | The Owner ends without a PR, or the session dies. GitHub has no record of completion, so the next oe ready starts the next attempt on the same branch |
+| Lost agent | The Owner ends without a PR, or the Runner dies. GitHub has no record of completion, so the next oe ready starts the next attempt on the same branch |
 | Failed verification | The Verifier writes a failure verdict and stores its findings. An Owner reads the findings, repairs, and pushes. The new SHA has no verdict, so CI and verification run again |
 | Manual checks | An Issue with only manual checks left gets a success verdict and waits for the merge |
 | Failed CI | An Owner fixes the failed check on the same branch and pushes |
 | Bot finding | CodeRabbit reports a Major finding. An Owner checks it in the code, repairs, pushes, and asks CodeRabbit to review again. A Major finding in that re-review goes to the engineer. A Minor finding starts nothing |
 | Reached cap | When a repair signal remains after 3 attempts, the Issue is parked and the Issues that depend on it stop too. The engineer either finishes and merges it by hand, or deletes the branch so the AI starts over |
-| Red default branch | While a check on the default branch fails, no claim, Owner, or Verifier starts, so no attempt is spent. The loop resumes once the check passes |
+| Red default branch | While a check on the default branch fails, no claim, Owner, or Verifier starts, so no attempt is spent. The next wake after the check passes resumes |
 
 ## Accepted Risks
 
@@ -266,11 +264,10 @@ sequenceDiagram
 - Workflows the AI changed run with the repository's secrets
 - oe does not scan for secrets, and the commit skill screens each commit instead
 - A comment the AI forgot to mark is read as engineer input
-- The session lock works only within one host, so running the same Epic on another host lets two agents touch the same branch
+- The Runner lock works only within one host, so listing the same Epic on another host lets two agents touch the same branch
 - Resuming an Epic on another host, or after losing the record store, resets attempt counts, bot rounds, and findings, and earlier engineer input and bot findings count as repair signals again
 - Records carry the host's clock, so clock skew can misorder them against GitHub events
-- In OpenCode V2 and an interactive Codex session the session's process is a shared background service, so a session that ends without releasing its lock blocks a rerun until the service restarts or the lock is released with its token
-- In Codex, waiting is not free: the session polls oe wait every 30 seconds within one turn, so a long run grows its context, and a compaction can drop the lock token or the running agents the session keeps in memory
+- A Runner killed while its agents run leaves them running, and the next wake can start a second agent on the same Issue
 - oe ready reads only the newest PR with an Issue's branch name, so a newer PR from a fork with that name hides the Issue's own PR; its Owners find nothing to repair, and the Issue parks
 - A bot that drops the level word from its first line or skips draft PRs has its findings missed
 - A first line whose title happens to hold a level word starts a repair
@@ -278,7 +275,7 @@ sequenceDiagram
 - A bot that refuses the re-review on a rate limit leaves the repair unreviewed
 - A bot finding the Owner cannot reproduce still spends an attempt
 - The board adds GitHub reads, so a large Epic reaches the rate limit sooner
-- A board keeps refreshing while a session's lock outlives it
+- A board keeps refreshing after the Operator stops listing the Epic
 
 ## Decisions
 
@@ -297,20 +294,19 @@ sequenceDiagram
 | Bot findings after approval | Start nothing, so the AI never pushes onto a head being merged |
 | Restarting an Owner after an answer | Counts toward the cap of 3 attempts |
 | A Verifier ends without a verdict | It is restarted once on the same SHA, and the Issue is parked when the second start also gives no verdict |
-| Waiting | One oe wait call waits up to 9 minutes, under the 10-minute limit Claude Code puts on a background command, and when no agent is running and oe ready's output does not change for 4 hours, the session prints a summary and ends |
-| Agents running at once | 3 Owners and Verifiers combined, changeable by an argument at invocation |
-| How the loop waits | Agents and oe wait run in the background where the harness can, and the session ends its turn, so waiting costs no tokens. A blocking oe wait would miss an ended agent, because oe ready leaves running Issues out |
-| Harnesses | The skill text, not a fork, maps each harness's tools onto the loop. OpenCode V1 waits in the foreground and sees an ended agent up to 9 minutes late; without background agents it starts each pass as one batch. Codex wakes no idle session, so it never ends its turn and polls oe wait every 30 seconds, stopping it with Ctrl-C when an agent ends. Codex agents start with `fork_turns: "none"`, so they never see the session's conversation |
+| Waiting | The Runner waits only for the agents it started. A schedule wakes it, and a wake that starts no agent exits at once |
+| Agents running at once | 3 Owners and Verifiers combined per host, changeable in the record store |
+| Harnesses | One Adapter per harness maps the Executor contract of `development-pipeline.md` onto that harness. Agents start with no view of any other session |
 | Agent mode | The agents declare `mode: subagent`, because OpenCode V2 refuses to start an agent without it as a subagent. APM drops the key for Codex |
 | Codex skill size | Codex cuts a plugin's skill at 8,000 bytes, so every SKILL.md stays within 8,000 bytes, and CI enforces it: `make validate` (`tests/validate-agent-portability.sh`) fails, naming each SKILL.md over the cap |
-| Implicit invocation | Codex ignores `disable-model-invocation`, so orchestrate-epic, pr-owner, and pr-verify carry `agents/openai.yaml` with `allow_implicit_invocation: false`, because invoking orchestrate-epic is the consent to push |
+| Implicit invocation | Codex ignores `disable-model-invocation`, so pr-owner and pr-verify carry `agents/openai.yaml` with `allow_implicit_invocation: false`, because only the Runner may start them |
 | Counting Verifier starts | oe brief writes the pending verify status that oe ready counts, before it prints a Verifier's brief, so no Verifier starts uncounted |
 | Worktrees | An agent's worktree is removed when the agent ends, and unpushed work is discarded |
 | Where records go | The record store, because comments under the user's account cluttered timelines. Only questions and re-review requests stay on GitHub, in a fixed format that says an agent wrote them |
 | Record key | Repository and Issue: an Issue has one parent Epic, and no writer is given the Epic |
-| Dropping records | oe forget, when a session ends with every Issue done. It refuses while an Issue is open, and oe ready stays read-only |
+| Dropping records | oe forget, which the Runner runs at a wake that finds every Issue of a listed Epic closed. It refuses while an Issue is open, and oe ready stays read-only |
 | Acceptance checks | Verification splits automated checks from manual ones, and no agent checks a box that needs a human, template boxes included |
 | The board in Herdr | Opt-in with git config `skills.herdr`, read only inside Herdr, so no other run calls herdr and no Herdr user gets a pane unasked |
-| Board refresh | Every 3 minutes, slower than oe wait's minute, because each refresh repeats oe ready's GitHub reads |
-| Board lifetime | The board stops by itself once its session ends, crash included, and leaves its last view. A later start reuses its pane when the pane runs the board or sits at its shell's prompt, and never sends input to a pane that runs anything else |
+| Board refresh | Every 3 minutes, because each refresh repeats oe ready's GitHub reads |
+| Board lifetime | The board runs until the Operator stops it and leaves its last view. A later start reuses its pane when the pane runs the board or sits at its shell's prompt, and never sends input to a pane that runs anything else |
 | Notifications | None. A question or a park shows on the board |
