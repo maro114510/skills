@@ -93,6 +93,16 @@ canonical() {
   expect "$(field '.branches')" '["feat/x"]'
 }
 
+@test "a PR whose head branch is checked out in two worktrees reports both as candidates" {
+  worktree_on feat/x "${BATS_TEST_TMPDIR}/first"
+  git -C "${repo}" worktree add -q --force "${BATS_TEST_TMPDIR}/second" feat/x
+  pr_state OPEN feat/x
+  run bash "${target}" https://github.com/o/r/pull/7
+  expect "${status}" 0
+  expect "$(field .match)" many
+  expect "$(field '[.worktrees[].path]')" "[\"$(canonical "${BATS_TEST_TMPDIR}/first")\",\"$(canonical "${BATS_TEST_TMPDIR}/second")\"]"
+}
+
 @test "a merged PR reports its state as MERGED" {
   worktree_on feat/x "${BATS_TEST_TMPDIR}/wt"
   pr_state MERGED feat/x
