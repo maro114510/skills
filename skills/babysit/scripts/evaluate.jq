@@ -25,6 +25,7 @@ def relevant($head; $gen): select(startswith("c:") or endswith("@\($head)#\($gen
 | $head.gen as $g
 | (($l.heads // {}) | if .[$s.head] == null then .[$s.head] = {first_seen: $t} else . end) as $heads
 | ($l.items // {}) as $items
+| ($l.started_at // null) as $started
 # In watch a report settles an item; in drive only a handled or parked one is settled, so drive still acts.
 | (if $mode == "drive" then ["handled", "parked"] else ["reported", "handled", "parked"] end) as $done
 | def settled($key; $hash):
@@ -59,9 +60,21 @@ def relevant($head; $gen): select(startswith("c:") or endswith("@\($head)#\($gen
       | .comments[] | . + {kind: "thread_comment", thread: $th.id, path: $th.path, line: $th.line}) ]
   | map(select((.isMinimized | not) and (own_reply(.) | not)))
   | sort_by(.createdAt // "")
-  | map(("c:" + .id) as $k | select(settled($k; .bodyHash) | not)
-      | {row: 10, event: "comment", key: $k, hash: .bodyHash,
-         comment: {id, kind, author, authorAssociation, url, body, thread, path, line, review_state: .state}})
+  as $comments
+
+# In watch, comments created before the session started are a baseline taken on the first poll; each stays
+# quiet until its body hash changes. The viewer's own comments stay quiet too. Drive acts on both.
+| (if $mode == "watch" and $started != null
+   then $l.baseline // ([$comments[] | select((.createdAt // "" | try fromdateiso8601 catch null) as $c
+                          | $c != null and $c < $started) | {key: ("c:" + .id), value: .bodyHash}] | from_entries)
+   else null end) as $baseline
+| def muted: $baseline != null
+    and (($s.viewer != null and .author == $s.viewer) or $baseline["c:" + .id] == .bodyHash);
+  [$comments[] | select(muted) | {key: ("c:" + .id), author}] as $muted
+| [ $comments[] | select(muted | not)
+    | ("c:" + .id) as $k | select(settled($k; .bodyHash) | not)
+    | {row: 10, event: "comment", key: $k, hash: .bodyHash,
+       comment: {id, kind, author, authorAssociation, url, body, thread, path, line, review_state: .state}} ]
   as $comment_items
 
 | ($conflict_items + $check_items + $comment_items) as $pending
@@ -94,7 +107,6 @@ def relevant($head; $gen): select(startswith("c:") or endswith("@\($head)#\($gen
     ($s.reviews[] | select(.state == "CHANGES_REQUESTED" and (.author | IN($rejecting[]))) | "c:\(.id)")
   ] as $blocker_keys
 
-| ($l.started_at // null) as $started
 | (($started != null and ($t - $started) >= session_seconds)
    or ((($l.rounds // 0) >= max_rounds) and any($firing[]; .row | IN(6, 9, 10)))) as $limit
 | (($pending | length) == 0 and any($blocker_keys[]; ($items[.] // {}).disposition == "parked")) as $stalled
@@ -107,6 +119,7 @@ def relevant($head; $gen): select(startswith("c:") or endswith("@\($head)#\($gen
     reported: [$keys[] | select($items[.].disposition == "reported")],
     handled: [$keys[] | select($items[.].disposition == "handled")],
     unresolved: $blockers,
+    muted: $muted,
     pending: $pending_list,
     reasons: ([$keys[] | select($items[.].reason != null) | {key: ., value: $items[.].reason}] | from_entries) } as $report
 
@@ -116,7 +129,7 @@ def relevant($head; $gen): select(startswith("c:") or endswith("@\($head)#\($gen
    elif $s.state == "CLOSED" then "CLOSED"
    elif ($blockers | length) == 0 then "READY"
    else "NOT_READY" end) as $status
-| { ledger: {head: $head, heads: $heads},
+| { ledger: ({head: $head, heads: $heads} + (if $baseline != null then {baseline: $baseline} else {} end)),
     status: $status,
     event: (
       if $status == "MERGED" then stop("merged")

@@ -89,7 +89,7 @@ start)
   fi
   jq -c --argjson now "${now}" --arg token "${token}" '
     . + {started_at: $now, rounds: 0, repairs: {}, replies: {}, api_failures: 0,
-         lock: {token: $token, heartbeat: $now}}' <<<"${ledger}" | write
+         lock: {token: $token, heartbeat: $now}} | del(.baseline)' <<<"${ledger}" | write
   echo "started"
   ;;
 record)
