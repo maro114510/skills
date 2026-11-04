@@ -1,6 +1,6 @@
 # 自律的なエピック実行の発見記録
 
-2026-10-14 時点の記録である。その後の orchestrate-epic の作り直しで、エージェント用の身元、自動マージ、レビュー区分の扱いは変わった。現在の設計は [development-pipeline.md](../../design/development-pipeline.md) と [orchestrate-epic.md](../../design/orchestrate-epic.md) が正である。
+Record as of 2026-10-14. The later orchestrate-epic rebuild changed the agent identity, auto-merge, and review-class decisions. The current designs are [development-pipeline.md](../../design/development-pipeline.md) and [orchestrate-epic.md](../../design/orchestrate-epic.md).
 
 エピックを登録したら、子 Issue の実装からマージまでを人の付き添いなしで進めたい。この記録は、その仕組みを作る前に調べた事実と、論点ごとの合意状況をまとめる。設計書でも実装計画でもない。設計と実装は、ここで合意した論点を入力にして別に行う。
 
