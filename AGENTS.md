@@ -28,6 +28,8 @@ Repository instructions for coding agents.
 | `.github/workflows/release.yml` | Creates a GitHub Release on a `v*` tag push after checking the tag matches both manifests |
 | `cliff.toml` | `git-cliff` config used by `make release` |
 
+`docs/design` holds only Design Docs that describe the current target, as `manage-design-documents` defines them; plans and proposals are Issues.
+
 ## Versions and Releases
 
 - Update both manifests together; updating only one breaks `claude plugin install`
