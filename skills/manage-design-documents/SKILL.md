@@ -32,7 +32,7 @@ Neither document carries status, authors, dates, a changelog, an owner, or an ap
 |---|---|
 | Changes the concepts, responsibilities, boundaries, significant behavior, data or state changes, or invariants of a system or domain | Update the Design Doc that covers it. Create one only when none does, and never one per feature, Issue, or code change |
 | Makes a consequential choice: material alternatives exist and the choice is costly to reverse or constrains later design | Write an ADR |
-| Replaces or retracts the decision of an existing ADR | Update the Design Doc, and delete the obsolete ADR as section 4 says |
+| Replaces or retracts the decision of an existing ADR | Update the Design Doc, record a replacing decision in a new ADR with the replaced one among its alternatives, and delete the obsolete ADR as section 4 says |
 | Does none of these, as a routine feature or implementation edit does | Write nothing, and say why |
 
 When several rows apply, take every action they name.
