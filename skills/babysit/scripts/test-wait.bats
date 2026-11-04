@@ -304,6 +304,43 @@ before_start='.comments = [($comment | .id = "IC_old" | .author = "bot" | .bodyH
   expect "$(event)" ready
 }
 
+@test "a draft approved at its head stops with approved in watch and drive" {
+  set_snap '.isDraft = true | .latestReviews = [{author: "bob", state: "APPROVED", commit: "aaa"}]'
+  poll
+  expect "$(event)" approved
+  expect "$(field '.report | has("parked") and has("unresolved")')" true
+  poll --mode drive
+  expect "$(event)" approved
+  run bash "${scripts}/check.sh" o/r 7 --snapshot "${snap}"
+  expect "$(field .event.event)" approved
+}
+
+@test "an approval on an older commit is not approved" {
+  set_snap '.isDraft = true | .latestReviews = [{author: "bob", state: "APPROVED", commit: "old"}]'
+  poll
+  expect "$(event)" idle
+}
+
+@test "an approval at the head beside another reviewer's change request is not approved" {
+  set_snap '.isDraft = true | .latestReviews = [{author: "bob", state: "APPROVED", commit: "aaa"},
+    {author: "carol", state: "CHANGES_REQUESTED", commit: "aaa"}]'
+  poll
+  expect "$(event)" idle
+}
+
+@test "merged and closed outrank approved, and approved outranks READY" {
+  approved_at_head='.latestReviews = [{author: "bob", state: "APPROVED", commit: "aaa"}]'
+  set_snap "${approved_at_head} | .state = \"MERGED\""
+  poll
+  expect "$(event)" merged
+  set_snap "${approved_at_head} | .state = \"CLOSED\""
+  poll
+  expect "$(event)" closed
+  set_snap "${approved_at_head}"
+  poll
+  expect "$(event)" approved
+}
+
 @test "a reviewer who never started blocks READY instead of reading as zero feedback" {
   set_snap "${waiting}"
   poll
