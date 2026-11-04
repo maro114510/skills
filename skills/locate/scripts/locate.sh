@@ -6,7 +6,8 @@
 #   kind, repo, number, url, state, branches, worktrees ([{path, branch}]), and match (one, none, many).
 #   A pull request adds isDraft, isCrossRepository, unresolvedThreads, failingChecks ([{name, url}]), pendingChecks.
 #   An Issue adds stateReason.
-# Candidate branches: a pull request's head branch; for an Issue, the branches GitHub links to it.
+# Candidate branches: a pull request's head branch; for an Issue, the branches GitHub links to it in this
+# repository. A fork's branch never matches a worktree here.
 # Pull request state comes from babysit's pr-state.sh, which pages every thread and check; LOCATE_PR_STATE
 # overrides its path.
 # Exit: 0 printed, 1 GitHub could not be read, 2 usage error, 3 the URL belongs to another repository than origin.
@@ -53,9 +54,11 @@ if [[ "${kind}" == pull ]]; then
   branches="$(jq -r '.headRef' <<<"${state}")" || fail "unexpected pull request state"
   info="$(jq -c '{kind: "pr", repo, number, url, state, isDraft, isCrossRepository,
     unresolvedThreads: ([.threads[] | select(.isResolved | not)] | length),
-    failingChecks: [.checks[] | select(.status == "failed") | {name, url}],
+    failingChecks: [.checks[] | select(.status == "failed" or .status == "action") | {name, url}],
     pendingChecks: ([.checks[] | select(.status == "pending")] | length)}' <<<"${state}")" ||
     fail "unexpected pull request state"
+  # A fork's branch only shares its name with any branch here, so no local worktree holds it.
+  matchable="$(jq -r 'if .isCrossRepository then "" else .headRef end' <<<"${state}")"
 else
   command -v gh >/dev/null 2>&1 || fail "gh is required"
   state="$(gh issue view "${num}" -R "${repo}" --json state,stateReason,url)" || fail "cannot read Issue ${repo}#${num}"
@@ -63,7 +66,10 @@ else
   info="$(jq -c --arg repo "${repo}" --argjson n "${num}" \
     '{kind: "issue", repo: $repo, number: $n, url, state, stateReason}' <<<"${state}")" ||
     fail "unexpected Issue state"
-  branches="$(cut -f1 <<<"${linked}" | sed '/^$/d' | LC_ALL=C sort -u)"
+  # A linked branch can live in a fork; only one in this repository can be checked out here.
+  branches="$(awk -F '\t' -v prefix="https://github.com/$(lower "${repo}")/tree/" \
+    'index(tolower($2), prefix) == 1 { print $1 }' <<<"${linked}" | LC_ALL=C sort -u)"
+  matchable="${branches}"
 fi
 
 # Every worktree of this clone, as <branch>\t<path>; a detached worktree has no branch line and never matches.
@@ -76,7 +82,7 @@ worktrees="$(while IFS= read -r b; do
   [[ -n "${path}" ]] || continue
   path="$(cd "${path}" 2>/dev/null && pwd -P || printf '%s' "${path}")"
   jq -nc --arg path "${path}" --arg branch "${b}" '{path: $path, branch: $branch}'
-done <<<"${branches}" | jq -sc '.')"
+done <<<"${matchable}" | jq -sc '.')"
 
 jq -c --argjson worktrees "${worktrees}" --arg branches "${branches}" '
   . + {branches: ($branches | split("\n") | map(select(. != ""))), worktrees: $worktrees,

@@ -45,4 +45,4 @@ It only reads: never create, switch, reset, or remove a worktree or branch.
    | `match` is `none` | Name the candidate branches, say no worktree has them checked out, and ask before creating one |
    | `match` is `one` | Continue the user's request in that worktree. Prefix each command with `cd <path> &&` |
 
-   `isCrossRepository: true` means the PR comes from a fork, so a local branch of the same name may be unrelated. Say so.
+   `isCrossRepository: true` means the PR comes from a fork, so `match` is always `none`: a local branch of the same name is unrelated. Say so.
