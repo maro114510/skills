@@ -5,7 +5,7 @@ description: >
   in the codebase, resolves requirements and acceptance criteria, decides autonomously from the Issue and
   repository, and asks only when acceptance, a premise, or the sources are in doubt, or a critical decision
   is unsettled. Writes tests through one playbook per task type, commits each TDD cycle, and proves every
-  bug fix with a reproduction test that fails on the pre-fix code.
+  fix that goes through the bug-fix playbook with a reproduction test that fails on the pre-fix code.
   Trigger on requests like
   「これを実装して」「機能を追加して」「バグを修正して」「変更して」「これを作って」
   「リファクタリングして」「対応して」 and similar implementation requests.
@@ -251,6 +251,8 @@ Write no automated test when any of these holds, record which one in the decisio
 ## Phase 6: Verify CI Locally
 
 Find the CI configuration in `.github/workflows/`, `Makefile`, and `package.json`, then run the equivalent lint, typecheck, test, and build checks. Fix every error before moving on to Phase 6.5.
+
+Scope the test run to what the diff can affect: the suites that exercise the files it touches, plus every check a criterion names. Run the whole suite only when it finishes within a few minutes on this machine. Leave the rest to CI, and report it as not run, never as passed.
 
 ---
 
