@@ -68,20 +68,17 @@ fingerprint() {
   } | git hash-object --stdin
 }
 
-# OpenCode v1 and v2 reject each other's flags, so the installed CLI's help picks the form.
-# v2: `--standalone`, without which OPENCODE_CONFIG_CONTENT and the deny block below are ignored.
-# v1: `--command review`, gated on 1.x so a future release without `--standalone` fails closed.
+# Only OpenCode v2 is supported. `--standalone` runs a private server; without it the shared background
+# service ignores OPENCODE_CONFIG_CONTENT, which would leave the deny block below inert. A CLI without it
+# fails closed, whatever its version.
 opencode_flags=()
 if [[ "${harness}" == opencode ]]; then
   opencode_help="$(opencode run --help 2>&1 </dev/null)"
   help_rc=$?
-  has_flag() { grep -qE -- "(^|[[:space:]])$1([[:space:],=]|$)" <<<"${opencode_help}"; }
-  if has_flag --standalone; then
+  if grep -qE -- "(^|[[:space:]])--standalone([[:space:],=]|$)" <<<"${opencode_help}"; then
     opencode_flags=(--standalone)
-  elif has_flag --command && [[ "$(opencode --version 2>/dev/null </dev/null)" == 1.* ]]; then
-    opencode_flags=(--command review)
   else
-    echo "Unsupported OpenCode CLI: 'opencode run --help' lists no --standalone, and no --command on a 1.x version" >&2
+    echo "Unsupported OpenCode CLI: 'opencode run --help' lists no --standalone (OpenCode v2 is required)" >&2
     head -n 5 <<<"${opencode_help}" >&2
     if [[ "${help_rc}" -ne 0 ]]; then echo "REVIEWER_EXIT=${help_rc}"; else echo "REVIEWER_EXIT=unsupported"; fi
     result failed
