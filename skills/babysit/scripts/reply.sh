@@ -4,10 +4,12 @@
 # A thread reply answers that review thread. --conversation posts a comment on the pull request, where issue
 # comments and review bodies share one capped thread. At most 2 agent replies are posted per thread.
 # It only ever replies: nothing here resolves or unresolves a thread.
-# A pull request that another automation owns, by the marker pr-state reads as automationOwner, takes no reply.
 # Prints one JSON line. Test hooks BABYSIT_GH replaces gh and BABYSIT_PR_STATE replaces pr-state.
+# A body asking CodeRabbit to approve or resolve is refused, so a reply never manufactures an approval.
+# A pull request that another automation owns, by the marker pr-state reads as automationOwner, takes no reply.
 # Exit: 0 posted, 1 the post failed or the pull request could not be read, 2 usage error, 3 the lock is not ours,
-# 10 the thread already holds 2 replies, 11 another automation owns the pull request, named in "owner".
+# 10 the thread already holds 2 replies, 11 refused: the body asks a bot to approve or resolve, or another
+# automation owns the pull request, named in "owner".
 # An exit of 1 or 3 with "posted":true in the JSON line means the reply is out and only the ledger write failed.
 set -uo pipefail
 
@@ -63,6 +65,15 @@ fi
 # The substitution drops trailing newlines, which GitHub drops from a stored body as well.
 body="$(cat "${body_file}")"
 [[ "${body}" =~ [^[:space:]] ]] || usage "The reply is empty"
+
+# The agent posts as the PR author, whose approve or resolve command CodeRabbit obeys, so the reply could
+# manufacture an approval. The check precedes the lock and the ledger, so a refusal writes nothing.
+body_lower="$(tr '[:upper:]' '[:lower:]' <<<"${body}")"
+if [[ "${body_lower}" =~ @coderabbitai[[:space:]]+(approve|resolve) ]]; then
+  jq -nc --arg target "${thread:-conversation}" \
+    '{posted: false, reason: "the reply asks a bot to approve or resolve", target: $target}'
+  exit 11
+fi
 
 sha256() {
   if command -v sha256sum >/dev/null 2>&1; then

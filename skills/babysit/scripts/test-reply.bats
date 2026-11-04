@@ -167,6 +167,41 @@ expect() {
   expect "$(calls)" 2
 }
 
+@test "a body asking CodeRabbit to approve exits 11, posts nothing, and leaves the ledger as it was" {
+  before="$(bash "${scripts}/ledger.sh" show o/r 7)"
+  printf 'Fixed in abc1234.\n@coderabbitai approve\n' >"${tmp}/body.md"
+  # A later clock makes any ledger write, even a heartbeat refresh, show up in the comparison.
+  export BABYSIT_NOW=1000100
+  reply --thread T1
+  [ "${status}" -eq 11 ]
+  expect "$(jq -r .posted <<<"${output}")" false
+  expect "$(calls)" 0
+  expect "$(bash "${scripts}/ledger.sh" show o/r 7)" "${before}"
+}
+
+@test "a body asking CodeRabbit to resolve exits 11 and posts nothing" {
+  printf '@coderabbitai resolve\n' >"${tmp}/body.md"
+  reply --conversation
+  [ "${status}" -eq 11 ]
+  expect "$(jq -r .posted <<<"${output}")" false
+  expect "$(calls)" 0
+}
+
+@test "the approval command is refused whatever its letter case" {
+  printf '@CodeRabbitAI  Approve\n' >"${tmp}/body.md"
+  reply --thread T1
+  [ "${status}" -eq 11 ]
+  expect "$(calls)" 0
+}
+
+@test "a body mentioning CodeRabbit without approve or resolve is posted" {
+  printf '@coderabbitai fixed in abc1234; the approval flow is unchanged.\n' >"${tmp}/body.md"
+  reply --thread T1
+  [ "${status}" -eq 0 ]
+  expect "$(jq -r .posted <<<"${output}")" true
+  expect "$(calls)" 1
+}
+
 @test "no call ever resolves a thread" {
   reply --thread T1
   reply --thread T1
