@@ -149,6 +149,18 @@ paged_fixtures() {
   expect "$(owner)" null
 }
 
+@test "each latest review carries the commit it reviewed" {
+  normalize '.latestOpinionatedReviews.nodes[0].commit = {oid: "bbb"}'
+  [ "${status}" -eq 0 ]
+  expect "$(field '.latestReviews[0].commit')" bbb
+}
+
+@test "each latest review carries its author's type, so a bot's review is told apart" {
+  normalize '.latestOpinionatedReviews.nodes[0].author = {__typename: "Bot", login: "coderabbitai"}'
+  [ "${status}" -eq 0 ]
+  expect "$(field '.latestReviews[0].authorType')" Bot
+}
+
 @test "keeps only the latest run of each check, keyed stably across heads" {
   normalize
   expect "$(field '.checks | length')" 2
