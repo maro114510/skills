@@ -68,7 +68,7 @@ EOF
   # The PR as pr-state prints it: not READY because a reviewer was requested, one passing Actions check.
   clean='{"repo":"o/r","number":7,"url":"https://github.com/o/r/pull/7","state":"OPEN","isDraft":false,
     "author":"me","viewer":"me","isCrossRepository":false,"baseRef":"main","headRef":"feat/x","head":"HEAD0",
-    "mergeable":"MERGEABLE","mergeStateStatus":"CLEAN","reviewDecision":"APPROVED",
+    "mergeable":"MERGEABLE","mergeStateStatus":"CLEAN","reviewDecision":"APPROVED","automationOwner":null,
     "checks":[{"key":"github-actions/.github/workflows/ci.yml/pull_request/test","name":"test","workflow":"CI",
       "kind":"check_run","rerunnable":true,"status":"pass","runId":100,"workflowRunId":10,"attempt":1,
       "url":"https://example.invalid/run/100","startedAt":"2026-01-01T00:00:00Z"}],

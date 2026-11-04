@@ -32,7 +32,7 @@ setup() {
   start="$(git rev-parse HEAD)"
 
   # The pull request as pr-state prints it, and the default branch as gh prints it
-  printf '{"repo":"o/r","number":7,"url":"https://github.com/o/r/pull/7","state":"OPEN","isDraft":false,"author":"me","viewer":"me","isCrossRepository":false,"baseRef":"main","headRef":"feat/x","head":"aaa"}\n' >"${tmp}/snap.json"
+  printf '{"repo":"o/r","number":7,"url":"https://github.com/o/r/pull/7","state":"OPEN","isDraft":false,"author":"me","viewer":"me","isCrossRepository":false,"baseRef":"main","headRef":"feat/x","head":"aaa","automationOwner":null}\n' >"${tmp}/snap.json"
   printf '#!/usr/bin/env bash\ncat "%s/snap.json"\n' "${tmp}" >"${tmp}/pr-state"
   printf '#!/usr/bin/env bash\necho "{\\"default_branch\\":\\"main\\"}"\n' >"${tmp}/bin/gh"
   chmod +x "${tmp}/pr-state" "${tmp}/bin/gh"
