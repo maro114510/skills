@@ -6,7 +6,8 @@
 # Output fields: repo, number, url, state, isDraft, author, viewer, isCrossRepository, baseRef,
 # headRef, head, mergeable, mergeStateStatus, reviewDecision, checks, reviewRequests, latestReviews,
 # threads, reviews, comments. Each comment carries id, author, authorAssociation, body, bodyHash,
-# createdAt, url, and isMinimized. Each check is the latest run of its key.
+# createdAt, url, and isMinimized. Each check is the latest run of its key. Each latest review
+# carries author, state, and the commit it reviewed.
 # Exit: 0 printed, 1 GitHub could not be read completely, 2 usage error.
 set -uo pipefail
 
@@ -53,7 +54,7 @@ QUERY='query($owner: String!, $repo: String!, $num: Int!,
         nodes { requestedReviewer { __typename
           ... on User { login } ... on Team { slug } ... on Bot { login } ... on Mannequin { login } } } }
       latestOpinionatedReviews(first: '"${PAGE}"', after: $cLatest) @include(if: $wLatest) {
-        totalCount pageInfo { hasNextPage endCursor } nodes { state author { login } } }
+        totalCount pageInfo { hasNextPage endCursor } nodes { state author { login } commit { oid } } }
       commits(last: 1) @include(if: $wChecks) { nodes { commit { oid statusCheckRollup {
         contexts(first: '"${PAGE}"', after: $cChecks) { totalCount pageInfo { hasNextPage endCursor } nodes { __typename
           ... on CheckRun { databaseId name status conclusion startedAt detailsUrl
@@ -149,7 +150,8 @@ NORMALIZE='
         | map(sort_by([.startedAt == null, .startedAt // "", .runId // 0]) | last)),
       reviewRequests: [.conns.reviewRequests.nodes[] | .requestedReviewer
         | {reviewer: (.login // .slug // null), type: .__typename}],
-      latestReviews: [.conns.latestOpinionatedReviews.nodes[] | {author: (.author.login // null), state}],
+      latestReviews: [.conns.latestOpinionatedReviews.nodes[] | {author: (.author.login // null), state,
+        commit: (.commit.oid // null)}],
       threads: [.conns.reviewThreads.nodes[] | {id, isResolved, isOutdated, path, line,
         comments: [.comments.nodes[] | comment]}],
       reviews: [.conns.reviews.nodes[] | comment + {state}],
