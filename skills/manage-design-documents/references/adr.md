@@ -10,7 +10,7 @@
 <The chosen approach>
 
 ## Rationale
-<The decisive reasons, and each real alternative with why it lost>
+<The decisive reasons, and each alternative the sources name with why it lost>
 
 ## Consequences
 <Benefits, costs, limitations, and accepted risks>

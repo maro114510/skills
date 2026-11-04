@@ -25,7 +25,7 @@ Read the repository instructions, the related Design Docs and ADRs, and the code
 
 Never change the design to match code or an Issue. Where they differ in what the request concerns, ask which is wrong; report other differences. Code that does not implement the design yet is not a difference.
 
-Ask, all at once and most important first, only when the sources cannot settle the design or a wrong guess could corrupt data, expose a security hole, break a contract, or be irreversible. Leave out any other rule nobody stated; never invent one.
+Ask, all at once and most important first, only when the sources cannot settle the design or a wrong guess could corrupt data, expose a security hole, break a contract, or be irreversible. Leave out any other rule nobody stated, without asking; never invent one.
 
 ## 2. Write
 
