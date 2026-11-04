@@ -122,8 +122,9 @@ check_codex() {
 
   # Codex injects only the first CODEX_SKILL_PROMPT_BYTES of a plugin's skill, and says so only in a
   # UI warning, so a longer skill must end with an end marker and name it within that prefix.
-  local body end_marker
-  for skill in "${CODEX_EXPLICIT_SKILLS[@]}"; do
+  local body end_marker source_body
+  for source_body in "${repo_root}"/skills/*/SKILL.md; do
+    skill="$(basename "$(dirname "${source_body}")")"
     body="${project_dir}/.agents/skills/${skill}/SKILL.md"
     end_marker="<!-- end of ${skill} -->"
     if [[ ! -f "${body}" ]]; then
