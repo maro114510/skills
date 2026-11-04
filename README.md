@@ -26,6 +26,7 @@ gh skill install maro114510/skills --agent claude-code --scope user
 | `domain-master` | Review domain model and state-transition code for illegal states that bypass validation. |
 | `frame-problem` | Frame a vague problem before implementation and converge on a direction. |
 | `locate` | Find the local worktree, branch, and current state for a pull request or Issue URL before working on it. |
+| `manage-design-documents` | Decide whether a change needs a Design Doc, an ADR, both, or neither, and keep them small and free of metadata Git already holds. |
 | `orchestrate-epic` | Turn an Epic's child Issues into verified PRs in dependency order, leaving every merge to a human. |
 | `pr-doc-review-pe` | Review design documents from a Principal Engineer perspective. |
 | `pr-review-pe` | Review code diffs from a Principal Engineer perspective. |
