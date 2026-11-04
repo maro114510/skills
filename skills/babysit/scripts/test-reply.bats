@@ -30,8 +30,19 @@ if [ -n "\$expr" ]; then jq -r "\$expr" <<<"\$resp"; else echo "\$resp"; fi
 EOF
   chmod +x "${tmp}/gh"
   export BABYSIT_GH="${tmp}/gh"
+  # A stub pr-state that prints the pull request as snap.json holds it, or fails on demand.
+  printf '#!/usr/bin/env bash\n[ -e "%s/pr-state-fails" ] && exit 1\ncat "%s/snap.json"\n' "${tmp}" "${tmp}" >"${tmp}/pr-state"
+  chmod +x "${tmp}/pr-state"
+  export BABYSIT_PR_STATE="${tmp}/pr-state"
+  owned_by null
   printf 'Fixed in abc1234.\nありがとう\n' >"${tmp}/body.md"
   bash "${scripts}/ledger.sh" start o/r 7 "${token}" >/dev/null
+}
+
+# Writes a pull request whose automationOwner is the JSON value $1.
+owned_by() {
+  jq -nc --argjson owner "$1" '{repo: "o/r", number: 7, state: "OPEN", author: "me", viewer: "me",
+    isCrossRepository: false, automationOwner: $owner}' >"${tmp}/snap.json"
 }
 
 reply() {
@@ -76,6 +87,40 @@ expect() {
   run bash "${scripts}/reply.sh" o/r 7 --session other --thread T1 --body-file "${tmp}/body.md"
   [ "${status}" -eq 3 ]
   expect "$(calls)" 0
+}
+
+@test "a reply on a pull request another automation owns exits 11, names it, posts nothing, and counts nothing" {
+  owned_by '"orchestrate-epic"'
+  reply --thread T1
+  [ "${status}" -eq 11 ]
+  expect "$(jq -r .posted <<<"${output}")" false
+  expect "$(jq -r .owner <<<"${output}")" orchestrate-epic
+  expect "$(calls)" 0
+  expect "$(ledger '.replies.T1 // 0')" 0
+  expect "$(ledger '.own.replies // [] | length')" 0
+}
+
+@test "a reply when the pull request cannot be read exits 1 and posts nothing" {
+  : >"${tmp}/pr-state-fails"
+  reply --conversation
+  [ "${status}" -eq 1 ]
+  expect "$(jq -r .posted <<<"${output}")" false
+  expect "$(calls)" 0
+  rm "${tmp}/pr-state-fails"
+  jq -nc '{repo: "o/r", number: 7}' >"${tmp}/snap.json"
+  reply --conversation
+  [ "${status}" -eq 1 ]
+  expect "$(calls)" 0
+}
+
+@test "an owned pull request takes no reply until a human deletes the marker, then the reply goes out" {
+  owned_by '"orchestrate-epic"'
+  reply --thread T1
+  [ "${status}" -eq 11 ]
+  owned_by null
+  reply --thread T1
+  [ "${status}" -eq 0 ]
+  expect "$(calls)" 1
 }
 
 @test "a thread reply goes to that thread, takes its comment id, and counts on the thread" {

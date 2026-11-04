@@ -4,10 +4,12 @@
 # A thread reply answers that review thread. --conversation posts a comment on the pull request, where issue
 # comments and review bodies share one capped thread. At most 2 agent replies are posted per thread.
 # It only ever replies: nothing here resolves or unresolves a thread.
-# Prints one JSON line. Test hook BABYSIT_GH replaces gh.
+# Prints one JSON line. Test hooks BABYSIT_GH replaces gh and BABYSIT_PR_STATE replaces pr-state.
 # A body asking CodeRabbit to approve or resolve is refused, so a reply never manufactures an approval.
-# Exit: 0 posted, 1 the post failed, 2 usage error, 3 the lock is not ours, 10 the thread already holds 2 replies,
-# 11 refused: the body asks a bot to approve or resolve.
+# A pull request that another automation owns, by the marker pr-state reads as automationOwner, takes no reply.
+# Exit: 0 posted, 1 the post failed or the pull request could not be read, 2 usage error, 3 the lock is not ours,
+# 10 the thread already holds 2 replies, 11 refused: the body asks a bot to approve or resolve, or another
+# automation owns the pull request, named in "owner".
 # An exit of 1 or 3 with "posted":true in the JSON line means the reply is out and only the ledger write failed.
 set -uo pipefail
 
@@ -16,6 +18,7 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${script_dir}/common.sh"
 
 GH="${BABYSIT_GH:-gh}"
+PR_STATE="${BABYSIT_PR_STATE:-${script_dir}/pr-state.sh}"
 MAX_REPLIES=2
 
 usage() {
@@ -85,6 +88,21 @@ hash="$(printf '%s' "${body}" | jq -Rrs '@base64' | tr -d '\n' | sha256)"
 
 # The lock check comes first, so a session that lost the PR posts nothing.
 bash "${script_dir}/ledger.sh" touch "${repo}" "${pr}" "${token}" || exit $?
+# The owner is read before anything is written, and a snapshot that cannot tell posts nothing.
+snap="$("${PR_STATE}" "${repo}" "${pr}" 2>/dev/null </dev/null)"
+owner_type="$(jq -r 'if type == "object" and has("automationOwner") then (.automationOwner | type) else "unreadable" end' \
+  <<<"${snap}" 2>/dev/null)"
+case "${owner_type}" in
+null) ;;
+string)
+  jq -c '{posted: false, reason: "another automation owns the pull request", owner: .automationOwner}' <<<"${snap}"
+  exit 11
+  ;;
+*)
+  jq -nc '{posted: false, reason: "the pull request could not be read, so its owner is unknown"}'
+  exit 1
+  ;;
+esac
 count="$(bash "${script_dir}/ledger.sh" replies "${repo}" "${pr}" "${target}")" || exit 2
 if ((count >= MAX_REPLIES)); then
   jq -nc --arg target "${target}" --argjson count "${count}" \

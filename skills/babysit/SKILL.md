@@ -13,7 +13,7 @@ babysit takes only a PR, and the PR decides what it does.
 
 | PR | Behavior |
 |---|---|
-| Drivable: you authored it, from a branch in the same repository, and it is open | Drive. Loops on `wait.sh`, repairs CI failures, review feedback, and conflicts in a dedicated worktree, pushes through the gate, and replies |
+| Drivable: you authored it, from a branch in the same repository, it is open, and no other automation owns it | Drive. Loops on `wait.sh`, repairs CI failures, review feedback, and conflicts in a dedicated worktree, pushes through the gate, and replies |
 | Any other | Report. Reads GitHub and the ledger once, reports, says why it cannot be driven, writes nothing, and stops |
 
 Drive stops and reports on an approval at the head, READY, merged, or closed. Nothing merges or resolves a thread. Only drive pushes, through `push.sh`, and posts a comment, through `reply.sh`.
@@ -42,7 +42,7 @@ Then handle any argument left over.
 
 Run `bash <scripts>/pr-state.sh <owner/repo> <n>`. On exit 1, GitHub could not be read: say so and stop.
 
-Drive when `viewer` equals `author`, `isCrossRepository` is false, and `state` is `OPEN`. Otherwise Report, and name every condition that failed: authored by `<author>`, not `<viewer>`; from a fork; or `<state>`, not open. Drive never touches a PR you did not author or one from a fork, and the gate checks the same before every push.
+Drive when `viewer` equals `author`, `isCrossRepository` is false, `state` is `OPEN`, and `automationOwner` is null. Otherwise Report, and name every condition that failed: authored by `<author>`, not `<viewer>`; from a fork; `<state>`, not open; or owned by the automation `<automationOwner>`, and then say that deleting the `<!-- automation-owner: ... -->` line from the PR body hands the PR over. Drive never touches a PR you did not author, one from a fork, or one another automation owns. The gate checks the same before every push, and `reply.sh` checks the owner before every reply.
 
 ## Report
 

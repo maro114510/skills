@@ -136,6 +136,15 @@ author="$(lower "$(pf '.author // ""')")"
 # Pull request is open
 [[ "$(pf '.state // ""')" == OPEN ]] || refuse "the pull request is not open"
 
+# No other automation owns the pull request. A snapshot without the field cannot tell, so it refuses too.
+owner_type="$(pf 'if has("automationOwner") then (.automationOwner | type) else "missing" end')"
+if [[ "${owner_type}" != null ]]; then
+  if [[ "${owner_type}" == string ]]; then
+    emit refuse "another automation owns the pull request: $(pf .automationOwner)" "$(jq -c '{owner: .automationOwner}' <<<"${snap}")"
+  fi
+  refuse "another automation owns the pull request, or the snapshot cannot tell"
+fi
+
 # Head branch is not the default branch
 branch="$(pf '.headRef // ""')"
 if [[ -z "${branch}" || "${branch}" == -* ]] || ! git check-ref-format "refs/heads/${branch}"; then

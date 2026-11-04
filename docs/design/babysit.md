@@ -18,6 +18,7 @@ babysit <PR URL> [--reset-budget]
 |---|---|
 | The URL of the viewer's own open PR from the same repository | Runs until a stop event |
 | `--reset-budget` | Sets the push and reply budgets back to zero before running |
+| The URL of a PR another automation owns, as Writers defines | Exit 2, naming the owner |
 | Any other PR, another form or argument, or an unset `skills.babysit.agent` | Exit 2 |
 
 | Exit | Meaning |
@@ -33,6 +34,20 @@ babysit <PR URL> [--reset-budget]
 - The agent command must be unable to push or write to GitHub
   - babysit cannot check this, and its safety depends on it
   - The agent never needs either, because `babysit.sh` pushes and replies
+
+## Writers
+
+- At most one writer pushes to or replies on a PR at a time
+- A PR body line that holds only `<!-- automation-owner: <id> -->` names automation `<id>` as the PR's only writer
+  - `<id>` is letters, digits, `.`, `_`, and `-`, and the first such line counts
+  - An automation that opens a PR for itself writes the line, as orchestrate-epic does, and babysit never writes it
+- babysit refuses an owned PR at start, the gate refuses each push to it, and `reply` refuses each reply on it
+  - A run that started before the line was added stops at its next push or reply
+  - An unreadable owner counts as owned
+- The line outlives the owner's session, so an owner whose session died still holds the PR
+- A human hands the PR over by deleting the line, and nothing tells the former owner
+  - Delete it only once the owner no longer works on the PR, or both write again
+- A PR without the line is the viewer's own PR, driven as before
 
 ## Split
 
@@ -77,6 +92,7 @@ flowchart LR
 `pr-state` output covers these fields.
 
 - PR state, draft flag, author, viewer login, and `isCrossRepository`
+- `automationOwner`, the `<id>` of the owner line that Writers defines, or null
 - Base ref, head ref, head SHA, and conflict state
 - Latest run of each check
 - Review threads, reviews, issue comments, and review requests
@@ -159,7 +175,7 @@ flowchart TD
 | `worktree prepare` | Fetches the PR branch into a private ref, then creates or resets the worktree, with leftover work discarded | 0, 1 head moved or unreadable, 2, 3 |
 | `worktree remove` | Removes the worktree | 0, 1, 2, 3 |
 | `push` | Runs the gate, lists the sha, pushes `sha:refs/heads/<branch>`, then counts one push | 0, 1, 4, 10 park, 11 refuse, 2, 3 |
-| `reply` | Posts a thread reply, or a PR comment for an issue comment or review body, then counts one reply | 0, 1, 4, 10 budget spent, 11 approval command, 2, 3 |
+| `reply` | Posts a thread reply, or a PR comment for an issue comment or review body, then counts one reply | 0, 1, 4, 10 budget spent, 11 approval command or another automation owns the PR, 2, 3 |
 | `park` | Records the item as parked with a reason and shows one notification | 0, 2, 3 |
 
 | Exit | Meaning for `push` and `reply` |
@@ -235,6 +251,7 @@ The first one that fails is the reason.
 | The viewer is the author |
 | The branch is in the same repository |
 | The pull request is open |
+| No other automation owns the pull request, as Writers defines |
 | The head branch is not the default branch |
 | origin is the pull request repository for fetch and push |
 | The remote head is the start commit |
@@ -271,6 +288,8 @@ The first one that fails is the reason.
 | Removed test cases | Only deleted files and added skips are read |
 | Secret values with brackets, parentheses, or quotes | An unquoted value with those characters reads as a call or a reference, so it does not park |
 | Mode-only changes | No line changes |
+| A PR opened before its owner wrote the owner line | Nothing marks it, so babysit drives it |
+| A human pushing or replying on an owned PR | The owner line binds automations only |
 | An agent command that can push or write to GitHub | babysit cannot detect it, so the user must configure the command without that access |
 | Approval commands the guard does not know | Only known bot commands are refused |
 | A head whose checks have not registered yet | It reads as passing, so an approval right after a push can end the run early |
@@ -297,6 +316,7 @@ The first one that fails is the reason.
 | Bot comments | No special handling until their cost is measured |
 | API failure | Back off from 30 seconds up to 8 minutes, and exit 1 at 5 consecutive failures |
 | Concurrency | One run per PR through the lock |
+| Writers | An owner line in the PR body, because it lives on GitHub, so it holds across hosts and after the owner's session dies, and babysit reads it without knowing the owner. A label needs repository setup, and GitHub's handling of a missing one is undocumented. Reading another tool's lock or branch names would tie babysit to that tool, and a shared lock would hold only on one host |
 | Idle cost | An unchanged PR costs no agent call |
 | Push path | Only `push` pushes, and it gates, lists, pushes, and counts in one call, so a rejected push never spends the budget |
 | Notification | `park` hands comment text to `osascript` as an argument, never as script |

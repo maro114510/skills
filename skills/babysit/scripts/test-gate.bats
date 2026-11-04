@@ -33,7 +33,8 @@ setup() {
 
   # The pull request as pr-state prints it
   clean='{"repo":"o/r","number":7,"url":"https://github.com/o/r/pull/7","state":"OPEN","isDraft":false,
-    "author":"me","viewer":"me","isCrossRepository":false,"baseRef":"main","headRef":"feat/x","head":"aaa"}'
+    "author":"me","viewer":"me","isCrossRepository":false,"baseRef":"main","headRef":"feat/x","head":"aaa",
+    "automationOwner":null}'
   set_snap '.'
   printf '#!/usr/bin/env bash\n[ -e "%s/pr-state-fails" ] && exit 1\ncat "%s/snap.json"\n' "${tmp}" "${tmp}" >"${tmp}/pr-state"
   chmod +x "${tmp}/pr-state"
@@ -213,6 +214,35 @@ expect_usage() {
   set_snap '.state = "MERGED"'
   gate_push
   expect_refuse open
+}
+
+@test "refuses a pull request that another automation owns, and names that automation" {
+  commit_file src.txt fix
+  set_snap '.automationOwner = "orchestrate-epic"'
+  gate_push
+  expect_refuse "another automation owns"
+  expect "$(field .owner)" orchestrate-epic
+}
+
+@test "refuses when the snapshot cannot say whether another automation owns the pull request" {
+  commit_file src.txt fix
+  set_snap 'del(.automationOwner)'
+  gate_push
+  expect_refuse "another automation owns"
+  set_snap '.automationOwner = 7'
+  gate_push
+  expect_refuse "another automation owns"
+}
+
+@test "an owned pull request stays refused until a human deletes the marker, then the push is allowed" {
+  commit_file src.txt fix
+  set_snap '.automationOwner = "orchestrate-epic"'
+  gate_push
+  expect_refuse "another automation owns"
+  set_snap '.automationOwner = null'
+  gate_push
+  expect "${status}" 0
+  expect "$(field .verdict)" allow
 }
 
 @test "refuses a pull request whose snapshot is for another repository" {
