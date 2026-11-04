@@ -70,6 +70,10 @@ A criterion about the state the step leaves, such as a pull request that exists 
 - Record the command or input and the observed result, summarized. Evidence can be published on GitHub, so never paste a token, credential, or environment value.
 - When an observation surprises you, by failing or by passing where it should fail, suspect the observation first: a stale build, a cached result, the wrong directory, commit, binary, file, or target. Conclude about the system only after the method checks out.
 
+### 2.5 Behavior Only the Running App Shows
+
+Use this only when no test or command in the repository reaches the behavior. Start the app with its documented command, drive the feature as a user does, record the command and result outside the worktree, and tear down what you started; if no usable app results, report `No evidence`.
+
 ## 3. Never Evidence
 
 - A check run cited for a criterion that does not name that check, such as `make ci -> exit 0` or `go test ./... -> exit 0` for a criterion about a feature. It shows that nothing broke, not that the behavior exists. Report it as a check, under `CHECKS` in autonomous mode.
