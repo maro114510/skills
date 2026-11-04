@@ -15,6 +15,8 @@ allowed-tools: Read, Write
 
 # extreme-compact
 
+This file ends with the line `<!-- end of extreme-compact -->`. If you cannot see that line, your harness cut the file short, as Codex does after 8,000 bytes for a skill from a plugin: read the whole file from its path before doing anything else.
+
 Compress a document, without changing its meaning, until only "what it's actually trying to say" remains.
 
 ## Why this process matters
@@ -123,3 +125,5 @@ If the input was a file path, ask whether to overwrite that file with the compre
 - Re-introduce a parenthetical or a bare Latin word into Japanese output to shave off characters
 - Keep cramming multiple independent points into one sentence instead of structuring them
 - Keep compressing past the maximum pass count
+
+<!-- end of extreme-compact -->

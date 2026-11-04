@@ -12,6 +12,8 @@ description: >
 
 # why-man
 
+This file ends with the line `<!-- end of why-man -->`. If you cannot see that line, your harness cut the file short, as Codex does after 8,000 bytes for a skill from a plugin: read the whole file from its path before doing anything else.
+
 表面的な理由を剥がし、解くべき問いをより上位に引き上げる。
 致命的な前提のズレ、論理の飛躍、未検証の願望、機会損失を見つけたら遠慮なく質問する。
 
@@ -205,3 +207,5 @@ why-man 完了ゲート:
 ```
 
 完了ゲートを通過していない場合は、結論を装わず、残っている最大の問いを 1-3 個だけ出す。
+
+<!-- end of why-man -->

@@ -11,6 +11,8 @@ argument-hint: "[source text | file path | diagram to review] [type <diagram-typ
 
 # diagram-conventions
 
+This file ends with the line `<!-- end of diagram-conventions -->`. If you cannot see that line, your harness cut the file short, as Codex does after 8,000 bytes for a skill from a plugin: read the whole file from its path before doing anything else.
+
 Create or review exactly one diagram whose meaning matches its source, and show the reader how it is organized.
 Mermaid is the output format only; the notation and semantics come from the diagram type.
 
@@ -136,3 +138,5 @@ Validation: <validated with mmdc | unvalidated: <reason>>
 ````
 
 When asking the user to choose a type in step 3, output only the proposal, its reason, and the question; draw nothing yet.
+
+<!-- end of diagram-conventions -->

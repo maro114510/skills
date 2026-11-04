@@ -12,6 +12,8 @@ argument-hint: "[optional hint, e.g. an issue number or message override]"
 
 # commit
 
+This file ends with the line `<!-- end of commit -->`. If you cannot see that line, your harness cut the file short, as Codex does after 8,000 bytes for a skill from a plugin: read the whole file from its path before doing anything else.
+
 ## Step 1. Inspect the working tree
 
 ```bash
@@ -204,3 +206,5 @@ Merged with a merge commit, red `test:` commits stay on the default branch, so b
 
 After committing — whether auto-committed or approved via Step 6 — show the user the commit hash and subject line in one short line.
 Never commit silently without this confirmation, even in the auto-commit path.
+
+<!-- end of commit -->

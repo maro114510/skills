@@ -13,6 +13,8 @@ allowed-tools: AskUserQuestion, Bash, Read, Edit, Write, Glob, Grep, WebFetch, W
 
 # write-researched-document
 
+This file ends with the line `<!-- end of write-researched-document -->`. If you cannot see that line, your harness cut the file short, as Codex does after 8,000 bytes for a skill from a plugin: read the whole file from its path before doing anything else.
+
 主要主張から出典、反証、適用範囲、確信度へ遡れる文書を作る。
 根拠が不足または矛盾する場合は、文章を整えるより主張の限定・仮説化・削除を優先する。
 
@@ -124,3 +126,5 @@ Checker全文ではなく、判定、修正文、不足根拠、資料取得状�
 - 追加調査した証拠ギャップ
 - Checkerの実行有無と未解決判定
 - 検証結果、コミット状態、残る制約
+
+<!-- end of write-researched-document -->

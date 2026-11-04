@@ -12,6 +12,8 @@ argument-hint: "[repo <owner/repo>] [lang <ja|en>] [project <n>]"
 
 # create-github-issues
 
+This file ends with the line `<!-- end of create-github-issues -->`. If you cannot see that line, your harness cut the file short, as Codex does after 8,000 bytes for a skill from a plugin: read the whole file from its path before doing anything else.
+
 Create a GitHub Epic and child Issues from conversation context.
 Write concise, length-capped bodies (requirements separated from specs), model dependencies explicitly, then link hierarchy and dependencies via native `gh` CLI flags and render the dependency graph in the Epic.
 
@@ -194,3 +196,5 @@ Note in the completion report (Step 6) that the Epic's number is lowest, `Tn` nu
 ## Step 6: Report Completion
 
 Use the "Step 6: Completion Report" template in `references/templates.<LANG>.md`. When the doc-update `Tn`'s dependency was wired transitively rather than directly, the report must say so explicitly — a later reader may otherwise "fix" the ordering by adding or removing edges.
+
+<!-- end of create-github-issues -->

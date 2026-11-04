@@ -21,6 +21,8 @@ argument-hint: "[description of what to implement] [autonomous] [branch <name>]"
 
 # implement
 
+This file ends with the line `<!-- end of implement -->`. If you cannot see that line, your harness cut the file short, as Codex does after 8,000 bytes for a skill from a plugin: read the whole file from its path before doing anything else.
+
 Prioritize implementation quality. Scale the flow to the task: skip steps that add nothing and go deep only where it matters.
 
 The phases below are the core, and both modes run them.
@@ -302,3 +304,5 @@ Autonomous mode follows its Phase 7 row, then emits the report from Autonomous M
 Normal mode follows `references/interactive.md` § Phase 7.
 
 Never push. Do not create a PR until the user explicitly says "create a PR."
+
+<!-- end of implement -->

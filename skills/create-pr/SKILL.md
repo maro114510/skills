@@ -14,6 +14,8 @@ argument-hint: "[ready] [base <branch>] [lang <ja|en>]"
 
 # create-pr
 
+This file ends with the line `<!-- end of create-pr -->`. If you cannot see that line, your harness cut the file short, as Codex does after 8,000 bytes for a skill from a plugin: read the whole file from its path before doing anything else.
+
 Analyze the branch changes and create a reviewer-focused GitHub pull request, in the language Step 1 resolves.
 
 ## Arguments
@@ -215,3 +217,5 @@ Run nothing more: the output holds the PR URL and every link, and `--web` alread
 Show the PR URL, whether it is draft or ready, every linked issue, and any `NOTICE` or `WARN` line verbatim.
 If a `NOTICE` rewrote an issue to `Related` while a commit footer still says `Closes` for it, warn that merging would still close the issue through that footer, even with a squash merge under GitHub's default message; edit the squash message or reword the footer before merging.
 If a `NOTICE` kept `Closes` unlinked on a non-default base, tell the user to run `create-linked-pr.sh --link <url>` once the PR is retargeted to the default branch.
+
+<!-- end of create-pr -->

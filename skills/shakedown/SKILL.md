@@ -18,6 +18,8 @@ argument-hint: "[PR番号 | base..head | design docパス] [ticket <チケット
 
 # shakedown
 
+This file ends with the line `<!-- end of shakedown -->`. If you cannot see that line, your harness cut the file short, as Codex does after 8,000 bytes for a skill from a plugin: read the whole file from its path before doing anything else.
+
 実装者本人の盲点を突くための QA ランブックを生成する。対象は自動テストが構造的に拾えない欠陥である: 初見の操作者だけが引っかかる UI 挙動、本番で一度も実行されたことのない経路、非同期ジョブのスケール限界、使用中データへの破壊的操作。
 
 成果物は文書だが、このスキルの責任範囲は文書生成で終わらない。QA の失敗は「文書に書いた」と「実際に実行・追跡される」の間のギャップで起きる。だから「Blocking 項目を実装者以外が実行する割り当て」と「発見した問題の Issue 化導線」までを文書構造として縛る。
@@ -168,3 +170,5 @@ Blocking は実装者以外の実行を推奨する。実装者は自分のコ�
 - **単体〜結合レベルのテストケース列挙**: 本スキルは扱わない。第 1 層の切り分け表で「自動テストで固定すべきだがテストがない」と判明した観点は、本スキルで抱え込まず、テスト追加が必要な観点として報告に含める。
 - **/self-qa**(対象リポジトリのコマンド): PRD(Notion)+ Figma 起点のチェックリスト生成。本スキルは拡張も置換もしない。出力形式・保存先も共有しない。
 - 本スキルが出すのは「人間が実際に手を動かして変更を揺さぶる実行計画書」であり、自動テストの代替ではない。
+
+<!-- end of shakedown -->

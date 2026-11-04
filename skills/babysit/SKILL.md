@@ -7,6 +7,8 @@ argument-hint: "<pr-url | owner/repo#n | n>"
 
 # babysit
 
+This file ends with the line `<!-- end of babysit -->`. If you cannot see that line, your harness cut the file short, as Codex does after 8,000 bytes for a skill from a plugin: read the whole file from its path before doing anything else.
+
 Scripts watch; the model acts only on a change. `docs/design/babysit.md` in the skills repository is the specification.
 
 babysit takes only a PR, and the PR decides what it does.
@@ -161,3 +163,5 @@ On `merged` or `closed`, run `bash <scripts>/worktree.sh remove <owner/repo> <n>
 - A thread the agent answered stays unresolved until a human resolves it, so a drive run can end in `stalled` or `limit` with answered threads open.
 - A head with no check 10 minutes after it was first seen counts as having no CI, and reviews alone decide READY.
 - `limit` fires 8 hours after `ledger.sh start`, or when 5 rounds are used and a repairable item is still pending. Say which. A new session restarts the 8 hours but not the rounds, which count every push to the PR.
+
+<!-- end of babysit -->

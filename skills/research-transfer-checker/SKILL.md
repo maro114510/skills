@@ -14,6 +14,8 @@ argument-hint: "[standard|deep|high_impact] <主張> <参照元>"
 
 # research-transfer-checker
 
+This file ends with the line `<!-- end of research-transfer-checker -->`. If you cannot see that line, your harness cut the file short, as Codex does after 8,000 bytes for a skill from a plugin: read the whole file from its path before doing anything else.
+
 研究結果の援用が原研究の射程内にあるかを検査する。目的は、主張の真偽を最終決定することではなく、原研究から援用主張へ至る推論を監査可能にすることである。
 
 ## 実行モード
@@ -221,3 +223,5 @@ Step 4・Step 5 で確認した内容をもとに、この命題が政策、医�
 `standard` モードでは「追加探索」「参照した規範・報告基準」「具体的な害の経路評価」の3セクションを省略する。`deep` モードでは「追加探索」だけを出力し、残り2セクションは省略する。`high_impact` モードはすべてのセクションを出力する。
 
 特定の軸や命題の一部だけを確認できない場合も、上記の様式でそのまま出力し、確認できない軸だけを `unverifiable` / `not_assessed` とする。2つの `source_access` が異なる場合も両方をそのまま出力し、弱い方の資料に依存しない軸の値を巻き込んで制限しない。資料に一切アクセスできず、すべての命題ですべての軸が判定不能になる場合だけ、命題別の検査を省略し、確認できた書誌情報、不足資料、検証再開に必要な情報、主張自体から予見できる暫定的な社会的リスクを出力する。
+
+<!-- end of research-transfer-checker -->

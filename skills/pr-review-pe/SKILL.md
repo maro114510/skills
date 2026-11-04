@@ -8,6 +8,8 @@ argument-hint: "<pr-number or url>"
 
 # pr-review-pe
 
+This file ends with the line `<!-- end of pr-review-pe -->`. If you cannot see that line, your harness cut the file short, as Codex does after 8,000 bytes for a skill from a plugin: read the whole file from its path before doing anything else.
+
 コード差分 PR を 4 phase (Brainstorm → Self-Refine → Filter → Meta-Review) でレビューする orchestrator。
 本スキルは Layer-1 (コード差分) に専念する。
 
@@ -253,3 +255,5 @@ FN log — deep 除外: <specialist 名 / 指摘概要（10 語以内）/ 除外
 
 指摘事項がない場合は `### 指摘事項` 内に「指摘事項なし。Approve 推奨。」と書く (見出しは省略しない)。
 `[good]` は `### 良い点` セクション専用。`### 良い点` は指摘事項なしでも出力してよい。
+
+<!-- end of pr-review-pe -->

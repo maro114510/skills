@@ -13,6 +13,8 @@ argument-hint: "[機能・課題の説明 or 関連ファイルパス]"
 
 # frame-problem
 
+This file ends with the line `<!-- end of frame-problem -->`. If you cannot see that line, your harness cut the file short, as Codex does after 8,000 bytes for a skill from a plugin: read the whole file from its path before doing anything else.
+
 機能や施策に着手する前に、**問題そのものを枠組み化し、そのまま採用する解決策まで決めきる**スキル。
 品質最優先で、時間をかけてでもユーザーが気づいていない致命的な前提のズレや論理の漏れを発見して問いかける。
 
@@ -181,3 +183,5 @@ Step 3 のループ収束後、以下を**出力として**チェックする。
 両方のゲートを通過した場合のみ出力する：
 
 > 問題の枠組みと採用する解決策が固まりました。次は設計文書に起こす、または実装に進む段階です。
+
+<!-- end of frame-problem -->
