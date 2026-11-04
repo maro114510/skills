@@ -11,9 +11,9 @@ argument-hint: "[change or decision to document | document path to review]"
 
 Work in the repository the user names, otherwise the current one. Never commit, push, or open a pull request.
 
-- A Design Doc states what a system or domain is meant to be, implemented or not. It never states how it is built, how it was decided, how far it is implemented, every edge case, coding conventions, or slogans.
+- A Design Doc states what a system or domain is meant to be, implemented or not. It never states how it is built (algorithms, classes, full API or schema, deployment), how it was decided, how far it is implemented, every edge case, coding conventions, or slogans.
 - An ADR records one consequential decision and why, not the investigation behind it.
-- Neither carries status, authors, dates, a changelog, an owner, or an approval state.
+- Never add status, authors, dates, a changelog, an owner, or an approval state to either.
 
 ## 1. Decide
 
