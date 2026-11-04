@@ -16,4 +16,4 @@
 <Benefits, costs, limitations, and accepted risks>
 ```
 
-Use exactly these four sections, and list the ADR in the Design Doc's References.
+Use exactly these four sections, and list the ADR in the References of the Design Doc that covers it, if any.

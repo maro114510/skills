@@ -35,11 +35,11 @@ Follow `references/design-doc.md` or `references/adr.md` in this skill's directo
 
 ## 3. Delete an ADR
 
-Delete without asking only when the request replaces or retracts the ADR; ask when it only seems obsolete. Move any part that still applies into the replacing ADR, or cut the ADR down to that part instead of deleting it. Fix every reference `git grep` finds by its file name, and delete with `git rm`. If `git rm` refuses, Git does not hold the content, so ask.
+Delete without asking only when the request replaces or retracts the ADR; ask when it only seems obsolete. Move any part that still applies into the replacing ADR, or cut the ADR down to that part instead of deleting it. Fix every reference `git grep` finds by its file name, and delete with `git rm`. If `git rm` refuses, Git does not hold the current content, so ask.
 
 ## 4. Review
 
-When asked to review a document, list each violation of this skill as `<file:line>: <rule> -> <fix>`, and edit nothing.
+When asked to review a document, read the matching reference, then list each violation of this skill as `<file:line>: <rule> -> <fix>`, and edit nothing.
 
 ## Output
 
