@@ -1,6 +1,7 @@
 #!/usr/bin/env bats
 # Tests for self-review.sh, using a stub reviewer CLI on PATH.
 # shellcheck disable=SC2292 # bats fails a test on a mid-test `[[ ]]` only under bash 4.1+; `[ ]` works on every bash.
+# shellcheck disable=SC2030,SC2031 # result_line reads ${lines} inside the same @test subshell that `run` set it in.
 
 setup() {
   target="${BATS_TEST_DIRNAME}/self-review.sh"
@@ -87,7 +88,7 @@ bash_permission() {
 # Sets ${config} to the OpenCode config self-review.sh passes to the reviewer.
 load_opencode_config() {
   # shellcheck disable=SC2016 # expanded by the stub, not here
-  run_stub "$(opencode_stub v2 'printf "%s" "${OPENCODE_CONFIG_CONTENT}" | jq -c .')" '' opencode
+  run_stub "$(opencode_stub v2 'printf "%s" "${OPENCODE_CONFIG_CONTENT}" | jq -c .; echo; echo "REVIEW_VERDICT: none"')" '' opencode
   [ "${status}" -eq 0 ]
   config="$(grep -m1 '^{' <<<"${output}")"
   [ -n "${config}" ]
@@ -166,7 +167,7 @@ expect_permission() {
 
 @test "opencode passes the review prompt as the message and asks for one command per call" {
   # shellcheck disable=SC2016 # expanded by the stub, not here
-  run_stub "$(opencode_stub v2 'echo "ARGS: $*"')" '' opencode
+  run_stub "$(opencode_stub v2 'echo "ARGS: $*"; echo "REVIEW_VERDICT: none"')" '' opencode
   [ "${status}" -eq 0 ]
   grep -qF -- "ARGS: run --standalone Review the uncommitted changes." <<<"${output}"
   grep -qF -- "one command per bash call" <<<"${output}"
@@ -180,14 +181,14 @@ expect_permission() {
 # and ships the `review` command.
 @test "opencode v2 runs the review standalone, and --standalone is its only flag" {
   # shellcheck disable=SC2016 # expanded by the stub, not here
-  run_stub "$(opencode_stub v2 'echo "ARGS: $*"')" '' opencode
+  run_stub "$(opencode_stub v2 'echo "ARGS: $*"; echo "REVIEW_VERDICT: none"')" '' opencode
   [ "${status}" -eq 0 ]
   [ "$(argv_flags)" = "--standalone" ]
 }
 
 @test "opencode v1 runs the review command, and --command is its only flag" {
   # shellcheck disable=SC2016 # expanded by the stub, not here
-  run_stub "$(opencode_stub v1 'echo "ARGS: $*"')" '' opencode
+  run_stub "$(opencode_stub v1 'echo "ARGS: $*"; echo "REVIEW_VERDICT: none"')" '' opencode
   [ "${status}" -eq 0 ]
   grep -qF -- "ARGS: run --command review Review the uncommitted changes." <<<"${output}"
   [ "$(argv_flags)" = "--command" ]
@@ -223,7 +224,7 @@ expect_permission() {
   real="$(command -v opencode)" || skip "opencode is not installed"
   # shellcheck disable=SC2016 # expanded by the stub, not here
   run_stub "if [ \"\$1 \$2\" = \"run --help\" ] || [ \"\$1\" = --version ]; then exec '${real}' \"\$@\"; fi"'
-echo "ARGS: $*"' '' opencode
+echo "ARGS: $*"; echo "REVIEW_VERDICT: none"' '' opencode
   [ "${status}" -eq 0 ]
   flags="$(argv_flags)"
   [ -n "${flags}" ]
@@ -263,7 +264,7 @@ echo "ARGS: $*"' '' opencode
   load_opencode_config
   v2="${config}"
   # shellcheck disable=SC2016 # expanded by the stub, not here
-  run_stub "$(opencode_stub v1 'printf "%s" "${OPENCODE_CONFIG_CONTENT}" | jq -c .')" '' opencode
+  run_stub "$(opencode_stub v1 'printf "%s" "${OPENCODE_CONFIG_CONTENT}" | jq -c .; echo; echo "REVIEW_VERDICT: none"')" '' opencode
   [ "${status}" -eq 0 ]
   [ "$(grep -m1 '^{' <<<"${output}")" = "${v2}" ]
 }
@@ -354,7 +355,7 @@ run_range_stub() {
 @test "opencode names the committed range in the review message" {
   for version in v1 v2; do
     # shellcheck disable=SC2016 # expanded by the stub, not here
-    run_range_stub "$(opencode_stub "${version}" 'echo "ARGS: $*"')" opencode
+    run_range_stub "$(opencode_stub "${version}" 'echo "ARGS: $*"; echo "REVIEW_VERDICT: none"')" opencode
     [ "${status}" -eq 0 ]
     grep -qF -- "Review the committed changes in ${mb}..HEAD." <<<"${output}"
     if grep -qF -- "uncommitted" <<<"${output}"; then return 1; fi
@@ -464,6 +465,44 @@ result_line() {
 @test "a reviewer that fails with no output still exits 1" {
   run_stub 'exit 2'
   [ "${status}" -eq 1 ]
+}
+
+@test "opencode asks the reviewer to end with a verdict line" {
+  for version in v1 v2; do
+    # shellcheck disable=SC2016 # expanded by the stub, not here
+    run_stub "$(opencode_stub "${version}" 'echo "ARGS: $*"; echo "REVIEW_VERDICT: none"')" '' opencode
+    [ "${status}" -eq 0 ]
+    grep -qF -- "REVIEW_VERDICT: findings" <<<"${output}"
+    grep -qF -- "never end a turn with a progress message" <<<"${output}"
+  done
+}
+
+@test "opencode narration without a verdict exits 5, reports status=incomplete, and shows the tails" {
+  run_stub "$(opencode_stub v2 'echo "Diff review done, now checking the tests."; echo "reviewer log line" >&2')" '' opencode
+  [ "${status}" -eq 5 ]
+  has_line "Diff review done, now checking the tests."
+  has_line "reviewer log line"
+  has_line "REVIEWER_NO_VERDICT"
+  [[ "$(result_line)" == "SELF_REVIEW status=incomplete "* ]]
+  [ "$(tail -n 1 <<<"${output}")" = "$(result_line)" ]
+}
+
+@test "opencode verdict followed by more text exits 5" {
+  run_stub "$(opencode_stub v2 'echo "REVIEW_VERDICT: none"; echo "Now checking gofmt."')" '' opencode
+  [ "${status}" -eq 5 ]
+  [[ "$(result_line)" == "SELF_REVIEW status=incomplete "* ]]
+}
+
+@test "opencode findings with REVIEW_VERDICT: findings exit 0 and report verdict=findings" {
+  run_stub "$(opencode_stub v2 'echo "main.go:3 nil dereference"; echo "REVIEW_VERDICT: findings"')" '' opencode
+  [ "${status}" -eq 0 ]
+  [[ "$(result_line)" == "SELF_REVIEW status=reviewed "*" verdict=findings" ]]
+}
+
+@test "opencode REVIEW_VERDICT: none exits 0 and reports verdict=none" {
+  run_stub "$(opencode_stub v2 'echo "REVIEW_VERDICT: none"')" '' opencode
+  [ "${status}" -eq 0 ]
+  [[ "$(result_line)" == "SELF_REVIEW status=reviewed "*" verdict=none" ]]
 }
 
 @test "usage errors print no result line" {
