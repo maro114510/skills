@@ -23,7 +23,8 @@ It does not show a procedure's full branching logic, how one thing's state chang
 - Put every message the source makes conditional inside an `opt` or an `alt` operand guarded by that condition, in the source's words. A step the source makes optional, with words such as "may" or "only when", is an `opt`. `[Convention]`
 - Use `alt` only for alternatives the source states as excluding each other, one operand per alternative. Use `else` only for the case the source states as "otherwise". `[Convention]`
 - Use `par` only where the source states that the operands happen concurrently or in any order. When the source gives no order for two messages, draw them in sequence in either order and list the order as an assumption. `[Convention]`
-- Use `loop` only where the source states a repetition, labeled with the bound or condition the source states. Use `break` only where the source states that the rest of the enclosing interaction is skipped. `[Convention]`
+- Use `loop` only where the source states a repetition, labeled with the bound or condition the source states. Use `break` only where the source states that the rest of the enclosing fragment, such as a loop, is skipped. `[Convention]`
+- When the source does not say whether a sender waits for the receiver, draw `->>` and list it as an assumption. `[Convention]`
 - Create or destroy a participant only where the source states that it starts or ends within the interaction. `[Convention]`
 
 ## Conformance
@@ -48,9 +49,11 @@ It does not show a procedure's full branching logic, how one thing's state chang
 
 - Use each symbol only for its meaning. A reply goes only to the caller of a synchronous message it returns from. `[Standard: UML 2.5.1]`
 - Time runs top to bottom on every lifeline, so a message is drawn below each message the source says comes before it. `[Standard: UML 2.5.1]`
-- Every operand of `alt`, `opt`, `loop`, and `break` carries its guard as the text after the keyword. `[Standard: UML 2.5.1]`
+- An operand with no guard runs whenever it is reached. `[Standard: UML 2.5.1]`
+- Write each condition the source states as the guard after its keyword, and never invent one. `[Convention]`
 - No two `alt` guards can both hold, so the operand that runs is never in doubt. `[Convention]`
-- A comment states nothing the diagram depends on, because it carries no behavior. `[Standard: UML 2.5.1]`
+- A comment carries no behavior, so never write a message as a note. `[Standard: UML 2.5.1]`
+- `create` and `destroy` need Mermaid 10.3 or later; say so in the output when the diagram uses one. `[Convention]`
 - Never draw a message with `->`, `-->`, `-x`, `--x`, a bidirectional arrow, a half arrow, or a central connection: UML gives none of them a message meaning. `[Convention]`
 - `rect` and `box` are not UML symbols. Use `box` only for a grouping the source states and `rect` only to shade a span the source names, and say in the output that each stands in for no UML element. `[Convention]`
 - `critical` takes no `option` operands, because a UML critical region has one operand. `[Standard: UML 2.5.1]`
