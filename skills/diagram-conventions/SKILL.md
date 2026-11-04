@@ -16,84 +16,77 @@ Mermaid is the output format only; the notation and semantics come from the diag
 
 ## Principles
 
-Every diagram, created or reviewed, must satisfy all three:
+Every diagram must satisfy all three:
 
 | Principle | Rule |
 |---|---|
 | Correctness | Never add an element or relation absent from the source, and never drop an important one present in it, including conditions, branches, and exceptions |
 | Conformance | Follow the symbols and semantics of the chosen diagram type |
-| Clarity | Keep granularity and layout such that the meaning cannot be misread |
+| Clarity | Granularity and layout leave no way to misread the meaning |
 
 When a principle conflicts with looking complete or tidy, the principle wins.
 
 ## Rulebooks
 
-`<skill-dir>` is the directory containing this SKILL.md, the base directory the harness gives for this skill; use its absolute path.
-A rulebook is a Markdown file in `<skill-dir>/references/`, one per diagram type.
-Its `## Purpose` section says what that diagram type expresses and when to choose it; the rest holds the type's rules.
-This file never lists diagram types: the set of rulebooks present is the set of types with rules.
-If `<skill-dir>/references/` is missing or empty, no rulebook exists.
+`<skill-dir>` is the absolute path of this SKILL.md's directory, the base directory the harness gives for this skill.
+Each Markdown file in `<skill-dir>/references/` is one diagram type's rulebook: its `## Purpose` says what the type expresses and when to choose it; the rest holds its rules.
+Only types with a rulebook present have rules; a missing or empty `references/` means none.
 
 ## Procedure
 
 ### 1. Determine the Mode and the Source
 
-Read `$ARGUMENTS` and the conversation. A file path is read with Read.
-
-| Mode | When |
-|---|---|
-| Create | The user gives content and asks for a diagram of it |
-| Review | The user gives an existing diagram and asks to review, check, or fix it |
-
-The source is the content the diagram must depict: the input text in create mode, and in review mode the text the diagram was drawn from.
-If a review has no source, ask for it. If the user has none, review Conformance and Clarity only, and state in the output that Correctness was not checked against a source.
+Read `$ARGUMENTS`, the conversation, and any file path given.
+The mode is Create when the user gives content and asks for a diagram of it, and Review when the user gives an existing diagram and asks to review, check, or fix it.
+The source is what the diagram must depict: the input text when creating, or the text a reviewed diagram was drawn from.
+If a review has no source, ask for it; if the user has none, review Conformance and Clarity only, and state in the output that Correctness was not checked.
 
 ### 2. Inventory the Source
 
-List from the source every element (actor, step, state, entity, component, event) and every relation (flow, message, transition, association, dependency, ordering), with its conditions, and where each appears.
-This inventory is the only material the diagram may use. Keep it as working notes; it is not part of the output.
+List every element (actor, step, state, entity, component, event) and relation (flow, message, transition, association, dependency, ordering) in the source, with its conditions and where each appears.
+This inventory, working notes and not output, is the only material the diagram may use.
 
 ### 3. Choose the Diagram Type
 
-1. Glob `<skill-dir>/references/*.md`, never a path relative to the working directory, and read only the `## Purpose` section of each.
-2. Decide what the reader must understand from the inventory: ordering of steps and branches, messages between actors over time, states and transitions, data structure, dependencies, schedule, and so on.
+1. Glob `<skill-dir>/references/*.md`, never a working-directory-relative path, and read only each `## Purpose` section.
+2. From the inventory, decide what the reader must understand: step order and branches, messages between actors over time, state transitions, data structure, dependencies, schedule, and so on.
 3. Choose the type:
 
    | Situation | Choice |
    |---|---|
    | The user named a type that fits | Use it |
-   | The user named a type that is clearly unfit, because its notation cannot express what the reader must understand | Propose the fitting type with a one-sentence reason, and ask which to draw before drawing |
-   | The user named no type | Choose the rulebook whose Purpose matches; if none matches, choose the type whose established notation best expresses it |
+   | The user named a type whose notation cannot express what the reader must understand | Output only the fitting type, a one-sentence reason, and a question asking which to draw |
+   | The user named no type | The rulebook whose Purpose matches, else the type whose established notation best expresses it |
 
    Judge fit by the type's notation, not by Mermaid's support for it. Never override a fitting named type for preference.
-4. If the chosen type has a rulebook, read that whole rulebook and apply every rule. If it has none, draw under the three principles alone.
+4. If the chosen type has a rulebook, read all of it and apply every rule. Otherwise draw under the three principles alone.
 
-Draw the chosen type with the closest Mermaid diagram. If Mermaid has no dedicated diagram for it, as for BPMN, use the Mermaid diagram that loses the least meaning and say which one it is. Whenever a Mermaid element stands in for a notation element, such as a subgraph for a swimlane, say so in one sentence.
+Draw with the closest Mermaid diagram. If Mermaid has none for the type, as for BPMN, use the one that loses the least meaning and name it. Say in one sentence whenever a Mermaid element stands in for a notation element, such as a subgraph for a swimlane.
 
 ### 4. Organize the Diagram
 
-Decide the organization before drawing. A rulebook's rule overrides any choice below.
+Decide before drawing; a rulebook's rule overrides these.
 
 | Decision | Rule |
 |---|---|
-| Question | The one question the diagram answers, taken from what the reader must understand |
-| Unit | What one node stands for, at one level of abstraction for the whole diagram. Merge or split inventory items only to reach that level, never to drop a condition |
-| Grouping | Group nodes, as lanes, subgraphs, or boundaries, only by a grouping the source states, such as the actor that performs each step. A node the source assigns to no group stays outside every group, and the explanation says that this placement means "not stated", not "outside" |
-| Reading order | One direction, following the order the source gives: time, process flow, or dependency |
+| Question | The one question the diagram answers, from what the reader must understand |
+| Unit | What one node stands for, at one abstraction level throughout. Merge or split inventory items only to reach it, never to drop a condition |
+| Grouping | Lanes, subgraphs, or boundaries only by a grouping the source states, such as each step's actor. A node the source puts in no group stays ungrouped, and the explanation says this means "not stated", not "outside" |
+| Reading order | One direction, in the source's order: time, process flow, or dependency |
 | Labels | The source's own terms, short, one meaning each |
 
 ### 5. Draw or Review
 
-- Create: draw exactly one diagram from the inventory, organized as step 4 decided. Do not add a summary diagram, a legend diagram, or a second view. If one diagram cannot hold the source without breaking Clarity, say so and ask how to split instead of splitting on your own.
-- Review: list each defect with the principle it breaks and the evidence, most severe first: wrong or invented relations, dropped relations including a dropped condition or branch, notation violations, then Clarity. A valid symbol that states something the source does not, such as concurrency, a loop, or optionality, breaks Correctness; Conformance covers only a symbol misused for its diagram type. Then give the fixed diagram. Never report a style preference as a defect.
+- Create: draw exactly one diagram from the inventory, organized per step 4, with no summary, legend, or second view. If one diagram cannot hold the source without breaking Clarity, say so and ask how to split; never split on your own.
+- Review: list each defect with its broken principle and evidence, most severe first: wrong or invented relations, dropped relations or conditions or branches, notation violations, then Clarity. A valid symbol stating what the source does not, such as concurrency, a loop, or optionality, breaks Correctness; Conformance covers only a symbol misused for its type. Then give the fixed diagram. Never report a style preference as a defect.
 
 ### 6. Check Against the Principles
 
 Check the diagram, not your intent:
 
-- Correctness: map every node and edge to an inventory item; remove anything unmapped. Map every important inventory relation to the diagram; add anything missing. When the notation seems to need an element the source does not state, such as a start or end symbol or a return message, leave it out and list it as not drawn; never draw it. List only what the form you drew needs: a flowchart lists a missing start symbol, not the length of a stated expiry. When a stated element lacks a value the notation needs, such as a Gantt task's duration or a class association's multiplicity, never invent the value: use a form of the element that needs none and list the value as not stated, or, if no such form exists, ask for it before drawing. A value or an order the Mermaid syntax or layout forces, such as the year in a date, the order of unordered steps, or the sender of a message the source does not name, is listed as an assumption.
-- Conformance: if a rulebook was used, recheck each of its rules. Check that each symbol carries the meaning the diagram type gives it.
-- Clarity: check that the diagram follows step 4, and that no edge or branch can be read two ways.
+- Correctness: map every node and edge to an inventory item, removing anything unmapped, and every important inventory relation to the diagram, adding anything missing. Never draw an unstated element the notation seems to need, such as a start or end symbol or a return message; list it as not drawn if the drawn form needs it: a flowchart lists a missing start symbol, not a stated expiry's length. Never invent a value the notation needs, such as a Gantt task's duration or an association's multiplicity: use a form that needs none and list the value as not stated, or, if none exists, ask for it before drawing. List as an assumption any value or order Mermaid's syntax or layout forces, such as a date's year, unordered steps' order, or an unnamed message's sender.
+- Conformance: recheck each rule of the rulebook used, if any, and that each symbol carries the meaning its type gives it.
+- Clarity: the diagram follows step 4, and no edge or branch reads two ways.
 
 Repeat until every check passes.
 
@@ -101,7 +94,7 @@ Repeat until every check passes.
 
 Run `command -v mmdc`.
 
-- Found: render the diagram from standard input and discard the SVG:
+- Found: render from standard input, discarding the SVG:
 
   ```bash
   mmdc --quiet --input - --output - --outputFormat svg > /dev/null <<'MERMAID'
@@ -109,16 +102,16 @@ Run `command -v mmdc`.
   MERMAID
   ```
 
-  A non-zero exit whose error names a position in the Mermaid source, such as `Parse error on line 2` or `Lexical error`, or `UnknownDiagramError`, is a diagram error: fix the diagram, recheck step 6, and render again.
-  Any other failure, such as a missing browser or a crash, is a tool failure: do not change the diagram, and mark it unvalidated with that reason.
-- Not found: do not install anything. Mark the diagram unvalidated.
+  A non-zero exit whose error names a source position, such as `Parse error on line 2` or `Lexical error`, or `UnknownDiagramError`, is a diagram error: fix it, recheck step 6, and rerender.
+  Any other failure, such as a missing browser or a crash, is a tool failure: keep the diagram and mark it unvalidated with that reason.
+- Not found: install nothing; mark it unvalidated.
 
-The diagram is validated only when a render of the exact diagram in the output exited 0. Any edit after that render needs another render.
+It is validated only when a render of the exact output diagram exited 0; any later edit needs another render.
 
 ## Output
 
-Reply in the user's language. Lead with the diagram, preceded only by the defect list in review mode, then explain how it is organized so the reader can follow it.
-Keep the two status lines at the end in English, verbatim apart from the placeholders, and write `<type>` there in English.
+Reply in the user's language. Lead with the diagram, preceded only by the defect list in review mode, then explain how it is organized.
+Keep the two closing status lines in English, verbatim apart from the placeholders, `<type>` included.
 
 ````
 <review mode only: the defects, one per line, `<principle>: <defect> -> <evidence>`>
@@ -134,5 +127,3 @@ Keep the two status lines at the end in English, verbatim apart from the placeho
 Rulebook: <references/<file>.md | No rulebook exists for <type>; no conformance is claimed>
 Validation: <validated with mmdc | unvalidated: <reason>>
 ````
-
-When asking the user to choose a type in step 3, output only the proposal, its reason, and the question; draw nothing yet.
