@@ -10,10 +10,10 @@
 <The chosen approach>
 
 ## Rationale
-<The decisive reasons, and each material alternative with why it lost>
+<The decisive reasons, and each real alternative with why it lost>
 
 ## Consequences
 <Benefits, costs, limitations, and accepted risks>
 ```
 
-Use exactly these four sections. Put the resulting design in the Design Doc and list the ADR in its References; keep the rationale only in the ADR.
+Use exactly these four sections, and list the ADR in the Design Doc's References.

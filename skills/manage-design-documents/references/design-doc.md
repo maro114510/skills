@@ -7,7 +7,7 @@
 <Purpose, responsibilities, and boundaries>
 
 ## Domain Model
-<Essential concepts, their definitions, data, and relationships; conceptual, not a physical schema>
+<Concepts, their definitions, and relationships; not a physical schema>
 
 ## Scenarios
 
@@ -23,13 +23,12 @@ sequenceDiagram
 - <A guarantee that holds in every scenario>
 
 ## References
-- <Related current Design Docs, ADRs, or specifications>
+- <Related Design Docs, ADRs, or specifications>
 ````
 
-- Use only these sections, each only when it has content; never write a placeholder.
-- State each fact once, in the section that owns it: Domain Model names concepts and their possible states; a flow or a transition between states lives in its diagram; a guarantee, including what a quantity counts, lives in Invariants. Overview and Domain Model never restate a transition or a guarantee.
-- A scenario's diagram shows the actors, their interactions, the conditions that change the flow, the changes to data or domain state, and the outcome. Participants are conceptual responsibilities, not necessarily services or classes. Prose never restates the diagram.
-- When interaction order adds nothing, as in some system-level documents, draw the one diagram type that fits instead of inventing scenarios.
-- Draw and check each diagram with the `diagram-conventions` skill, and put only its Mermaid block into the document. Never add a step, order, branch, or concurrency the design does not state.
-- Invariants hold only domain-wide guarantees whose omission could mislead an implementation, including critical consistency, concurrency, security, and irreversible-state guarantees. State what must hold, not the mechanism. A condition local to one scenario stays in that scenario. A diagram that reads a balance and then updates it does not establish that concurrent grants respect a balance cap; that cap is an invariant.
-- In every normative sentence and diagram message, make the acting subject, the action, its object, each condition and what it applies to, and the result unambiguous whenever the distinction matters. Use one term per concept. Never leave "appropriately", "as needed", or "etc." without the condition it stands for.
+- Use only these sections, and only with real content.
+- State each fact once: Domain Model names concepts and their states, diagrams show flows and state changes, and Invariants hold guarantees, including what a quantity counts.
+- A scenario's diagram shows the actors, the conditions that change the flow, the state changes, and the outcome. Participants are roles, not services. When interaction order adds nothing, draw the one diagram that fits instead.
+- Draw and check diagrams with the `diagram-conventions` skill, and paste only the Mermaid block.
+- Invariants hold only guarantees whose omission would mislead an implementation, such as consistency under concurrency, security, or irreversible state.
+- Write so that who does what to what, under which condition, with which result, is unambiguous. Use one term per concept, and never "appropriately" or "as needed" without the condition.
