@@ -311,6 +311,49 @@ EOF
   [ "$(column_of 5 7)" = - ]
 }
 
+@test "under another TZ and locale, the agent column names the role while the holder that took the lock under UTC and C runs" {
+  three_issues
+  git init -q "${tmp}/clone"
+  git -C "${tmp}/clone" -c user.name=test -c user.email=test@example.com commit -q --no-verify --allow-empty -m base
+  git -C "${tmp}/clone" worktree add -q --detach "${tmp}/clone-oe/issue-5"
+  cd "${tmp}/clone" || return 1
+  session="$(
+    sleep 600 >/dev/null 2>&1 3>&- &
+    echo "$!"
+  )"
+  echo "${session}" >"${tmp}/detached-session"
+  OE_SESSION_PID="${session}" env -u LC_ALL -u LC_TIME TZ=UTC LANG=C bash "${oe}" lock acquire o/r 1 >/dev/null
+
+  run --separate-stderr env TZ=Asia/Tokyo LC_ALL=ja_JP.UTF-8 bash "${oe}" status o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(column_of 5 7)" = verifier ]
+}
+
+@test "--watch under another TZ and locale keeps refreshing while the holder that took the lock under UTC and C runs, and stops after it ends" {
+  three_issues
+  session="$(
+    sleep 600 >/dev/null 2>&1 3>&- &
+    echo "$!"
+  )"
+  echo "${session}" >"${tmp}/detached-session"
+  OE_SESSION_PID="${session}" env -u LC_ALL -u LC_TIME TZ=UTC LANG=C bash "${oe}" lock acquire o/r 1 >/dev/null
+  # The session ends during the second refresh's Epic read.
+  cat >"${tmp}/bin/gh" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >>"${calls}"
+[ "\$(grep -c 'epic=1' "${calls}")" -ne 2 ] || kill ${session}
+exec bash "${BATS_TEST_DIRNAME}/testdata/fake-gh.sh" "\$@"
+EOF
+  # Refresh 1 sees the session, refresh 2 reads while it ends, and refresh 3 finds it gone and is the last.
+  views_until_end=3
+
+  OE_WAIT_INTERVAL=0 OE_STATUS_REFRESHES=10 run --separate-stderr env TZ=Asia/Tokyo LC_ALL=ja_JP.UTF-8 bash "${oe}" status o/r 1 --watch
+
+  [ "${status}" -eq 0 ]
+  [ "$(printf '%s\n' "${lines[@]}" | grep -c '^ISSUE ')" -eq "${views_until_end}" ]
+}
+
 @test "under a failed check on the default branch, every Issue waits for it as in oe ready, without reading the Issues" {
   github <<'JSON'
 {

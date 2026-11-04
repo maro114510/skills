@@ -100,6 +100,18 @@ token_of() {
   [ "${status}" -eq 0 ]
 }
 
+@test "a session under another TZ and locale is refused while the holder that took the lock under UTC and C runs" {
+  start_session
+  first="${session_pid}"
+  OE_SESSION_PID="${first}" run env -u LC_ALL -u LC_TIME TZ=UTC LANG=C bash "${oe}" lock acquire o/r 1
+  [ "${status}" -eq 0 ]
+  start_session
+
+  OE_SESSION_PID="${session_pid}" run env TZ=Asia/Tokyo LC_ALL=ja_JP.UTF-8 bash "${oe}" lock acquire o/r 1
+
+  [ "${status}" -eq 4 ]
+}
+
 @test "a session under another TZ and locale gets the lock once the holder that took it under UTC and C has ended" {
   start_session
   first="${session_pid}"
