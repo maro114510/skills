@@ -45,7 +45,7 @@ Choose another type when the reader must understand something else:
 | Attribute | A value each instance holds | `+name : Type` inside `class C { ... }` |
 | Operation | Behavior an instance offers | `+op(p : Type) Return` inside `class C { ... }` |
 | Generalization | The subclass is a kind of the superclass | `Super <|-- Sub` |
-| Realization | The class implements the interface | `C ..|> I` |
+| Realization | The class implements the interface | `I <|.. C` |
 | Association | Instances are linked | `A -- B`, or `A --> B` when only A navigates to B |
 | Composition | The part exists only within one whole | `Whole *-- Part` |
 | Aggregation | Shared part, as the source names it | `Whole o-- Part` |
@@ -65,7 +65,7 @@ Choose another type when the reader must understand something else:
 
 - All classes sit at one level of abstraction, such as all domain types. `[Convention]`
 - Name each class, member, and relationship with the source's term, as briefly as possible. When a name holds spaces or non-ASCII characters, give it an ASCII identifier with `class C["name"]`. `[Convention]`
-- Write every generalization and realization as `Super <|-- Sub` or `C ..|> I`, so superclasses and interfaces sit above their subtypes. `[Convention]`
+- Write every generalization and realization with the superclass or interface on the left, `Super <|-- Sub` or `I <|.. C`, because Mermaid places the left class above, so supertypes sit above their subtypes. `[Convention]`
 
 ## Validation
 
