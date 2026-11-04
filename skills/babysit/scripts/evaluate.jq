@@ -126,6 +126,10 @@ def relevant($head; $gen): select(startswith("c:") or endswith("@\($head)#\($gen
     pending: $pending_list,
     reasons: ([$keys[] | select($items[.].reason != null) | {key: ., value: $items[.].reason}] | from_entries) } as $report
 
+# Nothing dismisses an approval when a later commit is pushed, so only one on the head counts.
+| (any($s.latestReviews[]; .state == "APPROVED" and .commit == $s.head)
+   and all($s.latestReviews[]; .state != "CHANGES_REQUESTED")) as $approved
+
 | {repo: $s.repo, pr: $s.number, head: $s.head, gen: $g} as $base
 | def stop($name): $base + {event: $name, report: $report};
   (if $s.state == "MERGED" then "MERGED"
@@ -137,6 +141,7 @@ def relevant($head; $gen): select(startswith("c:") or endswith("@\($head)#\($gen
     event: (
       if $status == "MERGED" then stop("merged")
       elif $status == "CLOSED" then stop("closed")
+      elif $approved then stop("approved")
       elif $status == "READY" then stop("ready")
       elif $limit then stop("limit")
       elif $stalled then stop("stalled")
