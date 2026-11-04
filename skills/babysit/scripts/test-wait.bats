@@ -132,7 +132,8 @@ waiting='.reviewRequests = [{reviewer: "dave", type: "User"}]'
   poll
   expect "$(event)" comment
   expect "$(field .key)" "c:IC1"
-  expect "$(field .comment.body)" "please rename"
+  expect "$(field .comment.excerpt)" "please rename"
+  expect "$(field .comment.bodyLength)" 13
   report_current
   poll
   expect "$(event)" idle
@@ -218,6 +219,16 @@ before_start='.comments = [($comment | .id = "IC_old" | .author = "bot" | .bodyH
   poll
   expect "$(event)" comment
   expect "$(field .key)" c:IC_old
+}
+
+@test "a comment event carries a 200-character excerpt and the body length, not the body" {
+  set_snap "${waiting} | .comments = [\$comment | .body = (\"x\" * 5000)]"
+  poll
+  expect "$(event)" comment
+  expect "$(field '.comment.excerpt | length')" 200
+  expect "$(field .comment.bodyLength)" 5000
+  expect "$(field .hash)" h1
+  expect "$(field '.comment | has("body")')" false
 }
 
 @test "a new watch session takes a new baseline" {
