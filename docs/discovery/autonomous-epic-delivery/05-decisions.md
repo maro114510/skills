@@ -1,185 +1,158 @@
-# 論点ごとの合意状況
+# Decision points
 
-論点は 10 個に分け、1 つずつ合意を取った。論点 1 から 7 は合意済みである。論点 8 から 10 は、いま合意を取る必要はないとして飛ばしたため、内容を提案か保留として残す。合意済みの論点どうしの食い違いは、末尾の補足で解消した。
+Ten points, agreed one at a time. Points 8 to 10 were skipped as not needing agreement yet.
 
-| 論点 | 状態 |
+| Point | Status |
 |---|---|
-| 1. 完了の定義と範囲 | 合意済み |
-| 2. 状態の持ち方 | 合意済み。末尾の補足で一部を補った |
-| 3. レビュー区分 | 合意済み |
-| 4. 依存の扱い | 合意済み |
-| 5. マージの条件 | 合意済み |
-| 6. 停止と通知 | 合意済み |
-| 7. 権限と身元 | 合意済み |
-| 8. 構成 | 提案 |
-| 9. 既存資産の扱い | 保留 |
-| 10. 立ち上げ順序 | 提案 |
+| 1 Done and scope | Agreed |
+| 2 Where state lives | Agreed, amended at the end |
+| 3 Review class | Agreed |
+| 4 Dependencies | Agreed |
+| 5 Merge conditions | Agreed |
+| 6 Stop and notify | Agreed |
+| 7 Authority and identity | Agreed |
+| 8 Shape | Proposed |
+| 9 Existing assets | Deferred |
+| 10 Bootstrap order | Proposed |
 
-## 論点より前に個別の質問で確定した前提
+## Premises fixed before the points
 
-論点に分ける前に、個別の質問への回答で次の前提が確定した。論点 7 と 8 の検討でも、合意済みとして扱った。
+- Agents act under a GitHub App identity, not the owner's
+- Approving a pull request is forbidden for every OpenCode agent. Bypass by other means is an accepted residual risk
+- Runs on the owner's machine. Resuming after a stop is enough
+- A controller judges state and merges. Not a model reading prose
+- No money limit
+- Notifications go to the resident agent
+- No labels. They fall off and mean different things per repository
 
-- エージェントは、利用者とは別の身元である GitHub App で動く。
-- PR の承認操作は、OpenCode のすべてのエージェントで禁止する。エージェントが利用者の認証を持つ限り、他の手段による迂回は完全には防げない。この残存リスクは受け入れる。
-- 実行場所は利用者の手元のマシンとする。止まっても、再開できればよい。
-- 状態の判断とマージは制御スクリプトが行う。言語モデルの手順書に任せない。
-- 金額の上限は設けない。
-- 人への通知は、利用者が普段会話している常駐エージェントに送る。
-- ラベルは使わない。外れたり、リポジトリごとに意味が変わったりして、再現性がないため。
+## 1 Done and scope
 
-## 論点 1 完了の定義と範囲
+See 01.
 
-状態は合意済みである。内容は [01-problem-and-goal.md](01-problem-and-goal.md) にまとめた。要点は次の 3 つである。
+## 2 Where state lives
 
-- 子 Issue は、マージ済み、人のレビュー待ち、人の判断待ちで通知済み、依存先を待っている、のどれかになれば完了とする。
-- 範囲はエピックの開始からマージまでである。
-- 振り返りから Issue を作る前段の流れ、デプロイ、自動の切り戻しは範囲外とする。
+| Rule | Reason |
+|---|---|
+| The only source of truth is what GitHub itself tracks. Issue state and body, linked pull requests, head commit, CI results, reviews, comments | Duplicate state diverges |
+| No labels read or written | |
+| No system-owned state record. Repair counts and repeated failures are recomputed from history each time. Local cache only | Recomputation gives the same answer after any loss |
+| Exceptions. Which Epics run lives in a local config file. Human decisions stay as Issue comments | |
+| Issue and pull request are linked by a closing reference in the body and the Issue number in the branch name. A hand-made pull request on the Issue means a person owns it | |
 
-## 論点 2 状態の持ち方
+## 3 Review class
 
-状態は合意済みである。
-
-- 状態の正本は、GitHub が自分で管理している事実だけにする。具体的には、Issue の開閉、Issue の本文、Issue に紐づく PR、PR の最新コミット、CI の結果と実行履歴、レビューの履歴、コメントである。
-- ラベルは読まず、書かない。
-- 仕組み専用の状態記録は持たない。何回修正したか、前回と同じ失敗かは、CI、コミット、レビューの履歴から毎回計算する。手元には高速化のためのキャッシュだけを置き、消えても判断は変わらない。
-- 例外は 2 つある。どのエピックを動かすかは、手元のマシンの設定ファイルに置く。利用者の判断は Issue のコメントとして残す。
-
-理由は 2 つある。状態を二重に持つと食い違う。履歴から毎回計算すれば、マシンが止まっても記録が消えても同じ結論に戻る。
-
-前提として、Issue と PR を確実に紐づける。PR の本文で Issue を閉じる参照を書き、ブランチ名に Issue 番号を含める。人が手で作った PR が同じ Issue に紐づいていれば、その Issue は人が対応中とみなして触らない。
-
-## 論点 3 レビュー区分
-
-状態は合意済みである。
-
-区分は次の 3 つである。
-
-| 区分 | 人が見るもの | マージの条件 |
+| Class | Person sees | Merge condition |
 |---|---|---|
-| 自動可 | なし | レビュー合格 |
-| 方針確認 | 実装方針 | 方針の承認後、レビュー合格 |
-| 人のレビュー | PR | 人の承認 |
+| Auto | Nothing | Reviewer pass |
+| Approach check | Implementation approach | Approach approved, then reviewer pass |
+| Human review | Pull request | Human approval |
 
-区分の決め方は次のとおりである。
+| Rule |
+|---|
+| The creating agent proposes the class in a fixed Issue field. The person confirms it with the Issue |
+| Missing or unreadable field means human review |
+| Agents may only raise the class, never lower it, and notify the reason |
+| A person editing the field is followed in either direction |
 
-- Issue を作るとき、作成するエージェントが区分を提案し、Issue 本文の決まった欄に書く。利用者は Issue の内容と一緒に区分を確かめる。
-- 区分の欄がない、または読み取れない Issue は、人のレビューとして扱う。
-- 実行中にエージェントができるのは、区分を上げることだけである。たとえばレビューエージェントが、方針から外れている、想定より危ないと判断したときに上げる。下げることはできない。上げたときは理由を通知する。
-- 利用者が Issue 本文を編集して区分を変えたときは、上げる場合も下げる場合も従う。
+| Class | Guideline |
+|---|---|
+| Auto | No behavior change, or acceptance verifiable by automated tests |
+| Approach check | Several reasonable implementations |
+| Human review | Permissions, data, public interfaces, irreversible changes, security, or behavior CI cannot verify |
 
-区分を提案するときの目安は次のとおりである。
+## 4 Dependencies
 
-- **自動可**: 振る舞いが変わらない。または受け入れ基準を自動テストで確かめられる。
-- **方針確認**: 実現方法に妥当な選択肢が複数ある。
-- **人のレビュー**: 権限、データ、公開しているインタフェース、元に戻せない変更、セキュリティに関わる。または CI では確かめられない振る舞いの変更がある。
+- Only leaf child Issues are worked
+- GitHub dependencies are the source. Epic diagrams are not read
+- Start when every dependency is closed as completed. Never stack on an unmerged pull request
+- Independent chains run in parallel. Default limit 3, locally configurable
 
-## 論点 4 依存の扱い
+| Anomaly | Handling |
+|---|---|
+| Dependency closed as not planned | Stop dependents and notify |
+| Dependency pull request closed unmerged | Notify and wait. A person rejected it |
+| Cycle | Start none of the involved Issues and notify |
+| Dependency outside the Epic | Wait for it to close. Never touch it |
 
-状態は合意済みである。
+## 5 Merge conditions
 
-- 作業の対象は、エピックの子 Issue のうち末端の Issue だけである。
-- 依存関係の正本は、GitHub 標準の依存関係だけである。エピック本文の図や表は読まない。
-- 依存先がすべて完了として閉じたときに着手する。マージされていない PR の上に、次の作業を積み重ねない。
-- 依存のない系列は並行して進める。同時に動かす数の上限は、初期値を 3 とし、手元の設定で変えられる。金額の上限を設けない代わりに、消費の速さもこれで抑える。
+| Condition |
+|---|
+| The class's pass is met. Human approval counts only from a person with write access |
+| No open change request from a person, in any class |
+| CI green with the latest main merged into the pull request |
+| Approval and reviewer pass stay valid while the pull request's own diff is unchanged |
 
-気づきにくい異常は、次のように扱う。
+| Merge rule |
+|---|
+| One at a time per repository |
+| Merge only the verified commit. Abort if anyone pushed since |
+| GitHub auto-merge is not used. Merge method follows the repository |
+| Never bypass protection. Wait and notify |
+| A red main after a merge stops new starts and merges in that repository until main is green |
+| A repository with no CI treats every class as human review |
 
-- 依存先が対応しないとして閉じられたら、後続には着手せず、止めて通知する。前提が崩れている可能性があるため。
-- 依存先の PR がマージされずに閉じられたら、作り直さずに通知して待つ。人が却下したとみなす。
-- 依存が循環していたら、関わる Issue には着手せず、通知する。
-- エピックの外の Issue に依存していたら、その Issue が完了として閉じるまで待ち、その Issue には手を出さない。
+## 6 Stop and notify
 
-## 論点 5 マージの条件
+| Stop one Issue when |
+|---|
+| The same check fails for the same reason twice in a row after a repair |
+| Blocking findings do not decrease twice in a row |
+| Agent crash or timeout twice on the same task. Default per-task timeout 60 minutes |
+| The agent returns a question |
 
-状態は合意済みである。
+| Rule |
+|---|
+| Stopping posts the reason on the Issue |
+| An owner comment resumes it and is passed as the next instruction. Counting restarts after that comment |
+| Closing the Issue ends it |
 
-マージしてよいのは、次の条件をすべて満たすときである。
+| Notify on |
+|---|
+| Approach check waiting, review waiting, stop, class raised, main CI failed or recovered, protection unmet, Epic complete |
 
-1. 区分ごとの合格を満たしている。人の承認は、書き込み権限を持つ人間によるものに限り、エージェント用の身元による承認は数えない。
-2. 人間からの変更要求が残っていない。自動可と方針確認の区分でも、人が変更を求めたらマージせず修正に戻る。
-3. 最新の `main` を PR に取り込んだ状態で、CI がすべて通っている。
-4. 承認とレビュー合格は、PR 自身の差分がそのときと同じなら有効とする。衝突の解消などで差分が変わったら、やり直す。
+The record is a GitHub comment mentioning the owner, mirrored to the resident agent. No duplicate notification for an identical existing comment.
 
-マージは次のように行う。
+## 7 Authority and identity
 
-- 同じリポジトリでは 1 件ずつマージする。
-- 確かめたコミットから変わっていないことを条件にマージする。確認とマージの間に誰かが送信していたらマージしない。
-- GitHub の自動マージ機能は使わない。マージの方式は、そのリポジトリで許されているものに従う。
-- 保護設定は迂回しない。満たせない条件があれば、待って通知する。
+| Rule | Reason |
+|---|---|
+| Only text by write-access people and the agent identity reaches agents | Anyone can comment on public repositories |
+| Repositories without an agent identity are out of scope | Under the owner's name, system and owner comments are indistinguishable, and the owner cannot approve their own pull request |
 
-マージ後に `main` の CI が失敗したら、そのリポジトリでは新しい着手とマージを止めて通知する。`main` の CI が成功に戻れば、特別な操作なしに再開する。
+## 8 Shape
 
-CI が 1 つもないリポジトリでは、条件 3 が何も確かめずに満たされてしまう。そのため、そうしたリポジトリでは自動可と方針確認の区分も、人のレビューとして扱う。
+Status Proposed.
 
-## 論点 6 停止と通知
+- A scheduled local controller runs every few minutes. No webhooks. One controller at a time. No agent starts when nothing changed
+- One process per agent per task, never inside the resident agent. Review in a fresh session
+- A worktree per Issue from the latest remote main
+- Controller in the skills repository, excluded from the distributed skills
 
-状態は合意済みである。
+## 9 Existing assets
 
-次のどれかが起きたら、その Issue だけを止める。他の Issue は進め続ける。
+Status Deferred. Candidate handling.
 
-- 修正したのに、同じチェックが同じ理由で 2 回続けて失敗した。
-- 修正しても、マージを妨げる指摘の数が 2 回続けて減らない。毎回違う指摘が出て終わらない場合も、これで止まる。
-- エージェントの異常終了か時間切れが、同じ作業で 2 回続いた。OpenCode には実行時間の上限がないため、1 回の作業に上限を設ける。初期値は 60 分とする。これは金額の上限ではなく、固まったまま待ち続けるのを防ぐためのものである。
-- エージェントが判断に詰まり、質問を返した。
+- Retire the orchestration skill after the new mechanism works
+- Rewrite the Epic and children to the agreed points. Close those assuming labels or an open session
+- Skill changes such as the class field become children of the rewritten Epic
 
-止めたときと再開するときは、次のようにする。
+## 10 Bootstrap order
 
-- 止めたときは、理由を Issue にコメントする。
-- その後に利用者が Issue へコメントすれば再開する。コメントの内容は、次の作業への指示としてエージェントに渡す。停止の判定は、利用者の最後のコメントより後の履歴だけで数え直す。
-- Issue を閉じれば、その Issue は終わる。
+Status Proposed.
 
-通知は次のように行う。
+- A person prepares only the agent identity
+- Hand-build the minimum. One Issue to a pull request with review notification. No merge or repair loop
+- The mechanism implements the rest from the rewritten Epic
+- Until auto-merge exists, everything is human review
+- No version pinning. Merged changes take effect when the owner reinstalls
 
-- 通知する場面は、方針の確認待ち、レビュー待ち、停止、区分の引き上げ、`main` の CI の失敗と回復、保護設定を満たせないとき、エピックの完了である。
-- 正式な記録は、利用者に言及した GitHub のコメントとする。投稿と同時に、常駐エージェントにも同じ内容を送る。
-- 常駐エージェントが動いていなくても、GitHub の通知で届く。同じ内容のコメントが既にあれば、二重に通知しない。
+## Amendment to point 2
 
-## 論点 7 権限と身元
+Status Agreed. Class raises and stop-and-resume depend on comments the system wrote. Comments posted by the agent identity count as GitHub facts. No other record or marker is added.
 
-状態は合意済みである。前提で確定した内容に加えて、次の 2 点を決めた。
+## Open
 
-- **第三者の書き込みはエージェントに渡さない。** 公開リポジトリでは誰でもコメントできる。第三者が「ついでにこう変えて」と書けば、エージェントがそれに従い、自動可の区分ならそのままマージされてしまう。渡すのは、書き込み権限を持つ人間とエージェント用の身元が書いた本文とコメントだけである。
-- **エージェント用の身元を使えないリポジトリは対象外とする。** 利用者の名義で動かすと、仕組み自身のコメントと利用者のコメントを区別できない。止めた直後に自分のコメントで再開してしまい、論点 6 が成り立たない。利用者が自分の PR を承認できない問題もある。
-
-## 論点 8 構成
-
-状態は提案である。利用者から合意を取る必要があるかを問われた。合意済みの内容から導ける実装上の選択と置き場所の話なので、不要と判断して飛ばした。
-
-- 手元のマシンの定期実行で制御スクリプトを数分おきに起動する。Webhook は使わない。状態が変わっていなければ、エージェントは起動しない。同時に動く制御スクリプトは 1 つに限る。
-- エージェントは、作業ごとに別プロセスとして起動する。常駐エージェントの中では動かさない。常駐エージェントを会話のために空けておき、1 つの作業が固まっても他に影響させないためである。レビューは、実装とは別の新しいセッションで行う。
-- 作業は Issue ごとの専用ワークツリーで行う。ワークツリーは最新のリモート `main` から作る。利用者の作業ディレクトリでは、ブランチの切り替えも取り込みもしない。
-- 制御スクリプトは、スキルと同じリポジトリに置き、スキルの配布物には含めない。役割を担うスキルと受け渡しの形式を一緒に更新できるためである。
-
-## 論点 9 既存資産の扱い
-
-状態は保留である。エピックと子 Issue を書き直すときに、まとめて決める。そのときの検討材料として、次の案を示した。
-
-- 編成スキルは、新しい仕組みが動いた後に廃止する。それまでは残す。
-- 既存のエピックと子 Issue は、合意した論点に合わせて書き直す。ラベルや会話セッションの継続を前提にした Issue は閉じる候補とする。
-- Issue 生成スキルへの区分欄の追加など、スキルの変更は書き直したエピックの中の作業として扱う。
-
-## 論点 10 立ち上げ順序
-
-状態は提案である。利用者は、エピックを書き直すときに決めればよいとした。
-
-仕組みを作る作業そのものも、この仕組みに任せたい。しかし最初は仕組みがない。この循環を断つ案は次のとおりである。
-
-- 人が最初に準備するのは、エージェント用の身元の作成と導入だけにする。
-- 手で作るのは、自走に必要な最小部分だけにする。着手できる Issue を 1 件実装し、PR を作り、レビューの結果を通知するところまでで、マージと修正の繰り返しは含めない。
-- 残りの機能は、書き直したエピックの子 Issue として、この仕組み自身に実装させる。
-- 自動マージの機能が入るまでは、すべてを人のレビューとして扱い、利用者がマージする。仕組みが自分自身を書き換える変更は、人が見ることになる。
-- マージされた変更は、利用者が入れ直すまで動いている仕組みに反映されない。そのため、版を固定する仕組みは作らない。
-
-## 補足 合意済みの論点どうしの食い違いの解消
-
-状態は合意済みである。
-
-論点 2 は、仕組み専用の状態記録を持たないとした。一方で、論点 3 の区分の引き上げと、論点 6 の停止からの再開は、仕組み自身が書いたコメントに依存する。引き上げを残さなければ、次の判定で元の区分に戻ってマージされてしまう。
-
-そこで論点 2 を次のように補った。エージェント用の身元が投稿した通知のコメントも、GitHub の事実に含める。停止と区分の引き上げを知らせるコメントは、人への通知であると同時に、状態を判断する材料にもなる。これとは別の記録場所や専用の目印は作らない。
-
-## 未決の事項
-
-- 論点 8 と論点 10 の提案の採否。
-- 論点 9 の、閉じる Issue と残す Issue の最終的な選定。
-- 振り返りから重複を除いて Issue を作る前段の流れ。仕組みが動いてから、別のエピックで扱う。
+- Adoption of points 8 and 10
+- Which Issues to close under point 9
+- The retrospective-to-Issue flow, in a later Epic

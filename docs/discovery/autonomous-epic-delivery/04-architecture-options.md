@@ -1,54 +1,50 @@
-# 構成の選択肢と選んだ方向
+# Architecture options
 
-## 比べた観点
+## Criteria
 
-構成の候補は、次の 5 つの観点で比べた。
+- Continues after the conversation ends
+- Adds nothing to the target repository
+- Where the model key lives
+- Operational burden
+- Delay before reacting to a state change
 
-- 会話セッションが終わった後も進み続けるか。
-- 対象リポジトリに何かを追加する必要があるか。
-- 言語モデルの鍵をどこに置くか。
-- 運用の手間が増えるか。
-- 状態の変化に反応するまでの遅れ。
+## Candidates
 
-## 候補
+Status Fact. Evaluated against 03.
 
-状態は事実である。各候補の評価は、03 の制約に基づく。
-
-| 候補 | 会話終了後 | 対象リポジトリへの追加 | 鍵の置き場所 | 主な弱点 |
+| Candidate | After session end | Added to target repository | Key location | Main weakness |
 |---|---|---|---|---|
-| 現状の編成を会話の中で動かす | 止まる | なし | 手元 | 完了の定義を満たせない |
-| 現状の編成スキルを、状態が変わったときに自動で再実行する | 進む | なし | 手元 | 状態の判断とマージを言語モデルが手順書を読んで行う。読み違えると未承認の変更をマージしうる |
-| GitHub のホストランナーで、イベントごとにエージェントを起動する | 進む | リポジトリごとにワークフロー | リポジトリの秘密情報 | 公開リポジトリに鍵を置く。対象リポジトリごとに導入が要る |
-| 手元のマシンを GitHub のランナーとして登録する | 進む | リポジトリごとにワークフロー | 手元 | GitHub は公開リポジトリでの利用を勧めていない。待機中の処理は 24 時間で取り消される |
-| Webhook を外部で受け、キューを経て実行する | 進む | Webhook の設定 | 実行先 | 受信口と実行先の両方を用意する必要がある。取りこぼしの補償も要る |
-| 手元のマシンで制御スクリプトを定期的に動かし、作業ごとにエージェントを起動する | マシンが動いていれば進む | なし | 手元 | マシンが眠ると止まる。反応が数分遅れる |
+| Current orchestration inside a conversation | Stops | None | Local | Cannot meet the done definition |
+| Re-run the current skill on each state change | Continues | None | Local | A model reads prose to judge state and merge. A misread merges unapproved changes |
+| GitHub-hosted runner per event | Continues | Workflow per repository | Repository secrets | Key on a public repository. Setup per repository |
+| Local machine as a GitHub runner | Continues | Workflow per repository | Local | Discouraged on public repositories. Waiting jobs cancel after 24 hours |
+| External webhook receiver with a queue | Continues | Webhook setting | Receiver | Needs a receiver and an executor plus loss compensation |
+| Scheduled local controller starting an agent per task | While the machine runs | None | Local | Stops while asleep. Minutes of delay |
 
-## 選んだ方向
+## Chosen direction
 
-最後の候補を選んだ。理由は次の 3 つである。
+The last candidate.
 
-- 対象リポジトリに何も追加せずに、複数のリポジトリを扱える。
-- 手元の認証、スキル、ワークツリーをそのまま使える。
-- 状態の判断とマージの可否を決定的なプログラムに置ける。マージの条件が手順書の読み違いで崩れることはない。ただし、条件の一つであるレビュー合格は、言語モデルの判断のままである。
+- Handles several repositories without adding anything to them
+- Reuses local credentials, skills, and worktrees
+- Puts state judgment and merge eligibility in a deterministic program. Reviewer pass remains a model judgment
 
-この方向を構成する判断は、次の状態にある。
-
-| 判断 | 状態 |
+| Decision | Status |
 |---|---|
-| 手元のマシンで動かし、止まっても再開できればよい | 合意済み |
-| 状態の判断、マージの可否、GitHub への書き込みは制御スクリプトが行う。言語モデルは実装、修正、審査だけを担う | 合意済み |
-| ラベルを使わない | 合意済み |
-| 定期実行で起動し、Webhook は使わない | 提案 |
-| 作業ごとに別プロセスでエージェントを起動し、常駐エージェントの中では動かさない | 提案 |
-| 作業ごとに専用のワークツリーを最新のリモート `main` から作り、利用者の作業ディレクトリには触れない | 提案 |
-| 制御スクリプトをスキルと同じリポジトリに置く | 提案 |
+| Run locally. Resuming after a stop is enough | Agreed |
+| The controller judges state, merge eligibility, and GitHub writes. Models implement, repair, and review | Agreed |
+| No labels | Agreed |
+| Schedule-driven. No webhooks | Proposed |
+| One process per agent per task, never inside the resident agent | Proposed |
+| A worktree per task from the latest remote main. Never touch the owner's checkout | Proposed |
+| Controller lives in the skills repository | Proposed |
 
-## 受け入れた弱点
+## Accepted weaknesses
 
-- マシンが眠っている間は進まない。起きた後の最初の定期実行で、GitHub の状態を読み直して続きから再開する。
-- 状態の変化への反応が、定期実行の間隔だけ遅れる。
-- 1 台のマシンで動かす前提である。複数のマシンで同時に動かすことは考えない。
+- No progress while the machine sleeps. The next run re-reads GitHub and resumes
+- Reaction delayed by the schedule interval
+- Single machine. No concurrent machines
 
-## 将来の移行
+## Future
 
-状態の判断を、GitHub から読んだ事実だけで結果が決まる部品として切り出しておけば、実行場所を後から GitHub のホストランナーへ移せる。移行するかどうかは決めていない。
+If state judgment depends only on GitHub facts, execution can later move to GitHub-hosted runners. Undecided.

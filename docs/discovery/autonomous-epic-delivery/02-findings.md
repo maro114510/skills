@@ -1,77 +1,73 @@
-# 既存の仕組みの調査結果
+# Findings on the existing pieces
 
-この文書の内容はすべて事実である。調査対象は、エピックの作成から実装までを担う 3 つのスキルと 2 つのエージェント定義、振り返りの記録、関連する Issue と PR である。
+Status Fact throughout. Surveyed three skills, two agent definitions, retrospectives, and related Issues and pull requests.
 
-## 既存の仕組みの分担
+## Division of work
 
-| 構成要素 | 担う役割 | 人とのやりとり | GitHub への書き込み |
+| Component | Role | Human contact | GitHub writes |
 |---|---|---|---|
-| `create-github-issues` スキル | 会話や計画から、エピックと子 Issue、その親子関係と依存関係を作る | 作成前に構成と範囲の承認を会話で得る | Issue の作成と関係の登録 |
-| `implement` スキル | 1 つの作業をワークツリーで実装し、検証してコミットする | 通常は確認を挟む。自律モードでは質問の代わりに「判断待ち」を返す | 自律モードでは書き込まない |
-| `orchestrate-epic` スキル | エピックの子 Issue を作業エージェントに配り、レビューを通して PR を作る | 計画をコメントし、人がエピックに目印を付けると動き出す | ラベル、コメント、ブランチの送信、PR の作成 |
-| 作業エージェント定義 | `implement` の自律モードで Issue を 1 件実装する | なし | 書き込まない |
-| レビューエージェント定義 | 差分を Issue の要件と受け入れ基準に照らして審査し、CI と同等の検査を自分で実行する | なし | 書き込まない |
+| create-github-issues | Epic, child Issues, hierarchy, dependencies | Approval of structure before creation | Issues and relations |
+| implement | One unit of work in a worktree, verified and committed | Asks in normal mode. Autonomous mode returns a decision request instead | None in autonomous mode |
+| orchestrate-epic | Hands child Issues to workers, reviews, opens pull requests | Posts a plan. Starts when a person marks the Epic | Labels, comments, pushes, pull requests |
+| Worker agent | Implements one Issue through implement autonomous mode | None | None |
+| Reviewer agent | Judges the diff against the Issue and runs CI-equivalent checks | None | None |
 
-編成スキルは、レビューエージェントが合格を出せば PR を作る。マージはしない。人がマージして Issue が閉じると、編成スキルは次の依存先に着手できるようになる。
+The orchestration skill opens a pull request after a reviewer pass and never merges. A person merges, the Issue closes, and dependents become startable.
 
-## 編成スキルの構造上の欠陥
+## Structural defects of the orchestration skill
 
-1. **会話セッションに依存している。** 作業エージェントもレビューエージェントも、編成を動かしている会話の中で起動される。会話が終われば止まり、人が再実行するまで続かない。
-2. **人と共有している作業ディレクトリを書き換える。** 作業前に、利用者が使っている作業ディレクトリでブランチを切り替え、最新を取り込む。同じディレクトリで作業中の人や別のエージェントを乱す。
-3. **二重起動を防ぐ仕組みがない。** ラベルは排他制御にならない。「他のセッションが 30 分以内に着手コメントを書いていれば避ける」という推定だけで防いでいる。
-4. **承認の種類を区別しない。** GitHub の承認レビューを一度も参照しない。人の承認とレビューエージェントの合格を区別できない。
-5. **守りが手順書の記述だけである。** 「作業エージェントは送信しない」「編成役はコードを編集しない」は手順書の指示であり、ツールの権限では強制されていない。スキル自身がこれを残存リスクとして認めている。
-6. **実行時間と費用の上限がない。** 上限があるのは修正の回数だけである。
-7. **状態判定にテストがない。** どの Issue が着手可能かを決める判定は手順書の文章で書かれており、単体テストがない。
+| Defect | Effect |
+|---|---|
+| Runs inside a conversation | Stops when the session ends |
+| Switches and pulls the shared checkout | Disturbs people and agents using the same directory |
+| No double-start prevention | Labels do not exclude. A 30-minute comment heuristic is the only guard |
+| Approval kinds not distinguished | Never reads approving reviews |
+| Rules are prompt text only | "Workers never push" is not enforced by tool permissions |
+| No time or cost limit | Only repair count is bounded |
+| State judgment untested | Written as prose, no unit tests |
 
-## Issue 生成スキルの欠陥
+## Defects of Issue creation
 
-- 作成前に、既存の Issue との重複を調べない。
-- 作成が途中で中断したとき、Issue のタイトルが一致するかどうかで作成済みかを判断する。人が作った同名の Issue を取り違える恐れがある。
-- 依存先の Issue の作成に失敗すると、その依存関係を外したまま後続の Issue を作る。後続は依存なしとして着手されうる。
+- No duplicate check against existing Issues
+- Resume after interruption matches by title and can pick a person's Issue of the same name
+- A failed dependency creation leaves dependents without the dependency
 
-後の 2 点は、別の改修計画で対処が予定されている。
+The last two are planned in a separate remediation.
 
-## 振り返りから見えた繰り返しの問題
+## Recurring problems from retrospectives
 
-振り返りのスキルは、会話の記録を読み、改善点を人向けの文章で提示する。Issue は作らず、重複も調べない。過去の振り返りでは、次の問題が繰り返し報告された。
+- Stale distributed skill copies reintroduced fixed bugs
+- A headless review denied shell access reported no problems anyway
+- Retrospectives analyzed an old main and reported solved or already filed problems
+- Command existence checks passed through a non-runnable shim
+- New worktrees lacked build outputs and dependencies
+- Finding the worktree for an Issue scanned every worktree each time
 
-- 配布された古いスキルのコピーを使い続け、既に直した不具合が再発した。配布物と最新版のずれを検出する手段がない。
-- ヘッドレスで起動したレビューが、シェルの権限で拒否されて差分を読めず、それでも「問題なし」と返した。
-- 振り返り自体が古い `main` を分析し、解決済みの指摘や既に起票済みの指摘を新しい問題として提案した。最新化と既存 Issue との照合の手順がない。
-- コマンドの存在確認が、実行できない代理コマンドを通してしまい、誤ったツールを選んだ。
-- 新しいワークツリーに生成物や依存が揃っておらず、作業の開始が遅れた。
-- Issue と作業中のワークツリーの対応を探すために、毎回すべてのワークツリーを調べていた。
+## Problems in the existing improvement Issues
 
-## 改善 Issue 群の構造上の問題
+- Assume the conversation stays open until merge. External restart is out of scope
+- Grant auto-merge by label without verifying who set it, while agents share the owner's credentials
+- Ten Issues in one chain because all edit the same file
+- Re-verification rules conflict. One requires re-verifying every waiting pull request per merge, another only overlapping ones
+- Detection criteria undefined for "waiting for a person", "checked on the real interface", "freeze released"
+- Some remediation handoffs never became Issues
 
-編成スキルを強化するためのエピックと子 Issue が既にある。完了済みの 4 件を除く残り 10 件の子 Issue は、調査時点で 1 件も既定ブランチに入っていない。内容には次の問題がある。
+## Past attempt
 
-- **前提が今回の目標と合わない。** エピックは「会話セッションが続いている間に」マージまで進めることを前提にしている。外部から再起動する仕組みは範囲外としている。
-- **ラベルで権限を与えている。** 自動マージの許可をラベルで表す。ラベルを付けた人を検証しない。人とエージェントが同じ GitHub の認証を使うため、エージェントが自分で許可を付けられる。
-- **一直線の依存になっている。** 子 Issue はすべて同じファイルを編集するため、10 段の一直線に並んでいる。
-- **再検証の方針が互いに矛盾している。** 「承認は最新の既定ブランチに対するものに限る」という要件は、マージのたびにすべての待機中 PR の再検証を求める。一方で別の Issue は、重なる変更を持つ PR だけを再検証すればよいとしている。前者に従うと、審査の費用が PR 数の二乗で増える。
-- **判定の基準が定義されていない。** 「人の確認が求められている状態」「実際のインタフェースでの確認」「凍結の解除」がどう検出されるかが書かれていない。
-- **引き継ぎが漏れている。** 改修計画から編成スキルへ引き継いだ項目の一部が、Issue になっていない。
+A prototype ran each worker in its own visible terminal pane so the person could watch and answer. Never merged. Does not remove the conversation dependency.
 
-## 過去の試み
+## Open Issues at survey time
 
-作業エージェントを、会話の裏ではなく端末上の見えるペインで 1 Issue 1 ペインとして動かす試作があった。既定ブランチには入っていない。利用者が作業を目で追え、判断待ちの作業エージェントに同じセッションのまま回答を送れる利点を狙っていた。会話セッションへの依存という欠陥 1 は解消しない。
-
-## このリポジトリの公開 Issue の状況
-
-調査日時点の状況である。どれを閉じ、どれを書き直すかは保留している。05 の論点 9 を参照。
-
-| Issue | 内容 | 状況 |
+| Issue | Content | State |
 |---|---|---|
-| #141 | 編成スキルを自動マージまで強化するエピック | 未着手。前提の書き直しが必要 |
-| #144 | 承認を審査したコミットと既定ブランチに結びつける | PR #223 が衝突したまま停止 |
-| #245 | 共有の作業ディレクトリでの切り替えと取り込みをやめる | 未着手。どの設計でも必要 |
-| #217 | ラベルによる自動マージの許可 | 未着手。ラベルを使わない方針と合わない |
-| #218 | レビューを受け入れ基準ごとの根拠に結びつける | 未着手 |
-| #219 | PR のマージ可否を決定的に判定する | 未着手 |
-| #171 | 上限に達した実行を凍結し、人の解除で再開する | 未着手。上限の定義が残っていない |
-| #148 | 重なる PR のマージを直列化する | 未着手 |
-| #145 | CI と指摘の修正、順次マージを担う | 未着手 |
-| #220 | マージ後に既定ブランチの健全性を確かめる | 未着手。会話セッションでの待機が前提 |
-| #221 | マージ確認後に次の Issue へ進む | 未着手。会話セッションの継続が前提 |
+| 141 | Epic to extend orchestration to auto-merge | Premise must be rewritten |
+| 144 | Bind approval to the reviewed commit and base | Pull request 223 stalled on conflicts |
+| 245 | Stop switching and pulling the shared checkout | Needed in every design |
+| 217 | Auto-merge permission by label | Conflicts with the no-label decision |
+| 218 | Bind review to evidence per acceptance criterion | Not started |
+| 219 | Deterministic merge decision | Not started |
+| 171 | Freeze at the limit, resume on human release | Limit undefined |
+| 148 | Serialize merges of overlapping pull requests | Not started |
+| 145 | CI and review repair, sequential merge | Not started |
+| 220 | Check main health after merge | Assumes an open session |
+| 221 | Start the next Issue after merge | Assumes an open session |

@@ -21,7 +21,10 @@ orchestrate-epic and `oe` are the only control plane for delivery in this reposi
 | DeepSeek Harness dsh-superagent as the control plane | Developer preview that states breaking changes, runs with full operating-system access, binds the pipeline to one harness |
 | Both programs for different scopes | The scopes overlap exactly. Both decide which Ticket starts next and what counts as done |
 
-The Ticket, claim, and verdict model with GitHub as the source of truth is the model the Tickets already use. A second definition of the same work costs more than porting the few intentline ideas that have evidence behind them.
+| Decisive reason |
+|---|
+| The Ticket, claim, and verdict model is the one the Tickets already use |
+| A second definition of the same work costs more than porting the few intentline ideas with evidence behind them |
 
 ## Consequences
 

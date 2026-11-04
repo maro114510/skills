@@ -55,10 +55,10 @@ flowchart TB
 |---|---|
 | Intent | What a person wants changed and why. Arrives as conversation, an Issue, or a retrospective finding |
 | Session | An interactive harness session a person runs. Every gate is passed in one |
-| Design | The agreed boundary of a change, a Design Doc or ADR under `docs/design/` or `docs/adr/`. Merging its pull request is the agreement. A change that moves no boundary needs none, and its Epic records that |
+| Design | The agreed boundary of a change, a Design Doc or ADR. Merging its pull request is the agreement. A change that moves no boundary needs none, and its Epic says so |
 | Epic | A parent Issue grouping the Tickets derived from one Design, approved by a person in a Session before the Tickets exist |
 | Ticket | A child Issue of an Epic. One independently verifiable unit of work whose acceptance criteria are split into automated checks, each naming the command that proves it, and manual checks that need a person |
-| Mandate | The fact that a Ticket exists under an approved Epic in a repository the Operator listed. Covers the Ticket's stated scope only. An Owner whose answer or instruction widens that scope writes a Question asking for a new Ticket instead of acting |
+| Mandate | A Ticket exists under an approved Epic in a repository the Operator listed. Covers the Ticket's stated scope only. An answer that widens the scope makes the Owner ask for a new Ticket instead of acting |
 | Operator | The person who lists repositories for the Runner and sets each repository's Mode |
 | Runner | The deterministic program a schedule wakes. Reads GitHub, derives each Ticket's next action, starts an Owner or Verifier as an Executor session when the action needs one, exits |
 | Mode | The Operator's setting for a repository, one of the three below |
@@ -69,9 +69,9 @@ flowchart TB
 | Wait state | Why a Ticket needs a person, one of the three below |
 | Holder | Who or what has the Ticket now. An Owner, a Verifier, or a person in a Wait state |
 | Board | The one view that shows every Ticket's Holder and Wait state, whether the Runner is healthy, and what happened to one Ticket. A healthy state takes no space |
-| Mergeable | A pull request whose head commit has green CI and a success verdict, no open change request from a person, and no conflict with its base, with its manual checks listed for the person who merges. Verification is bound to the head commit. A base that moves afterwards is not re-verified |
-| Attention | The pipeline's measure. Messages and answers people wrote for a pull request, read from harness logs of Sessions and from GitHub comments, divided by mergeable pull requests produced. Read together with the rate of reverts and of changes requested after review |
-| Evaluation | The judgment of a skill change. Candidate and current version run the same fixed tasks on a pinned model and Executor, the pass threshold fixed before the runs, and the paired difference decides. Inputs are trigger accuracy, deterministic assertions, token cost, and the correction rate in local session history |
+| Mergeable | Head commit with green CI and a success verdict, no open change request from a person, no conflict with the base, manual checks listed for the merger. Bound to the head commit. A moved base is not re-verified |
+| Attention | The pipeline's measure. Messages and answers people wrote for a pull request, from Session logs and GitHub comments, per mergeable pull request. Read with the rate of reverts and of changes requested after review |
+| Evaluation | The judgment of a skill change. Candidate and current version run the same tasks on a pinned model and Executor. The threshold is fixed before the runs. The paired difference decides. Inputs are trigger accuracy, deterministic assertions, token cost, and the correction rate in session history |
 
 | Mode | Runner behavior |
 |---|---|

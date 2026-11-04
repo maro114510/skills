@@ -1,43 +1,41 @@
-# 問題と完了の定義
+# Problem and done definition
 
-## 現状で止まる場所
+## Where it stops today
 
-状態は事実である。人がエピックを承認すると、既存の編成スキルが子 Issue を実装し、PR を作るところまで進める。しかし次の 4 か所で止まり、人が手を入れるまで再開しない。
+Status Fact. After a person approves an Epic, the orchestration skill implements child Issues and opens pull requests, then stops in four places until a person acts.
 
-- **会話が終わると止まる。** 編成は会話セッションの中で動く。セッションを閉じると止まり、人が同じ指示を出し直すまで再開しない。
-- **PR を作った後を誰も見ない。** CI の失敗やレビュー指摘を拾って直す役割がない。
-- **依存のある Issue は一段目で止まる。** 依存先の Issue がマージされて閉じるまで次に着手しない。マージは人だけが行うため、人がマージしない限り先へ進まない。
-- **承認の種類を区別していない。** 人による承認と、レビューエージェントの合格を区別せず、GitHub 上の承認レビューも参照しない。
+| Stop | Cause |
+|---|---|
+| Conversation ends | Orchestration runs inside a session. Closing it halts everything |
+| Pull request opened | Nobody fixes CI failures or review comments |
+| Dependent Issue | Work waits for the dependency to merge and close, and only a person merges |
+| Approval kinds | Human approval and reviewer pass are not distinguished. Approving reviews are never read |
 
-## 完了の定義
+## Done
 
-状態は合意済みである。エピックを登録して放置すれば、子 Issue はすべて次のどれかになる。
+Status Agreed. An Epic left alone ends with every child Issue in one state.
 
-1. マージ済み。
-2. PR ができており、人のレビューを待っている。
-3. 人の判断を待って止まっており、そのことを人に通知済み。実装方針の確認待ちや、前に進まないための停止がこれに当たる。
-4. 依存先が 2 か 3 にあるため、着手せずに待っている。
+| State |
+|---|
+| Merged |
+| Pull request open, waiting for human review |
+| Stopped for a human decision, and the person notified |
+| Not started because a dependency is in one of the two states above |
 
-当初は「すべて PR になっている」ことを目標にしていた。しかし依存のある Issue は、依存先の人のレビューが終わるまで着手しないと合意したため、4 の状態が生じる。完了の定義には 4 を含める。
+The last state was added because work never stacks on an unmerged dependency.
 
-## 優先順位
+## Priority
 
-状態は合意済みである。最優先は、上の完了の定義を人の付き添いなしで満たすことである。自動マージはそのための手段であり、必達の条件ではない。人のレビューが要らない変更に限ってマージを自動にする。
+Status Agreed. Meeting the done definition unattended comes first. Auto-merge is a means, limited to changes that need no human review.
 
-## 範囲
+## Scope
 
-状態は合意済みである。
+Status Agreed.
 
-範囲に含めるのは、エピックの開始からマージまでの次の作業である。
-
-- 実装と PR の作成
-- CI 失敗の修正
-- レビューエージェントによる審査と、その指摘の修正
-- マージ
-- 依存先が閉じた後の、次の Issue への着手
-
-範囲に含めないものは次のとおり。
-
-- 振り返りから改善点を抽出し、重複を除いて Issue を作る前段の流れ。仕組みが動いてから別に扱う。
-- デプロイとリリース。
-- 壊れたときの自動の切り戻し。
+| In | Out |
+|---|---|
+| Implementation and pull request creation | Turning retrospectives into deduplicated Issues |
+| CI failure repair | Deploy and release |
+| Reviewer review and repair of its findings | Automatic rollback |
+| Merge | |
+| Starting the next Issue after a dependency closes | |

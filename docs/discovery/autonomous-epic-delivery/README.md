@@ -1,48 +1,36 @@
-# 自律的なエピック実行の発見記録
+# Discovery: autonomous epic delivery
 
-Record as of 2026-10-14. The later orchestrate-epic rebuild changed the agent identity, auto-merge, and review-class decisions. The current designs are [development-pipeline.md](../../design/development-pipeline.md) and [orchestrate-epic.md](../../design/orchestrate-epic.md).
+Record as of 2026-10-14 of the facts and agreements gathered before designing unattended delivery from an Epic to merge. Not a design and not a plan. The later orchestrate-epic rebuild changed the agent identity, auto-merge, and review-class decisions. The current designs are [development-pipeline.md](../../design/development-pipeline.md) and [orchestrate-epic.md](../../design/orchestrate-epic.md).
 
-エピックを登録したら、子 Issue の実装からマージまでを人の付き添いなしで進めたい。この記録は、その仕組みを作る前に調べた事実と、論点ごとの合意状況をまとめる。設計書でも実装計画でもない。設計と実装は、ここで合意した論点を入力にして別に行う。
-
-## 状態の区別
-
-各記述には次のどれかの状態を付ける。合意していない内容を、決定事項として読まれないようにするためである。
-
-| 状態 | 意味 |
+| Status tag | Meaning |
 |---|---|
-| 事実 | 調査で確認した内容。判断を含まない |
-| 合意済み | 論点として提示し、利用者が合意した内容 |
-| 提案 | 論点として提示したが、利用者がいま合意を取る必要はないとした内容。実装時に改めて判断する |
-| 保留 | 判断を後の作業に回した内容 |
+| Fact | Verified by inspection. No judgment |
+| Agreed | Presented as a decision point and agreed by the owner |
+| Proposed | Presented, agreement deferred to implementation |
+| Deferred | Decision pushed to later work |
 
-## 文書の構成
-
-| 文書 | 答える問い |
+| Document | Question it answers |
 |---|---|
-| [01-problem-and-goal.md](01-problem-and-goal.md) | 何が困っていて、どうなれば完了か |
-| [02-findings.md](02-findings.md) | 既存の仕組みは何をしていて、どこが欠けているか |
-| [03-external-constraints.md](03-external-constraints.md) | GitHub と OpenCode の仕様は、設計に何を強いるか |
-| [04-architecture-options.md](04-architecture-options.md) | どんな構成がありえて、なぜその方向を選んだか |
-| [05-decisions.md](05-decisions.md) | 論点ごとに何が合意され、何が残っているか |
+| [01-problem-and-goal.md](01-problem-and-goal.md) | What hurts and what counts as done |
+| [02-findings.md](02-findings.md) | What the existing pieces do and lack |
+| [03-external-constraints.md](03-external-constraints.md) | What GitHub and OpenCode force on the design |
+| [04-architecture-options.md](04-architecture-options.md) | Which shapes were possible and which was chosen |
+| [05-decisions.md](05-decisions.md) | What was agreed per decision point and what remains |
 
-上から順に読むと、問題、事実、制約、選択肢、決定の順に進む。合意内容だけを知りたい読者は 05 から読めばよい。
-
-## 調査の前提
-
-- 調査日は 2026-10-14 である。外部仕様は、この日に公式文書と手元の実行環境で確認した。
-- OpenCode の記述は版 1.19.0 に基づく。上流の開発系列は次の大版に移っており、コマンドや設定が変わる可能性がある。
-- 特定の組織や業務リポジトリに固有の情報は書かない。どのリポジトリにも当てはまる形に一般化している。例外は 02 の末尾にある、このリポジトリの公開 Issue の状況だけである。
-
-## 用語
-
-| 用語 | 意味 |
+| Assumption | Value |
 |---|---|
-| エピック | 子 Issue をまとめる親 Issue。子 Issue は GitHub 標準の親子関係と依存関係でつながる |
-| 制御スクリプト | 状態を判断し、GitHub を操作する決定的なプログラム。言語モデルを使わない |
-| 作業エージェント | 実装、修正、実装方針の作成を行う言語モデルのエージェント |
-| レビューエージェント | 作業エージェントとは別の新しいセッションで差分を審査するエージェント |
-| 常駐エージェント | 利用者が普段会話している、常に起動したエージェントのセッション |
-| エージェント用の身元 | 利用者の GitHub アカウントとは別の、GitHub App としての身元 |
-| レビュー区分 | Issue ごとに、人がどこまで確認するかを表す 3 段階の区分 |
-| 人の承認 | 書き込み権限を持つ人間が PR に付けた承認レビュー。エージェント用の身元による承認は含まない |
-| レビュー合格 | レビューエージェントが、マージを妨げる指摘なしと判定したこと。人の承認とは別物である |
+| Survey date | 2026-10-14 |
+| OpenCode version | 1.19.0 |
+| Repository specifics | None, except the Issue list at the end of 02 |
+
+| Term | Meaning |
+|---|---|
+| Epic | Parent Issue whose children are linked by GitHub sub-issues and dependencies |
+| Controller | Deterministic program that judges state and writes to GitHub. No model |
+| Worker | Model agent that implements, repairs, or drafts an approach |
+| Reviewer | Model agent that judges a diff in a fresh session |
+| Resident agent | The always-on agent session the owner talks to |
+| Agent identity | A GitHub App identity separate from the owner's account |
+| Review class | Three-level setting per Issue for how far a person checks |
+| Human approval | Approving review by a person with write access. Agent identity does not count |
+| Review pass | Reviewer found nothing that blocks a merge. Distinct from human approval |
