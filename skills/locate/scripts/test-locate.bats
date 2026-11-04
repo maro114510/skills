@@ -124,14 +124,13 @@ canonical() {
   expect "$(field '[.worktrees[].branch]')" '["feat/issue-9-a","feat/issue-9-a-2"]'
 }
 
-@test "an Issue finds a local branch carrying issue-<N> that GitHub does not link" {
-  worktree_on feat/issue-9 "${BATS_TEST_TMPDIR}/epic-worker"
-  git -C "${repo}" branch feat/issue-90-other
+@test "an Issue ignores a worktree branch that carries issue-<N> but that GitHub does not link" {
+  worktree_on feat/issue-9 "${BATS_TEST_TMPDIR}/unlinked"
   issue_gh OPEN
   run bash "${target}" https://github.com/o/r/issues/9
   expect "${status}" 0
-  expect "$(field .match)" one
-  expect "$(field .branches)" '["feat/issue-9"]'
+  expect "$(field .match)" none
+  expect "$(field .branches)" '[]'
 }
 
 @test "a URL for a repository other than this clone's origin exits 3" {
