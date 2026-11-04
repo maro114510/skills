@@ -24,17 +24,19 @@ worktree_on() {
   git -C "${repo}" worktree add -q -b "$1" "$2"
 }
 
-# Fakes babysit's pr-state.sh: pull request 7 of o/r in state $1 with head branch $2. One review thread is
-# unresolved and one resolved; one check failed, one passed, and one is still running.
+# Fakes babysit's pr-state.sh: pull request 7 of o/r in state $1 with head branch $2, from a fork when $3 is
+# true. One review thread is unresolved and one resolved; one check failed, one waits for a required action,
+# one passed, and one is still running.
 pr_state() {
   cat >"${LOCATE_PR_STATE}" <<EOF
 #!/usr/bin/env bash
 [ "\$1 \$2" = "o/r 7" ] || { echo "unexpected pr-state call: \$*" >&2; exit 2; }
 cat <<'JSON'
 {"repo":"o/r","number":7,"url":"https://github.com/o/r/pull/7","state":"$1","isDraft":false,
- "isCrossRepository":false,"baseRef":"main","headRef":"$2","head":"aaa",
+ "isCrossRepository":${3:-false},"baseRef":"main","headRef":"$2","head":"aaa",
  "threads":[{"id":"T1","isResolved":false},{"id":"T2","isResolved":true}],
- "checks":[{"name":"lint","status":"failed","url":"https://ci/lint"},{"name":"test","status":"pass","url":"https://ci/test"},
+ "checks":[{"name":"lint","status":"failed","url":"https://ci/lint"},{"name":"deploy","status":"action","url":"https://ci/deploy"},
+   {"name":"test","status":"pass","url":"https://ci/test"},
    {"name":"build","status":"pending","url":"https://ci/build"}]}
 JSON
 EOF
@@ -58,6 +60,11 @@ case "\$*" in
 esac
 EOF
   chmod +x "${BATS_TEST_TMPDIR}/bin/gh"
+}
+
+# Adds branch $1 of the fork fork/r to the branches GitHub links to Issue 9. Call it after issue_gh.
+link_fork_branch() {
+  printf '%s\thttps://github.com/fork/r/tree/%s\n' "$1" "$1" >>"${BATS_TEST_TMPDIR}/linked"
 }
 
 field() {
@@ -99,7 +106,7 @@ canonical() {
   run bash "${target}" https://github.com/o/r/pull/7
   expect "${status}" 0
   expect "$(field .unresolvedThreads)" 1
-  expect "$(field .failingChecks)" '[{"name":"lint","url":"https://ci/lint"}]'
+  expect "$(field .failingChecks)" '[{"name":"lint","url":"https://ci/lint"},{"name":"deploy","url":"https://ci/deploy"}]'
   expect "$(field .pendingChecks)" 1
 }
 
@@ -127,6 +134,26 @@ canonical() {
 @test "an Issue ignores a worktree branch that carries issue-<N> but that GitHub does not link" {
   worktree_on feat/issue-9 "${BATS_TEST_TMPDIR}/unlinked"
   issue_gh OPEN
+  run bash "${target}" https://github.com/o/r/issues/9
+  expect "${status}" 0
+  expect "$(field .match)" none
+  expect "$(field .branches)" '[]'
+}
+
+@test "a PR from a fork matches no worktree, even one on a local branch of the same name" {
+  worktree_on feat/x "${BATS_TEST_TMPDIR}/same-name"
+  pr_state OPEN feat/x true
+  run bash "${target}" https://github.com/o/r/pull/7
+  expect "${status}" 0
+  expect "$(field .isCrossRepository)" true
+  expect "$(field .match)" none
+  expect "$(field .worktrees)" '[]'
+}
+
+@test "an Issue ignores a linked branch that lives in a fork, even with a same-named local worktree" {
+  worktree_on feat/issue-9-a "${BATS_TEST_TMPDIR}/same-name"
+  issue_gh OPEN
+  link_fork_branch feat/issue-9-a
   run bash "${target}" https://github.com/o/r/issues/9
   expect "${status}" 0
   expect "$(field .match)" none
