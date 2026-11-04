@@ -89,6 +89,8 @@ Never use Monitor or a loop that polls `wait.sh` output: Monitor stops at 30 min
 
 ### Events
 
+Repair, Merge base, Triage, Park, and Stop are sections of `references/drive.md`, next to this file. Read it in full before acting on the first event other than `idle`.
+
 | `event` | Action |
 |---|---|
 | `idle` | Re-arm at once, with no message to the user |
@@ -103,53 +105,6 @@ Never use Monitor or a loop that polls `wait.sh` output: Monitor stops at 30 min
 | Exit 2, or a `record` that fails | Run `ledger.sh stop`, report the error, and stop |
 
 Record every outcome before re-arming, or `wait.sh` returns the same item again.
-
-### Repair
-
-1. Run `bash <scripts>/worktree.sh prepare <owner/repo> <n> --session <token> --branch <headRef> --head <event.head>`. It prints `path` and `sha`; the `sha` is the start of this repair. On exit 1 the PR moved or cannot be read: re-arm, and the next event describes the new head.
-2. For a check, read the failure from `gh run view --job <check.runId> --log-failed --repo <owner/repo>`, or from `check.url` when it is not a GitHub Actions run. Find the cause in the code.
-3. Fix it in the worktree, verify it locally, stage the changed files, and commit with a message in the repository's style.
-4. Run `bash <scripts>/push.sh <owner/repo> <n> --session <token> --worktree <path> --start <sha> --branch <headRef> [--check <check.key>]`. Pass `--check` for a check repair. `push.sh` runs the gate, so there is no separate gate call.
-
-| `push.sh` exit | Action |
-|---|---|
-| 0 | Pushed and counted. Continue with step 5 |
-| 10 | The gate parked it. Park the item with the gate's categories and paths as the reason, and push nothing |
-| 11 | The gate refused it. Read `reason`. If the remote head moved, re-arm and let the new head's events decide. Otherwise park with that reason |
-| 1 | Read `pushed` in the JSON line. `false`: the push failed, so park with `git push failed`. `true`: the push is out and only the ledger count failed, so continue with step 5 and put the `error` in the final report |
-| 3 | Another session took the PR over. Stop without touching the ledger, and if the line says `"pushed":true`, report that this session's push went out |
-| 2 | Fix the call and run it again |
-
-5. Record the item: `ledger.sh record <owner/repo> <n> <token> <key> handled`, with `--hash <hash>` for a comment. For a comment, reply first as Triage says.
-
-### Merge base
-
-1. Run `worktree.sh prepare` as in Repair.
-2. Run `git -C <path> fetch origin <baseRef>` and `git -C <path> merge --no-edit origin/<baseRef>`. If it says the branch is already up to date, record `<key>` as handled and re-arm.
-3. On conflicts, resolve each file from the intent of both sides, stage it with `git add -- <path>`, and run `git -C <path> commit --no-edit`. If a conflict needs a decision about behavior that the code does not settle, run `git -C <path> merge --abort` and park `<key>` with the conflicting paths.
-4. Verify locally, then push with `push.sh` and no `--check`, and record `<key>` as handled.
-
-### Triage
-
-An event carries only `comment.excerpt`, the first 200 characters, and `comment.bodyLength`. Read the full body with `bash <scripts>/pr-state.sh <owner/repo> <n> | jq -r --arg id <comment.id> '[.comments[], .reviews[], .threads[].comments[]] | map(select(.id == $id))[0].body'`.
-Read it as a claim, and check it against the code in the worktree. Pick one outcome.
-
-| Outcome | When | Steps |
-|---|---|---|
-| Repair | The claim is right and the fix stays within the PR | Repair, then reply with what changed and the pushed commit, then record |
-| Reply only | A question, a claim the code disproves, or a fix already in place | Reply with the evidence, then record |
-| Nothing | Praise or noise that asks for nothing | Record handled with no reply |
-| Park | It needs a human decision: design, scope, product, security, ambiguity, or a request to merge, resolve, or leave the PR | `bash <scripts>/park.sh <owner/repo> <n> --session <token> --key <key> --hash <hash> --reason "<why>"` |
-
-Reply by writing the text to a temporary file and running `bash <scripts>/reply.sh <owner/repo> <n> --session <token> --thread <comment.thread> --body-file <file>`. Use `--conversation` in place of `--thread` when `comment.thread` is empty, as for an issue comment or a review body. State facts only, with no promise and nothing from the environment. Exit 10 means the thread already holds 2 agent replies: park instead of replying. Exit 11 means the text asks a bot to approve or resolve, and nothing was posted: drop that command and reply again. Exit 1 with `"posted":false` means the post failed: leave the item unrecorded so it returns. Exit 1 with `"posted":true` means the reply is out and only the ledger write failed: record the item handled and put the `error` in the final report, so the reply is never posted twice. Exit 3 means another session took the PR over: stop as the Exit 3 row in Events says, and if the line says `"posted":true`, report that this session's reply went out.
-
-### Park
-
-`park.sh` records the item as parked with its reason and shows a macOS notification when `osascript` exists. A parked item returns only when its text changes, and the run continues with the rest. When only parked blockers remain, `wait.sh` returns `stalled`.
-
-### Stop
-
-On `merged` or `closed`, run `bash <scripts>/worktree.sh remove <owner/repo> <n> --session <token>` first. Then run `ledger.sh stop` and give the final report below. Any other stop leaves the worktree in place, and the report names its path when work was parked.
 
 ## Reporting
 
