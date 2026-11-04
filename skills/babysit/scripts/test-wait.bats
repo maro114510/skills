@@ -132,7 +132,8 @@ waiting='.reviewRequests = [{reviewer: "dave", type: "User"}]'
   poll
   expect "$(event)" comment
   expect "$(field .key)" "c:IC1"
-  expect "$(field .comment.body)" "please rename"
+  expect "$(field .comment.excerpt)" "please rename"
+  expect "$(field .comment.bodyLength)" 13
   report_current
   poll
   expect "$(event)" idle
@@ -193,6 +194,69 @@ waiting='.reviewRequests = [{reviewer: "dave", type: "User"}]'
   set_snap "${waiting} | .comments = [\$comment, (\$comment | .id = \"IC2\" | .bodyHash = \"h9\")]"
   poll
   expect "$(event)" idle
+}
+
+# A comment created before the session started (BABYSIT_NOW is 1970-01-12) and one by the viewer "me".
+# shellcheck disable=SC2016 # $comment is a jq variable bound by set_snap.
+before_start='.comments = [($comment | .id = "IC_old" | .author = "bot" | .bodyHash = "o1" | .createdAt = "1970-01-01T00:00:00Z"),
+  ($comment | .id = "IC_mine" | .author = "me" | .bodyHash = "m1")]'
+
+@test "watch fires no event for comments older than the session or by the viewer, and the report lists them" {
+  set_snap "${waiting} | ${before_start}"
+  poll
+  expect "$(event)" idle
+  set_snap "${before_start} | .state = \"CLOSED\""
+  poll
+  expect "$(event)" closed
+  expect "$(field '[.report.muted[] | "\(.key) \(.author)"] | join(",")')" "c:IC_old bot,c:IC_mine me"
+}
+
+@test "watch fires an edit to a comment older than the session" {
+  set_snap "${waiting} | ${before_start}"
+  poll
+  expect "$(event)" idle
+  set_snap "${waiting} | ${before_start} | .comments[0].bodyHash = \"o2\""
+  poll
+  expect "$(event)" comment
+  expect "$(field .key)" c:IC_old
+}
+
+@test "a comment event carries a 200-character excerpt and the body length, not the body" {
+  set_snap "${waiting} | .comments = [\$comment | .body = (\"x\" * 5000)]"
+  poll
+  expect "$(event)" comment
+  expect "$(field '.comment.excerpt | length')" 200
+  expect "$(field .comment.bodyLength)" 5000
+  expect "$(field .hash)" h1
+  expect "$(field '.comment | has("body")')" false
+}
+
+@test "a new watch session takes a new baseline" {
+  set_snap "${waiting} | ${before_start}"
+  poll
+  expect "$(ledger '.baseline["c:IC_old"]')" o1
+  bash "${scripts}/ledger.sh" stop o/r 7 "${token}"
+  bash "${scripts}/ledger.sh" start o/r 7 tok-2 >/dev/null
+  expect "$(ledger '.baseline // "none"')" none
+}
+
+@test "drive still acts on comments older than the session and on the viewer's own" {
+  set_snap "${waiting} | ${before_start}"
+  poll --mode drive
+  expect "$(field .key)" c:IC_old
+  record c:IC_old handled --hash o1
+  poll --mode drive
+  expect "$(field .key)" c:IC_mine
+}
+
+@test "an unresolved thread hidden by the baseline still blocks READY" {
+  set_snap ".threads = [{id: \"T1\", isResolved: false, path: \"a\", line: 1,
+    comments: [\$comment | .id = \"TC_old\" | .createdAt = \"1970-01-01T00:00:00Z\"]}]"
+  poll
+  expect "$(event)" idle
+  run bash "${scripts}/check.sh" o/r 7 --snapshot "${snap}"
+  expect "$(field '.event')" null
+  expect "$(field '.blockers | join(",")')" "1 unresolved review thread(s)"
 }
 
 @test "an approval without a body is not an event, and a review body is" {

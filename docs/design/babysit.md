@@ -61,6 +61,7 @@ Path is `$(git rev-parse --path-format=absolute --git-common-dir)/babysit/<owner
 | `replies.conversation` | `reply` | Agent replies to issue comments and review bodies, which share one top-level conversation | Yes |
 | `api_failures` | `wait` | Consecutive API failures across re-arms | Yes |
 | `lock` | skill, `wait` | Session token and heartbeat | Replaced |
+| `baseline.<comment key>` | `wait` | In watch, the body hash of each comment created before `started_at`, taken on the first poll | Yes |
 | `heads.<sha>.first_seen` | `wait` | Start of the no-CI clock | No |
 | `head.sha`, `head.gen` | `wait` | Last observed head and a counter raised on every observed head change | No |
 | `own.pushes` | `push` | SHA of each push, written before pushing | No |
@@ -123,13 +124,14 @@ An exit of 1 or 3 from `push` or `reply` with `pushed` or `posted` true in its J
 
 Event rules follow.
 
+- A `comment` event carries a 200-character excerpt, the body length, and the body hash, never the full body, which the skill reads from `pr-state` only when it acts.
 - Only GitHub Actions check runs can be re-run, so other checks go straight to `check_confirmed`.
 - A `rerun` item is pending until a newer run finishes, and that run decides it without a ledger write, closing it on a pass and firing `check_confirmed` on a failure.
 - Any other pending item has no disposition yet.
 - In watch, reported, handled, and parked all count as dispositions.
 - In drive, only handled and parked count, so drive still acts on items watch reported.
 - Only drive parks items, so `stalled` fires only in drive.
-- Every stop report lists all parked items with their reasons, and all reported, pending, and unresolved items, in every mode.
+- Every stop report lists all parked items with their reasons, and all reported, muted, pending, and unresolved items, in every mode.
 - A bot that rewrites one comment on each push costs one triage per push, bounded by the round limit.
 - A bot that answers each reply is bounded by the 2-reply cap per thread, including a bot that answers with fresh top-level comments, since they all share the `conversation` thread.
 - `wait` exits nonzero when the API keeps failing, and the skill then stops and reports.
@@ -145,6 +147,7 @@ Event rules follow.
 - A requested reviewer who has not reviewed yet
 - Converting the PR to draft, which only blocks READY while other events still fire
 - An approval without a body
+- In watch, a comment in `baseline` whose body hash is unchanged, or a comment by the viewer; both are listed in `report.muted`
 
 ## READY
 
