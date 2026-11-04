@@ -118,6 +118,12 @@ paged_fixtures() {
   expect "$(field '.reviews[0].state')" APPROVED
 }
 
+@test "each latest review carries the commit it reviewed" {
+  normalize '.latestOpinionatedReviews.nodes[0].commit = {oid: "bbb"}'
+  [ "${status}" -eq 0 ]
+  expect "$(field '.latestReviews[0].commit')" bbb
+}
+
 @test "keeps only the latest run of each check, keyed stably across heads" {
   normalize
   expect "$(field '.checks | length')" 2
