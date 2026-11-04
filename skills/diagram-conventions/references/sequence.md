@@ -1,7 +1,7 @@
 # Sequence Diagram
 
 Every rule ends with a tag: `[Standard: UML 2.5.1]` when OMG UML 2.5.1 states it, `[Convention]` when it is common practice adopted here.
-A review finding's principle is the heading of the section that holds the rule it breaks, and the finding's evidence quotes that rule as well as the source. A defect that breaks rules in two sections is two findings. A defect no rule here covers is filed under the SKILL.md principle it breaks.
+A review finding's principle is the heading of the section that holds the rule it breaks, and the finding's evidence quotes that rule as well as the source. A defect that breaks rules in two sections is two findings; one that breaks several rules in one section is one finding quoting each. Judge Correctness against the source and Conformance against the diagram as drawn, so a message drawn the wrong way round is a Correctness finding even when its symbol fits the drawn diagram. A defect no rule here covers is filed under the SKILL.md principle it breaks.
 
 ## Purpose
 
@@ -19,12 +19,13 @@ It does not show a procedure's full branching logic, how one thing's state chang
 
 - Draw a lifeline only for a participant the source names as sending or receiving a message. A phase, a document, or a data item is never a lifeline. `[Convention]`
 - Draw each message from the participant the source says sends it to the one the source says receives it. Never reverse it because the reply or the data flows the other way, and never route it through a participant the source does not put between them. `[Convention]`
-- Never add a message the source does not state, including a reply, an acknowledgment, a self-call, or a retry. `[Convention]`
+- Never add a message the source does not state, including a reply, an acknowledgment, a self-call, or a retry. An action the source says one participant performs on or against another named participant, such as "checks them against the user store", is a message to that participant. `[Convention]`
 - Put every message the source makes conditional inside an `opt` or an `alt` operand guarded by that condition, in the source's words; never invent a guard. A step the source makes optional, with words such as "may" or "only when", is an `opt`; when the source states no condition, the guard is the source's own optional wording, such as `client may cancel`. `[Convention]`
-- Use `alt` only for alternatives the source states as excluding each other, one operand per alternative. Use `else` only for the case the source states as "otherwise". `[Convention]`
+- Use `alt` only for alternatives the source states as excluding each other, one operand per alternative. Mermaid opens every later operand with `else`, so follow it with that alternative's own condition, and write `else otherwise` only for a case the source states as "otherwise". `[Convention]`
 - Use `par` only where the source states that the operands happen concurrently or in any order. When the source gives no order for two messages, draw them in sequence in either order and list the order as an assumption. `[Convention]`
 - Use `loop` only where the source states a repetition, labeled with the bound or condition the source states. Use `break` only where the source states that the rest of the enclosing fragment, such as a loop, is skipped. `[Convention]`
-- When the source does not say whether a sender waits for the receiver, draw `->>` and list it as an assumption. `[Convention]`
+- Draw `->>` where the source says the sender waits and `-)` where it says the sender does not. When the source says neither, draw `->>` and list it as an assumption. `[Convention]`
+- Draw a message as a reply only where the source itself says the caller waits for it; a wait you assumed never makes a reply. Draw any other message back to an earlier sender as a new message. `[Convention]`
 - Create or destroy a participant only where the source states that it starts or ends within the interaction. `[Convention]`
 
 ## Conformance
@@ -62,7 +63,7 @@ It does not show a procedure's full branching logic, how one thing's state chang
 - Every lifeline stands for a participant at one level of abstraction, such as all services or all classes in one service, never a mix. `[Convention]`
 - Declare the lifelines in the order they first take part, the initiator leftmost, so most messages run left to right. `[Convention]`
 - A message label names the request, signal, or returned value in the source's terms, in the shortest phrase that does. `[Convention]`
-- Nest combined fragments only as deep as the source's conditions nest. `[Convention]`
+- Nest combined fragments only as deep as the source's conditions nest. A step that can happen only in one `alt` operand, such as one that needs what that operand sends, goes inside that operand. `[Convention]`
 
 ## Validation
 
