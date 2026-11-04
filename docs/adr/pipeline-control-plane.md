@@ -29,6 +29,6 @@ orchestrate-epic and `oe` are the only control plane for delivery in this reposi
 ## Consequences
 
 - One definition of work, a Ticket under an approved Epic, read from GitHub by every stage.
-- Whatever coordinates delivery here, including the Runner, Modes, Wait states, and Board of `development-pipeline.md`, belongs to `oe`. A second program would be a second control plane.
+- The Runner of `development-pipeline.md` is an `oe` program and replaces the skill session that coordinated the loop. Modes, Wait states, and the Board are `oe` records and views. A second program would be a second control plane.
 - Intentline's separation of run success, work acceptance, and outcome acceptance is unavailable until a failure shows it is needed. The Mergeable ceiling and a person's merge stand in for it.
 - The pipeline runs on the repository owner's token. A verdict can be forged, an Owner's unmarked comment reads as a person's and could answer its own Question, and a Ticket's Holder is a record rather than a separate identity. These remain the accepted risks of `orchestrate-epic.md`.

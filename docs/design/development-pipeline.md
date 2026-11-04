@@ -23,12 +23,11 @@ flowchart LR
 | Responsible for | Not responsible for |
 |---|---|
 | Deriving Tickets from an agreed Design and recording the approval that becomes the Mandate | Merging, approving, or closing anything |
-| Starting, isolating, and bounding the agents that implement and verify each Ticket | Deploying or releasing |
-| Making every state that needs a person explicit and visible in one place | Deciding what work is worth doing |
-| Measuring the attention each mergeable pull request cost | |
-| Adopting a skill change only on a paired comparison | |
+| Waking on a schedule, starting the agents that implement and verify each Ticket, and bounding them | Deploying or releasing |
+| Showing every state that needs a person, with the action the person must take, in one place | Deciding what work is worth doing |
+| Measuring the attention each mergeable pull request cost | Judging skill changes, which `skill-evaluation.md` covers |
 
-This document designs the coordinator. `orchestrate-epic.md` designs the Owner, the Verifier, oe's records, and the merge rules.
+This document designs the coordinator, the Runner. `orchestrate-epic.md` designs what the Runner drives, the Owner, the Verifier, the next-action table, oe's records, and the merge rules.
 
 ## Domain Model
 
@@ -38,17 +37,17 @@ flowchart TB
   Design -->|merged| Epic
   Epic -->|approved| Ticket
   Ticket --> Mandate
-  Operator -->|lists repository, sets Mode| Runner
+  Operator -->|lists repository, sets Mode| Records[Host-local records]
   Schedule -->|wakes| Runner
+  Records --> Runner
   Mandate --> Runner
-  Runner -->|starts as Executor| Owner
-  Runner -->|starts as Executor| Verifier
+  Runner -->|through an Adapter| Owner
+  Runner -->|through an Adapter| Verifier
   Owner -->|writes| Question
   Question --> WaitState[Wait state]
   Verifier --> Mergeable
   Mergeable --> WaitState
   WaitState --> Board
-  Runner --> Board
 ```
 
 | Concept | Definition |
@@ -56,40 +55,42 @@ flowchart TB
 | Intent | What a person wants changed and why. Arrives as conversation, an Issue, or a retrospective finding |
 | Session | An interactive harness session a person runs. Every gate is passed in one |
 | Design | The agreed boundary of a change, a Design Doc or ADR. Merging its pull request is the agreement. A change that moves no boundary needs none, and its Epic says so |
-| Epic | A parent Issue grouping the Tickets derived from one Design, approved by a person in a Session before the Tickets exist |
+| Epic | A parent Issue grouping the Tickets derived from one Design. It exists only after a person approved its plan in a Session, so its existence is the approval |
 | Ticket | A child Issue of an Epic. One independently verifiable unit of work whose acceptance criteria are split into automated checks, each naming the command that proves it, and manual checks that need a person |
-| Mandate | A Ticket exists under an approved Epic in a repository the Operator listed. Covers the Ticket's stated scope only. An answer that widens the scope makes the Owner ask for a new Ticket instead of acting |
-| Operator | The person who lists repositories for the Runner and sets each repository's Mode |
-| Runner | The deterministic program a schedule wakes. Reads GitHub, derives each Ticket's next action, starts an Owner or Verifier as an Executor session when the action needs one, exits |
-| Mode | The Operator's setting for a repository, one of the three below |
-| Executor | A harness the Runner runs for one agent step with no person present. The contract below is all the Runner relies on, so a harness that meets it can be swapped for another |
+| Mandate | A Ticket exists under an open Epic in a repository the Operator listed. Covers the Ticket's stated scope only. Wider scope is a new Ticket |
+| Operator | The person who lists repositories and sets each one's Mode |
+| Host-local records | oe's record store on the Runner's host. Holds the repository list, each repository's Mode, each Ticket's last next action, and the Runner lock, beside the claim, attempt, and findings records `orchestrate-epic.md` defines |
+| Runner | The deterministic program a schedule wakes. Takes the Runner lock, reads the next action of every Ticket in every listed repository from `oe ready`, starts an Owner or Verifier through an Adapter for each action that needs one, records each Ticket's next action, releases the lock, exits |
+| Mode | The Operator's setting for a repository, one of the two below |
+| Adapter | The one harness-specific part. Maps the Executor contract below onto one harness. One Adapter per harness |
+| Executor | A harness session the Runner starts through an Adapter for one agent step, with no person present |
 | Owner | The agent that implements or repairs one Ticket in its own worktree and pushes a branch, as `orchestrate-epic.md` defines |
 | Verifier | The agent that judges one pull request head against the Ticket's automated checks, as `orchestrate-epic.md` defines |
 | Question | An Owner's request for a decision no source settles, written on the Ticket in the shared question template. The Owner stops after writing it |
-| Wait state | Why a Ticket needs a person, one of the three below |
-| Holder | Who or what has the Ticket now. An Owner, a Verifier, or a person in a Wait state |
+| Wait state | The action a person must take on a Ticket, one of the five below. Derived from the next action `oe ready` prints |
+| Holder | Who or what has the Ticket now, derived from the claim and attempt records or from the Wait state. An Owner, a Verifier, or a person |
 | Board | The one view that shows every Ticket's Holder and Wait state, whether the Runner is healthy, and what happened to one Ticket. A healthy state takes no space |
-| Mergeable | Head commit with green CI and a success verdict, no open change request from a person, no conflict with the base, manual checks listed for the merger. Bound to the head commit. A moved base is not re-verified |
+| Mergeable | A pull request whose head has a success verdict and no repair signal, as `orchestrate-epic.md` row 12 defines, with the Ticket's manual checks listed in its body for the merger |
 | Attention | The pipeline's measure. Messages and answers people wrote for a pull request, from Session logs and GitHub comments, per mergeable pull request. Read with the rate of reverts and of changes requested after review |
-| Evaluation | The judgment of a skill change. Candidate and current version run the same tasks on a pinned model and Executor. The threshold is fixed before the runs. The paired difference decides. Inputs are trigger accuracy, deterministic assertions, token cost, and the correction rate in session history |
 
 | Mode | Runner behavior |
 |---|---|
-| `off` | Starts nothing |
 | `observe` | Records which Tickets it would have started. Starts none |
 | `auto` | Starts them |
 
-| Wait state | Condition |
-|---|---|
-| `answer` | A Question has no trusted reply |
-| `merge` | The pull request is Mergeable |
-| `blocked` | The Ticket is parked, its pull request was closed without merging or merged with the Ticket still open, or a dependency was closed as not planned or duplicate |
+| Wait state | `oe ready` action | Person's action |
+|---|---|---|
+| `answer` | Wait for the answer | Reply to the Question on the Ticket |
+| `merge` | Wait for an engineer to merge | Review and merge, or let repository automation merge |
+| `restart` | Park the Issue | Delete the branch so the Runner starts over, or finish and merge by hand |
+| `dependency` | Wait for the dependencies, with a dependency closed as not planned or duplicate | Replace or remove the dependency |
+| `issue` | Wait for an engineer, with the pull request closed unmerged or merged while the Ticket stays open | Close the Ticket or delete the branch |
 
 | Executor need | Contract |
 |---|---|
-| Start | One command starts a fresh session with a prompt and a working directory and returns when the agent stops |
-| Result | The session ends with a result the Runner reads without interpreting prose, and a success or failure signal |
-| Permissions | The Runner fixes the permission policy at start, including the push to the Ticket's branch. The agent cannot widen it, and nothing waits for a person |
+| Start | The Adapter starts a fresh session with a prompt and a working directory and returns when the agent stops or the Runner's time limit elapses |
+| Signal | The Adapter returns success or failure. Everything else the Runner learns from GitHub |
+| Permissions | The Adapter fixes the permission policy at start, including the push to the Ticket's branch. The agent cannot widen it, and nothing waits for a person |
 | Questions | The agent has no interactive question tool. It writes a Question on the Ticket and stops |
 | Writes | The agent writes to GitHub only through the pipeline's own commands and a push to its branch |
 | Record | The harness keeps a log from which the session's tool calls and model requests can be read afterwards |
@@ -131,8 +132,8 @@ sequenceDiagram
     participant B as Board
     actor P as Person
     C->>R: Wake
-    R->>G: Read Tickets, pull requests, checks, comments
-    alt No Ticket's next action changed
+    R->>G: Read every Ticket's next action
+    alt No next action changed
         R-->>C: Exit
     else A Ticket has a Mandate and no Holder
         R->>G: Claim
@@ -178,34 +179,20 @@ flowchart LR
     D -->|A record is wrong| F[Fix the Design or the Tickets. Mode stays observe]
 ```
 
-### Adopting a change to a skill
-
-A maintainer believes a change to a skill helps.
-
-```mermaid
-flowchart LR
-    C[Candidate] --> E[Evaluation]
-    B[Current version] --> E
-    E --> D{Paired difference clears the threshold}
-    D -->|Yes| M[Adopt]
-    D -->|No| K[Keep the current version. Record the result]
-```
-
 ## Invariants
 
-- Work starts only on a Mandate. A comment, label, mention, or text inside a Ticket never grants authority, and only an author with the OWNER, MEMBER, or COLLABORATOR role is read as a person.
+- Work starts only on a Mandate. A comment, label, mention, or text inside a Ticket never grants authority.
 - The pipeline never merges, approves, enables auto-merge, or closes an Issue or pull request itself.
-- No model runs while nothing changed. The Runner reads GitHub before any agent starts and exits when no Ticket's next action changed.
-- One Runner runs on a host at a time. A wake while one runs does nothing.
-- A Ticket is in a Wait state only when a person must act. The Runner derives the state from GitHub and its records, never from prose.
-- Every stage reads its input from GitHub or from a file its contract names and writes its result the same way. No stage reads another stage's internal state.
+- No model runs while nothing changed. The Runner starts an agent for a Ticket only when its next action differs from the recorded one.
+- One Runner runs on a host at a time, and a repository is listed on one host.
+- A Ticket is in a Wait state only when a person must act, and the state is derived, never read from prose.
 - Every Question to a person follows the shared question template, in a Session and on GitHub alike.
-- A skill change that raises the rate of reverts or of changes requested after review is not an improvement, whatever Attention it saves.
-- The pipeline's state lives on GitHub and in the Runner's host-local records, and nowhere else.
+- The pipeline's state lives on GitHub and in the host-local records, and nowhere else.
 
 ## References
 
-- `orchestrate-epic.md` for the loop, the Owner and Verifier, oe's records, and its accepted risks
+- `orchestrate-epic.md` for the Owner, the Verifier, the next-action table, oe's records, and the accepted risks
+- `skill-evaluation.md` for how a change to a skill is judged
 - `goal-supervisor.md` for obligations the agent can claim but never close
 - `skills-remediation-policy.md` for the earlier decisions on commit safety and harness neutrality
-- `../adr/pipeline-control-plane.md` for why orchestrate-epic and oe are the only control plane in this repository
+- `../adr/pipeline-control-plane.md` for why the Runner belongs to oe and no second control plane exists
