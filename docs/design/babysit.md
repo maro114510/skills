@@ -124,6 +124,7 @@ An exit of 1 or 3 from `push` or `reply` with `pushed` or `posted` true in its J
 
 Event rules follow.
 
+- A `comment` event carries a 200-character excerpt, the body length, and the body hash, never the full body, which the skill reads from `pr-state` only when it acts.
 - Only GitHub Actions check runs can be re-run, so other checks go straight to `check_confirmed`.
 - A `rerun` item is pending until a newer run finishes, and that run decides it without a ledger write, closing it on a pass and firing `check_confirmed` on a failure.
 - Any other pending item has no disposition yet.

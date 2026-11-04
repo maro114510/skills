@@ -10,6 +10,8 @@ def no_ci_seconds: 600;
 def session_seconds: 28800;
 def max_rounds: 5;
 def stuck_repairs: 2;
+# An event carries this much of a comment body; the skill reads the rest from pr-state only when it acts.
+def excerpt_chars: 200;
 
 # The item keys of the ledger that still describe this head; comment keys never carry a head.
 def relevant($head; $gen): select(startswith("c:") or endswith("@\($head)#\($gen)") or . == "x:\($head)#\($gen)");
@@ -74,7 +76,8 @@ def relevant($head; $gen): select(startswith("c:") or endswith("@\($head)#\($gen
 | [ $comments[] | select(muted | not)
     | ("c:" + .id) as $k | select(settled($k; .bodyHash) | not)
     | {row: 10, event: "comment", key: $k, hash: .bodyHash,
-       comment: {id, kind, author, authorAssociation, url, body, thread, path, line, review_state: .state}} ]
+       comment: {id, kind, author, authorAssociation, url, excerpt: ((.body // "")[:excerpt_chars]),
+         bodyLength: ((.body // "") | length), thread, path, line, review_state: .state}} ]
   as $comment_items
 
 | ($conflict_items + $check_items + $comment_items) as $pending

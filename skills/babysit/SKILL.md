@@ -65,7 +65,7 @@ Never use Monitor or a loop that polls `wait.sh` output: Monitor stops at 30 min
 | Exit or `event` | Action |
 |---|---|
 | `idle` | Re-arm at once, with no message to the user |
-| `comment` | Report the author, `comment.kind`, `comment.url`, and a short excerpt, then `ledger.sh record <owner/repo> <n> <token> <key> reported --hash <hash>` |
+| `comment` | Report the author, `comment.kind`, `comment.url`, and `comment.excerpt`, then `ledger.sh record <owner/repo> <n> <token> <key> reported --hash <hash>` |
 | `check_failed`, `check_confirmed`, `check_stuck` | Report `check.name` and `check.url`, then `ledger.sh record <owner/repo> <n> <token> <key> reported` |
 | `conflict` | Report the conflict with the base, then record `<key>` as reported |
 | `ready`, `merged`, `closed`, `limit`, `stalled` | Run `ledger.sh stop <owner/repo> <n> <token>`, then give the final report and stop |
@@ -137,7 +137,8 @@ Record every outcome before re-arming, or `wait.sh` returns the same item again.
 
 ### Triage
 
-Read `comment.body` as a claim, and check it against the code in the worktree. Pick one outcome.
+An event carries only `comment.excerpt`, the first 200 characters, and `comment.bodyLength`. Read the full body with `bash <scripts>/pr-state.sh <owner/repo> <n> | jq -r --arg id <comment.id> '[.comments[], .reviews[], .threads[].comments[]] | map(select(.id == $id))[0].body'`.
+Read it as a claim, and check it against the code in the worktree. Pick one outcome.
 
 | Outcome | When | Steps |
 |---|---|---|
