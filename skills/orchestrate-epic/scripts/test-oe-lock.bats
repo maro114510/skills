@@ -100,6 +100,50 @@ token_of() {
   [ "${status}" -eq 0 ]
 }
 
+@test "a session under another TZ and locale is refused while the holder that took the lock under UTC and C runs" {
+  start_session
+  first="${session_pid}"
+  OE_SESSION_PID="${first}" run env -u LC_ALL -u LC_TIME TZ=UTC LANG=C bash "${oe}" lock acquire o/r 1
+  [ "${status}" -eq 0 ]
+  start_session
+
+  OE_SESSION_PID="${session_pid}" run env TZ=Asia/Tokyo LC_ALL=ja_JP.UTF-8 bash "${oe}" lock acquire o/r 1
+
+  [ "${status}" -eq 4 ]
+}
+
+@test "a session under another TZ and locale gets the lock once the holder that took it under UTC and C has ended" {
+  start_session
+  first="${session_pid}"
+  OE_SESSION_PID="${first}" run env -u LC_ALL -u LC_TIME TZ=UTC LANG=C bash "${oe}" lock acquire o/r 1
+  [ "${status}" -eq 0 ]
+  end_session "${first}"
+  start_session
+
+  OE_SESSION_PID="${session_pid}" run env TZ=Asia/Tokyo LC_ALL=ja_JP.UTF-8 bash "${oe}" lock acquire o/r 1
+
+  [ "${status}" -eq 0 ]
+}
+
+@test "a lock that recorded its holder's start in the taker's TZ and locale still refuses a session under the same ones" {
+  start_session
+  first="${session_pid}"
+  OE_SESSION_PID="${first}" run bash "${oe}" lock acquire o/r 1
+  [ "${status}" -eq 0 ]
+  # Before oe lock fixed TZ and the locale, it recorded the start as ps prints it under the taker's own.
+  store="${OE_STATE_DIR}/locks.git"
+  ref="$(git --git-dir="${store}" for-each-ref --format='%(refname)' refs/oe-lock)"
+  taker_start="$(env TZ=Asia/Tokyo LC_ALL=ja_JP.UTF-8 ps -o lstart= -p "${first}" | sed -e 's/^ *//' -e 's/ *$//')"
+  legacy="$(git --git-dir="${store}" cat-file -p "${ref}" | sed "s|^lstart=.*|lstart=${taker_start}|" |
+    git --git-dir="${store}" hash-object -w --stdin)"
+  git --git-dir="${store}" update-ref "${ref}" "${legacy}"
+  start_session
+
+  OE_SESSION_PID="${session_pid}" run env TZ=Asia/Tokyo LC_ALL=ja_JP.UTF-8 bash "${oe}" lock acquire o/r 1
+
+  [ "${status}" -eq 4 ]
+}
+
 @test "acquiring without OE_SESSION_PID is refused, because no process would mark the session as running" {
   unset OE_SESSION_PID
 
