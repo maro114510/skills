@@ -165,4 +165,4 @@ On `merged` or `closed`, run `bash <scripts>/worktree.sh remove <owner/repo> <n>
 - READY means the PR is open, not a draft, mergeable, every latest check passed, nothing pending, no thread unresolved, no review requested or required, and no changes requested. A requested reviewer who has not started blocks READY, so silence never reads as approval.
 - A thread the agent answered stays unresolved until a human resolves it, so a drive run can end in `stalled` or `limit` with answered threads open.
 - A head with no check 10 minutes after it was first seen counts as having no CI, and reviews alone decide READY.
-- `limit` fires 8 hours after `ledger.sh start`, or when 5 rounds are used and a repairable item is still pending. Say which; the user can start a new session.
+- `limit` fires 8 hours after `ledger.sh start`, or when 5 rounds are used and a repairable item is still pending. Say which. A new session restarts the 8 hours but not the rounds, which count every push to the PR.
