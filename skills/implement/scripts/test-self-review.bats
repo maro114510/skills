@@ -385,7 +385,8 @@ result_line() {
   [ "${status}" -eq 4 ]
   has_line "reviewer log line"
   [[ "$(result_line)" == "SELF_REVIEW status=empty "* ]]
-  [ "${lines[-1]}" = "$(result_line)" ]
+  # A negative array subscript needs bash 4.3; macOS ships bash 3.2, so index from the length instead.
+  [ "${lines[${#lines[@]} - 1]}" = "$(result_line)" ]
 }
 
 @test "whitespace-only output counts as empty" {
