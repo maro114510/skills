@@ -274,7 +274,7 @@ sequenceDiagram
 - A bot that refuses the re-review on a rate limit leaves the repair unreviewed
 - A bot finding the Owner cannot reproduce still spends an attempt
 - The board adds GitHub reads, so a large Epic reaches the rate limit sooner
-- A board keeps refreshing after the Operator stops listing the repository
+- A board keeps refreshing after the Operator stops listing the Epic
 
 ## Decisions
 
@@ -302,7 +302,7 @@ sequenceDiagram
 | Worktrees | An agent's worktree is removed when the agent ends, and unpushed work is discarded |
 | Where records go | The record store, because comments under the user's account cluttered timelines. Only questions and re-review requests stay on GitHub, in a fixed format that says an agent wrote them |
 | Record key | Repository and Issue: an Issue has one parent Epic, and no writer is given the Epic |
-| Dropping records | oe forget, once every Issue of an Epic is closed. It refuses while an Issue is open, and oe ready stays read-only |
+| Dropping records | oe forget, which the Runner runs at a wake that finds every Issue of a listed Epic closed. It refuses while an Issue is open, and oe ready stays read-only |
 | Acceptance checks | Verification splits automated checks from manual ones, and no agent checks a box that needs a human, template boxes included |
 | The board in Herdr | Opt-in with git config `skills.herdr`, read only inside Herdr, so no other run calls herdr and no Herdr user gets a pane unasked |
 | Board refresh | Every 3 minutes, because each refresh repeats oe ready's GitHub reads |
