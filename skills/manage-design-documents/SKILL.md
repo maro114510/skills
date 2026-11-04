@@ -2,22 +2,21 @@
 name: manage-design-documents
 description: >
   Decide whether a change needs a Design Doc, an ADR, both, or neither, then create, revise, delete, or review them in a Git repository.
-  A Design Doc states the intended design of a system or domain; an ADR records one consequential decision and why. Neither carries status, authors, dates, or a changelog, because Git holds history.
+  A Design Doc states the intended design of a system or domain; an ADR records one consequential decision and why.
   Use for "write a design doc", "add an ADR", "update the design doc", "does this need an ADR", "設計ドキュメントを書いて", "ADR を書いて", "Design Doc を更新して", "ADR が必要か判断して".
   Not for hunting fatal design defects (pr-doc-review-pe).
-allowed-tools: Read, Glob, Grep, Edit, Write, AskUserQuestion, Bash(git status:*, git ls-files:*, git grep:*, git rm:*)
+allowed-tools: Read, Glob, Grep, Edit, Write, AskUserQuestion, Bash(git grep:*, git rm:*)
 argument-hint: "[change or decision to document | document path to review]"
 ---
 
 # manage-design-documents
 
-Keep a repository's Design Docs and ADRs few, small, and true to the intended design.
 Work in the repository the user names, otherwise the current one. Never commit, push, or open a pull request.
 
 | Document | States | Never states |
 |---|---|---|
-| Design Doc | What a system or domain is meant to be: its concepts, responsibilities, boundaries, behavior, and guarantees. It is normative, including design not implemented yet | Decision history, alternatives, implementation status, code-level design, full API or schema detail, coding conventions, design slogans |
-| ADR | One consequential decision, its decisive reasons, and its consequences | The investigation's history, or the resulting design in full |
+| Design Doc | What a system or domain is meant to be: its concepts, responsibilities, boundaries, behavior, and guarantees | Decision history, alternatives, implementation status, implementation mechanisms or code-level design, full API or schema detail, exhaustive scenarios, edge cases, or failure modes, coding conventions, design slogans |
+| ADR | One consequential decision, its decisive reasons, and its consequences | The investigation's history |
 
 Neither document carries status, authors, dates, a changelog, an owner, or an approval state.
 
@@ -39,7 +38,7 @@ When several rows apply, take every action they name.
 
 The Design Doc is normative. Code that does not implement part of it yet does not contradict it; code that behaves otherwise does. When the user says the design changes, change it. Otherwise, when code, an Issue, or another document contradicts it, ask whether the design changes or the other side is wrong, and never rewrite the design to match code or let an Issue override it.
 
-Beyond such a contradiction, ask with AskUserQuestion, giving concrete options, only when the design the request needs cannot be determined uniquely from the request and the sources section 1 reads, or when an unresolved premise or missing guarantee could cause data corruption, a security exposure, a broken contract, or an irreversible change. Never invent a domain rule: leave out a rule those sources do not state and that meets neither condition, and do not count its absence as ambiguity. Decide everything else yourself.
+Beyond such a contradiction, ask with AskUserQuestion, giving concrete options, only when the design the request needs cannot be determined uniquely from the request and the sources section 1 reads, or when an unresolved premise or missing guarantee could cause data corruption, a security exposure, a broken contract, or an irreversible change. Never invent a domain rule: leave out a rule those sources do not state and that meets neither condition, and do not count its absence as ambiguity.
 
 ## 3. Write
 
@@ -73,7 +72,7 @@ sequenceDiagram
 - <Related current Design Docs, ADRs, or specifications>
 ````
 
-- Include a section only when it has content.
+- Use only these sections, each only when it has content; never write a placeholder.
 - A scenario's diagram shows the actors, their interactions, the conditions that change the flow, the changes to data or domain state, and the outcome. Participants are conceptual responsibilities, not necessarily services or classes. Prose never restates the diagram.
 - When interaction order adds nothing, as in some system-level documents, draw the one diagram type that fits instead of inventing scenarios.
 - Draw and check each diagram with the `diagram-conventions` skill, and put only its Mermaid block into the document. Never add a step, order, branch, or concurrency the design does not state.
@@ -98,13 +97,13 @@ sequenceDiagram
 <Benefits, costs, limitations, and accepted risks>
 ```
 
-Put the resulting design in the Design Doc and list the ADR in its References; keep the rationale only in the ADR.
+Use exactly these four sections. Put the resulting design in the Design Doc and list the ADR in its References; keep the rationale only in the ADR.
 
 Before finishing, remove every section, sentence, and diagram you wrote that has no purpose, repeats another, or states something the table at the top forbids.
 
 ## 4. Revise and Delete
 
-- Change only what the request changes. When nothing material changes, edit nothing and say so.
+- Change only what the request changes.
 - Content you write follows this skill's format. Leave existing parts outside it, such as a Status field, as they are, and report them.
 - Delete an ADR without asking only when the request or a new decision explicitly replaces or retracts it. When obsolescence is only inferred, as from code or age, ask first.
 - If part of the ADR's decision still applies, keep it: move it into the replacing ADR, or, with no replacing ADR, cut the ADR down to that part instead of deleting it.
