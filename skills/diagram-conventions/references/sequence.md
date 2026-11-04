@@ -20,7 +20,7 @@ It does not show a procedure's full branching logic, how one thing's state chang
 - Draw a lifeline only for a participant the source names as sending or receiving a message. A phase, a document, or a data item is never a lifeline. `[Convention]`
 - Draw each message from the participant the source says sends it to the one the source says receives it. Never reverse it because the reply or the data flows the other way, and never route it through a participant the source does not put between them. `[Convention]`
 - Never add a message the source does not state, including a reply, an acknowledgment, a self-call, or a retry. `[Convention]`
-- Put every message the source makes conditional inside an `opt` or an `alt` operand guarded by that condition, in the source's words. A step the source makes optional, with words such as "may" or "only when", is an `opt`. `[Convention]`
+- Put every message the source makes conditional inside an `opt` or an `alt` operand guarded by that condition, in the source's words; never invent a guard. A step the source makes optional, with words such as "may" or "only when", is an `opt`; when the source states no condition, the guard is the source's own optional wording, such as `client may cancel`. `[Convention]`
 - Use `alt` only for alternatives the source states as excluding each other, one operand per alternative. Use `else` only for the case the source states as "otherwise". `[Convention]`
 - Use `par` only where the source states that the operands happen concurrently or in any order. When the source gives no order for two messages, draw them in sequence in either order and list the order as an assumption. `[Convention]`
 - Use `loop` only where the source states a repetition, labeled with the bound or condition the source states. Use `break` only where the source states that the rest of the enclosing fragment, such as a loop, is skipped. `[Convention]`
@@ -49,10 +49,8 @@ It does not show a procedure's full branching logic, how one thing's state chang
 
 - Use each symbol only for its meaning. A reply goes only to the caller of a synchronous message it returns from. `[Standard: UML 2.5.1]`
 - Time runs top to bottom on every lifeline, so a message is drawn below each message the source says comes before it. `[Standard: UML 2.5.1]`
-- An operand with no guard runs whenever it is reached. `[Standard: UML 2.5.1]`
-- Write each condition the source states as the guard after its keyword, and never invent one. `[Convention]`
 - No two `alt` guards can both hold, so the operand that runs is never in doubt. `[Convention]`
-- A comment carries no behavior, so never write a message as a note. `[Standard: UML 2.5.1]`
+- A comment carries no behavior, so never write a message as a note; a note stands in for an action only as the substitute below. `[Convention]`
 - `create` and `destroy` need Mermaid 10.3 or later; say so in the output when the diagram uses one. `[Convention]`
 - Never draw a message with `->`, `-->`, `-x`, `--x`, a bidirectional arrow, a half arrow, or a central connection: UML gives none of them a message meaning. `[Convention]`
 - `rect` and `box` are not UML symbols. Use `box` only for a grouping the source states and `rect` only to shade a span the source names, and say in the output that each stands in for no UML element. `[Convention]`
@@ -73,4 +71,5 @@ It does not show a procedure's full branching logic, how one thing's state chang
 - Every conditional message is inside an `opt` or `alt` operand whose guard is the source's condition
 - `par` appears only where the source states concurrency or any order, and every order the source does not state is listed as an assumption
 - Every arrow is one of `->>`, `-)`, `-->>`, or a `--)` create message, used for its meaning
+- Every unstated wait drawn as `->>` is listed as an assumption, and any `create` or `destroy` carries the Mermaid 10.3 note
 - No `critical` has an `option`, and every substitute form is named with no conformance claimed
