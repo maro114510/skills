@@ -127,8 +127,11 @@ def relevant($head; $gen): select(startswith("c:") or endswith("@\($head)#\($gen
     reasons: ([$keys[] | select($items[.].reason != null) | {key: ., value: $items[.].reason}] | from_entries) } as $report
 
 # Nothing dismisses an approval when a later commit is pushed, so only one on the head counts.
-| (any($s.latestReviews[]; .state == "APPROVED" and .commit == $s.head)
-   and all($s.latestReviews[]; .state != "CHANGES_REQUESTED")) as $approved
+# A bot's approval never counts, and a head that still needs a repair or a base merge is not approved.
+| (any($s.latestReviews[]; .state == "APPROVED" and .commit == $s.head and .authorType != "Bot")
+   and all($s.latestReviews[]; .state != "CHANGES_REQUESTED")
+   and $s.mergeable == "MERGEABLE"
+   and ($no_ci or (($s.checks | length) > 0 and all($s.checks[]; .status == "pass")))) as $approved
 
 | {repo: $s.repo, pr: $s.number, head: $s.head, gen: $g} as $base
 | def stop($name): $base + {event: $name, report: $report};

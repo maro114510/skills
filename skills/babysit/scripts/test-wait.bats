@@ -328,6 +328,48 @@ before_start='.comments = [($comment | .id = "IC_old" | .author = "bot" | .bodyH
   expect "$(event)" idle
 }
 
+@test "a bot's approval at the head is not approved" {
+  set_snap '.isDraft = true | .latestReviews = [{author: "coderabbitai", authorType: "Bot", state: "APPROVED", commit: "aaa"}]'
+  poll
+  expect "$(event)" idle
+}
+
+@test "an approval at the head with a failing check is not approved, so drive repairs it" {
+  set_snap '.latestReviews = [{author: "bob", state: "APPROVED", commit: "aaa"}]
+    | .checks[0].status = "failed"'
+  poll --mode drive
+  expect "$(event)" check_failed
+}
+
+@test "an approval at the head with a check still running is not approved" {
+  set_snap '.isDraft = true | .latestReviews = [{author: "bob", state: "APPROVED", commit: "aaa"}]
+    | .checks[0].status = "pending"'
+  poll
+  expect "$(event)" idle
+}
+
+@test "an approval at the head that conflicts with the base is not approved, so drive merges the base" {
+  set_snap '.latestReviews = [{author: "bob", state: "APPROVED", commit: "aaa"}]
+    | .mergeable = "CONFLICTING" | .mergeStateStatus = "DIRTY"'
+  poll --mode drive
+  expect "$(event)" conflict
+}
+
+@test "an approval at the head whose mergeability GitHub has not computed is not approved" {
+  set_snap '.isDraft = true | .latestReviews = [{author: "bob", state: "APPROVED", commit: "aaa"}]
+    | .mergeable = "UNKNOWN"'
+  poll
+  expect "$(event)" idle
+}
+
+@test "an approval at a head without checks waits until the head counts as having no CI" {
+  set_snap '.isDraft = true | .latestReviews = [{author: "bob", state: "APPROVED", commit: "aaa"}] | .checks = []'
+  poll
+  expect "$(event)" idle
+  BABYSIT_NOW=$((BABYSIT_NOW + 600)) poll
+  expect "$(event)" approved
+}
+
 @test "merged and closed outrank approved, and approved outranks READY" {
   approved_at_head='.latestReviews = [{author: "bob", state: "APPROVED", commit: "aaa"}]'
   set_snap "${approved_at_head} | .state = \"MERGED\""
