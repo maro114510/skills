@@ -27,7 +27,7 @@ sequenceDiagram
 ````
 
 - Use only these sections, each only when it has content; never write a placeholder.
-- State each fact once, in the section that owns it: a guarantee in Invariants, a flow or state change in its diagram. Overview and Domain Model never restate either.
+- State each fact once, in the section that owns it: Domain Model names concepts and their possible states; a flow or a transition between states lives in its diagram; a guarantee, including what a quantity counts, lives in Invariants. Overview and Domain Model never restate a transition or a guarantee.
 - A scenario's diagram shows the actors, their interactions, the conditions that change the flow, the changes to data or domain state, and the outcome. Participants are conceptual responsibilities, not necessarily services or classes. Prose never restates the diagram.
 - When interaction order adds nothing, as in some system-level documents, draw the one diagram type that fits instead of inventing scenarios.
 - Draw and check each diagram with the `diagram-conventions` skill, and put only its Mermaid block into the document. Never add a step, order, branch, or concurrency the design does not state.
