@@ -122,6 +122,14 @@ expect() {
   expect "$(calls)" 2
 }
 
+@test "a body mentioning CodeRabbit without approve or resolve is posted" {
+  printf '@coderabbitai fixed in abc1234; the approval flow is unchanged.\n' >"${tmp}/body.md"
+  reply --thread T1
+  [ "${status}" -eq 0 ]
+  expect "$(jq -r .posted <<<"${output}")" true
+  expect "$(calls)" 1
+}
+
 @test "no call ever resolves a thread" {
   reply --thread T1
   reply --thread T1
