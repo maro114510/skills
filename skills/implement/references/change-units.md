@@ -12,7 +12,7 @@ Split into units only for one of these reasons:
 4. Changes that do not depend on each other
 5. Changes that must be reverted separately
 
-Never split for size alone, a test from the code it drives, or a new function or type from its first usage. A schema or contract change is split from the code that uses it by reason 3. A large change with one reason for change is one unit.
+Never split for size alone, a test from the code it drives, or a new function or type from its first usage. A schema or contract change is split from the code that uses it by reason 3. A large change to which no reason above applies is one unit.
 
 Size is a guide only: a unit changes about 200 to 400 lines of production code, not counting tests, generated files, or diagrams. A unit well above that looks for a seam among the reasons above, and never splits for size alone.
 
