@@ -197,3 +197,20 @@ paged_fixtures() {
   run bash "${target}" o/r 7
   [ "${status}" -eq 1 ]
 }
+
+@test "reports the GraphQL rate-limit reset from gh" {
+  gh="${BATS_TEST_TMPDIR}/gh"
+  cat >"${gh}" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$2" == graphql ]]; then
+  echo "API rate limit exceeded" >&2
+  exit 1
+fi
+printf '%s\n' '1000010'
+EOF
+  chmod +x "${gh}"
+
+  PATH="${BATS_TEST_TMPDIR}:${PATH}" run bash "${target}" o/r 7
+  [ "${status}" -eq 75 ]
+  [[ "${output}" == *"reset at 1000010"* ]]
+}
