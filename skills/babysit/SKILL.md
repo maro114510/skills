@@ -108,30 +108,39 @@ Record every outcome before re-arming, or `wait.sh` returns the same item again.
 
 ## Driver
 
-`bash <scripts>/drive.sh <owner/repo> <n>`, run from a terminal inside a clone of the repository, drives a drivable PR with no harness and no model in the loop. Its header lists the exit codes.
+Drives a drivable PR from a terminal with no harness in the loop. Scripts do every deterministic step, and the agent is woken only for judgment.
 
-- It loops on `wait.sh` and does every deterministic step itself: re-runs, pushes through `push.sh`, replies through `reply.sh`, parks, and records.
-- It invokes the agent once for each check, conflict, or comment event that needs judgment, and never for `idle`.
-- A comment by `coderabbitai` or `chatgpt-codex-connector` that carries that bot's status marker is recorded as reported with no agent call.
-- A time `limit` with fewer than 5 rounds used starts a new session; at 5 it stops.
-- `git config skills.babysit.agent` names the agent command, such as `claude -p`. It has no default, is split on whitespace without shell evaluation, and gets the prompt as its last argument.
-- The command must let the agent edit, commit, and run the repository's tests without asking, and must be unable to push or write to GitHub. `drive.sh` cannot check this. It only removes `GH_TOKEN` and `GITHUB_TOKEN` from the agent's environment, keeps the session token out of its arguments and environment, and stops when the remote head moves while the agent runs. The ledger under the git common directory still holds the token, so the agent's sandbox must not write there.
+| Interface | Value |
+|---|---|
+| Command | `bash <scripts>/drive.sh <owner/repo> <n>`, inside a clone of the repository |
+| Agent | `git config skills.babysit.agent`, such as `claude -p`. No default. Split on whitespace, prompt appended last |
+| Agent call | Once per `check_confirmed`, `conflict`, or `comment`, and for a `check_failed` GitHub refuses to re-run. Never for `idle` or a review bot's status comment, which is recorded as reported |
+| Output | One JSON line on stop: `stop`, `report`, `rounds`, `pushes`, `errors` |
+| Exit | 0 `approved`, `ready`, or `merged`. 1 any other stop. 2 usage or configuration. 3 another session holds the PR |
+
+A time `limit` below 5 rounds starts a new session.
+
+The agent command must edit, commit, and run tests without asking, and must be unable to push or write to GitHub. `drive.sh` cannot enforce this: it withholds `GH_TOKEN`, `GITHUB_TOKEN`, and the session token from the agent's environment and arguments, and stops when the remote head moves while the agent runs. The ledger in the git common directory still holds the session token, so keep the agent from writing there.
 
 ## Single event
 
-`drive.sh` invokes the agent with this section, an event file, a worktree, and a result file. Handle that one event, write the result, and exit.
+Followed by the agent `drive.sh` invokes. Handle one event, write the result, and exit.
 
-- The worktree is a detached checkout of the PR head, already prepared. Work only there.
-- The event file holds the `wait.sh` event line plus `baseRef`, `headRef`, and, for a comment, the full `comment.body`.
-- Never push, write to GitHub, or run `push.sh`, `reply.sh`, `park.sh`, `rerun.sh`, `ledger.sh`, or `worktree.sh`. `drive.sh` acts on the result instead. The other Rules under Drive apply.
+| Input | Holds |
+|---|---|
+| Event file, also `$BABYSIT_EVENT_FILE` | The `wait.sh` event line plus `baseRef`, `headRef`, and a comment's full `comment.body` |
+| Worktree, the current directory | A detached checkout of the PR head. Work and commit only here |
+| Result file, also `$BABYSIT_RESULT_FILE` | Where to write the result |
 
-| `event` | Do, using the sections of `references/drive.md` | Result |
+| `event` | Do, as `references/drive.md` says | Allowed `outcome` |
 |---|---|---|
-| `check_failed`, `check_confirmed` | Repair steps 2 and 3 | `fixed`, or `park` |
-| `conflict` | Merge base steps 2 and 3, with no push. Abort the merge before a `park` | `fixed`, or `park` |
-| `comment` | Triage. Repair commits the fix, Reply only drafts the text, Nothing does nothing | `fixed` with an optional `reply`, `reply`, `none`, or `park` |
+| `check_failed`, `check_confirmed` | Repair steps 2 and 3 | `fixed`, `park` |
+| `conflict` | Merge base steps 2 and 3. Abort the merge before a `park` | `fixed`, `park` |
+| `comment` | Triage, without its push, reply, or record steps | `fixed`, `reply`, `none`, `park` |
 
-Write the result file as one JSON object, `{"outcome": "<result>", "reply": "<text>", "reason": "<why>"}`, with `reply` for a reply and `reason` for a park. A reply follows Triage's wording rules and never asks a bot to approve or resolve. A missing or invalid result parks the item.
+Result: `{"outcome": "<outcome>", "reply": "<text>", "reason": "<why>"}`. `reply` goes with `reply` and optionally `fixed`, and follows Triage's wording rules. `reason` goes with `park`. A missing or invalid result parks the item.
+
+Never push, write to GitHub, or run another babysit script. The Rules under Drive apply.
 
 ## Reporting
 
