@@ -36,7 +36,7 @@ Judge whether the context is clear on each axis:
 |------|-----------|
 | Granularity | Can each task be implemented and merged as an independent PR? |
 | Acceptance criteria | Can completion be confirmed with numbered verification steps? |
-| Specification | Are there implementation choices that could be interpreted more than one way? |
+| Specification | Are there implementation choices that could be interpreted more than one way, where the reading changes a requirement, a dependency, or a verification outcome? |
 
 - All clear: go to Step 2 without asking.
 - Any unclear: ask with **AskUserQuestion** in the "Step 1.5: Clarification Question Format" of `references/templates.<LANG>.md`, using only the unclear axes' subsections, with concrete answer choices per item, in one call of up to 4 questions, highest-impact first. **Stop after calling AskUserQuestion; do not proceed to Step 2 until the user responds.**
@@ -51,7 +51,7 @@ From the context, extract the Epic (title, purpose, scope) and child tasks `T1`,
 
 ## Step 3: Show Summary and Get Approval
 
-Use the "Step 3: Summary Format" in `references/templates.<LANG>.md`. Per task show its `Tn` id, title, wave/dependency, one-line background, requirement bullets, spec bullets, one-line target state, the full verification list, and any point-option pointer; for the Epic, its background and scope; and a dependency preview keyed by `Tn` — Mermaid for 12 or fewer tasks, the wave table for more, the same form Step 4 renders. When a doc-update `Tn` exists, state that the document is out of sync with the answers. Step 4.5 is skipped by default, so approving this summary must be equivalent to approving the final bodies.
+Use the "Step 3: Summary Format" in `references/templates.<LANG>.md`. Per task, or once for tasks that differ only in one value as the template allows, show its `Tn` id, title, wave/dependency, one-line background, requirement bullets, spec bullets, one-line target state, the full verification list, and any point-option pointer; for the Epic, its background, scope, target state, and verification; and a dependency preview keyed by `Tn` — Mermaid for 12 or fewer tasks, the wave table for more, the same form Step 4 renders. When a doc-update `Tn` exists, state that the document is out of sync with the answers. Step 4.5 is skipped by default, so approving this summary must be equivalent to approving the final bodies.
 
 **End your response here and wait for the user's reply. Do not proceed to Step 4 until approval is received.**
 On requested changes, update the summary, including the graph and waves, and show it again.
