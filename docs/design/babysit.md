@@ -64,7 +64,7 @@ babysit <PR URL> [--reset-budget]
 flowchart LR
   B["babysit.sh"] -->|"blocking call"| W["wait"]
   W -->|"one event line"| B
-  W -->|"poll every 60 s"| P["pr-state"]
+  W -->|"poll every 3 min"| P["pr-state"]
   P -->|"GraphQL"| G[(GitHub)]
   W <-->|"head, heartbeat"| L[("ledger")]
   B -->|"event file"| A["agent"]
@@ -314,6 +314,8 @@ The first one that fails is the reason.
 | Lifetime | No bound, because waiting costs only polling |
 | Failing checks | Repair at once without a re-run, since the last 100 CI runs here had 1 failure and no re-run |
 | Bot comments | No special handling until their cost is measured |
+| Poll interval | 3 minutes. One read already costs the minimum of 1 point, so only fewer reads lower the cost, and one PR costs about 20 points per hour |
+| Rate limit | A rate-limit failure makes `wait` wait until the reset time. REST has its own limit, so reading through REST while GraphQL waits is a later option |
 | API failure | Back off from 30 seconds up to 8 minutes, and exit 1 at 5 consecutive failures |
 | Concurrency | One run per PR through the lock |
 | Writers | An owner line in the PR body, because it lives on GitHub, so it holds across hosts and after the owner's session dies, and babysit reads it without knowing the owner. A label needs repository setup, and GitHub's handling of a missing one is undocumented. Reading another tool's lock or branch names would tie babysit to that tool, and a shared lock would hold only on one host |
