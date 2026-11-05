@@ -26,6 +26,9 @@ git log --format="--- %h%n%B" origin/HEAD..HEAD 2>/dev/null
 
 If both `git status --short` and `git diff --staged` are empty, report "nothing to commit" and stop.
 
+If `git status --short` holds any change this session did not make itself, touch nothing, including your own changes, and ask the user once via `AskUserQuestion`.
+When no human can answer, as in an autonomous run, do not ask or wait: end with `STOPPED: foreign changes` and the paths.
+
 ## Step 2. Screen for secrets (always blocks auto-commit)
 
 Cover staged, unstaged, and untracked changes: a suspected secret never ends up in a commit, however it got into the working tree.
