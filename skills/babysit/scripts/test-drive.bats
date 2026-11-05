@@ -54,13 +54,19 @@ if [ -n "\$expr" ]; then jq -r "\$expr" <<<"\$resp"; else echo "\$resp"; fi
 EOF
   printf '#!/usr/bin/env bash\ncat "%s/snap.json"\n' "${tmp}" >"${tmp}/pr-state"
   # Each call logs its arguments and prints the next queued event line; an empty queue is an API failure.
+  # A queued TERM sends SIGTERM to drive.sh, the stub's parent, and then returns idle.
   cat >"${tmp}/wait" <<EOF
 #!/usr/bin/env bash
 printf '%s\n' "\$*" >>"${tmp}/wait-calls"
 [ -s "${tmp}/events" ] || exit 1
-head -n 1 "${tmp}/events"
+next="\$(head -n 1 "${tmp}/events")"
 tail -n +2 "${tmp}/events" >"${tmp}/events.rest"
 mv "${tmp}/events.rest" "${tmp}/events"
+if [ "\${next}" = TERM ]; then
+  kill -TERM "\${PPID}"
+  next='{"event":"idle"}'
+fi
+printf '%s\n' "\${next}"
 EOF
   # The agent logs its call, environment, directory, and event file, then runs what the test put in agent-does.
   cat >"${tmp}/agent" <<EOF
@@ -359,4 +365,36 @@ printf '{\"outcome\":\"none\"}' >\"\${BABYSIT_RESULT_FILE}\""
   expect "${status}" 1
   expect "$(ledger '.items["c:IC1"].disposition')" parked
   expect "$(wc -l <"${tmp}/wait-calls" | tr -d ' ')" 1
+}
+
+@test "a worktree that cannot be prepared at an unchanged head parks the item instead of retrying it" {
+  set_snap ".comments = [${human_comment}]"
+  mkdir -p "$(git rev-parse --git-common-dir)/babysit/wt/o/r/7"
+  printf 'not a worktree\n' >"$(git rev-parse --git-common-dir)/babysit/wt/o/r/7/stray.txt"
+  queue_comment IC1 carol h1
+  queue_stop approved
+  drive
+  expect "${status}" 0
+  expect "$(agent_calls)" 0
+  expect "$(ledger '.items["c:IC1"].disposition')" parked
+}
+
+@test "a fix refused because the head branch was deleted parks the item instead of retrying it" {
+  queue '{event: "check_confirmed", key: "k:ci/test@x#0", check: {key: "ci/test", runId: 101, workflowRunId: 10}}'
+  queue_stop approved
+  agent_does "printf 'fixed\n' >fix.txt; git add -- fix.txt; git commit -q -m fix
+git --git-dir='${tmp}/srv/o/r.git' update-ref -d refs/heads/feat/x
+printf '{\"outcome\":\"fixed\"}' >\"\${BABYSIT_RESULT_FILE}\""
+  drive
+  expect "${status}" 0
+  expect "$(ledger '.items["k:ci/test@x#0"].disposition')" parked
+}
+
+@test "SIGTERM stops the drive with exit 1 and clears the lock" {
+  printf 'TERM\n' >>"${tmp}/events"
+  queue_stop approved
+  drive
+  expect "${status}" 1
+  expect "$(field .stop)" interrupted
+  expect "$(ledger '.lock // "none"')" none
 }
