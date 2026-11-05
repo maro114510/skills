@@ -295,6 +295,7 @@ sequenceDiagram
 | Restarting an Owner after an answer | Counts toward the cap of 3 attempts |
 | A Verifier ends without a verdict | It is restarted once on the same SHA, and the Issue is parked when the second start also gives no verdict |
 | Waiting | The Runner waits only for the agents it started. A schedule wakes it, and a wake that starts no agent exits at once |
+| Only a person can act | When no agent runs and every Issue is done, parked, or waits for a merge, an answer, its dependencies, or an engineer, the Runner ends at once instead of waiting, because only a person moves those Issues and a rerun resumes from GitHub. An Issue that waits for CI or can be claimed, repaired, or verified keeps the Runner running |
 | Agents running at once | 3 Owners and Verifiers combined per host, changeable in the record store |
 | Harnesses | One Adapter per harness maps the Executor contract of `development-pipeline.md` onto that harness. Agents start with no view of any other session |
 | Agent mode | The agents declare `mode: subagent`, because OpenCode V2 refuses to start an agent without it as a subagent. APM drops the key for Codex |

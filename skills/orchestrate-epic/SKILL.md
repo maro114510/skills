@@ -85,6 +85,7 @@ Pass `--running` for every Issue whose agent is running. Act on the exit code:
 | 2 or other | End the session as in Step 4 and show the error |
 
 When every line's action is `done`, end the session as in Step 4.
+When no agent runs and every line's action is `done`, `parked`, `wait-merge`, `wait-answer`, `wait-dependencies`, or `wait-engineer`, end the session as in Step 4 without starting a wait, because only a person moves those Issues and a rerun resumes from GitHub. Any other action, such as `wait-ci` or `wait-base`, keeps the loop running.
 When the Issue numbers and actions differ from the previous pass, set `<idle-since>` to now.
 
 ### 3.2 Start agents
@@ -156,7 +157,7 @@ The harness wakes you when an agent ends or the wait returns, and whichever come
 
 ## Step 4: End the session
 
-1. Start nothing new. Wait for each running agent to end, in Codex with `wait_agent`, then run `oe worktree remove <n>` for it.
+1. Start nothing new, and stop the wait if one is still running, so it never wakes the session after the lock is released. Wait for each running agent to end, in Codex with `wait_agent`, then run `oe worktree remove <n>` for it.
 2. When every Issue is `done`, run `oe forget <repo> <epic>`. Report a non-zero exit and go on.
 3. Release the lock: `oe lock release <repo> <epic> <token>`.
 4. Report to the user in Japanese with the format below, from the last `oe ready` output and the agents' final lines.
@@ -164,11 +165,11 @@ The harness wakes you when an agent ends or the wait returns, and whichever come
 ```markdown
 ## orchestrate-epic: Epic #<epic> を終了しました
 
-終了理由: <すべて完了 | 変化がないまま待機上限に到達 | default branch にチェックが無い | GitHub の読み取りが続けて失敗>
+終了理由: <すべて完了 | 人の対応待ちのみ | 変化がないまま待機上限に到達 | default branch にチェックが無い | GitHub の読み取りが続けて失敗>
 
 | Issue | 状態 | 次に必要なこと |
 |---|---|---|
-| #<n> | <oe ready の action> | <例: PR #<pr> のレビューと merge / 質問への回答 / parked の理由を見て判断> |
+| #<n> | <oe ready の action> | <例: PR #<pr> のレビューと merge / 質問への回答 / parked の理由を見て判断 / 依存 Issue #<m> の完了 / merge 済み PR のある Issue の確認> |
 
 再開するには同じホストで同じ引数でもう一度実行してください。状態は GitHub とこのホストの記録から読み直します。
 ```
