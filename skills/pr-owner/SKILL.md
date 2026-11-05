@@ -1,7 +1,7 @@
 ---
 name: pr-owner
 description: >
-  Move one orchestrate-epic Issue one step forward: implement it and open its PR, or repair its open PR, by running implement in autonomous mode and pushing the result.
+  Move one orchestrate-epic Issue one step forward: implement it and open its PR, or repair its open PR, by following implement without a human and pushing the result.
   When it cannot decide, it writes a question with `oe question` and pushes nothing.
   Started by orchestrate-epic with a brief holding the Issue, the base branch, and the Issue branch's worktree.
   Never merges and never enables auto-merge.
@@ -70,21 +70,9 @@ If any of the first four is missing, end without changing anything and say which
    ```
 
    Resolve each conflict so that both sides' intent holds, then commit the merge with `git -C <worktree> commit --no-edit`. If you cannot tell how to resolve one, run `git -C <worktree> merge --abort`, ask about it with `oe question` as in step 6, and end without running implement or pushing.
-5. Read `<skills-root>/implement/SKILL.md` and follow it with these arguments:
-
-   ```text
-   autonomous branch <branch> worktree <worktree> <task>
-   ```
-
+5. Read `<skills-root>/implement/SKILL.md` and follow it with `<task>` as its arguments, saying that no human is reachable, that the worktree is `<worktree>`, and that questions go to `oe question` as in step 6.
    `<task>` is `Implement GitHub Issue #<issue> in <repo>.` for a new task, or `Repair PR #<pr> for GitHub Issue #<issue> in <repo>.` followed by every present item for a repair. Append the answers from step 3 as the user's decisions.
-   Run every phase autonomous mode runs and end with its report, because step 6 acts on that report.
-6. Act on implement's `STATUS`:
-
-   | Status | Action |
-   |---|---|
-   | `BLOCKED` | Write its `QUESTIONS` with `oe question` as below. Push nothing |
-   | `FAILED` | Push nothing, and end |
-   | `DONE` | Go to step 7 |
+6. If you wrote a question while following implement, push nothing and end. If implement stopped before committing its work, push nothing and end. Otherwise go to step 7. Write a question this way, each with its options:
 
    ```bash
    bash <skills-root>/orchestrate-epic/scripts/oe question <repo> <issue> <<'EOF'

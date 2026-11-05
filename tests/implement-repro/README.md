@@ -31,7 +31,7 @@ $(cat <co>/tests/implement-repro/cases/<case>.md)" \
   --allowedTools "Bash,Read,Edit,Write,Glob,Grep,Skill,Task"
 ```
 
-For autonomous mode, make a linked worktree first and add `autonomous branch <branch> worktree <path>` as the line after `ARGUMENTS`.
+To run without a human, make a linked worktree first and say in the prompt that no human is reachable, which worktree to work in, and where to write questions.
 
 The agent can run any command with your credentials.
 Run it in a throwaway environment, without `gh` signed in, and with the skills directory read-only.
