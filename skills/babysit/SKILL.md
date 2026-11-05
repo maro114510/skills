@@ -99,6 +99,7 @@ Repair, Merge base, Triage, Park, and Stop are sections of `references/drive.md`
 | `check_stuck` | Park with the reason `still failing after 2 repair pushes` |
 | `conflict` | Merge base |
 | `comment` | Triage |
+| `untrusted_comment` | Never returned in drive: `wait.sh` parks a comment whose author is not OWNER, MEMBER, or COLLABORATOR, and not a review bot listed in `review_bots` of `<scripts>/evaluate.jq`, with the reason `untrusted author`. Report lists it in `pending` |
 | `approved`, `ready`, `merged`, `closed`, `limit`, `stalled` | Stop |
 | Exit 1 | The API failed 5 times in a row. Run `ledger.sh stop <owner/repo> <n> <token>`, report, and stop |
 | Exit 3 | Another session took the PR over. Stop without touching the ledger |
@@ -114,7 +115,7 @@ Drives a drivable PR from a terminal with no harness in the loop. Scripts do eve
 |---|---|
 | Command | `bash <scripts>/drive.sh <owner/repo> <n>`, inside a clone of the repository |
 | Agent | `git config skills.babysit.agent`, such as `claude -p`. No default. Split on whitespace, prompt appended last |
-| Agent call | Once per `check_confirmed`, `conflict`, or `comment`, and for a `check_failed` GitHub refuses to re-run. Never for `idle` or a review bot's status comment, which is recorded as reported |
+| Agent call | Once per `check_confirmed`, `conflict`, or `comment`, and for a `check_failed` GitHub refuses to re-run. Never for `idle`, a review bot's status comment, which is recorded as reported, or a comment from an untrusted author, which `wait.sh` parks |
 | Output | One JSON line on stop: `stop`, `report`, `rounds`, `pushes`, `errors` |
 | Exit | 0 `approved`, `ready`, or `merged`. 1 any other stop. 2 usage or configuration. 3 another session holds the PR |
 

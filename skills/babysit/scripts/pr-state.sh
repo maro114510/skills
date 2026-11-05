@@ -6,9 +6,9 @@
 # Output fields: repo, number, url, state, isDraft, author, viewer, isCrossRepository, baseRef,
 # headRef, head, mergeable, mergeStateStatus, reviewDecision, automationOwner, checks, reviewRequests,
 # latestReviews, threads, reviews, comments. automationOwner is the id of the first PR body line that
-# holds only <!-- automation-owner: <id> -->, or null. Each comment carries id, author, authorAssociation, body, bodyHash,
-# createdAt, url, and isMinimized. Each check is the latest run of its key. Each latest review
-# carries author, authorType, state, and the commit it reviewed.
+# holds only <!-- automation-owner: <id> -->, or null. Each comment carries id, author, authorType,
+# authorAssociation, body, bodyHash, createdAt, url, and isMinimized. Each check is the latest run of its key.
+# Each latest review carries author, authorType, state, and the commit it reviewed.
 # Exit: 0 printed, 1 GitHub could not be read completely, 2 usage error.
 set -uo pipefail
 
@@ -28,7 +28,7 @@ fail() {
   exit 1
 }
 
-COMMENT_FIELDS='id body createdAt url isMinimized authorAssociation author { login }'
+COMMENT_FIELDS='id body createdAt url isMinimized authorAssociation author { __typename login }'
 
 # One query shape for every page. Each connection is fetched only while its @include flag is true,
 # so later pages carry just the connections that still have a next page.
@@ -113,8 +113,8 @@ COMPLETE='
 # latest run of a key counts. A run not started yet has no timestamp and counts as the latest.
 # shellcheck disable=SC2016 # jq program, not shell expansion.
 NORMALIZE='
-  def comment: {id, author: (.author.login // null), authorAssociation, body: (.body // ""), createdAt, url,
-    isMinimized: (.isMinimized == true)};
+  def comment: {id, author: (.author.login // null), authorType: (.author.__typename // null), authorAssociation,
+    body: (.body // ""), createdAt, url, isMinimized: (.isMinimized == true)};
   def check_class:
     if .__typename == "CheckRun" then
       if (.status | type) != "string" then "unreadable"

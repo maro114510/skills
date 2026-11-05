@@ -13,6 +13,15 @@ def stuck_repairs: 2;
 # An event carries this much of a comment body; the skill reads the rest from pr-state only when it acts.
 def excerpt_chars: 200;
 
+# The review bots whose comments drive may act on, by GraphQL login. The same logins as
+# skills/orchestrate-epic/scripts/oe-bots.jq, which cannot be included here because it needs oe-records.jq.
+def review_bots: ["coderabbitai", "chatgpt-codex-connector"];
+
+# Succeeds for a comment drive may act on: one from a repository owner, member, or collaborator, or from a
+# listed review bot, which has no association. A user who takes a bot's login is not a Bot.
+def trusted: (.authorAssociation | IN("OWNER", "MEMBER", "COLLABORATOR"))
+  or (.authorType == "Bot" and (.author | IN(review_bots[])));
+
 # The item keys of the ledger that still describe this head; comment keys never carry a head.
 def relevant($head; $gen): select(startswith("c:") or endswith("@\($head)#\($gen)") or . == "x:\($head)#\($gen)");
 
@@ -75,7 +84,9 @@ def relevant($head; $gen): select(startswith("c:") or endswith("@\($head)#\($gen
   [$comments[] | select(muted) | {key: ("c:" + .id), author}] as $muted
 | [ $comments[] | select(muted | not)
     | ("c:" + .id) as $k | select(settled($k; .bodyHash) | not)
-    | {row: 10, event: "comment", key: $k, hash: .bodyHash,
+    # An untrusted author's comment sorts first and never counts toward the limit, so drive parks it before acting.
+    | (if trusted then {row: 10, event: "comment"} else {row: 5, event: "untrusted_comment"} end)
+    + {key: $k, hash: .bodyHash,
        comment: {id, kind, author, authorAssociation, url, excerpt: ((.body // "")[:excerpt_chars]),
          bodyLength: ((.body // "") | length), thread, path, line, review_state: .state}} ]
   as $comment_items

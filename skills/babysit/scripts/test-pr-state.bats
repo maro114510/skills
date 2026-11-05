@@ -161,6 +161,14 @@ paged_fixtures() {
   expect "$(field '.latestReviews[0].authorType')" Bot
 }
 
+@test "each comment carries its author's type, so a review bot's comment is told apart" {
+  normalize '.comments.nodes[0].author = {__typename: "Bot", login: "coderabbitai"}
+    | .reviewThreads.nodes[0].comments.nodes[0].author = {__typename: "User", login: "carol"}'
+  [ "${status}" -eq 0 ]
+  expect "$(field '.comments[0].authorType')" Bot
+  expect "$(field '.threads[0].comments[0].authorType')" User
+}
+
 @test "keeps only the latest run of each check, keyed stably across heads" {
   normalize
   expect "$(field '.checks | length')" 2
