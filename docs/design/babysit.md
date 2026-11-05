@@ -322,3 +322,9 @@ The first one that fails is the reason.
 | Notification | `park` hands comment text to `osascript` as an argument, never as script |
 | Reply scan | Not gated yet, see the gaps under Gate |
 | Harness | A harness runs `babysit.sh` once, as measured for [Claude Code](https://github.com/maro114510/skills/issues/306#issuecomment-6331950722) and [OpenCode](https://github.com/maro114510/skills/issues/306#issuecomment-6331950357), and Monitor is rejected because [it stops at 30 minutes and costs a turn per output line](https://github.com/maro114510/skills/issues/306#issuecomment-6331950722) |
+
+```mermaid
+flowchart TD
+  A --> B{x
+  B -->|y| C
+```
