@@ -169,6 +169,13 @@ post_reply() {
   return 1
 }
 
+# Succeeds when the pull request's head on GitHub is no longer $1. An unreadable head counts as unchanged.
+head_moved() {
+  local now
+  now="$(snapshot | jq -r '.head // ""' 2>/dev/null)"
+  [[ -n "${now}" && "${now}" != "$1" ]]
+}
+
 # Pushes the worktree's commits for event $1 from start $2 on branch $3. Succeeds when the push went out.
 push_fix() {
   local line="$1" start="$2" branch="$3" wt="$4" key hash out code checks=()
@@ -186,7 +193,8 @@ push_fix() {
       finish 1 "another automation owns the pull request: $(jq -r .owner <<<"${out}")"
     fi
     # A head that moved since the start is the next event's to describe, so the item stays unrecorded.
-    jq -e '.reason | test("remote branch moved")' <<<"${out}" >/dev/null 2>&1 ||
+    # A deleted branch reads the same to the gate but leaves the head unchanged, and would repeat forever.
+    head_moved "${start}" ||
       park "${key}" "${hash}" "the gate refused the fix: $(jq -r '.reason // ""' <<<"${out}")"
     ;;
   1)
@@ -217,8 +225,11 @@ invoke_agent() {
   prep="$(bash "${script_dir}/worktree.sh" prepare "${repo}" "${pr}" --session "${token}" --branch "${branch}" \
     --head "${head}")"
   code=$?
-  # Exit 1 means the pull request moved since the event, so the next event describes it.
-  ((code == 1)) && return
+  if ((code == 1)); then
+    # A moved head is the next event's to describe. Any other failure would return this item at once, forever.
+    head_moved "${head}" || park "${key}" "${hash}" "the drive worktree could not be prepared at ${head}"
+    return
+  fi
   ((code == 0)) || helper_failed "${code}" "worktree.sh prepare"
   wt="$(jq -r '.path' <<<"${prep}")"
   start="$(jq -r '.sha' <<<"${prep}")"
@@ -285,6 +296,8 @@ invoke_agent() {
 }
 
 start_session
+# An interrupted drive still clears its lock, so a rerun need not wait for the heartbeat to go stale.
+trap 'finish 1 interrupted' INT TERM
 while true; do
   line="$("${WAIT}" "${repo}" "${pr}" --max "${WAIT_MINUTES}" --session "${token}" --mode drive)"
   code=$?
