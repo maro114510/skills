@@ -8,11 +8,13 @@ Split into units only for one of these reasons:
 
 1. A structure change from a behavior change or a bug fix
 2. A mechanical bulk change, such as a rename or a format run, from hand-written logic
-3. A design doc or ADR from the implementation it describes
+3. Changes in different areas. The areas are documentation that describes the system, such as Design Docs, ADRs, plans, and runbooks; infrastructure, such as Terraform; deploy configuration and feature flags; schemas and contracts, such as DDL and proto; and other code. Tests and generated files belong to the area of the code they come from, and an instruction file that is the product, such as a SKILL.md, is code
 4. Changes that do not depend on each other
 5. Changes that must be reverted separately
 
-Never split for size alone, a test from the code it drives, or a new API from its first usage. A large change with one reason for change is one unit.
+Never split for size alone, a test from the code it drives, or a new function or type from its first usage. A schema or contract change is split from the code that uses it by reason 3. A large change with one reason for change is one unit.
+
+Size is a guide only: a unit changes about 200 to 400 lines of production code, not counting tests, generated files, or diagrams. A unit well above that looks for a seam among the reasons above, and never splits for size alone.
 
 List the units in the order structure change, behavior change, cleanup, and never before a unit they depend on. One line each:
 
