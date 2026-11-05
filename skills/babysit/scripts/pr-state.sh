@@ -26,6 +26,24 @@ fail() {
   exit 1
 }
 
+rate_limit_fail() {
+  local reset
+  reset="$(gh api rate_limit --jq '.resources.graphql.reset' 2>/dev/null || true)"
+  if [[ "${reset}" =~ ^[0-9]+$ ]]; then
+    echo "pr-state: GitHub GraphQL rate limit exceeded; reset at ${reset}" >&2
+  else
+    echo "pr-state: GitHub GraphQL rate limit exceeded" >&2
+  fi
+  exit 75
+}
+
+gh_failed() {
+  if grep -Eiq 'rate[ _-]*limit|rate_limited' "$1"; then
+    rate_limit_fail
+  fi
+  fail "gh api graphql failed: $(head -n1 "$1")"
+}
+
 COMMENT_FIELDS='id body createdAt url isMinimized authorAssociation author { login }'
 
 # One query shape for every page. Each connection is fetched only while its @include flag is true,
@@ -227,18 +245,23 @@ page() {
       args+=(-F "w${suffix}=false")
     fi
   done
-  raw="$(gh api graphql "${args[@]}" 2>"${err}" </dev/null)" || fail "gh api graphql failed: $(head -n1 "${err}")"
+  raw="$(gh api graphql "${args[@]}" 2>"${err}" </dev/null)" || gh_failed "${err}"
   flat="$(jq -c "${FLATTEN}" <<<"${raw}" 2>&1)" || fail "unexpected response: ${flat}"
   printf '%s\n' "${flat}"
 }
 
-acc="$(page '{"reviewThreads":null,"reviews":null,"comments":null,"reviewRequests":null,"latestOpinionatedReviews":null,"checks":null}')" ||
-  exit 1
+acc="$(page '{"reviewThreads":null,"reviews":null,"comments":null,"reviewRequests":null,"latestOpinionatedReviews":null,"checks":null}')" || {
+  code=$?
+  exit "${code}"
+}
 for ((i = 1; i < MAX_PAGES; i++)); do
   want="$(jq -c '[.conns | to_entries[] | select(.value.pageInfo.hasNextPage == true)
     | {(.key): .value.pageInfo.endCursor}] | add // {}' <<<"${acc}")"
   [[ "${want}" != '{}' ]] || break
-  next="$(page "${want}")" || exit 1
+  next="$(page "${want}")" || {
+    code=$?
+    exit "${code}"
+  }
   # Pages go through stdin, because a page of comment bodies can outgrow the argument size limit.
   acc="$(printf '%s\n%s\n' "${acc}" "${next}" | jq -sc '
     .[1] as $n | .[0]
@@ -256,7 +279,7 @@ while IFS=$'\t' read -r thread cursor; do
   [[ -n "${thread}" ]] || continue
   for ((i = 0; i < MAX_PAGES; i++)); do
     raw="$(gh api graphql -f query="${THREAD_QUERY}" -f id="${thread}" -f cursor="${cursor}" 2>"${err}" </dev/null)" ||
-      fail "gh api graphql failed: $(head -n1 "${err}")"
+      gh_failed "${err}"
     acc="$(printf '%s\n%s\n' "${acc}" "${raw}" | jq -sc --arg id "${thread}" '
       (.[1].data.node.comments // error("thread comments missing")) as $c
       | .[0] | .conns.reviewThreads.nodes |= map(if .id == $id

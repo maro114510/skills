@@ -21,6 +21,8 @@ BACKOFF_MAX=480
 MAX_FAILURES=5
 PR_STATE="${BABYSIT_PR_STATE:-${script_dir}/pr-state.sh}"
 SLEEP="${BABYSIT_SLEEP:-sleep}"
+FETCH_ERROR="$(mktemp "${TMPDIR:-/tmp}/babysit-wait.XXXXXX")" || usage "Cannot create temporary file"
+trap 'rm -f "${FETCH_ERROR}"' EXIT
 
 usage() {
   echo "$1" >&2
@@ -87,8 +89,9 @@ fi
 
 while true; do
   now="$(babysit_now)"
+  rate_limited=0
   ledger="$(read_owned_ledger)" || exit 3
-  if snap="$(fetch)" && [[ -n "${snap}" ]]; then
+  if snap="$(fetch 2>"${FETCH_ERROR}")" && [[ -n "${snap}" ]]; then
     result="$(printf '%s\n%s\n' "${snap}" "${ledger}" |
       jq -sc --arg now "${now}" --arg mode "${mode}" -f "${script_dir}/evaluate.jq")" ||
       usage "Snapshot is not a normalized pr-state snapshot"
@@ -104,6 +107,22 @@ while true; do
     fi
     pause="${POLL_SECONDS}"
   else
+    fetch_status=$?
+    cat "${FETCH_ERROR}" >&2
+    if ((fetch_status == 75)); then
+      reset="$(sed -nE 's/.*reset at ([0-9]+).*/\1/p' "${FETCH_ERROR}" | head -n 1)"
+      if [[ "${reset}" =~ ^[0-9]+$ ]]; then
+        echo "GitHub GraphQL rate limit exceeded; waiting until ${reset}" >&2
+        pause=$((reset - now))
+        ((pause > 0)) || pause=1
+        rate_limited=1
+      else
+        fetch_status=1
+      fi
+    fi
+    if ((fetch_status == 75)); then
+      :
+    else
     ledger="$(read_owned_ledger)" || exit 3
     failures=$(($(jq -r '.api_failures // 0' <<<"${ledger}") + 1))
     jq -c --argjson f "${failures}" --argjson now "${now}" \
@@ -115,11 +134,14 @@ while true; do
     fi
     pause=$((BACKOFF_FIRST << (failures - 1)))
     ((pause <= BACKOFF_MAX)) || pause="${BACKOFF_MAX}"
+    fi
   fi
-  if ((now >= deadline)); then
+  if ((now >= deadline && rate_limited == 0)); then
     jq -nc --arg repo "${repo}" --argjson pr "${pr}" '{event: "idle", repo: $repo, pr: $pr}'
     exit 0
   fi
-  ((pause <= deadline - now)) || pause=$((deadline - now))
+  if ((rate_limited == 0 && pause > deadline - now)); then
+    pause=$((deadline - now))
+  fi
   "${SLEEP}" "${pause}"
 done
