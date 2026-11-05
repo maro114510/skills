@@ -115,7 +115,7 @@ Record every outcome before re-arming, or `wait.sh` returns the same item again.
 - A comment by `coderabbitai` or `chatgpt-codex-connector` that carries that bot's status marker is recorded as reported with no agent call.
 - A time `limit` with fewer than 5 rounds used starts a new session; at 5 it stops.
 - `git config skills.babysit.agent` names the agent command, such as `claude -p`. It has no default, is split on whitespace without shell evaluation, and gets the prompt as its last argument.
-- The command must let the agent edit, commit, and run the repository's tests without asking, and must be unable to push or write to GitHub. `drive.sh` cannot check this. It only removes `GH_TOKEN` and `GITHUB_TOKEN` from the agent's environment, never hands it the session token, and stops when the remote head moves while the agent runs.
+- The command must let the agent edit, commit, and run the repository's tests without asking, and must be unable to push or write to GitHub. `drive.sh` cannot check this. It only removes `GH_TOKEN` and `GITHUB_TOKEN` from the agent's environment, keeps the session token out of its arguments and environment, and stops when the remote head moves while the agent runs. The ledger under the git common directory still holds the token, so the agent's sandbox must not write there.
 
 ## Single event
 
