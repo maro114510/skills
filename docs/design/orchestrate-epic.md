@@ -298,7 +298,6 @@ sequenceDiagram
 | Agents running at once | 3 Owners and Verifiers combined per host, changeable in the record store |
 | Harnesses | One Adapter per harness maps the Executor contract of `development-pipeline.md` onto that harness. Agents start with no view of any other session |
 | Agent mode | The agents declare `mode: subagent`, because OpenCode V2 refuses to start an agent without it as a subagent. APM drops the key for Codex |
-| Codex skill size | Codex cuts a plugin's skill at 8,000 bytes, so every SKILL.md stays within 8,000 bytes, and CI enforces it: `make validate` (`tests/validate-agent-portability.sh`) fails, naming each SKILL.md over the cap |
 | Implicit invocation | Codex ignores `disable-model-invocation`, so pr-owner and pr-verify carry `agents/openai.yaml` with `allow_implicit_invocation: false`, because only the Runner may start them |
 | Counting Verifier starts | oe brief writes the pending verify status that oe ready counts, before it prints a Verifier's brief, so no Verifier starts uncounted |
 | Worktrees | An agent's worktree is removed when the agent ends, and unpushed work is discarded |

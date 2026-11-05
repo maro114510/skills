@@ -12,8 +12,6 @@ argument-hint: "repo <owner/repo> issue <number> base <branch> worktree <path> [
 
 # pr-owner
 
-This file ends with the line `<!-- end of pr-owner -->`. If you cannot see that line, your harness cut the file short, as Codex does after 8,000 bytes for a skill from a plugin: read the whole file from its path before doing anything else.
-
 Move one Issue exactly one step forward and leave the result on GitHub.
 
 `<skill-dir>` is the directory containing this file, and `<skills-root>` is its parent.
@@ -128,5 +126,3 @@ End with one line:
 - `RESULT: pushed <sha>` after a repair push, or after a push whose PR could not be opened, followed by the error
 - `RESULT: question <url>` after writing a question
 - `RESULT: none <reason>` when nothing was pushed or written
-
-<!-- end of pr-owner -->

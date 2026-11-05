@@ -14,8 +14,6 @@ argument-hint: "epic <number|url> [repo <owner/repo>] [max-agents <n>]"
 
 # orchestrate-epic
 
-This file ends with the line `<!-- end of orchestrate-epic -->`. If you cannot see that line, your harness cut the file short, as Codex does after 8,000 bytes for a skill from a plugin: read the whole file from its path before doing anything else.
-
 Drive an Epic's child Issues to verified PRs, one step per fresh agent, with every state read from GitHub and from oe's records on this host.
 
 `<skill-dir>` is the directory containing this file, and `<skills-root>` is its parent.
@@ -174,5 +172,3 @@ The harness wakes you when an agent ends or the wait returns, and whichever come
 
 再開するには同じホストで同じ引数でもう一度実行してください。状態は GitHub とこのホストの記録から読み直します。
 ```
-
-<!-- end of orchestrate-epic -->
