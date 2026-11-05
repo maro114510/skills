@@ -28,7 +28,8 @@ Repository instructions for coding agents.
 | `.github/workflows/release.yml` | Creates a GitHub Release on a `v*` tag push after checking the tag matches both manifests |
 | `cliff.toml` | `git-cliff` config used by `make release` |
 
-`docs/design` holds only Design Docs that describe the current target, as `manage-design-documents` defines them; plans and proposals are Issues.
+`docs/design` holds only Design Docs that describe the current target, as `manage-design-documents` defines them; work the owner decided to build is an Issue.
+Ideas, experiments, and open questions go to [Discussions](https://github.com/maro114510/skills/discussions) as [Discussion #638](https://github.com/maro114510/skills/discussions/638) describes, never to Issues. The repository is public, so a post never carries work context.
 
 ## Versions and Releases
 
