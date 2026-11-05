@@ -85,6 +85,7 @@ Pass `--running` for every Issue whose agent is running. Act on the exit code:
 | 2 or other | End the session as in Step 4 and show the error |
 
 When every line's action is `done`, end the session as in Step 4.
+When no agent runs and every line's action is `done`, `parked`, `wait-merge`, `wait-answer`, `wait-dependencies`, or `wait-engineer`, end the session as in Step 4 without starting a wait, because only a person moves those Issues and a rerun resumes from GitHub.
 When the Issue numbers and actions differ from the previous pass, set `<idle-since>` to now.
 
 ### 3.2 Start agents
@@ -164,11 +165,11 @@ The harness wakes you when an agent ends or the wait returns, and whichever come
 ```markdown
 ## orchestrate-epic: Epic #<epic> を終了しました
 
-終了理由: <すべて完了 | 変化がないまま待機上限に到達 | default branch にチェックが無い | GitHub の読み取りが続けて失敗>
+終了理由: <すべて完了 | 人の対応待ちのみ | 変化がないまま待機上限に到達 | default branch にチェックが無い | GitHub の読み取りが続けて失敗>
 
 | Issue | 状態 | 次に必要なこと |
 |---|---|---|
-| #<n> | <oe ready の action> | <例: PR #<pr> のレビューと merge / 質問への回答 / parked の理由を見て判断> |
+| #<n> | <oe ready の action> | <例: PR #<pr> のレビューと merge / 質問への回答 / parked の理由を見て判断 / 依存 Issue #<m> の完了 / merge 済み PR のある Issue の確認> |
 
 再開するには同じホストで同じ引数でもう一度実行してください。状態は GitHub とこのホストの記録から読み直します。
 ```
