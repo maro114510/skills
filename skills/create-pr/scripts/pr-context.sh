@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Prints everything create-pr needs to write a PR. Fetches origin/<base>, and otherwise changes no branch, worktree, or GitHub state.
+# Reads GitHub only through REST, so it still works when another job has drained the GraphQL rate limit.
 # Usage: pr-context.sh [ready|draft] [base <branch>] [lang <ja|en>]
 # Language: whatever lang.sh resolves, given the lang argument when there is one.
 # Base: the base argument, else git config branch.<current>.gh-merge-base, else the default branch, as create-linked-pr.sh resolves it.
@@ -54,7 +55,7 @@ fi
 # Same precedence as create-linked-pr.sh, which passes the result to gh pr create.
 [[ -n "${base}" ]] || base="$(git config --get "branch.${branch}.gh-merge-base" 2>/dev/null)"
 if [[ -z "${base}" ]]; then
-  base="$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)" || exit 1
+  base="$(gh api 'repos/{owner}/{repo}' --jq .default_branch)" || exit 1
 fi
 
 if [[ "${branch}" == "${base}" ]]; then
@@ -119,7 +120,7 @@ while IFS= read -r line; do
   [[ -n "${line}" ]] || continue
   n="${line##*#}"
   # create-linked-pr.sh would reject the issue anyway, but only after the push.
-  if ! view="$(gh issue view "${n}" --json title,body --jq '.title, .body' 2>&1)"; then
+  if ! view="$(gh api "repos/{owner}/{repo}/issues/${n}" --jq '.title, (.body // "")' 2>&1)"; then
     echo "ISSUE_LOOKUP_FAILED #${n}: $(tr '\n' ' ' <<<"${view}" | sed 's/[[:space:]]*$//')"
     exit 1
   fi
@@ -134,7 +135,7 @@ while IFS= read -r line; do
   done < <(manual_checks <<<"${body}")
 done <<<"${refs}"
 
-labels="$(gh label list --limit 200 --json name,description --jq '.[] | "\(.name)\t\(.description)"')" || exit 1
+labels="$(gh api --paginate 'repos/{owner}/{repo}/labels?per_page=100' --jq '.[] | "\(.name)\t\(.description // "")"')" || exit 1
 
 commits="$(git log --reverse --format='--- %h%n%B' "${remote}..HEAD")" || exit 1
 stat="$(git diff --stat "${remote}...HEAD")" || exit 1
