@@ -37,6 +37,7 @@ Judge whether the context is clear on each axis:
 | Granularity | Can each task be implemented and merged as an independent PR? |
 | Acceptance criteria | Can completion be confirmed with numbered verification steps? |
 | Specification | Are there implementation choices that could be interpreted more than one way, where the reading changes a requirement, a dependency, or a verification outcome? |
+| Premise | Was every claim the plan rests on checked? A claim about how a tool, file, or system behaves, or about a count or usage, is unclear when the context gives no measurement, reproduction, source reference, or observed data for it |
 
 - All clear: go to Step 2 without asking.
 - Any unclear: ask with **AskUserQuestion** in the "Step 1.5: Clarification Question Format" of `references/templates.<LANG>.md`, using only the unclear axes' subsections, with concrete answer choices per item, in one call of up to 4 questions, highest-impact first. **Stop after calling AskUserQuestion; do not proceed to Step 2 until the user responds.**
