@@ -202,6 +202,30 @@ expect() {
   expect "$(calls)" 1
 }
 
+@test "a line that is only a re-review request to a listed bot is posted" {
+  printf 'Fixed in abc1234.\n@codex review\n' >"${tmp}/body.md"
+  reply --thread T1
+  [ "${status}" -eq 0 ]
+  printf '  @CodeRabbitAI Review  \n' >"${tmp}/body.md"
+  reply --thread T2
+  [ "${status}" -eq 0 ]
+  expect "$(calls)" 2
+}
+
+@test "an address, a longer name, or a bot named without @ is not a mention and is posted" {
+  printf 'Mail a@codex.com or ping @codexfoo; coderabbitai and codex reviewed this.\n' >"${tmp}/body.md"
+  reply --thread T1
+  [ "${status}" -eq 0 ]
+  expect "$(calls)" 1
+}
+
+@test "a path or a slash word that does not start its line is posted" {
+  printf '/tmp/x holds the log.\nRun it, then /approve is not needed.\n' >"${tmp}/body.md"
+  reply --thread T1
+  [ "${status}" -eq 0 ]
+  expect "$(calls)" 1
+}
+
 @test "no call ever resolves a thread" {
   reply --thread T1
   reply --thread T1
