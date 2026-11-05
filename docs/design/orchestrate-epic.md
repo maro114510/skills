@@ -207,7 +207,7 @@ sequenceDiagram
   rect rgba(0,200,120,0.08)
     Note over O,G: Implementation
     O->>+W: Start with A
-    W->>+I: Run in autonomous mode
+    W->>+I: Run without a human
     I-->>-W: Return the commits
     W->>G: Push
   end

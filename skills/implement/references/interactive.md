@@ -1,7 +1,7 @@
 # Interactive Shell
 
 What normal mode adds around the core phases in SKILL.md: the Issue Claim, how to ask, Phase 4, Phase 6.5, and Phase 7.
-Only normal mode reads this file; an autonomous worker never does.
+A run without a human never reads this file.
 Each section below belongs to the SKILL.md phase it names, so Phase numbers match.
 
 `<skill-dir>` is the directory containing SKILL.md, the parent of the directory holding this file.

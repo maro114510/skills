@@ -96,9 +96,10 @@ bash <skill-dir>/scripts/classify-approval.sh --staged [--require "<reason>"]...
 | 0 | Go to Step 7 and commit without asking |
 | 10 or any other | Ask via `AskUserQuestion` before committing, showing the `reason:` lines, the staged diff summary, and the message after Step 5 |
 
-Two cases skip asking about the mechanical `reason:` lines and the caller's critical decisions; commit and list them in Step 8:
+Three cases skip asking about the mechanical `reason:` lines and the caller's critical decisions; commit and list them in Step 8:
 
 - The caller reports it classifies the whole `base..HEAD` range with this classifier before push and gets human approval when the range needs it, as implement does in normal mode. Leave its critical decisions out here: the range classification covers them, since a path counts when any commit in the range touches it.
+- The caller reports that no human is reachable and that a human approves the pushed range as a PR, as implement does for pr-owner.
 - A difit window you opened closed with no comments, and `git status --porcelain` and the hash of `git diff HEAD`, both recorded when it opened, are unchanged at commit time.
 
 Your own findings above are still asked about in both, since they concern how this commit is cut, which a range review cannot fix; for a type/scope you cannot determine confidently, ask about the message only.
