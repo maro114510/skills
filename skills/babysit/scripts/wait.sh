@@ -2,7 +2,8 @@
 # Blocks until a pull request has a new, unhandled actionable item, then prints it as one JSON line.
 # Polls pr-state.sh every 60 seconds, compares each snapshot with the ledger, and prints
 # {"event":"idle"} once --max minutes pass with nothing to act on. It never marks an item handled;
-# the skill records each disposition with ledger.sh before calling wait again.
+# the skill records each disposition with ledger.sh before calling wait again. The one item it settles itself is
+# a comment from an untrusted author in drive, which it parks through park.sh with the reason "untrusted author".
 # Usage: wait.sh <owner/repo> <pr> --max <minutes> --session <token> [--mode watch|drive] [--snapshot <file>]
 #   --snapshot reads a normalized pr-state snapshot from <file> on every poll instead of querying GitHub.
 # --max is shortened so the call returns at the 8-hour session mark, where the limit event fires.
@@ -77,6 +78,12 @@ fetch() {
   fi
 }
 
+# Evaluates the snapshot in snap against the ledger in ledger.
+evaluate() {
+  printf '%s\n%s\n' "${snap}" "${ledger}" |
+    jq -sc --arg now "${now}" --arg mode "${mode}" -f "${script_dir}/evaluate.jq"
+}
+
 now="$(babysit_now)"
 ledger="$(read_owned_ledger)" || exit 3
 deadline=$((now + max * 60))
@@ -89,9 +96,18 @@ while true; do
   now="$(babysit_now)"
   ledger="$(read_owned_ledger)" || exit 3
   if snap="$(fetch)" && [[ -n "${snap}" ]]; then
-    result="$(printf '%s\n%s\n' "${snap}" "${ledger}" |
-      jq -sc --arg now "${now}" --arg mode "${mode}" -f "${script_dir}/evaluate.jq")" ||
-      usage "Snapshot is not a normalized pr-state snapshot"
+    result="$(evaluate)" || usage "Snapshot is not a normalized pr-state snapshot"
+    # Drive never hands an untrusted author's comment to the agent: each one is parked here, and the same
+    # snapshot is evaluated again so the next item is not delayed by a poll.
+    while [[ "${mode}" == drive && "$(jq -r '.event.event // ""' <<<"${result}")" == untrusted_comment ]]; do
+      bash "${script_dir}/park.sh" "${repo}" "${pr}" --session "${token}" --key "$(jq -r '.event.key' <<<"${result}")" \
+        --hash "$(jq -r '.event.hash' <<<"${result}")" --reason "untrusted author" >/dev/null
+      code=$?
+      ((code != 3)) || lost "Lock is not held by this session"
+      ((code == 0)) || usage "Cannot park an untrusted author's comment in ledger: ${path}"
+      ledger="$(read_owned_ledger)" || exit 3
+      result="$(evaluate)" || usage "Snapshot is not a normalized pr-state snapshot"
+    done
     # Re-read, so a ledger.sh write made during the fetch survives; only wait's own fields change.
     ledger="$(read_owned_ledger)" || exit 3
     printf '%s\n%s\n' "${ledger}" "${result}" |
