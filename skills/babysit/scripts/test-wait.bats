@@ -443,16 +443,20 @@ before_start='.comments = [($comment | .id = "IC_old" | .author = "bot" | .bodyH
     "test https://example.invalid/run/100"
 }
 
-@test "drive acts on items watch only reported, and stalls once only parked blockers remain" {
+@test "drive leaves a reported comment quiet until its text changes, and stalls once only parked blockers remain" {
   set_snap "${waiting} | .threads = [{id: \"T1\", isResolved: false, path: \"a\", line: 1, comments: [\$comment | .id = \"TC1\"]}]"
-  poll
-  expect "$(event)" comment
-  report_current
-  poll
-  expect "$(event)" idle
   poll --mode drive
   expect "$(event)" comment
-  record c:TC1 parked --hash h1
+  report_current
+  poll --mode drive
+  expect "$(event)" idle
+  run bash "${scripts}/check.sh" o/r 7 --mode drive --snapshot "${snap}"
+  expect "$(field '.report.reported[0]')" c:TC1
+  set_snap "${waiting} | .threads = [{id: \"T1\", isResolved: false, path: \"a\", line: 1,
+    comments: [\$comment | .id = \"TC1\" | .bodyHash = \"h2\"]}]"
+  poll --mode drive
+  expect "$(event)" comment
+  record c:TC1 parked --hash h2
   poll --mode drive
   expect "$(event)" stalled
   expect "$(field '.report.parked[0]')" c:TC1
