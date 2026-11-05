@@ -22,6 +22,8 @@ fragment HeadChecks on Commit {
   statusCheckRollup {
     contexts(first: 100) {
       totalCount
+      # oe-ready.sh reads the remaining pages with oe-ready-checks.graphql.
+      pageInfo { hasNextPage endCursor }
       nodes {
         __typename
         ... on CheckRun { name status conclusion startedAt checkSuite { databaseId } }

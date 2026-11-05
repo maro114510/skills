@@ -35,6 +35,7 @@
 # |---|---|
 # | oe-ready-epic.graphql | The Epic read |
 # | oe-ready-issue.graphql | The read of one Issue |
+# | oe-ready-checks.graphql | One more page of checks on a commit |
 # | oe-ready.jq | Every rule that turns a response into an action |
 # | oe-bots.jq | The review bots whose findings start a repair, and how a finding is read |
 # | oe-records.jq | Which comments count as questions and as engineer input |
@@ -48,6 +49,8 @@
 # 3. The open pull request list gives the head of each Issue branch.
 # 4. Commit statuses give the verdict on each head and the number of Verifier starts.
 # 5. One read per Issue, with its claim and attempt records from this host, gives everything else.
+#
+# Reads 1 and 5 hold 100 checks of a commit, and one more read per page gives the rest.
 set -uo pipefail
 
 dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -91,6 +94,7 @@ now="${OE_NOW:-$(date -u +%s)}"
 
 epic_query="$(<"${dir}/oe-ready-epic.graphql")" || fail "cannot read oe-ready-epic.graphql"
 issue_query="$(<"${dir}/oe-ready-issue.graphql")" || fail "cannot read oe-ready-issue.graphql"
+checks_query="$(<"${dir}/oe-ready-checks.graphql")" || fail "cannot read oe-ready-checks.graphql"
 trust="$(<"${dir}/oe-records.jq")" || fail "cannot read oe-records.jq"
 bots="$(<"${dir}/oe-bots.jq")" || fail "cannot read oe-bots.jq"
 rules="$(<"${dir}/oe-ready.jq")" || fail "cannot read oe-ready.jq"
@@ -115,9 +119,35 @@ pushed_at() {
     2>"${err}" || fail "activity read for $1 failed: $(head -n1 "${err}")"
 }
 
+# Prints the GraphQL response $1 with every check of each commit in it, reading the pages after the first.
+# A page that cannot be read fails, so no action is decided from part of the checks.
+all_checks() {
+  local response="$1" at oid cursor page
+  while true; do
+    at="$(jq -c 'first(paths(objects | .statusCheckRollup?.contexts.pageInfo.hasNextPage == true)) // empty' \
+      <<<"${response}")" || fail "checks unreadable"
+    [[ -n "${at}" ]] || break
+    IFS=$'\t' read -r oid cursor < <(jq -r --argjson at "${at}" \
+      'getpath($at) | "\(.oid)\t\(.statusCheckRollup.contexts.pageInfo.endCursor)"' <<<"${response}")
+    [[ "${oid}" =~ ^[0-9a-f]{40}$ && -n "${cursor}" && "${cursor}" != null ]] || fail "checks unreadable"
+    page="$(gh api graphql -f query="${checks_query}" -F owner="${repo%/*}" -F repo="${repo#*/}" \
+      -f oid="${oid}" -f after="${cursor}" --jq '.data.repository.object.statusCheckRollup.contexts' 2>"${err}")" ||
+      fail "checks read on ${oid} failed: $(head -n1 "${err}")"
+    response="$(jq -c --argjson at "${at}" --argjson page "${page:-null}" '
+      setpath($at + ["statusCheckRollup", "contexts"];
+        getpath($at).statusCheckRollup.contexts
+        | .nodes += ($page.nodes // []) | .pageInfo = $page.pageInfo)' <<<"${response}")" ||
+      fail "checks on ${oid} unreadable"
+  done
+  printf '%s' "${response}"
+}
+
 # Read 1: the Epic.
-epic_lines="$(gh api graphql -f query="${epic_query}" -F owner="${repo%/*}" -F repo="${repo#*/}" -F epic="${epic}" \
-  --jq "$(program epic_lines)" 2>"${err}")" || fail "Epic read failed: $(head -n1 "${err}")"
+epic_response="$(gh api graphql -f query="${epic_query}" -F owner="${repo%/*}" -F repo="${repo#*/}" -F epic="${epic}" \
+  2>"${err}")" || fail "Epic read failed: $(head -n1 "${err}")"
+epic_response="$(all_checks "${epic_response}")" || exit 1
+epic_lines="$(jq -r "$(program epic_lines)" <<<"${epic_response}" 2>"${err}")" ||
+  fail "Epic read failed: $(head -n1 "${err}")"
 
 issues=()
 default_line=""
@@ -218,9 +248,11 @@ for n in ${sorted[@]+"${sorted[@]}"}; do
   issue_records="$(records_read "${repo}" "${n}" 2>"${err}")" || fail "$(head -n1 "${err}")"
   issue_records="$(jq -c 'map(select(.kind == "claim" or .kind == "attempt") | {kind, at, bots})' <<<"${issue_records}")" ||
     fail "records of Issue #${n} unreadable"
-  line="$(gh api graphql -f query="${issue_query}" -F owner="${repo%/*}" -F repo="${repo#*/}" -F num="${n}" \
-    -f branch="${branch_prefix}${n}" -f ref="refs/heads/${branch_prefix}${n}" \
-    --jq "$(program "${entry}" "${pr_heads%,}" "${issue_records}")" 2>"${err}")" ||
+  response="$(gh api graphql -f query="${issue_query}" -F owner="${repo%/*}" -F repo="${repo#*/}" -F num="${n}" \
+    -f branch="${branch_prefix}${n}" -f ref="refs/heads/${branch_prefix}${n}" 2>"${err}")" ||
+    fail "Issue #${n} read failed: $(head -n1 "${err}")"
+  response="$(all_checks "${response}")" || exit 1
+  line="$(jq -r "$(program "${entry}" "${pr_heads%,}" "${issue_records}")" <<<"${response}" 2>"${err}")" ||
     fail "Issue #${n} read failed: $(head -n1 "${err}")"
   out+="${line}"$'\n'
 done
