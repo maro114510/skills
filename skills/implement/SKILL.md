@@ -34,7 +34,7 @@ When the caller says no human is reachable, as pr-owner does, the phases below r
 - Work in the worktree the caller names. Take no Issue Claim, and skip Phase 4.
 - Where Phase 2 or Phase 3 would ask, write every open question with its options where the caller says, and stop.
 - Implement every planned unit in order, in one run. Run One Unit does not apply.
-- Skip Phase 6.5 and Phase 7's approval. Commit any uncommitted work with the `commit` skill, and never push.
+- Skip Phase 6.5 and Phase 7's approval, because a human approves the pushed range as a PR. Commit with the `commit` skill, telling it so, and never push.
 
 ---
 
@@ -149,7 +149,7 @@ Implement only the first unit of the plan, the first one listed with `depends on
 
 ## Phase 4: Set Up the Worktree
 
-Follow `references/interactive.md` § Phase 4.
+Follow `references/interactive.md` § Phase 4. Without a human, skip this phase, as Without a Human says.
 
 ---
 
@@ -203,7 +203,7 @@ Scope the test run to what the diff can affect: the suites that exercise the fil
 
 ## Phase 6.5: Separate-Context Self-Review
 
-Follow `references/interactive.md` § Phase 6.5, then proceed to Phase 6.9.
+Follow `references/interactive.md` § Phase 6.5, then proceed to Phase 6.9. Without a human, skip this phase, as Without a Human says.
 
 ---
 
@@ -244,6 +244,6 @@ Lead with the last two lines whenever either has content.
 
 ## Phase 7: Finish
 
-Follow `references/interactive.md` § Phase 7.
+Follow `references/interactive.md` § Phase 7. Without a human, do only what Without a Human says for Phase 7.
 
 Never push. Do not create a PR until the user explicitly says "create a PR."
