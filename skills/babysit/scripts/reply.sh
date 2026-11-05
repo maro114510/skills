@@ -5,10 +5,11 @@
 # comments and review bodies share one capped thread. At most 2 agent replies are posted per thread.
 # It only ever replies: nothing here resolves or unresolves a thread.
 # Prints one JSON line. Test hooks BABYSIT_GH replaces gh and BABYSIT_PR_STATE replaces pr-state.
-# A body asking CodeRabbit to approve or resolve is refused, so a reply never manufactures an approval.
+# A body that mentions a review bot, other than a line that is exactly "@<bot> review", or that starts a line
+# with a slash command is refused, so a reply never manufactures an approval or a merge.
 # A pull request that another automation owns, by the marker pr-state reads as automationOwner, takes no reply.
 # Exit: 0 posted, 1 the post failed or the pull request could not be read, 2 usage error, 3 the lock is not ours,
-# 10 the thread already holds 2 replies, 11 refused: the body asks a bot to approve or resolve, or another
+# 10 the thread already holds 2 replies, 11 refused: the body addresses a bot or uses a slash command, or another
 # automation owns the pull request, named in "owner".
 # An exit of 1 or 3 with "posted":true in the JSON line means the reply is out and only the ledger write failed.
 set -uo pipefail
@@ -66,14 +67,25 @@ fi
 body="$(cat "${body_file}")"
 [[ "${body}" =~ [^[:space:]] ]] || usage "The reply is empty"
 
-# The agent posts as the PR author, whose approve or resolve command CodeRabbit obeys, so the reply could
-# manufacture an approval. The check precedes the lock and the ledger, so a refusal writes nothing.
+# The agent posts as the PR author, whose commands review bots and merge tools obey, so the reply could
+# manufacture an approval or a merge. A bot acts on a bare mention, and its command words vary, so any mention
+# is refused rather than a list of commands; only a line that is exactly "@<bot> review" passes, so a
+# re-review needs no human. The check precedes the lock and the ledger, so a refusal writes nothing.
+BOTS='coderabbitai|codex|chatgpt-codex-connector|copilot|gemini-code-assist|claude|cursor|greptileai|sourcery-ai|dependabot|renovate|mergify|kodiak'
+RE_REVIEW="^[[:space:]]*@(${BOTS})[[:space:]]+review[[:space:]]*$"
+# A login character on either side means an address such as a@codex.com or a longer login such as @codexfoo.
+RE_MENTION="(^|[^[:alnum:]_-])@(${BOTS})([^[:alnum:]_-]|$)"
+# A word after the slash and then a space or the end, so a path such as /tmp/x is not a command.
+RE_SLASH='^[[:space:]]*/[[:alpha:]][[:alnum:]_-]*([[:space:]]|$)'
 body_lower="$(tr '[:upper:]' '[:lower:]' <<<"${body}")"
-if [[ "${body_lower}" =~ @coderabbitai[[:space:]]+(approve|resolve) ]]; then
-  jq -nc --arg target "${thread:-conversation}" \
-    '{posted: false, reason: "the reply asks a bot to approve or resolve", target: $target}'
-  exit 11
-fi
+while IFS= read -r line || [[ -n "${line}" ]]; do
+  [[ "${line}" =~ ${RE_REVIEW} ]] && continue
+  if [[ "${line}" =~ ${RE_MENTION} || "${line}" =~ ${RE_SLASH} ]]; then
+    jq -nc --arg target "${thread:-conversation}" \
+      '{posted: false, reason: "the reply addresses a review bot or starts a line with a slash command", target: $target}'
+    exit 11
+  fi
+done <<<"${body_lower}"
 
 sha256() {
   if command -v sha256sum >/dev/null 2>&1; then
