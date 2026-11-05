@@ -20,3 +20,4 @@ Run nothing more: the output holds the PR URL and every link, and `--web` alread
 Show the PR URL, whether it is draft or ready, each issue as `Closes` and linked, `Related`, or still unlinked after the rerun, and every `NOTICE` or `WARN` line verbatim.
 If a `NOTICE` rewrote an issue to `Related` while a commit footer still says `Closes` for it, warn that merging would still close the issue through that footer, even with a squash merge under GitHub's default message; edit the squash message or reword the footer before merging.
 If a `NOTICE` kept `Closes` unlinked on a non-default base, tell the user to run `create-linked-pr.sh --link <url>` once the PR is retargeted to the default branch.
+If a `NOTICE` skipped linking because the GraphQL rate limit is exhausted, say the link was skipped and tell the user to run `create-linked-pr.sh --link <url>` once the limit resets; until then only the body's `Closes` line links the issue, which GitHub can take hours to do.

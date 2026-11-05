@@ -16,24 +16,30 @@ unset GIT_CONFIG GIT_CONFIG_COUNT GIT_CONFIG_PARAMETERS
 # - labels: label lines, printed as gh would after the script's --jq
 # - missing: issue numbers that do not exist
 # - body.<n>: issue n's body, printed after its title when the call asks for the body
+# Every GraphQL-backed subcommand fails on the rate limit, so every case runs with no GraphQL points left and only REST answers.
 bin="${work}/bin"
 mkdir -p "${bin}"
 cat >"${bin}/gh" <<'STUB'
 #!/usr/bin/env bash
 d="${STUB_DIR}"
 case " $* " in
-*" repo view "*) cat "${d}/default" 2>/dev/null || echo main ;;
-*" issue view "*)
-  if grep -qx -- "$3" "${d}/missing" 2>/dev/null; then
-    echo "GraphQL: Could not resolve to an issue with the number of $3." >&2
+*" repo view "* | *" issue view "* | *" label list "*)
+  echo "GraphQL: API rate limit already exceeded for user ID 1." >&2
+  exit 1
+  ;;
+*" api "*"repos/{owner}/{repo}/issues/"*)
+  for a in "$@"; do [[ "${a}" == repos/*/issues/* ]] && n="${a##*/}"; done
+  if grep -qx -- "${n}" "${d}/missing" 2>/dev/null; then
+    echo "gh: Not Found (HTTP 404)" >&2
     exit 1
   fi
-  echo "Title of $3"
+  echo "Title of ${n}"
   if [[ " $* " == *"body"* ]]; then
-    cat "${d}/body.$3" 2>/dev/null || echo
+    cat "${d}/body.${n}" 2>/dev/null || echo
   fi
   ;;
-*" label list "*) cat "${d}/labels" 2>/dev/null || true ;;
+*" api "*"repos/{owner}/{repo}/labels"*) cat "${d}/labels" 2>/dev/null || true ;;
+*" api repos/{owner}/{repo} "*) cat "${d}/default" 2>/dev/null || echo main ;;
 *) echo "unexpected gh $*" >&2 && exit 1 ;;
 esac
 STUB
@@ -251,7 +257,7 @@ setup
 echo 5 >"${STUB_DIR}/missing"
 commit $'feat: a\n\nCloses #5'
 run
-[[ "${rc}" == 1 && "${out}" == "ISSUE_LOOKUP_FAILED #5: GraphQL: Could not resolve to an issue with the number of 5." ]] && no_context && r=0 || r=1
+[[ "${rc}" == 1 && "${out}" == "ISSUE_LOOKUP_FAILED #5: gh: Not Found (HTTP 404)" ]] && no_context && r=0 || r=1
 check "unreadable footer issue exits 1 with ISSUE_LOOKUP_FAILED and no context" "${r}"
 
 # A valid branch name with shell metacharacters survives pasting the create flags into a shell.

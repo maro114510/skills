@@ -12,11 +12,13 @@ fail=0
 # - default, base, body: repo default branch, PR base and PR body
 # - missing: issue numbers that do not exist
 # - open.<n>: open sub-issue count of issue <n>, 0 when absent
-# - no_subs: gh too old to know the subIssuesSummary field
-# - subs_fail: the subIssuesSummary query fails for another reason
-# - edited_body: body written by gh pr edit
-# - create_fail, pr_view_fail, link_noop, web_fail: force that failure
+# - subs_fail: reading the issue fails for a reason other than its absence
+# - created_body, edited_body: body sent when creating or editing the PR
+# - meta: the call that set the PR's assignees and labels
+# - create_fail, pr_view_fail, link_noop, web_fail, meta_fail, user_fail: force that failure
 # - refs: linked issue numbers. lag: reads that still return the old list
+# - gql_exhausted: every GraphQL call fails on the rate limit
+# The script must use REST wherever REST can do the job, so a GraphQL-only subcommand that has a REST equivalent always fails here.
 bin="${work}/bin"
 mkdir -p "${bin}"
 cat >"${bin}/gh" <<'STUB'
@@ -24,39 +26,18 @@ cat >"${bin}/gh" <<'STUB'
 d="${STUB_DIR}"
 printf '%s\n' "$*" >>"${d}/log"
 args=" $* "
+limited() {
+  echo "GraphQL: API rate limit already exceeded for user ID 1." >&2
+  exit 1
+}
+body_arg() { # destination file; copies the file named by a body=@<path> argument
+  local a
+  for a in "${@:2}"; do [[ "${a}" == body=@* ]] && cp "${a#body=@}" "$1"; done
+  return 0
+}
 case "${args}" in
-*" repo view "*) cat "${d}/default" 2>/dev/null || echo main ;;
-*" issue view "*)
-  n="$3"
-  if grep -qx -- "${n}" "${d}/missing" 2>/dev/null; then
-    echo "GraphQL: Could not resolve to an issue with the number of ${n}." >&2
-    exit 1
-  fi
-  if [[ "${args}" != *subIssuesSummary* ]]; then
-    echo "I_${n}"
-  elif [[ -f "${d}/subs_fail" ]]; then
-    echo "HTTP 502: Bad Gateway" >&2
-    exit 1
-  elif [[ -f "${d}/no_subs" ]]; then
-    echo 'Unknown JSON field: "subIssuesSummary"' >&2
-    exit 1
-  else
-    printf 'I_%s\t%s\n' "${n}" "$(cat "${d}/open.${n}" 2>/dev/null || echo 0)"
-  fi
-  ;;
-*" pr create "*)
-  if [[ -f "${d}/create_fail" ]]; then
-    echo "a pull request for branch \"x\" into branch \"main\" already exists" >&2
-    exit 1
-  fi
-  while [[ $# -gt 0 ]]; do
-    if [[ "$1" == "--body-file" ]]; then cp "$2" "${d}/created_body"; fi
-    shift
-  done
-  echo "https://github.com/o/r/pull/7"
-  echo "Warning: 1 uncommitted change" >&2
-  ;;
 *" api graphql "*)
+  [[ -f "${d}/gql_exhausted" ]] && limited
   issue=""
   for a in "$@"; do [[ "${a}" == i=I_* ]] && issue="${a#i=I_}"; done
   [[ -f "${d}/link_noop" ]] || echo "${issue}" >>"${d}/pending"
@@ -69,6 +50,7 @@ case "${args}" in
   }
   ;;
 *" pr view "*"closingIssuesReferences"*)
+  [[ -f "${d}/gql_exhausted" ]] && limited
   lag="$(cat "${d}/lag" 2>/dev/null || echo 0)"
   if [[ "${lag}" -gt 0 ]]; then
     echo $((lag - 1)) >"${d}/lag"
@@ -78,18 +60,56 @@ case "${args}" in
   fi
   cat "${d}/refs" 2>/dev/null
   ;;
-*" pr edit "*)
-  while [[ $# -gt 0 ]]; do
-    if [[ "$1" == "--body-file" ]]; then cp "$2" "${d}/edited_body"; fi
-    shift
-  done
+*" pr create "* | *" pr edit "* | *" pr view "* | *" issue view "* | *" repo view "*) limited ;;
+*" api user "*)
+  [[ -f "${d}/user_fail" ]] && {
+    echo "gh: Resource not accessible by integration (HTTP 403)" >&2
+    exit 1
+  }
+  echo me
   ;;
-*" pr view "*"baseRefName"*) cat "${d}/base" 2>/dev/null || echo main ;;
-*" pr view "*"body"*) cat "${d}/body" ;;
-*" pr view "*)
-  [[ -f "${d}/pr_view_fail" ]] && exit 1
-  printf 'PR_7\thttps://github.com/o/r/pull/7\n'
+*" api -X POST "*"/pulls "*)
+  if [[ -f "${d}/create_fail" ]]; then
+    echo '{"message":"Validation Failed","errors":[{"message":"A pull request already exists for o:x."}]}'
+    echo "gh: Validation Failed (HTTP 422)" >&2
+    exit 1
+  fi
+  body_arg "${d}/created_body" "$@"
+  printf '7\thttps://github.com/o/r/pull/7\n'
   ;;
+*" api -X PATCH "*"/pulls/"*) body_arg "${d}/edited_body" "$@" ;;
+*" api -X PATCH "*"/issues/"*)
+  [[ -f "${d}/meta_fail" ]] && {
+    echo "gh: Validation Failed (HTTP 422)" >&2
+    exit 1
+  }
+  printf '%s\n' "$*" >"${d}/meta"
+  ;;
+*" api "*"/pulls/"*)
+  case "${args}" in
+  *".base.ref"*) cat "${d}/base" 2>/dev/null || echo main ;;
+  *".body"*) cat "${d}/body" ;;
+  *)
+    [[ -f "${d}/pr_view_fail" ]] && {
+      echo "gh: Not Found (HTTP 404)" >&2
+      exit 1
+    }
+    echo PR_7
+    ;;
+  esac
+  ;;
+*" api "*"/issues/"*)
+  for a in "$@"; do [[ "${a}" == repos/*/issues/* ]] && n="${a##*/}"; done
+  if grep -qx -- "${n}" "${d}/missing" 2>/dev/null; then
+    echo "gh: Not Found (HTTP 404)" >&2
+    exit 1
+  elif [[ -f "${d}/subs_fail" ]]; then
+    echo "HTTP 502: Bad Gateway" >&2
+    exit 1
+  fi
+  printf 'I_%s\t%s\n' "${n}" "$(cat "${d}/open.${n}" 2>/dev/null || echo 0)"
+  ;;
+*" api repos/"*) printf '%s\to\n' "$(cat "${d}/default" 2>/dev/null || echo main)" ;;
 *)
   echo "stub gh: unexpected call: $*" >&2
   exit 99
@@ -100,7 +120,8 @@ chmod +x "${bin}/gh"
 
 # git stub: current branch from $STUB_DIR/current, gh-merge-base per branch from $STUB_DIR/merge-base.<branch>.
 # Local HEAD is $LOCAL_SHA. The remote tip of <branch> is $STUB_DIR/remote.<branch>, else $LOCAL_SHA, as if pushed;
-# $STUB_DIR/no_remote.<branch> means origin has no such branch. Each call is logged to $STUB_DIR/git_log.
+# $STUB_DIR/no_remote.<branch> means origin has no such branch. origin's URL is $STUB_DIR/origin_url, else the o/r repository.
+# Each call is logged to $STUB_DIR/git_log.
 cat >"${bin}/git" <<'STUB'
 #!/usr/bin/env bash
 d="${STUB_DIR}"
@@ -113,6 +134,7 @@ case "$*" in
   cat "${d}/merge-base.${b%.gh-merge-base}" 2>/dev/null || exit 1
   ;;
 "rev-parse HEAD") echo "${local_sha}" ;;
+"remote get-url origin") cat "${d}/origin_url" 2>/dev/null || echo "https://github.com/o/r.git" ;;
 "ls-remote origin refs/heads/"*)
   b="${3#refs/heads/}"
   [[ -f "${d}/no_remote.${b}" ]] && exit 0
@@ -196,7 +218,7 @@ echo 5 >"${STUB_DIR}/missing"
 create --base develop
 r=0
 [[ "${rc}" == 2 ]] || r=1
-called "pr create" && r=1
+called "POST .*/pulls " && r=1
 check "non-default base still rejects a missing issue" "${r}"
 
 setup $'Body\nCloses #12'
@@ -245,7 +267,7 @@ touch "${STUB_DIR}/subs_fail"
 create
 r=0
 [[ "${rc}" == 2 ]] || r=1
-called "pr create" && r=1
+called "POST .*/pulls " && r=1
 has_line "ISSUE_NOT_FOUND #12: HTTP 502: Bad Gateway" || r=1
 check "a failed sub-issue query stops instead of skipping the guard" "${r}"
 
@@ -254,26 +276,9 @@ echo 5 >"${STUB_DIR}/missing"
 create
 r=0
 [[ "${rc}" == 2 ]] || r=1
-called "pr create" && r=1
-has_line "ISSUE_NOT_FOUND #5: GraphQL: Could not resolve to an issue with the number of 5." || r=1
+called "POST .*/pulls " && r=1
+has_line "ISSUE_NOT_FOUND #5: gh: Not Found (HTTP 404)" || r=1
 check "missing issue exits 2 with gh's reason before creating the PR" "${r}"
-
-setup $'Closes #12'
-touch "${STUB_DIR}/no_subs"
-create
-r=0
-[[ "${rc}" == 0 ]] || r=1
-has_line "LINKED #12" || r=1
-check "gh without subIssuesSummary still links" "${r}"
-
-setup $'Closes #5'
-touch "${STUB_DIR}/no_subs"
-echo 5 >"${STUB_DIR}/missing"
-create
-r=0
-[[ "${rc}" == 2 ]] || r=1
-has_line "ISSUE_NOT_FOUND #5: GraphQL: Could not resolve to an issue with the number of 5." || r=1
-check "gh without subIssuesSummary still rejects a missing issue" "${r}"
 
 setup $'Closes #12'
 touch "${STUB_DIR}/create_fail"
@@ -316,7 +321,7 @@ echo 12 >"${STUB_DIR}/refs"
 run --link 7
 r=0
 [[ "${rc}" == 0 ]] || r=1
-called "pr create" && r=1
+called "POST .*/pulls " && r=1
 called "i=I_12" && r=1
 called "i=I_13" || r=1
 has_line "LINKED #12" || r=1
@@ -371,7 +376,7 @@ echo develop >"${STUB_DIR}/merge-base.feat-x"
 create
 r=0
 [[ "${rc}" == 0 ]] || r=1
-grep -q -- "pr create .*--base develop" "${STUB_DIR}/log" || r=1
+grep -q -- "POST .*/pulls .*base=develop" "${STUB_DIR}/log" || r=1
 grep -qx "Closes #12" "${STUB_DIR}/created_body" 2>/dev/null || r=1
 called "api graphql" && r=1
 check "gh-merge-base of the current branch is the base" "${r}"
@@ -381,7 +386,7 @@ echo develop >"${STUB_DIR}/merge-base.feat-y"
 create --head feat-y
 r=0
 [[ "${rc}" == 0 ]] || r=1
-grep -q -- "pr create .*--base develop" "${STUB_DIR}/log" || r=1
+grep -q -- "POST .*/pulls .*base=develop" "${STUB_DIR}/log" || r=1
 called "api graphql" && r=1
 check "gh-merge-base is read from the --head branch" "${r}"
 
@@ -389,7 +394,7 @@ setup $'Closes #12'
 create
 r=0
 [[ "${rc}" == 0 ]] || r=1
-grep -q -- "pr create .*--base main" "${STUB_DIR}/log" || r=1
+grep -q -- "POST .*/pulls .*base=main" "${STUB_DIR}/log" || r=1
 check "default branch is passed as --base when nothing is configured" "${r}"
 
 setup ""
@@ -405,7 +410,7 @@ create
 r=0
 [[ "${rc}" == 4 ]] || r=1
 grep -q "^NOT_PUSHED" <<<"${out}" || r=1
-called "pr create" && r=1
+called "POST .*/pulls " && r=1
 check "remote branch at an older commit exits 4 without creating the PR" "${r}"
 
 setup $'Closes #12'
@@ -414,7 +419,7 @@ create --head feat-y
 r=0
 [[ "${rc}" == 4 ]] || r=1
 grep -q "^NOT_PUSHED" <<<"${out}" || r=1
-called "pr create" && r=1
+called "POST .*/pulls " && r=1
 check "--head branch missing on origin exits 4 without creating the PR" "${r}"
 
 setup $'Closes #12'
@@ -443,7 +448,70 @@ r=0
 [[ "${rc}" == 0 ]] || r=1
 has_line "https://github.com/o/r/pull/7" || r=1
 has_line "LINKED #12" || r=1
-grep -q -- "^pr create --repo o/r .*--base main --head feat-y --draft" "${STUB_DIR}/log" || r=1
+grep -q -- "^api -X POST repos/o/r/pulls .*head=feat-y .*base=main .*draft=true" "${STUB_DIR}/log" || r=1
 check "pr-owner's pushed --repo --base --head --draft call creates and links the PR" "${r}"
+
+setup $'Body\nCloses #12'
+touch "${STUB_DIR}/gql_exhausted"
+create --web
+r=0
+[[ "${rc}" == 0 ]] || r=1
+has_line "https://github.com/o/r/pull/7" || r=1
+grep -qx "Closes #12" "${STUB_DIR}/created_body" 2>/dev/null || r=1
+has_line "NOTICE: GraphQL rate limit exhausted; skipped linking #12" || r=1
+grep -q "LINK" <<<"${out}" && r=1
+check "GraphQL exhausted: creates the PR and says linking #12 was skipped" "${r}"
+
+setup ""
+printf 'Closes #12\n' >"${STUB_DIR}/body"
+touch "${STUB_DIR}/gql_exhausted"
+run --link 7
+r=0
+[[ "${rc}" == 0 ]] || r=1
+has_line "NOTICE: GraphQL rate limit exhausted; skipped linking #12" || r=1
+check "GraphQL exhausted: --link says linking #12 was skipped and exits 0" "${r}"
+
+setup $'Closes #12'
+create --assignee @me --label bug --label docs
+r=0
+[[ "${rc}" == 0 ]] || r=1
+grep -qx -- "api -X PATCH repos/{owner}/{repo}/issues/7 -f assignees\[\]=me -f labels\[\]=bug -f labels\[\]=docs --silent" \
+  "${STUB_DIR}/meta" 2>/dev/null || r=1
+check "--assignee @me and --label are set on the created PR, with @me as the login" "${r}"
+
+setup $'Closes #12'
+touch "${STUB_DIR}/meta_fail"
+create --label bug
+r=0
+[[ "${rc}" == 0 ]] || r=1
+has_line "https://github.com/o/r/pull/7" || r=1
+has_line "LINKED #12" || r=1
+grep -q "^WARN: could not set assignees or labels on https://github.com/o/r/pull/7" <<<"${out}" || r=1
+check "a failed label update warns and still exits 0 with the PR created and linked" "${r}"
+
+setup $'Closes #12'
+touch "${STUB_DIR}/user_fail"
+create --assignee @me --label bug
+r=0
+[[ "${rc}" == 0 ]] || r=1
+has_line "https://github.com/o/r/pull/7" || r=1
+has_line "WARN: could not resolve @me to assign https://github.com/o/r/pull/7: gh: Resource not accessible by integration (HTTP 403)" || r=1
+grep -qx -- "api -X PATCH repos/{owner}/{repo}/issues/7 -f labels\[\]=bug --silent" "${STUB_DIR}/meta" 2>/dev/null || r=1
+check "an unresolvable @me warns, still sets the labels, and exits 0" "${r}"
+
+setup $'Closes #12'
+echo "git@github.com:fork/r.git" >"${STUB_DIR}/origin_url"
+create
+r=0
+[[ "${rc}" == 0 ]] || r=1
+grep -q -- "POST .*/pulls .*head=fork:feat-x " "${STUB_DIR}/log" || r=1
+check "origin in another owner's fork sends head as fork:feat-x" "${r}"
+
+setup $'Closes #12'
+create
+r=0
+[[ "${rc}" == 0 ]] || r=1
+grep -q -- "POST .*/pulls .*head=feat-x " "${STUB_DIR}/log" || r=1
+check "origin in the target repository sends head as the bare branch" "${r}"
 
 exit "${fail}"
