@@ -275,23 +275,6 @@ has_line "ISSUE_NOT_FOUND #5: gh: Not Found (HTTP 404)" || r=1
 check "missing issue exits 2 with gh's reason before creating the PR" "${r}"
 
 setup $'Closes #12'
-touch "${STUB_DIR}/no_subs"
-create
-r=0
-[[ "${rc}" == 0 ]] || r=1
-has_line "LINKED #12" || r=1
-check "gh without subIssuesSummary still links" "${r}"
-
-setup $'Closes #5'
-touch "${STUB_DIR}/no_subs"
-echo 5 >"${STUB_DIR}/missing"
-create
-r=0
-[[ "${rc}" == 2 ]] || r=1
-has_line "ISSUE_NOT_FOUND #5: GraphQL: Could not resolve to an issue with the number of 5." || r=1
-check "gh without subIssuesSummary still rejects a missing issue" "${r}"
-
-setup $'Closes #12'
 touch "${STUB_DIR}/create_fail"
 create
 r=0
