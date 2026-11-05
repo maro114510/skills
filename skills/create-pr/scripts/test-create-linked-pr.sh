@@ -15,7 +15,7 @@ fail=0
 # - subs_fail: reading the issue fails for a reason other than its absence
 # - created_body, edited_body: body sent when creating or editing the PR
 # - meta: the call that set the PR's assignees and labels
-# - create_fail, pr_view_fail, link_noop, web_fail, meta_fail: force that failure
+# - create_fail, pr_view_fail, link_noop, web_fail, meta_fail, user_fail: force that failure
 # - refs: linked issue numbers. lag: reads that still return the old list
 # - gql_exhausted: every GraphQL call fails on the rate limit
 # The script must use REST wherever REST can do the job, so a GraphQL-only subcommand that has a REST equivalent always fails here.
@@ -61,7 +61,13 @@ case "${args}" in
   cat "${d}/refs" 2>/dev/null
   ;;
 *" pr create "* | *" pr edit "* | *" pr view "* | *" issue view "* | *" repo view "*) limited ;;
-*" api user "*) echo me ;;
+*" api user "*)
+  [[ -f "${d}/user_fail" ]] && {
+    echo "gh: Resource not accessible by integration (HTTP 403)" >&2
+    exit 1
+  }
+  echo me
+  ;;
 *" api -X POST "*"/pulls "*)
   if [[ -f "${d}/create_fail" ]]; then
     echo '{"message":"Validation Failed","errors":[{"message":"A pull request already exists for o:x."}]}'
@@ -482,6 +488,16 @@ has_line "https://github.com/o/r/pull/7" || r=1
 has_line "LINKED #12" || r=1
 grep -q "^WARN: could not set assignees or labels on https://github.com/o/r/pull/7" <<<"${out}" || r=1
 check "a failed label update warns and still exits 0 with the PR created and linked" "${r}"
+
+setup $'Closes #12'
+touch "${STUB_DIR}/user_fail"
+create --assignee @me --label bug
+r=0
+[[ "${rc}" == 0 ]] || r=1
+has_line "https://github.com/o/r/pull/7" || r=1
+has_line "WARN: could not resolve @me to assign https://github.com/o/r/pull/7: gh: Resource not accessible by integration (HTTP 403)" || r=1
+grep -qx -- "api -X PATCH repos/{owner}/{repo}/issues/7 -f labels\[\]=bug --silent" "${STUB_DIR}/meta" 2>/dev/null || r=1
+check "an unresolvable @me warns, still sets the labels, and exits 0" "${r}"
 
 setup $'Closes #12'
 echo "git@github.com:fork/r.git" >"${STUB_DIR}/origin_url"
