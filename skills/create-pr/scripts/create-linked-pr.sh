@@ -255,8 +255,9 @@ echo "${url}"
 # The pulls endpoint takes neither, so they go on the PR's issue; the PR exists by now, so a failure is only a warning.
 meta_args=()
 for a in ${assignees[@]+"${assignees[@]}"}; do
-  if [[ "${a}" == "@me" ]]; then
-    a="$(gh api user --jq .login 2>"${err}")" || a=""
+  if [[ "${a}" == "@me" ]] && ! a="$(gh api user --jq .login 2>"${err}")"; then
+    echo "WARN: could not resolve @me to assign ${url}: $(tr '\n' ' ' <"${err}" | sed 's/[[:space:]]*$//')" >&2
+    a=""
   fi
   [[ -n "${a}" ]] && meta_args+=(-f "assignees[]=${a}")
 done
