@@ -16,15 +16,17 @@ The Epic is created first: `gh issue create --parent` needs the parent to exist,
 
 - `gh issue create` prints the new Issue URL on success.
 - Record its trailing number against the id: `T1`, `T1.1`, `T2`, and so on; a grandchild is keyed by its full `Tn.m` id.
-- A failed create prints an error, not a URL, so it gets no number; treat it as failed and continue.
-- To resume an interrupted run, recover a number with `gh issue list --repo <owner/repo> --state all --search "in:title <Tn title>" --json number,title,url,state`, continuing only when exactly one returned title matches `<Tn title>`; otherwise stop rather than attach an ambiguous Issue to the dependency graph.
+- A failed create prints an error, not a URL, so it gets no number; treat it as failed and continue. A server error such as `HTTP 502` may still have created the Issue, so run the title search below once, before the next create: when exactly one title matches, record that number as created instead.
+- To resume an interrupted run, recover a number with `gh issue list --repo <owner/repo> --state all --search 'in:title <Tn title>' --json number,title,url,state`, quoting the title as for `--title` below, continuing only when exactly one returned title matches `<Tn title>`; otherwise stop rather than attach an ambiguous Issue to the dependency graph.
 
 **Failures and the Step 6 report**
 
 - Neither a failed `Tn` nor a failed `Tn.m` aborts the rest of the run.
 - A failed `Tn`/`Tn.m` never gets a real number, so any not-yet-created sibling whose `depends_on` names it must drop that id from its own `--blocked-by` list — never pass a number that doesn't exist. Note the dropped edge in the Step 6 report so the user knows that dependency was never wired, rather than silently creating an Issue that was supposed to wait but isn't blocked on anything.
 - Before each `gh issue edit` in 5.4 and 5.5, confirm no token remains in that body's scope; if one does and a failed create doesn't explain it, the substitution missed it — fix it before submitting.
-- Note in the Step 6 report that the Epic's number is lowest, `Tn` numbers come next in wave order, and each container's `Tn.m` numbers come after their parent.
+- Note in the Step 6 report that the Epic's number is lowest, `Tn` numbers come next in wave order, and every `Tn.m` number comes after all of them, since grandchildren are created last.
+
+Every title goes in single quotes, so the shell expands nothing in it, such as a backtick-quoted name; write a `'` inside a title as `'\''`.
 
 ### 5.1 Create the Epic
 
@@ -33,7 +35,7 @@ The Epic is created first: `gh issue create --parent` needs the parent to exist,
 ```bash
 gh issue create \
   --repo <owner/repo> \
-  --title "<Epic title>" \
+  --title '<Epic title>' \
   --body-file - <<'EOF'
 <Epic body, {{Tn}} placeholders as approved in Step 4>
 EOF
@@ -46,9 +48,9 @@ Repeat per `Tn`, in wave order, Wave 1 first. `--blocked-by` lists every `Tm` in
 ```bash
 gh issue create \
   --repo <owner/repo> \
-  --title "<Tn title>" \
+  --title '<Tn title>' \
   --parent <Epic number> \
-  --blocked-by "<real numbers of every Tm in TN's depends_on>" \
+  --blocked-by "<real numbers of every Tm in TN's depends_on, comma-separated, e.g. 101,102>" \
   --body-file - <<'EOF'
 <Tn body — leaf shape, or container shape with {{Tn.m}} tokens still in place>
 EOF
@@ -67,7 +69,7 @@ Only for a container `Tn`. `--parent` is the container's number; `--blocked-by` 
 ```bash
 gh issue create \
   --repo <owner/repo> \
-  --title "<Tn.m title>" \
+  --title '<Tn.m title>' \
   --parent <container Tn's number> \
   --blocked-by "<real numbers of every sibling Tn.m in this Tn.m's depends_on>" \
   --body-file - <<'EOF'
@@ -105,13 +107,13 @@ EOF
 
 ### 5.6 Verify sub-issue and blocked-by relations against GitHub
 
-Script output is not proof: read the relations back before Step 6 and stop on any mismatch. `Issue` exposes `blockedBy`, `blocking`, and `issueDependenciesSummary`; `blockedByIssues` does not exist.
+Script output is not proof: read the relations back before Step 6 and stop on any mismatch. `Issue` exposes `blockedBy`, `blocking`, and `issueDependenciesSummary`; `blockedByIssues` does not exist. Run this field listing only when a query below fails on an unknown field:
 
 ```bash
 gh api graphql -f query='{ __type(name:"Issue"){ fields { name } } }'
 ```
 
-Sub-issue count: Epic sub-issues are the `Tn` level only, so the expected count is the number of non-dotted ids created.
+Sub-issue count: Epic sub-issues are the `Tn` level only, so the expected count is the number of non-dotted ids created. Run the same query for each container `Tn`, expecting its created `Tn.m`.
 
 ```bash
 gh api graphql -f owner="<owner>" -f name="<name>" -F number=<Epic number> -f query='
