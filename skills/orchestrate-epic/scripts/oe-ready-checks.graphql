@@ -1,0 +1,22 @@
+# The read of one more page of checks on a commit in oe ready.
+# It reads the commit by its SHA, so every page comes from the commit the first page came from.
+query($owner: String!, $repo: String!, $oid: GitObjectID!, $after: String!) {
+  repository(owner: $owner, name: $repo) {
+    object(oid: $oid) {
+      ... on Commit {
+        oid
+        statusCheckRollup {
+          contexts(first: 100, after: $after) {
+            totalCount
+            pageInfo { hasNextPage endCursor }
+            nodes {
+              __typename
+              ... on CheckRun { name status conclusion startedAt checkSuite { databaseId } }
+              ... on StatusContext { context state createdAt }
+            }
+          }
+        }
+      }
+    }
+  }
+}
