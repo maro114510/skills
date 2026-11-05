@@ -265,7 +265,7 @@ before_start='.comments = [($comment | .id = "IC_old" | .author = "bot" | .bodyH
   set_snap "${waiting}"
   poll
   expect "$(event)" idle
-  set_snap "${waiting} | .reviews += [{id: \"R2\", author: \"bob\", body: \"nit: naming\", bodyHash: \"r2\", state: \"COMMENTED\", isMinimized: false, createdAt: \"2026-01-03\"}]"
+  set_snap "${waiting} | .reviews += [{id: \"R2\", author: \"bob\", authorAssociation: \"MEMBER\", body: \"nit: naming\", bodyHash: \"r2\", state: \"COMMENTED\", isMinimized: false, createdAt: \"2026-01-03\"}]"
   poll
   expect "$(event)" comment
   expect "$(field .comment.kind)" review
