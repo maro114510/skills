@@ -1127,6 +1127,114 @@ JSON
   [ "$(action_of 5)" = wait-answer ]
 }
 
+# Prints 150 checks named check-1 to check-150, which GitHub returns over two pages.
+# check-150, on the second page, has the result $1, and every other check passed.
+checks_150() {
+  jq -nc --arg last "$1" '[range(1; 150) | {key: "check-\(.)", value: "success"}] + [{key: "check-150", value: $last}] | from_entries'
+}
+
+@test "a pending check on the second page of a pull request head with 150 checks waits for CI" {
+  github <<JSON
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": $(checks_150 in_progress)}]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:01
+
+  run --separate-stderr bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-ci ]
+}
+
+@test "150 passed checks over two pages on a pull request head start the Verifier without a truncation error" {
+  github <<JSON
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": $(checks_150 success)}]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:01
+
+  run --separate-stderr bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-verifier ]
+  case "${stderr}" in
+  *"checks truncated"*) return 1 ;;
+  *) ;;
+  esac
+}
+
+@test "a failed check on the second page of a pull request head with 150 checks gets an Owner that names it" {
+  github <<JSON
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": $(checks_150 failure)}]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:01
+
+  run --separate-stderr bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-owner ]
+  case "${lines[0]}" in
+  *"checks failed on "*": check-150") ;;
+  *) return 1 ;;
+  esac
+}
+
+@test "a failed check on the second page of a default branch head with 150 checks makes no Issue ready" {
+  github <<JSON
+{
+  "default_branch": {"checks": $(checks_150 failure)},
+  "issues": [{"number": 5}]
+}
+JSON
+
+  run --separate-stderr bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-base ]
+  case "${lines[0]}" in
+  *"checks failed on main head "*": check-150") ;;
+  *) return 1 ;;
+  esac
+}
+
+@test "a failed read of the second page of checks exits non-zero and prints nothing" {
+  github <<JSON
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": $(checks_150 success)}]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:01
+
+  GH_FAIL="after=" run --separate-stderr bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 1 ]
+  [ -z "${output}" ]
+}
+
 @test "a question from before the latest claim does not hold a restarted Issue" {
   github <<'JSON'
 {

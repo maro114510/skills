@@ -12,6 +12,9 @@
 # | ref | Branch name | The head of that branch |
 # | comments | Issue number | The comments on that Issue, oldest first |
 # | sub_issues | Epic number | The child Issues, each with its number and state |
+# | checks | Commit SHA and cursor, as SHA:CURSOR | The page of checks on that commit after the cursor |
+#
+# Checks come 100 to a page, in every read that holds them.
 #
 # The state
 #
@@ -78,12 +81,20 @@ def check_run($name; $result):
     conclusion: (if $result == "in_progress" then null else ($result | ascii_upcase) end)};
 def status_context($context; $state):
   {__typename: "StatusContext", context: $context, state: ($state | ascii_upcase), createdAt: ("07:20" | time)};
-def rollup:
+def rollup_nodes:
   if .checks == null and .statuses == null then null
   else [(.checks // {} | to_entries[] | check_run(.key; .value)),
       (.statuses // {} | to_entries[] | status_context(.key; .value))]
-    | {contexts: {totalCount: length, nodes: .}}
   end;
+
+# One page of checks, which holds 100 at most, as GitHub returns them; the cursor is the position after the page.
+def contexts_page($after):
+  if . == null then null
+  else {contexts: {totalCount: length,
+    pageInfo: {hasNextPage: (length > $after + 100), endCursor: "\([length, $after + 100] | min)"},
+    nodes: .[$after:$after + 100]}}
+  end;
+def rollup: rollup_nodes | contexts_page(0);
 
 def epic_response:
   (.default_branch // {}) as $d
@@ -166,6 +177,12 @@ def issue_comments($n):
 def sub_issues:
   [.issues[] | {number, state: (if .closed then "closed" else "open" end)}];
 
+# The page of checks after the cursor $after on the commit $oid: the default branch head or a pull request head.
+def checks_response($oid; $after):
+  (if $oid == default_sha then .default_branch // {}
+   else [.issues[].pull_requests[]? | select(read_sha == $oid)] | first // error("unknown commit \($oid)") end) as $commit
+  | {data: {repository: {object: {oid: $oid, statusCheckRollup: ($commit | rollup_nodes | contexts_page($after))}}}};
+
 $state
 | if $call == "epic" then epic_response
   elif $call == "issue" then issue_response($arg | tonumber)
@@ -176,4 +193,5 @@ $state
   elif $call == "ref" then branch_head($arg)
   elif $call == "comments" then issue_comments($arg | tonumber)
   elif $call == "sub_issues" then sub_issues
+  elif $call == "checks" then ($arg | split(":")) as [$oid, $after] | checks_response($oid; $after | tonumber)
   else error("unknown call \($call)") end
