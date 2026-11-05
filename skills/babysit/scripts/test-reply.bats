@@ -194,12 +194,49 @@ expect() {
   expect "$(calls)" 0
 }
 
-@test "a body mentioning CodeRabbit without approve or resolve is posted" {
+@test "a body mentioning CodeRabbit without a command exits 11, because a bare mention already reaches the bot" {
   printf '@coderabbitai fixed in abc1234; the approval flow is unchanged.\n' >"${tmp}/body.md"
   reply --thread T1
-  [ "${status}" -eq 0 ]
-  expect "$(jq -r .posted <<<"${output}")" true
-  expect "$(calls)" 1
+  [ "${status}" -eq 11 ]
+  expect "$(jq -r .posted <<<"${output}")" false
+  expect "$(calls)" 0
+}
+
+@test "an approval reworded around the mention exits 11 and posts nothing" {
+  for body in '@coderabbitai please approve' '@coderabbitai: approve' '@codex review and approve'; do
+    printf 'Fixed in abc1234.\n%s\n' "${body}" >"${tmp}/body.md"
+    reply --thread T1
+    [ "${status}" -eq 11 ] || {
+      echo "posted: ${body}" >&2
+      return 1
+    }
+  done
+  expect "$(calls)" 0
+}
+
+@test "a mention of any listed review bot, not only CodeRabbit, exits 11" {
+  for bot in codex chatgpt-codex-connector copilot gemini-code-assist claude cursor greptileai sourcery-ai \
+    dependabot renovate mergify kodiak; do
+    printf 'Thanks (@%s) for the note.\n' "${bot}" >"${tmp}/body.md"
+    reply --thread T1
+    [ "${status}" -eq 11 ] || {
+      echo "posted: @${bot}" >&2
+      return 1
+    }
+  done
+  expect "$(calls)" 0
+}
+
+@test "a line that starts with a slash command exits 11 and posts nothing" {
+  for cmd in '/approve' '  /lgtm' '/merge now'; do
+    printf 'Fixed in abc1234.\n%s\n' "${cmd}" >"${tmp}/body.md"
+    reply --conversation
+    [ "${status}" -eq 11 ] || {
+      echo "posted: ${cmd}" >&2
+      return 1
+    }
+  done
+  expect "$(calls)" 0
 }
 
 @test "a line that is only a re-review request to a listed bot is posted" {
