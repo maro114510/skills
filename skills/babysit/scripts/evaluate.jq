@@ -28,8 +28,8 @@ def relevant($head; $gen): select(startswith("c:") or endswith("@\($head)#\($gen
 | (($l.heads // {}) | if .[$s.head] == null then .[$s.head] = {first_seen: $t} else . end) as $heads
 | ($l.items // {}) as $items
 | ($l.started_at // null) as $started
-# In watch a report settles an item; in drive only a handled or parked one is settled, so drive still acts.
-| (if $mode == "drive" then ["handled", "parked"] else ["reported", "handled", "parked"] end) as $done
+# A report settles an item in both modes: drive.sh reports a review bot's status comment instead of acting on it.
+| ["reported", "handled", "parked"] as $done
 | def settled($key; $hash):
     ($items[$key] // null) as $d
     | $d != null and ($d.disposition | IN($done[])) and ($hash == null or $d.hash == $hash);
