@@ -6,14 +6,15 @@
 # The agent runs in the drive worktree with the event file and result file named in its prompt and in
 # BABYSIT_EVENT_FILE and BABYSIT_RESULT_FILE. It edits and commits there and writes one result:
 #   {"outcome":"fixed"|"reply"|"none"|"park","reply":"<text>","reason":"<text>"}
-# Only this script pushes, replies, parks, and records, through the scripts beside it. The agent never gets the
-# session token, GH_TOKEN, or GITHUB_TOKEN, and a remote head that moves while it runs stops the drive.
+# Only this script pushes, replies, parks, and records, through the scripts beside it. The agent's arguments and
+# environment carry neither the session token, GH_TOKEN, nor GITHUB_TOKEN, and a remote head that moves while it
+# runs stops the drive.
 # A review bot's status comment is recorded as reported with no agent call. A time limit restarts the session
 # while rounds are below the cap. Nothing here merges, marks the pull request ready, or requests a review.
 # Prints one JSON line when it stops: {stop, report, rounds, pushes, errors}. Progress goes to stderr.
 # Test hooks: BABYSIT_WAIT replaces wait.sh, and BABYSIT_PR_STATE replaces pr-state.sh here and in the scripts it calls.
 # Exit: 0 approved, ready, or merged; 1 closed, stalled, the rounds cap, an API failure, a nonzero agent exit,
-# or a head that moved under the agent; 2 usage or configuration error; 3 another session holds the pull request.
+# a head that moved under the agent, or SIGINT or SIGTERM; 2 usage or configuration error; 3 another session holds the pull request.
 set -uo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -77,6 +78,8 @@ add_error() {
 # Stops with exit $1 after clearing the lock, unless the lock is already another session's, and prints the report.
 finish() {
   local code="$1" stop="$2" report="${3:-null}" shown
+  # A signal during the stop must not start a second stop that replaces this one's exit and report.
+  trap '' INT TERM
   if ((code != 3)) && [[ -n "${token}" ]]; then
     bash "${script_dir}/ledger.sh" stop "${repo}" "${pr}" "${token}" >/dev/null 2>&1
   fi
