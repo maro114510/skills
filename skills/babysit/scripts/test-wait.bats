@@ -8,6 +8,8 @@ setup() {
   git init -q "${BATS_TEST_TMPDIR}/repo"
   cd "${BATS_TEST_TMPDIR}/repo" || return 1
   export BABYSIT_NOW=1000000
+  # A park wait makes itself must not show a real notification.
+  export BABYSIT_OSASCRIPT="${BATS_TEST_TMPDIR}/no-osascript"
   token="tok-1"
   snap="${BATS_TEST_TMPDIR}/snap.json"
   # READY: open, mergeable, one passing Actions check, approved without a review body, nothing pending.
@@ -22,7 +24,7 @@ setup() {
     "reviews":[{"id":"R1","author":"bob","authorAssociation":"MEMBER","body":"","bodyHash":"e0","createdAt":"2026-01-01T00:00:00Z",
       "url":"u","isMinimized":false,"state":"APPROVED"}],
     "comments":[]}'
-  comment='{"id":"IC1","author":"carol","authorAssociation":"NONE","body":"please rename","bodyHash":"h1",
+  comment='{"id":"IC1","author":"carol","authorAssociation":"COLLABORATOR","body":"please rename","bodyHash":"h1",
     "createdAt":"2026-01-02T00:00:00Z","url":"u","isMinimized":false}'
   bash "${scripts}/ledger.sh" start o/r 7 "${token}" >/dev/null
   set_snap '.'
@@ -468,6 +470,101 @@ before_start='.comments = [($comment | .id = "IC_old" | .author = "bot" | .bodyH
   poll --mode drive
   expect "$(event)" stalled
   expect "$(field '.report.reasons["c:TC1"]')" "asks for a schema change"
+}
+
+@test "drive parks a comment whose author has no association as an untrusted author and returns no event" {
+  set_snap "${waiting} | .comments = [\$comment | .authorAssociation = \"NONE\"]"
+  poll --mode drive
+  expect "$(event)" idle
+  expect "$(ledger '.items["c:IC1"].disposition')" parked
+  expect "$(ledger '.items["c:IC1"].reason')" "untrusted author"
+  expect "$(ledger '.items["c:IC1"].hash')" h1
+}
+
+@test "drive parks a comment from a contributor, a first-timer, or an unknown association as an untrusted author" {
+  set_snap "${waiting} | .comments = [
+    (\$comment | .id = \"IC_contributor\" | .authorAssociation = \"CONTRIBUTOR\"),
+    (\$comment | .id = \"IC_first_timer\" | .authorAssociation = \"FIRST_TIMER\"),
+    (\$comment | .id = \"IC_first_contribution\" | .authorAssociation = \"FIRST_TIME_CONTRIBUTOR\"),
+    (\$comment | .id = \"IC_mannequin\" | .authorAssociation = \"MANNEQUIN\"),
+    (\$comment | .id = \"IC_unknown\" | del(.authorAssociation))]"
+  poll --mode drive
+  expect "$(event)" idle
+  for id in IC_contributor IC_first_timer IC_first_contribution IC_mannequin IC_unknown; do
+    expect "$(ledger ".items[\"c:${id}\"].reason")" "untrusted author"
+  done
+}
+
+@test "drive hands an OWNER, MEMBER, or COLLABORATOR comment over as a comment event" {
+  for association in OWNER MEMBER COLLABORATOR; do
+    set_snap "${waiting} | .comments = [\$comment | .authorAssociation = \"${association}\"]"
+    poll --mode drive
+    expect "$(event)" comment
+    expect "$(field .key)" c:IC1
+  done
+}
+
+@test "drive hands a listed review bot's comment over as a comment event although the bot has no association" {
+  for bot in coderabbitai chatgpt-codex-connector; do
+    set_snap "${waiting} | .comments = [\$comment | .author = \"${bot}\" | .authorType = \"Bot\" | .authorAssociation = \"NONE\"]"
+    poll --mode drive
+    expect "$(event)" comment
+    expect "$(field .comment.author)" "${bot}"
+  done
+}
+
+@test "drive parks a user who holds a listed bot's login, and a bot that is not listed, as untrusted authors" {
+  set_snap "${waiting} | .comments = [
+    (\$comment | .id = \"IC_user\" | .author = \"coderabbitai\" | .authorType = \"User\" | .authorAssociation = \"NONE\"),
+    (\$comment | .id = \"IC_bot\" | .author = \"renovate\" | .authorType = \"Bot\" | .authorAssociation = \"NONE\")]"
+  poll --mode drive
+  expect "$(event)" idle
+  expect "$(ledger '.items["c:IC_user"].reason')" "untrusted author"
+  expect "$(ledger '.items["c:IC_bot"].reason')" "untrusted author"
+}
+
+@test "drive parks an untrusted thread comment and review body, and stalls once only they block" {
+  set_snap "${waiting} | .threads = [{id: \"T1\", isResolved: false, path: \"a\", line: 1,
+      comments: [\$comment | .id = \"TC1\" | .authorAssociation = \"NONE\"]}]
+    | .reviews += [\$comment | .id = \"R2\" | .authorAssociation = \"NONE\" | .state = \"COMMENTED\"]"
+  poll --mode drive
+  expect "$(event)" stalled
+  expect "$(field '.report.reasons["c:TC1"]')" "untrusted author"
+  expect "$(field '.report.reasons["c:R2"]')" "untrusted author"
+}
+
+@test "drive parks an untrusted comment and returns the trusted comment after it in the same call" {
+  set_snap "${waiting} | .comments = [(\$comment | .id = \"IC_out\" | .authorAssociation = \"NONE\"),
+    (\$comment | .id = \"IC_in\" | .createdAt = \"2026-01-03T00:00:00Z\")]"
+  poll --mode drive
+  expect "$(event)" comment
+  expect "$(field .key)" c:IC_in
+  expect "$(ledger '.items["c:IC_out"].reason')" "untrusted author"
+}
+
+@test "an edited untrusted comment is parked again with its new text" {
+  record c:IC1 parked --hash h1 --reason "untrusted author"
+  set_snap "${waiting} | .comments = [\$comment | .authorAssociation = \"NONE\" | .bodyHash = \"h2\"]"
+  poll --mode drive
+  expect "$(event)" idle
+  expect "$(ledger '.items["c:IC1"].hash')" h2
+}
+
+@test "5 used rounds do not fire the limit for an untrusted comment, which is parked instead" {
+  path="$(bash "${scripts}/ledger.sh" path o/r 7)"
+  jq '.rounds = 5' "${path}" >"${path}.new" && mv "${path}.new" "${path}"
+  set_snap "${waiting} | .comments = [\$comment | .authorAssociation = \"NONE\"]"
+  poll --mode drive
+  expect "$(event)" idle
+  expect "$(ledger '.items["c:IC1"].reason')" "untrusted author"
+}
+
+@test "watch reports an untrusted comment as untrusted_comment and parks nothing" {
+  set_snap "${waiting} | .comments = [\$comment | .authorAssociation = \"NONE\"]"
+  poll
+  expect "$(event)" untrusted_comment
+  expect "$(field .key)" c:IC1
+  expect "$(ledger '.items["c:IC1"] // "none"')" none
 }
 
 @test "a re-run check waits for a newer run, which confirms a failure" {
