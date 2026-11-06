@@ -31,7 +31,7 @@ It only reads: never create, switch, edit, or close an Issue, PR, branch, or wor
 
    | Group | JSON | Each item says |
    |---|---|---|
-   | Waits on you | `owner` | What the PR changes, then the owner's action: mark it ready when `isDraft` is true, otherwise review and merge it. Its checks passed or never ran, so it waits only on the owner |
+   | Waits on you | `owner` | What the PR changes, then the owner's action: mark it ready when `isDraft` is true, otherwise review and merge it, and that it waits only on the owner because its checks passed (`checks` is `SUCCESS`) or never ran (`checks` is null) |
    | Start next | `next` | What the work does and why it matters now |
    | Blocked | `blocked` | What the work does, why it matters now, and each Issue in `blockedBy` it waits on |
    | Open discussions | `discussions`, present only with `--discussions` | What it proposes or asks, its `category`, and, when `answered` is not null, whether it is answered. It is an idea or question, not work: say that deciding it is the action, never that it is the next work to start |
@@ -45,11 +45,11 @@ It only reads: never create, switch, edit, or close an Issue, PR, branch, or wor
 The owner must understand every item without opening GitHub.
 
 - Start with what the work does, in plain words drawn from `title` and `body`, and never with a number. A `blockedBy` entry has only a `title`, so reword it.
-- Give why it matters now from the signals present on the item, and when none is present, say only what it does:
+- Give why it matters now from the signals present on the item, and when none is present, say only what it does. A signal below its condition is not mentioned at all:
 
   | Signal | Say |
   |---|---|
-  | `inProgress` | Work already started: the worktree in `worktrees`, the PR's state in `pr`, or, with neither, that it is assigned to you |
+  | `inProgress` | Work already started: the worktree in `worktrees`, the PR's state in `pr`, or, with neither, that it is assigned to you, because `pick.jq` sets `inProgress` only for a worktree, an open PR, or you among the assignees |
   | `unblocks` above 0 | How many waiting Issues it frees |
   | `epic` with `completed` above 0 | Which larger effort it moves forward, by what that effort does, and its progress as `completed` of `total` |
 
