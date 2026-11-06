@@ -69,7 +69,7 @@ Every non-zero exit prints no context and no `Arguments:` line, so write the mes
 | 3 | `CONFLICT #NNN` | Stop and report each issue: an older commit closes the issue that the newest commit marks Related. Never amend, rebase, reset, revert, or commit; the user fixes the history, so the newest commit also closes it or the older one stops closing it |
 | 4 | `ON_BASE_BRANCH` | Stop: a PR cannot target its own branch. Suggest creating a feature branch |
 | 5 | `NO_COMMITS` | Stop and ask whether commits are missing |
-| 6 | `UNCOMMITTED` | Invoke the `commit` skill, then rerun the command once. If it exits 6 again, for example because the user declined or a suspected secret was excluded, stop and report that |
+| 6 | `UNCOMMITTED` | Invoke the `commit` skill, then rerun the command once. If it exits 6 again, for example because a suspected secret was excluded, stop and report that |
 
 ## Step 2. Analyze the Change
 
