@@ -2,7 +2,7 @@
 # oe wait
 #
 # Blocks inside one call until oe ready's next actions change, so waiting for CI or a human costs the session no tokens.
-# It reads GitHub only through oe ready, and writes nothing.
+# It reads GitHub only through oe ready, and writes only its own process record, waits/<repo-key>/<epic> in the state oe-store.sh lays out.
 #
 # Usage
 #
@@ -11,6 +11,7 @@
 # - --running is passed to oe ready, and also means an agent is still running.
 # - --timeout bounds this call, wait_timeout seconds by default.
 #   The deadline is checked before each poll, so the call can run up to one poll interval past it.
+# - Starting a wait stops an earlier oe wait for the same Epic on this host, so at most one runs.
 # - --idle-since is when the caller last saw a next action change, or when the session started, in epoch seconds.
 #   With no --running, the session is idle once idle_limit seconds have passed since then.
 # - OE_NOW sets the current time in epoch seconds, as in oe ready.
@@ -33,6 +34,7 @@
 # | 2 | The arguments are invalid | Nothing |
 # | 5 | The timeout passed with every next action unchanged | The latest output |
 # | 6 | The session is idle: no agent runs and idle_limit has passed since --idle-since | The latest output, as the session's summary |
+# | 137 | A later oe wait for the same Epic killed this one | Nothing |
 #
 # After exit 6 the session ends, and a rerun of orchestrate-epic resumes from GitHub, where every state lives.
 set -uo pipefail
@@ -78,6 +80,51 @@ done
 interval="${OE_WAIT_INTERVAL:-${wait_interval}}"
 [[ "${interval}" =~ ^[0-9]+$ ]] || usage "OE_WAIT_INTERVAL must be whole seconds"
 [[ -z "${OE_NOW:-}" || "${OE_NOW}" =~ ^[0-9]+$ ]] || usage "OE_NOW must be epoch seconds"
+
+# shellcheck source-path=SCRIPTDIR
+source "${dir}/oe-store.sh"
+
+# Prints process $1 and every process below it, deepest last.
+process_tree() {
+  local child
+  printf '%s\n' "$1"
+  for child in $(pgrep -P "$1" 2>/dev/null); do
+    process_tree "${child}"
+  done
+}
+
+# Stops an earlier wait for this Epic on this host, then records this one, so at most one runs.
+# The record holds the process ID and its start time, so a reused process ID is never stopped.
+# The earlier wait is suspended while its tree is read, then killed before anything below it,
+# so it never sees a failed poll and exits 1, and runs no EXIT trap that could drop the record this wait writes.
+# It gets KILL, not TERM: bash 5 prints "Terminated" when it reaps a child that TERM killed, before any trap runs.
+wait_file=""
+single_wait() {
+  local key pid lstart tree
+  key="$(repo_key "${repo}")" || return 0
+  wait_file="$(state_dir)/waits/${key}/${epic}"
+  if read -r pid lstart 2>/dev/null <"${wait_file}" && [[ "${pid}" =~ ^[1-9][0-9]*$ && "${pid}" != "$$" && -n "${lstart:-}" ]] &&
+    [[ "$(process_start "${pid}")" == "${lstart}" ]]; then
+    kill -STOP "${pid}" 2>/dev/null || true
+    tree="$(process_tree "${pid}")"
+    kill -KILL "${pid}" 2>/dev/null || true
+    # shellcheck disable=SC2086 # one process ID per word
+    kill -TERM ${tree} 2>/dev/null || true
+  fi
+  mkdir -p "${wait_file%/*}" 2>/dev/null &&
+    printf '%s %s\n' "$$" "$(process_start "$$")" >"${wait_file}" 2>/dev/null || true
+}
+
+# Drops this wait's record when it ends on its own, unless a later wait already replaced it.
+# shellcheck disable=SC2329 # invoked by the EXIT trap below
+drop_wait_record() {
+  local pid _
+  [[ -n "${wait_file}" ]] && read -r pid _ 2>/dev/null <"${wait_file}" && [[ "${pid}" == "$$" ]] && rm -f "${wait_file}"
+  return 0
+}
+trap drop_wait_record EXIT
+trap 'trap - EXIT; exit 143' TERM
+single_wait
 
 now() {
   printf '%s' "${OE_NOW:-$(date -u +%s)}"
