@@ -7,7 +7,8 @@
 # pick.jq holds every rule that groups and orders them.
 # Reads, in order: every open Issue (pick-issues.graphql), every open pull request (pick-prs.graphql), and
 # git worktree list with git status of each worktree. A detached worktree has no branch and is skipped.
-# Exit: 0 printed, 1 GitHub or a worktree could not be read, 2 usage error or an origin not on GitHub.
+# Exit: 0 printed, 1 GitHub or a worktree could not be read, or an Issue has more relations than one read returns,
+#   2 usage error or an origin not on GitHub.
 set -uo pipefail
 
 dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -48,6 +49,10 @@ read_all() {
 }
 
 issues="$(read_all pick-issues.graphql issues)" || fail "cannot read the open Issues of ${owner}/${repo}"
+# A missing relation can hide a blocker or a branch, so an Issue holding more than one read returns stops the pick.
+over="$(jq -r '[.nodes[] | select(any(.blockedBy, .blocking, .linkedBranches; .totalCount > (.nodes | length)))
+  | .number] | map(tostring) | join(", ")' <<<"${issues}")" || fail "unexpected Issue read"
+[[ -z "${over}" ]] || fail "Issue ${over} has more blockers, blocked Issues, or linked branches than one read returns"
 prs="$(read_all pick-prs.graphql pullRequests)" || fail "cannot read the open pull requests of ${owner}/${repo}"
 
 list="$(git worktree list --porcelain)" || fail "cannot list worktrees"

@@ -23,7 +23,7 @@ It only reads: never create, switch, edit, or close an Issue, PR, branch, or wor
    | Exit | Action |
    |---|---|
    | 0 | Continue with step 3 |
-   | 1 | GitHub or a worktree could not be read. Show the error and stop |
+   | 1 | GitHub or a worktree could not be read, or an Issue has more relations than one read returns. Show the error and stop |
    | 2 | Not inside a clone whose origin is on GitHub, or a bad limit. Show the error and stop |
 
 3. Reply with the groups in this order, skipping an empty one, and add nothing the JSON does not support.
