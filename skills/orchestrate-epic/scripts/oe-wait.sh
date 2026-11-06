@@ -82,17 +82,29 @@ source "${dir}/oe-store.sh"
 
 # Stops an earlier wait for this Epic on this host, then records this one, so at most one runs.
 # The process ID is checked against its command line, because a recorded ID can belong to another process by now.
+# The earlier wait is suspended before its children are killed, so it never sees a failed poll and exits 1 instead of quietly.
+wait_file=""
 single_wait() {
-  local file pid key
+  local pid key
   key="$(repo_key "${repo}")" || return 0
-  file="$(state_dir)/waits/${key}/${epic}"
-  if pid="$(cat "${file}" 2>/dev/null)" && [[ "${pid}" =~ ^[0-9]+$ && "${pid}" != "$$" ]] &&
+  wait_file="$(state_dir)/waits/${key}/${epic}"
+  if pid="$(cat "${wait_file}" 2>/dev/null)" && [[ "${pid}" =~ ^[0-9]+$ && "${pid}" != "$$" ]] &&
     ps -o command= -p "${pid}" 2>/dev/null | grep -q "oe-wait.sh ${repo} ${epic}\( \|$\)"; then
+    kill -STOP "${pid}" 2>/dev/null || true
     pkill -P "${pid}" 2>/dev/null || true
-    kill "${pid}" 2>/dev/null || true
+    kill -TERM "${pid}" 2>/dev/null || true
+    kill -CONT "${pid}" 2>/dev/null || true
   fi
-  mkdir -p "${file%/*}" 2>/dev/null && printf '%s\n' "$$" >"${file}" 2>/dev/null || true
+  mkdir -p "${wait_file%/*}" 2>/dev/null && printf '%s\n' "$$" >"${wait_file}" 2>/dev/null || true
 }
+
+# Drops this wait's record on exit, unless a later wait already replaced it.
+# shellcheck disable=SC2329 # invoked by the EXIT trap below
+drop_wait_record() {
+  [[ -n "${wait_file}" && "$(cat "${wait_file}" 2>/dev/null)" == "$$" ]] && rm -f "${wait_file}"
+  return 0
+}
+trap drop_wait_record EXIT
 single_wait
 
 interval="${OE_WAIT_INTERVAL:-${wait_interval}}"
