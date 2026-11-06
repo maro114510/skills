@@ -427,6 +427,50 @@ JSON
   [ "$(action_of 5)" = wait-ci ]
 }
 
+@test "a cancelled check with no later run of the same name gets an Owner" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{"number": 50, "opened": "07:10", "check_runs": [
+      {"name": "gate", "result": "cancelled", "suite": 2, "started": "07:16"},
+      {"name": "lint", "result": "success", "suite": 1, "started": "07:17"}
+    ]}]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:01
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-owner ]
+}
+
+@test "a check cancelled after an earlier run of the same name passed in another suite gets an Owner" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{"number": 50, "opened": "07:10", "check_runs": [
+      {"name": "gate", "result": "success", "suite": 1, "started": "07:15"},
+      {"name": "gate", "result": "cancelled", "suite": 2, "started": "07:16"}
+    ]}]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:01
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-owner ]
+}
+
 @test "a pull request head pushed five minutes ago with no checks waits for CI, even when committed long before" {
   github <<'JSON'
 {
