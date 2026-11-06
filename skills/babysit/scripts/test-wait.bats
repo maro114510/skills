@@ -641,6 +641,69 @@ before_start='.comments = [($comment | .id = "IC_old" | .author = "bot" | .bodyH
   [ "${status}" -eq 1 ]
 }
 
+# Puts a fake gh first on PATH: every GraphQL call fails with the message $1, and the REST
+# rate_limit endpoint reports $2 GraphQL points remaining until the epoch $3.
+fake_gh() {
+  mkdir -p "${BATS_TEST_TMPDIR}/bin"
+  cat >"${BATS_TEST_TMPDIR}/bin/gh" <<EOF
+#!/usr/bin/env bash
+if [[ "\$1 \$2" == "api rate_limit" ]]; then
+  echo '{"resources":{"graphql":{"limit":5000,"remaining":$2,"reset":$3}}}'
+  exit 0
+fi
+echo "$1" >&2
+exit 1
+EOF
+  chmod +x "${BATS_TEST_TMPDIR}/bin/gh"
+  export PATH="${BATS_TEST_TMPDIR}/bin:${PATH}"
+}
+
+# Makes wait sleep through a stub that records each pause in the file sleeps instead of sleeping.
+recording_sleep() {
+  # shellcheck disable=SC2016 # $1 belongs to the generated stub.
+  printf '#!/usr/bin/env bash\necho "$1" >>"%s/sleeps"\n' "${BATS_TEST_TMPDIR}" >"${BATS_TEST_TMPDIR}/sleep"
+  chmod +x "${BATS_TEST_TMPDIR}/sleep"
+  export BABYSIT_SLEEP="${BATS_TEST_TMPDIR}/sleep"
+}
+
+sleeps() {
+  tr '\n' ' ' <"${BATS_TEST_TMPDIR}/sleeps"
+}
+
+# Makes wait read GitHub through the real pr-state.sh on its first poll only, and the snapshot after it,
+# as GitHub answers again once the rate limit resets.
+recovering_pr_state() {
+  cat >"${BATS_TEST_TMPDIR}/pr-state" <<EOF
+#!/usr/bin/env bash
+if [[ -e "${BATS_TEST_TMPDIR}/fetched" ]]; then
+  cat "${snap}"
+  exit 0
+fi
+: >"${BATS_TEST_TMPDIR}/fetched"
+exec bash "${scripts}/pr-state.sh" "\$@"
+EOF
+  chmod +x "${BATS_TEST_TMPDIR}/pr-state"
+  export BABYSIT_PR_STATE="${BATS_TEST_TMPDIR}/pr-state"
+}
+
+@test "a GitHub failure other than the rate limit backs off and ends in exit 1" {
+  fake_gh "HTTP 502: Bad Gateway (https://api.github.com/graphql)" 4999 1000600
+  recording_sleep
+  run bash "${scripts}/wait.sh" o/r 7 --max 60 --session "${token}"
+  [ "${status}" -eq 1 ]
+  expect "$(sleeps)" "30 60 120 240 "
+  expect "$(ledger .api_failures)" 5
+}
+
+@test "a secondary rate limit with GraphQL points left backs off like any other failure" {
+  fake_gh "You have exceeded a secondary rate limit. Please wait a few minutes before you try again." 4999 1000600
+  recording_sleep
+  run bash "${scripts}/wait.sh" o/r 7 --max 60 --session "${token}"
+  [ "${status}" -eq 1 ]
+  expect "$(sleeps)" "30 60 120 240 "
+  expect "$(ledger .api_failures)" 5
+}
+
 @test "ledger start refuses a live lock, takes over a stale one, and resets the session" {
   record c:IC1 reported --hash h1
   run bash "${scripts}/ledger.sh" start o/r 7 tok-2
