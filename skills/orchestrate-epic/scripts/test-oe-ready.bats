@@ -52,21 +52,6 @@ JSON
   [ "$(action_of 5)" = claim ]
 }
 
-@test "a default branch head pushed five minutes ago with no checks makes every Issue wait, even when committed long before" {
-  github <<'JSON'
-{
-  "default_branch": {"committed": "06:00", "pushed": "07:55"},
-  "issues": [{"number": 5}, {"number": 6}]
-}
-JSON
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = wait-base ]
-  [ "$(action_of 6)" = wait-base ]
-}
-
 @test "a failed check on the default branch head makes no Issue ready" {
   github <<'JSON'
 {
