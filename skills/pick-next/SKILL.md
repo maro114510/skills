@@ -27,7 +27,7 @@ It only reads: never create, switch, edit, or close an Issue, PR, branch, or wor
    | 1 | GitHub, including the Discussions with `--discussions`, or a worktree could not be read, or an Issue has more relations than one read returns. Show the error and stop |
    | 2 | Not inside a clone whose origin is on GitHub, or a bad limit. Show the error and stop |
 
-3. Reply with the groups in this order, skipping an empty one, and add nothing the JSON does not support.
+3. Reply with the groups in this order, skipping an empty one, and add nothing the JSON does not support. Translate each group name into the reply's language, and keep the reference forms under Writing an Item as written in every language.
 
    | Group | JSON | Each item says |
    |---|---|---|
