@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Creates a PR and links each closing line to its issue through the API.
-# Usage: create-linked-pr.sh --title T --body-file F|- [--base B] [--head H] [--repo R] [--draft] [--web] [--assignee A] [--label L]...
+# Usage: create-linked-pr.sh --title T --body-file F|- [--base B] [--head H] [--repo R] [--draft] [--web] [--assignee A] [--label L]... [--owner ID]
 # Usage: create-linked-pr.sh --link PR [--repo R]
 # Before creating, origin's tip of the head branch must equal local HEAD.
 # Exit: 0 ok, 1 gh or git failed, 2 bad usage or unknown issue, 3 link missing, 4 NOT_PUSHED: head not pushed or stale.
@@ -18,7 +18,7 @@ usage() {
   exit 2
 }
 
-title="" body_file="" base="" head="" repo="" draft=0 web=0 link_pr=""
+title="" body_file="" base="" head="" repo="" draft=0 web=0 link_pr="" owner_id=""
 assignees=()
 labels=()
 while [[ $# -gt 0 ]]; do
@@ -33,10 +33,14 @@ while [[ $# -gt 0 ]]; do
   --draft) draft=1 ;;
   --web) web=1 ;;
   --link) link_pr="${2:-}" && shift ;;
+  --owner) owner_id="${2:-}" && shift ;;
   *) usage ;;
   esac
   shift
 done
+
+# The owner line is written only into the body of a PR this script creates.
+[[ -n "${owner_id}" && -n "${link_pr}" ]] && usage
 
 # --link takes the PR's URL as well as its number; the URL names the repository.
 if [[ -z "${repo}" && "${link_pr}" =~ ^https?://[^/]+/([^/]+/[^/]+)/pull/[0-9]+ ]]; then
