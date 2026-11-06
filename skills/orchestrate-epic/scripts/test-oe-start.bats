@@ -167,6 +167,24 @@ JSON
   [ "${*: -1}" = "${reason}" ]
 }
 
+@test "a reason holding a single quote reads back unchanged from the start command" {
+  github <<'JSON'
+{"default_branch": {"checks": {"test": "success"}}, "issues": [{"number": 5, "branch": true, "pull_requests": [{"number": 15, "opened": "07:10", "checks": {"it's": "failure"}}]}]}
+JSON
+  records 5 claim@07:00 attempt@07:01
+
+  run --separate-stderr bash "${oe}" ready o/r 1
+
+  IFS=$'\t' read -r _ action reason start <<<"${lines[0]}"
+  [ "${action}" = start-owner ]
+  case "${reason}" in
+  *"it's"*) ;;
+  *) return 1 ;;
+  esac
+  eval "set -- ${start#bash }"
+  [ "${*: -1}" = "${reason}" ]
+}
+
 @test "each oe ready line names the start command for its action, and leaves it empty for a wait" {
   jq -n --arg sha "${head}" '{
     default_branch: {checks: {test: "success"}},

@@ -77,7 +77,14 @@ step() {
   ((rc == 0)) || exit "${rc}"
 }
 
-skills_root="${dir}/../.."
+# The canonical path of the agent's SKILL.md, resolved before any step writes, so a missing skill starts nothing.
+agent=pr-owner
+[[ "${role}" == owner ]] || agent=pr-verify
+skill="$(cd "${dir}/../../${agent}" 2>/dev/null && pwd -P)/SKILL.md"
+[[ -f "${skill}" ]] || {
+  echo "Cannot find ${agent}/SKILL.md next to orchestrate-epic" >&2
+  exit 1
+}
 worktree=""
 # Removes the worktree this run created, when a step after it fails.
 # shellcheck disable=SC2329 # invoked by the EXIT trap below
@@ -96,9 +103,9 @@ if [[ "${role}" == owner ]]; then
   step attempt "${repo}" "${n}"
   worktree="$(bash "${dir}/oe" worktree add "${n}")" || exit $?
   brief="$(bash "${dir}/oe" brief owner "${repo}" "${n}" "${worktree}" ${reason:+"${reason}"})" || exit $?
-  printf '%s\n%s\n' "$(cd "${skills_root}/pr-owner" && pwd -P)/SKILL.md" "${brief}"
+  printf '%s\n%s\n' "${skill}" "${brief}"
 else
   worktree="$(bash "${dir}/oe" worktree add "${n}" --detach)" || exit $?
   brief="$(bash "${dir}/oe" brief verifier "${repo}" "${n}" "${worktree}")" || exit $?
-  printf '%s\n%s\n' "$(cd "${skills_root}/pr-verify" && pwd -P)/SKILL.md" "${brief}"
+  printf '%s\n%s\n' "${skill}" "${brief}"
 fi
