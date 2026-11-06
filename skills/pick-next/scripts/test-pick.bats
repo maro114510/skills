@@ -366,6 +366,22 @@ expect() {
   expect "$(field '[.discussions[].number]')" '[3]'
 }
 
+@test "without --discussions, Discussions are not read and the output has no discussions group" {
+  issue 1 "A"
+  discussion 2 "Idea" 2026-11-01T00:00:00Z Ideas
+  touch "${BATS_TEST_TMPDIR}/discussions-unreadable"
+  run bash "${target}"
+  expect "${status}" 0
+  expect "$(field '[has("discussions"), has("discussionsTotal")]')" '[false,false]'
+}
+
+@test "with --discussions, a Discussion read that fails exits 1" {
+  touch "${BATS_TEST_TMPDIR}/discussions-unreadable"
+  run bash "${target}" --discussions
+  expect "${status}" 1
+  expect "$(grep -c 'cannot read the open Discussions' <<<"${output}")" 1
+}
+
 @test "a GitHub read that fails exits 1" {
   printf '#!/usr/bin/env bash\nexit 1\n' >"${BATS_TEST_TMPDIR}/bin/gh"
   run bash "${target}"
