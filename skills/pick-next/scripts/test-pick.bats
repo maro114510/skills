@@ -16,15 +16,18 @@ setup() {
   git remote add origin https://github.com/o/r.git
   issues="${BATS_TEST_TMPDIR}/issues.jsonl"
   prs="${BATS_TEST_TMPDIR}/prs.jsonl"
+  discussions="${BATS_TEST_TMPDIR}/discussions.jsonl"
   : >"${issues}"
   : >"${prs}"
+  : >"${discussions}"
   mkdir -p "${BATS_TEST_TMPDIR}/bin"
   PATH="${BATS_TEST_TMPDIR}/bin:${PATH}"
   fake_gh
 }
 
-# Fakes gh api graphql: the Issue query gets one page holding every issue() node, viewer me, and the pull
-# request query one page holding every pr() node. Any other call fails, so a write would fail the test.
+# Fakes gh api graphql: the Issue query gets one page holding every issue() node, viewer me, the pull
+# request query one page holding every pr() node, and the Discussion query one page holding every discussion()
+# node, or fails while the file discussions-unreadable exists. Any other call fails, so a write would fail the test.
 fake_gh() {
   cat >"${BATS_TEST_TMPDIR}/bin/gh" <<EOF
 #!/usr/bin/env bash
@@ -34,6 +37,9 @@ case "\$*" in
 *) echo "unexpected repository: \$*" >&2; exit 1 ;;
 esac
 case "\$*" in
+*"discussions("*)
+  [ ! -e "${BATS_TEST_TMPDIR}/discussions-unreadable" ] || { echo "cannot read Discussions" >&2; exit 1; }
+  jq -sc '{data: {repository: {discussions: {pageInfo: {hasNextPage: false, endCursor: null}, nodes: .}}}}' "${discussions}" ;;
 *"pullRequests("*) jq -sc '{data: {repository: {pullRequests: {pageInfo: {hasNextPage: false, endCursor: null}, nodes: .}}}}' "${prs}" ;;
 *"issues("*) jq -sc '{data: {viewer: {login: "me"}, repository: {issues: {pageInfo: {hasNextPage: false, endCursor: null}, nodes: .}}}}' "${issues}" ;;
 *) echo "unexpected query: \$*" >&2; exit 1 ;;
@@ -114,6 +120,31 @@ pr() {
     '{number: $n, title: $t, url: ("https://github.com/o/r/pull/" + ($n | tostring)), body: ("Body of " + $t),
       isDraft: $draft, headRefName: $b, reviewDecision: $review, closingIssuesReferences: {nodes: $closes},
       commits: {nodes: [{commit: {statusCheckRollup: $rollup}}]}}' >>"${prs}"
+}
+
+# Adds open Discussion $1 titled $2, last updated at $3, in category $4.
+# Options: --answered <true|false> makes the category answerable with that answer state; without it the category
+# takes no answers.
+discussion() {
+  local num="$1" title="$2" updated="$3" category="$4" answered=null answerable=false
+  shift 4
+  while [ $# -gt 0 ]; do
+    case "$1" in
+    --answered)
+      answered="$2"
+      answerable=true
+      shift 2
+      ;;
+    *)
+      echo "unknown discussion option $1" >&2
+      return 1
+      ;;
+    esac
+  done
+  jq -nc --argjson n "${num}" --arg t "${title}" --arg u "${updated}" --arg c "${category}" \
+    --argjson answered "${answered}" --argjson answerable "${answerable}" \
+    '{number: $n, title: $t, url: ("https://github.com/o/r/discussions/" + ($n | tostring)), body: ("Body of " + $t),
+      updatedAt: $u, isAnswered: $answered, category: {name: $c, isAnswerable: $answerable}}' >>"${discussions}"
 }
 
 # Checks out branch $1 in a new worktree at $2.
@@ -308,6 +339,18 @@ expect() {
     expect "${status}" 1
     expect "$(grep -c 'Issue 2 ' <<<"${output}")" 1
   done
+}
+
+@test "with --discussions, open Discussions are listed most recently updated first with their category and answer state" {
+  discussion 3 "Older idea" 2026-11-01T00:00:00Z Ideas
+  discussion 1 "Newest question" 2026-11-05T00:00:00Z Q\&A --answered false
+  discussion 2 "Answered question" 2026-11-03T00:00:00Z Q\&A --answered true
+  run bash "${target}" --discussions
+  expect "${status}" 0
+  expect "$(field '[.discussions[] | {kind, number, category, answered, updatedAt}]')" \
+    '[{"kind":"discussion","number":1,"category":"Q&A","answered":false,"updatedAt":"2026-11-05T00:00:00Z"},{"kind":"discussion","number":2,"category":"Q&A","answered":true,"updatedAt":"2026-11-03T00:00:00Z"},{"kind":"discussion","number":3,"category":"Ideas","answered":null,"updatedAt":"2026-11-01T00:00:00Z"}]'
+  expect "$(field '.discussions[0] | {title, url, body}')" '{"title":"Newest question","url":"https://github.com/o/r/discussions/1","body":"Body of Newest question"}'
+  expect "$(field '.discussionsTotal')" 3
 }
 
 @test "a GitHub read that fails exits 1" {
