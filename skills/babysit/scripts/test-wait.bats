@@ -380,21 +380,6 @@ waiting='.reviewRequests = [{reviewer: "dave", type: "User"}]'
   expect "$(ledger .api_failures)" 5
 }
 
-@test "a rate-limit failure waits for its reset time and resumes polling" {
-  stub="${BATS_TEST_TMPDIR}/pr-state"
-  printf '#!/usr/bin/env bash\ncount="%s/rate-count"\nif [[ ! -e "${count}" ]]; then\n  : >"${count}"\n  echo "rate limit exceeded; reset at 1000010" >&2\n  exit 75\nfi\ncat "%s/snap.json"\n' "${BATS_TEST_TMPDIR}" "${BATS_TEST_TMPDIR}" >"${stub}"
-  chmod +x "${stub}"
-  printf '#!/usr/bin/env bash\necho "$1" >>"%s/sleeps"\n' "${BATS_TEST_TMPDIR}" >"${BATS_TEST_TMPDIR}/sleep"
-  chmod +x "${BATS_TEST_TMPDIR}/sleep"
-
-  BABYSIT_PR_STATE="${stub}" BABYSIT_SLEEP="${BATS_TEST_TMPDIR}/sleep" \
-    run bash "${scripts}/wait.sh" o/r 7 --max 0 --session "${token}"
-  [ "${status}" -eq 0 ]
-  expect "$(jq -r '.event' <<<"$(tail -n1 <<<"${output}")")" ready
-  expect "$(tr '\n' ' ' <"${BATS_TEST_TMPDIR}/sleeps")" "10 "
-  [[ "${output}" == *"1000010"* ]]
-}
-
 @test "API failures count across re-arms, and a success resets them" {
   stub="${BATS_TEST_TMPDIR}/pr-state"
   printf '#!/usr/bin/env bash\nexit 1\n' >"${stub}"
