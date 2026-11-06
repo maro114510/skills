@@ -187,19 +187,25 @@ pending) gate_reason="checks pending on ${default_name} head ${default_sha:0:7}:
 failed) gate_reason="checks failed on ${default_name} head ${default_sha:0:7}: ${default_detail}" ;;
 esac
 
+# Prints $1 in single quotes, so a shell reads it back unchanged in any locale.
+shell_quote() {
+  local q="'\\''"
+  printf "'%s'" "${1//\'/${q}}"
+}
+
 # Prints out's lines with a fourth field: the oe start command for an action that starts an agent, and nothing otherwise.
 # The command is complete and quoted, so a session that lost SKILL.md can run it as printed.
 with_start() {
-  local n action reason oe_cmd
-  oe_cmd="bash $(printf '%q' "${dir}/oe")"
+  local n action reason start
   while IFS=$'\t' read -r n action reason; do
     [[ -n "${n}" ]] || continue
     case "${action}" in
-    claim) printf '%s\t%s\t%s\t%s start owner %s %s --claim %q\n' "${n}" "${action}" "${reason}" "${oe_cmd}" "${repo}" "${n}" "${reason}" ;;
-    start-owner) printf '%s\t%s\t%s\t%s start owner %s %s %q\n' "${n}" "${action}" "${reason}" "${oe_cmd}" "${repo}" "${n}" "${reason}" ;;
-    start-verifier) printf '%s\t%s\t%s\t%s start verifier %s %s\n' "${n}" "${action}" "${reason}" "${oe_cmd}" "${repo}" "${n}" ;;
-    *) printf '%s\t%s\t%s\t\n' "${n}" "${action}" "${reason}" ;;
+    claim) start="owner ${repo} ${n} --claim $(shell_quote "${reason}")" ;;
+    start-owner) start="owner ${repo} ${n} $(shell_quote "${reason}")" ;;
+    start-verifier) start="verifier ${repo} ${n}" ;;
+    *) start="" ;;
     esac
+    printf '%s\t%s\t%s\t%s\n' "${n}" "${action}" "${reason}" "${start:+bash $(shell_quote "${dir}/oe") start ${start}}"
   done <<<"$1"
 }
 

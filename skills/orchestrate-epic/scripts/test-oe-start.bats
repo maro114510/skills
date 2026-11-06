@@ -154,6 +154,19 @@ JSON
   [ ! -e "${tmp}/shared-oe" ]
 }
 
+@test "the reason in the start command reads back as the third field" {
+  github <<'JSON'
+{"default_branch": {"checks": {"test": "success"}}, "issues": [{"number": 6}]}
+JSON
+
+  run --separate-stderr bash "${oe}" ready o/r 1
+
+  IFS=$'\t' read -r _ _ reason start <<<"${lines[0]}"
+  eval "set -- ${start#bash }"
+  [ "$1" = "${BATS_TEST_DIRNAME}/oe" ]
+  [ "${*: -1}" = "${reason}" ]
+}
+
 @test "each oe ready line names the start command for its action, and leaves it empty for a wait" {
   jq -n --arg sha "${head}" '{
     default_branch: {checks: {test: "success"}},
@@ -171,10 +184,11 @@ JSON
   [ "${status}" -eq 0 ]
   IFS=$'\t' read -r n action _ start <<<"${lines[0]}"
   [ "${n} ${action}" = "5 start-verifier" ]
-  [ "${start}" = "bash ${BATS_TEST_DIRNAME}/oe start verifier o/r 5" ]
+  [ "${start}" = "bash '${BATS_TEST_DIRNAME}/oe' start verifier o/r 5" ]
   IFS=$'\t' read -r n action reason start <<<"${lines[1]}"
   [ "${n} ${action}" = "6 claim" ]
-  [ "${start}" = "bash ${BATS_TEST_DIRNAME}/oe start owner o/r 6 --claim $(printf '%q' "${reason}")" ]
+  [ "${start}" = "bash '${BATS_TEST_DIRNAME}/oe' start owner o/r 6 --claim '${reason}'" ]
+  [ "$(eval "printf '%s' ${start#*--claim }")" = "${reason}" ]
   IFS=$'\t' read -r n action _ start <<<"${lines[2]}"
   [ "${n} ${action}" = "7 wait-ci" ]
   [ -z "${start}" ]

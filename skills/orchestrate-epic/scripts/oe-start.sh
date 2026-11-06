@@ -77,7 +77,7 @@ step() {
   ((rc == 0)) || exit "${rc}"
 }
 
-skills_root="$(cd "${dir}/../.." && pwd -P)"
+skills_root="${dir}/../.."
 worktree=""
 # Removes the worktree this run created, when a step after it fails.
 # shellcheck disable=SC2329 # invoked by the EXIT trap below
@@ -96,9 +96,9 @@ if [[ "${role}" == owner ]]; then
   step attempt "${repo}" "${n}"
   worktree="$(bash "${dir}/oe" worktree add "${n}")" || exit $?
   brief="$(bash "${dir}/oe" brief owner "${repo}" "${n}" "${worktree}" ${reason:+"${reason}"})" || exit $?
-  printf '%s\n%s\n' "${skills_root}/pr-owner/SKILL.md" "${brief}"
+  printf '%s\n%s\n' "$(cd "${skills_root}/pr-owner" && pwd -P)/SKILL.md" "${brief}"
 else
   worktree="$(bash "${dir}/oe" worktree add "${n}" --detach)" || exit $?
   brief="$(bash "${dir}/oe" brief verifier "${repo}" "${n}" "${worktree}")" || exit $?
-  printf '%s\n%s\n' "${skills_root}/pr-verify/SKILL.md" "${brief}"
+  printf '%s\n%s\n' "$(cd "${skills_root}/pr-verify" && pwd -P)/SKILL.md" "${brief}"
 fi
