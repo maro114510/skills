@@ -24,7 +24,7 @@
 # Output
 #
 # - On success, the agent's prompt: the canonical path of the agent's SKILL.md on the first line, then the brief.
-# - The steps' own output goes to stderr.
+# - The steps' own output is dropped on success, and goes to stderr when a step fails.
 #
 # Exit codes
 #
@@ -69,12 +69,16 @@ verifier)
 *) usage "Unknown role: ${role}" ;;
 esac
 
-# Runs oe subcommand $1 with the rest as arguments, its output to stderr, and ends the run with its code on failure.
+# Runs oe subcommand $1 with the rest as arguments, and ends the run with its code on failure.
+# Its output is dropped on success, because a harness shows stderr merged into the prompt, and goes to stderr on failure.
 step() {
-  local rc
-  bash "${dir}/oe" "$@" >&2
+  local rc out
+  out="$(bash "${dir}/oe" "$@" 2>&1)"
   rc=$?
-  ((rc == 0)) || exit "${rc}"
+  ((rc == 0)) || {
+    printf '%s\n' "${out}" >&2
+    exit "${rc}"
+  }
 }
 
 # The canonical path of the agent's SKILL.md, resolved before any step writes, so a missing skill starts nothing.
