@@ -88,5 +88,5 @@ def body_excerpt: (.body // "")[0:1500];
         | {kind: "discussion", number, title, url, body: body_excerpt, category: .category.name,
            answered: .isAnswered, updatedAt}]
        | sort_by(.updatedAt, -.number) | reverse) as $discussions
-      | {discussions: $discussions, discussionsTotal: ($discussions | length)}
+      | {discussions: $discussions[0:$in.limit], discussionsTotal: ($discussions | length)}
     end

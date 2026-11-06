@@ -2,7 +2,7 @@
 # Collects what pick-next ranks: the open Issues and pull requests of this clone's origin, and its worktrees.
 # It only reads: it never writes to GitHub, a branch, or a worktree.
 # Usage: pick.sh [--limit <n>] [--discussions]
-#   --limit caps the next and blocked groups; the default is 3. The owner and local groups are never cut.
+#   --limit caps the next, blocked, and discussions groups; the default is 3. The owner and local groups are never cut.
 #   --discussions also reads the open Discussions; without it they are neither read nor printed.
 # Prints one JSON object: repo, viewer, owner, next, nextTotal, blocked, blockedTotal, local, and with --discussions
 # also discussions and discussionsTotal. pick.jq holds every rule that groups and orders them.
