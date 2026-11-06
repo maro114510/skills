@@ -659,9 +659,11 @@ EOF
 }
 
 # Makes wait sleep through a stub that records each pause in the file sleeps instead of sleeping.
+# The stub ends wait with TERM at the 6th pause, so a wait that loops on the pinned clock fails instead of hanging.
 recording_sleep() {
-  # shellcheck disable=SC2016 # $1 belongs to the generated stub.
-  printf '#!/usr/bin/env bash\necho "$1" >>"%s/sleeps"\n' "${BATS_TEST_TMPDIR}" >"${BATS_TEST_TMPDIR}/sleep"
+  # shellcheck disable=SC2016 # $1 and $PPID belong to the generated stub.
+  printf '#!/usr/bin/env bash\necho "$1" >>"%s/sleeps"\n[ "$(wc -l <"%s/sleeps")" -lt 6 ] || kill "$PPID"\n' \
+    "${BATS_TEST_TMPDIR}" "${BATS_TEST_TMPDIR}" >"${BATS_TEST_TMPDIR}/sleep"
   chmod +x "${BATS_TEST_TMPDIR}/sleep"
   export BABYSIT_SLEEP="${BATS_TEST_TMPDIR}/sleep"
 }
