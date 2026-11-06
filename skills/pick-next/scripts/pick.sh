@@ -15,7 +15,7 @@ dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 usage() {
   echo "pick-next: $1" >&2
-  echo "Usage: pick.sh [--limit <n>]" >&2
+  echo "Usage: pick.sh [--limit <n>] [--discussions]" >&2
   exit 2
 }
 
@@ -28,8 +28,14 @@ command -v jq >/dev/null 2>&1 || usage "jq is required"
 command -v gh >/dev/null 2>&1 || usage "gh is required"
 
 limit=3
+discussions=false
 while [[ $# -gt 0 ]]; do
-  [[ "$1" == --limit && "${2:-}" =~ ^[1-9][0-9]*$ ]] || usage "Expected --limit <positive number>, got: $*"
+  if [[ "$1" == --discussions ]]; then
+    discussions=true
+    shift
+    continue
+  fi
+  [[ "$1" == --limit && "${2:-}" =~ ^[1-9][0-9]*$ ]] || usage "Expected --limit <positive number> or --discussions, got: $*"
   limit="$2"
   shift 2
 done
@@ -67,6 +73,6 @@ worktrees="$(awk '/^worktree / { path = substr($0, 10) }
 
 # Bodies make the reads large, so they go through stdin rather than arguments, which the OS caps.
 printf '%s\n' "${issues}" "${prs}" "${worktrees}" |
-  jq -sc --arg repo "${owner}/${repo}" --argjson limit "${limit}" \
+  jq -sc --arg repo "${owner}/${repo}" --argjson limit "${limit}" --argjson discussions "${discussions}" \
     '{repo: $repo, viewer: .[0].viewer, limit: $limit, issues: .[0].nodes, prs: .[1].nodes, worktrees: .[2]}' |
   jq -c -f "${dir}/pick.jq" || fail "cannot rank the facts"
