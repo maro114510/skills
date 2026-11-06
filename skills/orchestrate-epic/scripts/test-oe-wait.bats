@@ -286,3 +286,22 @@ recorded() {
   [ "${status}" -eq 5 ]
   [ -z "$(find "${OE_STATE_DIR}" -path '*/waits/*' -type f 2>/dev/null)" ]
 }
+
+@test "releasing the Epic's lock stops its wait, and leaves another Epic's wait running" {
+  pr_15_checks_running
+  sleep 600 >/dev/null 2>&1 3>&- &
+  session=$!
+  echo "${session}" >>"${BATS_TEST_TMPDIR}/waits"
+  token="$(OE_SESSION_PID="${session}" bash "${oe}" lock acquire o/r 1 | sed -n 's/^token=//p')"
+  first="$(background_wait 1)"
+  other="$(background_wait 2)"
+  recorded "${first}"
+  recorded "${other}"
+
+  run bash "${oe}" lock release o/r 1 "${token}"
+
+  [ "${status}" -eq 0 ]
+  ended "${first}"
+  [ ! -s "${BATS_TEST_TMPDIR}/wait-${first}.out" ]
+  kill -0 "${other}"
+}
