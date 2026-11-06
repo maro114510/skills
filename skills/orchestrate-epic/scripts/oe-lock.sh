@@ -25,7 +25,7 @@
 #
 # | Code | Meaning |
 # |---|---|
-# | 0 | acquire: this session holds the lock. release: the lock is free |
+# | 0 | acquire: this session holds the lock. release: the lock is free, and the Epic's oe wait, if one runs, is stopped |
 # | 1 | The lock store failed |
 # | 2 | The arguments are invalid, or OE_SESSION_PID is not a running process |
 # | 4 | Another running session holds the lock |
@@ -94,9 +94,12 @@ refuse() {
 
 if [[ "${cmd}" == release ]]; then
   current="$(holder)" || exit 1
-  [[ -n "${current}" ]] || exit 0
-  [[ "$(lock_field token "${current}")" == "${token}" ]] || refuse "${current}"
-  store_git update-ref -d "${ref}" "${current}" || fail "cannot release ${repo}#${epic}"
+  if [[ -n "${current}" ]]; then
+    [[ "$(lock_field token "${current}")" == "${token}" ]] || refuse "${current}"
+    store_git update-ref -d "${ref}" "${current}" || fail "cannot release ${repo}#${epic}"
+  fi
+  # A session that ends leaves no wait behind for the Epic.
+  stop_recorded_wait "${repo}" "${epic}"
   exit 0
 fi
 
