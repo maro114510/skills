@@ -35,7 +35,7 @@
 # | 3 | oe ready ended the session: the default branch head has no checks after no_checks_grace | The end line |
 # | 5 | The timeout passed with every next action unchanged | The latest output |
 # | 6 | The session is idle: no agent runs and idle_limit has passed since --idle-since | The latest output, as the session's summary |
-# | 143 | A later oe wait for the same Epic stopped this one | Nothing |
+# | 137 | A later oe wait for the same Epic killed this one | Nothing |
 #
 # After exit 6 the session ends, and a rerun of orchestrate-epic resumes from GitHub, where every state lives.
 set -uo pipefail
@@ -96,8 +96,9 @@ process_tree() {
 
 # Stops an earlier wait for this Epic on this host, then records this one, so at most one runs.
 # The record holds the process ID and its start time, so a reused process ID is never stopped.
-# The earlier wait is suspended before anything below it is killed, so it never sees a failed poll and exits 1;
-# its TERM handler skips the EXIT trap, so it cannot drop the record this wait writes.
+# The earlier wait is suspended while its tree is read, then killed before anything below it,
+# so it never sees a failed poll and exits 1, and runs no EXIT trap that could drop the record this wait writes.
+# It gets KILL, not TERM: bash 5 prints "Terminated" when it reaps a child that TERM killed, before any trap runs.
 wait_file=""
 single_wait() {
   local key pid lstart tree
@@ -107,9 +108,9 @@ single_wait() {
     [[ "$(process_start "${pid}")" == "${lstart}" ]]; then
     kill -STOP "${pid}" 2>/dev/null || true
     tree="$(process_tree "${pid}")"
+    kill -KILL "${pid}" 2>/dev/null || true
     # shellcheck disable=SC2086 # one process ID per word
     kill -TERM ${tree} 2>/dev/null || true
-    kill -CONT "${pid}" 2>/dev/null || true
   fi
   mkdir -p "${wait_file%/*}" 2>/dev/null &&
     printf '%s %s\n' "$$" "$(process_start "$$")" >"${wait_file}" 2>/dev/null || true
