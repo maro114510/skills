@@ -90,9 +90,10 @@ issue() {
 }
 
 # Adds open pull request $1 titled $2 from branch $3 with checks $4 (SUCCESS, FAILURE, PENDING, or none).
-# Options: --draft, --closes <n>, --review <APPROVED|CHANGES_REQUESTED|REVIEW_REQUIRED>.
+# Options: --draft, --closes <n>, --review <APPROVED|CHANGES_REQUESTED|REVIEW_REQUIRED>, and --more-closes, which makes
+# GitHub hold one more closing Issue than the read returns; otherwise totalCount matches the closing Issues read.
 pr() {
-  local num="$1" title="$2" branch="$3" checks="$4" draft=false closes='[]' review=null rollup
+  local num="$1" title="$2" branch="$3" checks="$4" draft=false closes='[]' review=null more=0 rollup
   shift 4
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -108,6 +109,10 @@ pr() {
       review="\"$2\""
       shift 2
       ;;
+    --more-closes)
+      more=1
+      shift
+      ;;
     *)
       echo "unknown pr option $1" >&2
       return 1
@@ -116,9 +121,9 @@ pr() {
   done
   if [ "${checks}" = none ]; then rollup=null; else rollup="{\"state\":\"${checks}\"}"; fi
   jq -nc --argjson n "${num}" --arg t "${title}" --arg b "${branch}" --argjson draft "${draft}" --argjson closes "${closes}" \
-    --argjson review "${review}" --argjson rollup "${rollup}" \
+    --argjson review "${review}" --argjson rollup "${rollup}" --argjson more "${more}" \
     '{number: $n, title: $t, url: ("https://github.com/o/r/pull/" + ($n | tostring)), body: ("Body of " + $t),
-      isDraft: $draft, headRefName: $b, reviewDecision: $review, closingIssuesReferences: {nodes: $closes},
+      isDraft: $draft, headRefName: $b, reviewDecision: $review, closingIssuesReferences: {totalCount: (($closes | length) + $more), nodes: $closes},
       commits: {nodes: [{commit: {statusCheckRollup: $rollup}}]}}' >>"${prs}"
 }
 
@@ -380,6 +385,14 @@ expect() {
   run bash "${target}" --discussions
   expect "${status}" 1
   expect "$(grep -c 'cannot read the open Discussions' <<<"${output}")" 1
+}
+
+@test "a pull request that closes more Issues than one read returns exits 1 naming it" {
+  issue 1 "Closed by the PR beyond the read"
+  pr 77 "Closes many" feat/many SUCCESS --closes 2 --more-closes
+  run bash "${target}"
+  expect "${status}" 1
+  expect "$(grep -c 'pull request 77 ' <<<"${output}")" 1
 }
 
 @test "a GitHub read that fails exits 1" {
