@@ -53,5 +53,5 @@ The owner must understand every item without opening GitHub.
   | `unblocks` above 0 | How many waiting Issues it frees |
   | `epic` with `completed` above 0 | Which larger effort it moves forward, by what that effort does, and its progress as `completed` of `total` |
 
-- Put each reference, as `(Issue <number>)`, `(PR <number>)`, or `(Discussion <number>)`, right after the words that describe what it names, never alone: the item's own reference ends the sentence that says what the work does, and a blocker's reference ends the words that name the blocker. Two references never stand side by side.
+- Put each reference, as `(Issue <number>)`, `(PR <number>)`, or `(Discussion <number>)`, right after the words that describe what it names, never alone: the item's own reference ends the sentence that says what the work does, and a blocker's reference ends the words that name the blocker. Two references never stand side by side. An item carries no other reference: describe its Epic, its PR, its linked Issues, and any number in its `body` in words only.
 - Name local state that changes the pick on the item itself: a worktree with `dirty: true` holds uncommitted changes, and a PR whose `pr.checks` is `FAILURE` needs repair before new work.
