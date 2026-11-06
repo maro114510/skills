@@ -7,6 +7,8 @@
 # Usage: wait.sh <owner/repo> <pr> --max <minutes> --session <token> [--mode watch|drive] [--snapshot <file>]
 #   --snapshot reads a normalized pr-state snapshot from <file> on every poll instead of querying GitHub.
 # --max is shortened so the call returns at the 8-hour session mark, where the limit event fires.
+# An exhausted GraphQL bucket is not an API failure: wait prints the reset time to stderr and sleeps until it,
+# or until --max ends, whichever comes first, then polls again.
 # The skill must hold the lock through `ledger.sh start` first.
 # Exit: 0 one event printed, 1 the API failed 5 times in a row, 2 usage error, 3 the lock is not ours.
 set -uo pipefail
@@ -78,6 +80,23 @@ fetch() {
   fi
 }
 
+# Prints the epoch at which GitHub refills the GraphQL bucket when the failed fetch, whose stderr is in
+# fetch_err, failed because that bucket is empty. Fails for any other failure, such as a secondary limit,
+# which leaves points in the bucket. The REST rate_limit endpoint costs no points.
+graphql_reset() {
+  local reset
+  grep -qi 'rate limit' "${fetch_err}" || return 1
+  reset="$(gh api rate_limit 2>/dev/null </dev/null |
+    jq -er '.resources.graphql | select(.remaining == 0) | .reset')" || return 1
+  [[ "${reset}" =~ ^[0-9]+$ ]] && ((reset > now)) && printf '%s\n' "${reset}"
+}
+
+# Prints the idle event and ends the call.
+idle() {
+  jq -nc --arg repo "${repo}" --argjson pr "${pr}" '{event: "idle", repo: $repo, pr: $pr}'
+  exit 0
+}
+
 # Evaluates the snapshot in snap against the ledger in ledger.
 evaluate() {
   printf '%s\n%s\n' "${snap}" "${ledger}" |
@@ -86,16 +105,24 @@ evaluate() {
 
 now="$(babysit_now)"
 ledger="$(read_owned_ledger)" || exit 3
-deadline=$((now + max * 60))
+# A rate-limit wait ends only at this call's own --max, not at the session mark, because the limit event
+# needs a snapshot; once the mark passes, every call would otherwise return idle at once.
+call_end=$((now + max * 60))
+deadline="${call_end}"
 started="$(jq -r '.started_at // ""' <<<"${ledger}")"
 if [[ "${started}" =~ ^[0-9]+$ ]] && ((started + SESSION_SECONDS < deadline)); then
   deadline=$((started + SESSION_SECONDS))
 fi
+fetch_err="$(mktemp)" || usage "Cannot create a temporary file"
+trap 'rm -f "${fetch_err}"' EXIT
 
 while true; do
   now="$(babysit_now)"
   ledger="$(read_owned_ledger)" || exit 3
-  if snap="$(fetch)" && [[ -n "${snap}" ]]; then
+  snap="$(fetch 2>"${fetch_err}")"
+  fetched=$?
+  cat "${fetch_err}" >&2
+  if ((fetched == 0)) && [[ -n "${snap}" ]]; then
     result="$(evaluate)" || usage "Snapshot is not a normalized pr-state snapshot"
     # Drive never hands an untrusted author's comment to the agent: each one is parked here, and the same
     # snapshot is evaluated again so the next item is not delayed by a poll.
@@ -119,6 +146,19 @@ while true; do
       exit 0
     fi
     pause="${POLL_SECONDS}"
+  elif reset="$(graphql_reset)"; then
+    # An empty bucket is no API failure: it refills at reset, so it is waited out without counting one.
+    ledger="$(read_owned_ledger)" || exit 3
+    jq -c --argjson now "${now}" '.lock.heartbeat = $now' <<<"${ledger}" |
+      babysit_ledger_write "${path}" || usage "Cannot write ledger: ${path}"
+    if ((now >= call_end)); then
+      idle
+    fi
+    echo "GitHub GraphQL rate limit exhausted; waiting until $(jq -nr --argjson t "${reset}" '$t | todate')" >&2
+    pause=$((reset - now))
+    ((pause <= call_end - now)) || pause=$((call_end - now))
+    "${SLEEP}" "${pause}"
+    continue
   else
     ledger="$(read_owned_ledger)" || exit 3
     failures=$(($(jq -r '.api_failures // 0' <<<"${ledger}") + 1))
@@ -133,8 +173,7 @@ while true; do
     ((pause <= BACKOFF_MAX)) || pause="${BACKOFF_MAX}"
   fi
   if ((now >= deadline)); then
-    jq -nc --arg repo "${repo}" --argjson pr "${pr}" '{event: "idle", repo: $repo, pr: $pr}'
-    exit 0
+    idle
   fi
   ((pause <= deadline - now)) || pause=$((deadline - now))
   "${SLEEP}" "${pause}"
