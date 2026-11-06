@@ -372,7 +372,7 @@ JSON
   [ "$(column_of 5 9)" = "checks failed on main head aaaaaaa: test" ]
 }
 
-@test "a default branch head with no checks past the grace shows the end of the session and no Issue" {
+@test "a default branch head with no checks past the grace shows each Issue's step and no end line" {
   github <<'JSON'
 {
   "default_branch": {"pushed": "07:00"},
@@ -383,8 +383,8 @@ JSON
   run --separate-stderr bash "${oe}" status o/r 1
 
   [ "${status}" -eq 0 ]
-  printf '%s\n' "${lines[@]}" | grep -q '^end: no checks on main head aaaaaaa'
-  [ -z "$(row_of 5)" ]
+  [ "$(column_of 5 2)" = claim ]
+  [ "$(printf '%s\n' "${lines[@]}" | grep -c '^end:')" -eq 0 ]
 }
 
 @test "a failed GitHub read exits 1 and prints nothing" {

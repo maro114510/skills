@@ -18,7 +18,6 @@ query($owner: String!, $repo: String!, $epic: Int!) {
 
 fragment HeadChecks on Commit {
   oid
-  committedDate
   statusCheckRollup {
     contexts(first: 100) {
       totalCount

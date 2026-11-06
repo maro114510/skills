@@ -81,7 +81,6 @@ Pass `--running` for every Issue whose agent is running. Act on the exit code:
 |---|---|
 | 0 | Go to 3.2 with the lines |
 | 1 | A GitHub read failed and decides nothing. Start nothing and go to 3.3 |
-| 3 | The default branch head has no checks. End the session as in Step 4, because CI is required |
 | 2 or other | End the session as in Step 4 and show the error |
 
 When every line's action is `done`, end the session as in Step 4.
@@ -142,7 +141,6 @@ The harness wakes you when an agent ends or the wait returns, and whichever come
 | An agent ended | `oe worktree remove <n>` for its Issue, drop it from the running agents, set `<idle-since>` to now, and go to 3.1. Its final line goes into the summary only |
 | The wait exited 0 or 5 | Go to 3.1 |
 | The wait exited 1 | Go to 3.1, and end the session as in Step 4 after three exit-1 wakes in a row |
-| The wait exited 3 | End the session as in Step 4 |
 | The harness stopped the wait, as on a time limit | Go to 3.1 |
 | The wait exited 6 | No agent runs and nothing changed for the idle limit: end the session as in Step 4 |
 | A wait you already replaced returns | Ignore it |
@@ -157,7 +155,7 @@ The harness wakes you when an agent ends or the wait returns, and whichever come
 ```markdown
 ## orchestrate-epic: Epic #<epic> を終了しました
 
-終了理由: <すべて完了 | 人の対応待ちのみ | 変化がないまま待機上限に到達 | default branch にチェックが無い | GitHub の読み取りが続けて失敗>
+終了理由: <すべて完了 | 人の対応待ちのみ | 変化がないまま待機上限に到達 | GitHub の読み取りが続けて失敗>
 
 | Issue | 状態 | 次に必要なこと |
 |---|---|---|

@@ -74,14 +74,14 @@ def ci:
 #
 # | First field | Other fields |
 # |---|---|
-# | default | Branch name, head SHA, commit time, CI state, failing or pending check names |
+# | default | Branch name, head SHA, CI state, failing or pending check names |
 # | issue | Child Issue number |
 def epic_lines:
   .data.repository as $r
   | if ($r | type) != "object" then error("repository not found") else . end
   | ($r.defaultBranchRef.target // error("default branch head unreadable")) as $head
   | ($head | ci) as $ci
-  | "default\t\($r.defaultBranchRef.name)\t\($head.oid)\t\($head.committedDate | epoch)\t\($ci.state)\t\($ci.detail)",
+  | "default\t\($r.defaultBranchRef.name)\t\($head.oid)\t\($ci.state)\t\($ci.detail)",
     (($r.issue // error("Epic not found")).subIssues
       | if .totalCount > (.nodes | length) then error("more than \(.nodes | length) child Issues") else . end
       | .nodes[]

@@ -169,8 +169,9 @@ process_tree() {
 
 # Stops the oe wait recorded for Epic $2 in repository $1, unless it is process $3.
 # - The record holds the process ID and its start time, so a reused process ID is never stopped.
-# - The wait is suspended before anything below it is killed, so it never sees a failed poll and exits 1;
-#   its TERM handler skips its exit trap, so it cannot drop a record a newer wait just wrote.
+# - The wait is suspended while its tree is read, then killed before anything below it,
+#   so it never sees a failed poll and exits 1, and runs no exit trap that could drop a record a newer wait just wrote.
+# - It gets KILL, not TERM: bash 5 prints "Terminated" when it reaps a child that TERM killed, before any trap runs.
 stop_recorded_wait() {
   local file pid lstart tree
   file="$(wait_record "$1" "$2")" || return 0
@@ -179,7 +180,7 @@ stop_recorded_wait() {
   [[ "$(process_start "${pid}")" == "${lstart}" ]] || return 0
   kill -STOP "${pid}" 2>/dev/null || true
   tree="$(process_tree "${pid}")"
+  kill -KILL "${pid}" 2>/dev/null || true
   # shellcheck disable=SC2086 # one process ID per word
   kill -TERM ${tree} 2>/dev/null || true
-  kill -CONT "${pid}" 2>/dev/null || true
 }

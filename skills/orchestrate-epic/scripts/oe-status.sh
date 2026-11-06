@@ -33,7 +33,6 @@
 # | REASON | oe ready's reason for the step |
 #
 # - Under the table, each Issue whose head has a failure verdict shows that verdict's findings, one line each.
-# - When oe ready ends the session for a default branch head without checks, the view is its end line alone.
 #
 # Exit codes
 #
@@ -98,14 +97,8 @@ agent_of() {
 
 # Prints the whole view once, or fails with the reason on stderr and prints nothing.
 render() {
-  local facts rc now line n head started since rows="" findings="" found
-  facts="$(bash "${dir}/oe-ready.sh" "${repo}" "${epic}" --facts)"
-  rc=$?
-  if ((rc == 3)); then
-    printf 'end: %s\n' "${facts#end$'\t'}"
-    return 0
-  fi
-  ((rc == 0)) || return 1
+  local facts now line n head started since rows="" findings="" found
+  facts="$(bash "${dir}/oe-ready.sh" "${repo}" "${epic}" --facts)" || return 1
   now="${OE_NOW:-$(date -u +%s)}"
   held=no
   ! lock_held "${repo}" "${epic}" || held=yes
