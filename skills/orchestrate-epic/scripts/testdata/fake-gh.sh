@@ -21,7 +21,9 @@
 # | api repos/o/r/git/ref/heads/BRANCH | ref BRANCH |
 # | api repos/o/r/issues/N/comments | comments N |
 # | api repos/o/r/issues/N/sub_issues | sub_issues N |
+# | api user | user |
 # | api -X POST repos/o/r/git/refs | the write create_ref |
+# | api -X POST repos/o/r/issues/N/assignees | the write assign N |
 # | api -X POST repos/o/r/issues/N/comments | the write comment N, where N is an Issue or a pull request |
 # | api -X POST repos/o/r/statuses/SHA | the write status SHA |
 set -uo pipefail
@@ -61,6 +63,10 @@ unexpected() {
 if [[ "${method}" == POST ]]; then
   case "${path}" in
   */git/refs) call=create_ref arg="" ;;
+  */issues/*/assignees)
+    n="${path#*/issues/}"
+    call=assign arg="${n%%/*}"
+    ;;
   */issues/*/comments)
     n="${path#*/issues/}"
     call=comment arg="${n%%/*}"
@@ -114,6 +120,7 @@ graphql)
   call=sub_issues arg="${n%%/*}"
   ;;
 repos/o/r) call=repo arg="" ;;
+user) call=user arg="" ;;
 *) unexpected ;;
 esac
 

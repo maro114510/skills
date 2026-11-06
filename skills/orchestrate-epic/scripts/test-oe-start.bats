@@ -91,6 +91,29 @@ JSON
   [ "$(records_of 5 | jq -r .kind | paste -sd, -)" = claim,attempt ]
 }
 
+@test "claiming an Issue assigns it to the gh user running oe" {
+  github <<'JSON'
+{"default_branch": {"checks": {"test": "success"}}, "issues": [{"number": 5}]}
+JSON
+
+  run --separate-stderr bash "${oe}" start owner o/r 5 --claim "every dependency completed"
+
+  [ "${status}" -eq 0 ]
+  [ "$(jq -c '.issues[0].assignees' "${OE_GITHUB}")" = '["me"]' ]
+}
+
+@test "a claim whose assignment fails still starts the Owner" {
+  github <<'JSON'
+{"default_branch": {"checks": {"test": "success"}}, "issues": [{"number": 5}]}
+JSON
+
+  GH_FAIL=assignees run --separate-stderr bash "${oe}" start owner o/r 5 --claim "every dependency completed"
+
+  [ "${status}" -eq 0 ]
+  [ "${lines[0]}" = "${skills}/pr-owner/SKILL.md" ]
+  [ "$(records_of 5 | jq -r .kind | paste -sd, -)" = claim,attempt ]
+}
+
 @test "a claimed Owner's start, read with stderr merged as a harness shows it, holds only the prompt" {
   github <<'JSON'
 {"default_branch": {"checks": {"test": "success"}}, "issues": [{"number": 5}]}

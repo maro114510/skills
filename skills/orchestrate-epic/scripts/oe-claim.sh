@@ -4,6 +4,7 @@
 # Claims an Issue: creates its branch on origin at the default branch head, then records the claim on this host.
 # GitHub's create-ref API refuses a ref that already exists, so two claims for one Issue never both succeed.
 # The claim record goes to the record store that oe-store.sh defines, never to GitHub.
+# It then assigns the Issue to the gh user running oe, so GitHub shows who took it; a failed assignment only warns on stderr.
 #
 # Usage
 #
@@ -74,4 +75,10 @@ fi
 
 records_add "${repo}" "${n}" '{"kind":"claim","at":"'"${at}"'"}' 2>"${err}" ||
   fail "created ${branch}, but recording the claim of Issue #${n} failed: $(head -n1 "${err}")"
+
+# The branch is the claim, so an assignee that fails to land is only a warning.
+if ! login="$(gh api user --jq .login 2>"${err}")" ||
+  ! gh api -X POST "repos/${repo}/issues/${n}/assignees" -f "assignees[]=${login}" --silent 2>"${err}"; then
+  echo "oe claim: WARN: could not assign Issue #${n}: $(head -n1 "${err}")" >&2
+fi
 printf 'claimed\t%s\t%s\n' "${branch}" "${sha}"
