@@ -12,7 +12,7 @@ Each part does one job and stores no state of its own. State lives on GitHub, ex
 
 | Part | Job | Uses |
 |---|---|---|
-| Runner | Woken by a schedule. Gets each Issue's next action from oe ready, starts the agents it needs, waits for them to end, and exits, as `development-pipeline.md` defines | oe, pr-owner, pr-verify |
+| Runner | Woken by a schedule. Gets each Issue's next action from oe ready, starts each agent it needs with the oe start command that oe ready prints, waits for them to end with oe wait, and exits, as `development-pipeline.md` defines | oe, pr-owner, pr-verify |
 
 ### Agents
 
@@ -33,10 +33,12 @@ Each part does one job and stores no state of its own. State lives on GitHub, ex
 
 | Part | Job | Writes to |
 |---|---|---|
-| Host-local record store | Keeps the Epic list and Modes, the starts that `observe` recorded, each Issue's claim, attempt, and findings records until oe forget drops them, and the Runner lock | `$XDG_STATE_HOME/orchestrate-epic` or `~/.local/state/orchestrate-epic` |
+| Host-local record store | Keeps the Epic list and Modes, the starts that `observe` recorded, each Issue's claim, attempt, and findings records until oe forget drops them, the Runner lock, the running oe wait of each Epic, and the facts of the Runner's latest read | `$XDG_STATE_HOME/orchestrate-epic` or `~/.local/state/orchestrate-epic` |
 | oe lock | Refuses a second Runner on the same host | A host-local lock |
-| oe ready | Reads GitHub and the record store and prints each Issue's next action | nothing |
-| oe status | Shows each Issue's step, PR, CI result, verdict and failure reason, attempts, running agent, Wait state, and time in step. `--watch` refreshes it until stopped | nothing |
+| oe ready | Reads GitHub and the record store and prints each Issue's next action, with the oe start command for an action that starts an agent | nothing |
+| oe start | Runs every step that starts an Owner or a Verifier for one Issue, from oe claim to oe brief, and prints the agent's prompt, so the steps live in oe and not in the skill | What those steps write |
+| oe wait | Blocks until oe ready's next actions change. Starting one stops an earlier oe wait for the same Epic on this host, and the stopped wait exits silently | The record of the running wait |
+| oe status | Shows each Issue's step, PR, CI result, verdict and failure reason, attempts, running agent, Wait state, and time in step. While a Runner holds the Epic's lock it shows the facts the Runner last read, and reads GitHub itself only when no Runner runs. `--watch` refreshes it until the Runner ends | A Herdr notification for each new Issue that needs the owner |
 | oe board | Inside Herdr with git config `skills.herdr` true, opens a pane that runs `oe status --watch` every 3 minutes, or reuses the Epic's pane from an earlier start | A Herdr pane, and the pane's record on this host |
 | oe brief | Builds the brief handed to an Owner or a Verifier, and records each Verifier start before its brief | A pending verify status on the SHA, for a Verifier |
 | oe claim | Creates the Issue's branch and writes a claim record | A branch on origin and the record store |
@@ -73,7 +75,7 @@ Each part does one job and stores no state of its own. State lives on GitHub, ex
 | Each agent works only in its own worktree and never touches the shared checkout | Never touch the shared checkout |
 | Engineer input is only an unmarked comment or review by someone with the OWNER, MEMBER, or COLLABORATOR role, and labels mean nothing | Trusted input only |
 | A bot's text can start a repair but never instructs an agent | Trusted input only |
-| When any GitHub read fails, oe ready prints nothing and exits with an error | A failed read decides nothing |
+| When a GitHub read fails, oe ready prints nothing and exits with an error. When one PR moves during the read, only its Issue is unreadable, and that Issue starts nothing until a later read | A failed read decides nothing |
 | Listing an Epic in Mode `auto` is consent, and removing it stops new starts | The entry gate. It is dropped because listing is consent |
 | Success is decided by the real CI on GitHub, never by a local reproduction | The locally reproduced check set. It is dropped because the real CI runs |
 
@@ -118,7 +120,7 @@ flowchart TB
 
 Every edge into the Attempts used check stands for one of the repair signals listed below the table. Row 4 applies to every claimed Issue, and the diagram draws Waiting for an engineer only from Waiting for CI, Verifier working, and Waiting for the merge.
 
-For each Issue, oe ready reads this table from the top and outputs the action of the first row that matches. Rows 1 and 2 are gates on the default branch and apply to every Issue. Claim and attempt records come from the record store.
+For each Issue, oe ready reads this table from the top and outputs the action of the first row that matches. Rows 1 and 2 are gates on the default branch and apply to every Issue. Claim and attempt records come from the record store. An Issue whose PR moved during the read matches no row: it starts nothing, and the next read classifies it.
 
 | Row | Phase | State | Next action |
 |---|---|---|---|
@@ -274,8 +276,7 @@ sequenceDiagram
 - A finding in a bot's review body, outside any thread, starts nothing
 - A bot that refuses the re-review on a rate limit leaves the repair unreviewed
 - A bot finding the Owner cannot reproduce still spends an attempt
-- The board adds GitHub reads, so a large Epic reaches the rate limit sooner
-- A board keeps refreshing after the Operator stops listing the Epic
+- While a Runner runs, the board is only as fresh as the Runner's latest read
 
 ## Decisions
 
@@ -307,6 +308,8 @@ sequenceDiagram
 | Dropping records | oe forget, which the Runner runs at a wake that finds every Issue of a listed Epic closed. It refuses while an Issue is open, and oe ready stays read-only |
 | Acceptance checks | Verification splits automated checks from manual ones, and no agent checks a box that needs a human, template boxes included |
 | The board in Herdr | Opt-in with git config `skills.herdr`, read only inside Herdr, so no other run calls herdr and no Herdr user gets a pane unasked |
-| Board refresh | Every 3 minutes, because each refresh repeats oe ready's GitHub reads |
-| Board lifetime | The board runs until the Operator stops it and leaves its last view. A later start reuses its pane when the pane runs the board or sits at its shell's prompt, and never sends input to a pane that runs anything else |
-| Notifications | None. A question or a park shows on the board |
+| Board refresh | Every 3 minutes. While a Runner holds the Epic's lock, a refresh draws the facts the Runner last read and adds no GitHub reads |
+| Board lifetime | The board stops once the Runner holding the Epic's lock ends, and leaves its last view. A `--watch` started with no Runner holding the lock draws once and exits. A later start reuses its pane when the pane runs the board or sits at its shell's prompt, and never sends input to a pane that runs anything else |
+| Notifications | Each new Issue that needs the owner, such as a question or a park, raises one Herdr notification, inside Herdr with git config `skills.herdr` true |
+| Starting agents | Through oe start, which oe ready prints for each line that starts an agent, because a Runner that lost the skill to a compaction rebuilt the steps from memory and passed the Epic number as the Issue |
+| Waits per Epic | One. A new oe wait stops the earlier one, because a Runner rebuilding its loop after a compaction started waits without stopping old ones, and each extra wait woke it again |
