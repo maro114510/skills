@@ -9,6 +9,7 @@
 # | statuses | Commit SHA | The commit statuses on that commit, newest first |
 # | activity | Branch name | The pushes to that branch |
 # | repo | none | The repository, naming its default branch |
+# | user | none | The authenticated user, whose login is me |
 # | ref | Branch name | The head of that branch |
 # | comments | Issue number | The comments on that Issue, oldest first |
 # | sub_issues | Epic number | The child Issues, each with its number and state |
@@ -38,6 +39,7 @@
 # | blocked_by | Dependencies, each with a number and a state of open, completed, or not_planned | None |
 # | branch | Whether the branch feat/issue-N exists | false |
 # | branch_sha | The head of the branch feat/issue-N | None |
+# | assignees | Logins oe assigned to the Issue | None |
 # | comments | Issue comments, oldest first, each with by, at, and body | None |
 # | pull_requests | Pull requests opened from the branch; the Issue read returns only the newest, as its query asks | None |
 # | older_comments | How many older comments GitHub leaves out of the read | 0 |
@@ -193,6 +195,7 @@ $state
   elif $call == "statuses" then statuses($arg)
   elif $call == "activity" then pushes($arg)
   elif $call == "repo" then {full_name: "o/r", default_branch: "main"}
+  elif $call == "user" then {login: "me"}
   elif $call == "ref" then branch_head($arg)
   elif $call == "comments" then issue_comments($arg | tonumber)
   elif $call == "sub_issues" then sub_issues

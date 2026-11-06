@@ -6,6 +6,7 @@
 # | $call | $arg | Write | Refused when |
 # |---|---|---|---|
 # | create_ref | none | Creates refs/heads/feat/issue-N at $fields.sha | The branch already exists |
+# | assign | Issue number | Adds $fields["assignees[]"] to the Issue's assignees | The Issue does not exist |
 # | comment | Issue or pull request number | Appends a comment by the OWNER at 08:00 | Neither exists |
 # | status | Commit SHA | Puts a commit status on that SHA, newest first in written_statuses | Never |
 
@@ -17,6 +18,13 @@ def create_ref:
     elif (.issues[] | select(.number == $n) | .branch) then {error: "Reference already exists (HTTP 422)"}
     else {state: (.issues |= map(if .number == $n then . + {branch: true, branch_sha: $fields.sha} else . end)),
       response: {ref: $fields.ref, object: {sha: $fields.sha}}}
+    end;
+
+def assign($n):
+  $state
+  | if ([.issues[] | select(.number == $n)] | length) == 0 then {error: "Not Found (HTTP 404)"}
+    else {state: (.issues |= map(if .number == $n then .assignees += [$fields["assignees[]"]] else . end)),
+      response: {number: $n}}
     end;
 
 def comment($n):
@@ -35,6 +43,7 @@ def status($sha):
   | {state: ($state | .written_statuses = [$new] + (.written_statuses // [])), response: $new};
 
 if $call == "create_ref" then create_ref
+elif $call == "assign" then assign($arg | tonumber)
 elif $call == "comment" then comment($arg | tonumber)
 elif $call == "status" then status($arg)
 else error("unknown write \($call)") end
