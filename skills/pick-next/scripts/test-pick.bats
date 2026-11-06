@@ -353,6 +353,19 @@ expect() {
   expect "$(field '.discussionsTotal')" 3
 }
 
+@test "the limit cuts discussions in either flag order and discussionsTotal counts them all" {
+  discussion 1 "A" 2026-11-01T00:00:00Z Ideas
+  discussion 2 "B" 2026-11-02T00:00:00Z Ideas
+  discussion 3 "C" 2026-11-03T00:00:00Z Ideas
+  run bash "${target}" --limit 2 --discussions
+  expect "${status}" 0
+  expect "$(field '[.discussions[].number]')" '[3,2]'
+  expect "$(field '.discussionsTotal')" 3
+  run bash "${target}" --discussions --limit 1
+  expect "${status}" 0
+  expect "$(field '[.discussions[].number]')" '[3]'
+}
+
 @test "a GitHub read that fails exits 1" {
   printf '#!/usr/bin/env bash\nexit 1\n' >"${BATS_TEST_TMPDIR}/bin/gh"
   run bash "${target}"
