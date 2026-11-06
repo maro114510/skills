@@ -91,6 +91,42 @@ JSON
   [ "$(records_of 5 | jq -r .kind | paste -sd, -)" = claim,attempt ]
 }
 
+@test "a claimed Owner's start, read with stderr merged as a harness shows it, holds only the prompt" {
+  github <<'JSON'
+{"default_branch": {"checks": {"test": "success"}}, "issues": [{"number": 5}]}
+JSON
+
+  run bash "${oe}" start owner o/r 5 --claim "every dependency completed"
+
+  [ "${status}" -eq 0 ]
+  [ "${lines[0]}" = "${skills}/pr-owner/SKILL.md" ]
+  [ "${lines[1]}" = "repo o/r issue 5 base main worktree ${wt} reason every dependency completed" ]
+  [ "${#lines[@]}" -eq 2 ]
+}
+
+@test "a Verifier's start, read with stderr merged as a harness shows it, holds only the prompt" {
+  records 5 claim@07:00 attempt@07:01
+  pr_15_passed_checks
+
+  run bash "${oe}" start verifier o/r 5
+
+  [ "${status}" -eq 0 ]
+  [ "${lines[0]}" = "${skills}/pr-verify/SKILL.md" ]
+  [ "${lines[1]}" = "repo o/r issue 5 sha ${head} base main worktree ${wt}" ]
+  [ "${#lines[@]}" -eq 2 ]
+}
+
+@test "a refused claim still says why on stderr" {
+  github <<'JSON'
+{"default_branch": {"checks": {"test": "success"}}, "issues": [{"number": 5, "branch": true}]}
+JSON
+
+  run --separate-stderr bash "${oe}" start owner o/r 5 --claim "every dependency completed"
+
+  [ "${status}" -eq 4 ]
+  [ -n "${stderr}" ]
+}
+
 @test "a claim refused because the branch exists exits 4 and starts nothing" {
   github <<'JSON'
 {"default_branch": {"checks": {"test": "success"}}, "issues": [{"number": 5, "branch": true}]}
