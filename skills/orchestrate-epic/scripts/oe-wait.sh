@@ -11,6 +11,7 @@
 # - --running is passed to oe ready, and also means an agent is still running.
 # - --timeout bounds this call, wait_timeout seconds by default.
 #   The deadline is checked before each poll, so the call can run up to one poll interval past it.
+# - Starting a wait stops an earlier oe wait for the same Epic on this host, so at most one runs; the stopped one exits without output.
 # - --idle-since is when the caller last saw a next action change, or when the session started, in epoch seconds.
 #   With no --running, the session is idle once idle_limit seconds have passed since then.
 # - OE_NOW sets the current time in epoch seconds, as in oe ready.
@@ -75,6 +76,24 @@ while [[ $# -gt 0 ]]; do
   esac
   shift 2
 done
+
+# shellcheck source-path=SCRIPTDIR
+source "${dir}/oe-store.sh"
+
+# Stops an earlier wait for this Epic on this host, then records this one, so at most one runs.
+# The process ID is checked against its command line, because a recorded ID can belong to another process by now.
+single_wait() {
+  local file pid key
+  key="$(repo_key "${repo}")" || return 0
+  file="$(state_dir)/waits/${key}/${epic}"
+  if pid="$(cat "${file}" 2>/dev/null)" && [[ "${pid}" =~ ^[0-9]+$ && "${pid}" != "$$" ]] &&
+    ps -o command= -p "${pid}" 2>/dev/null | grep -q "oe-wait.sh ${repo} ${epic}\( \|$\)"; then
+    pkill -P "${pid}" 2>/dev/null || true
+    kill "${pid}" 2>/dev/null || true
+  fi
+  mkdir -p "${file%/*}" 2>/dev/null && printf '%s\n' "$$" >"${file}" 2>/dev/null || true
+}
+single_wait
 
 interval="${OE_WAIT_INTERVAL:-${wait_interval}}"
 [[ "${interval}" =~ ^[0-9]+$ ]] || usage "OE_WAIT_INTERVAL must be whole seconds"
