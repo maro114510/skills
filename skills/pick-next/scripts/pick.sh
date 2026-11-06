@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # Collects what pick-next ranks: the open Issues and pull requests of this clone's origin, and its worktrees.
 # It only reads: it never writes to GitHub, a branch, or a worktree.
-# Usage: pick.sh [--limit <n>]
+# Usage: pick.sh [--limit <n>] [--discussions]
 #   --limit caps the next and blocked groups; the default is 3. The owner and local groups are never cut.
-# Prints one JSON object: repo, viewer, owner, next, nextTotal, blocked, blockedTotal, local.
-# pick.jq holds every rule that groups and orders them.
-# Reads, in order: every open Issue (pick-issues.graphql), every open pull request (pick-prs.graphql), and
-# git worktree list with git status of each worktree. A detached worktree has no branch and is skipped.
+#   --discussions also reads the open Discussions; without it they are neither read nor printed.
+# Prints one JSON object: repo, viewer, owner, next, nextTotal, blocked, blockedTotal, local, and with --discussions
+# also discussions and discussionsTotal. pick.jq holds every rule that groups and orders them.
+# Reads, in order: every open Issue (pick-issues.graphql), every open pull request (pick-prs.graphql), with
+# --discussions every open Discussion (pick-discussions.graphql), and git worktree list with git status of each
+# worktree. A detached worktree has no branch and is skipped.
 # Exit: 0 printed, 1 GitHub or a worktree could not be read, or an Issue has more relations than one read returns,
 #   2 usage error or an origin not on GitHub.
 set -uo pipefail
@@ -60,6 +62,11 @@ over="$(jq -r '[.nodes[] | select(any(.blockedBy, .blocking, .linkedBranches; .t
   | .number] | map(tostring) | join(", ")' <<<"${issues}")" || fail "unexpected Issue read"
 [[ -z "${over}" ]] || fail "Issue ${over} has more blockers, blocked Issues, or linked branches than one read returns"
 prs="$(read_all pick-prs.graphql pullRequests)" || fail "cannot read the open pull requests of ${owner}/${repo}"
+discussion_read=null
+if [[ "${discussions}" == true ]]; then
+  discussion_read="$(read_all pick-discussions.graphql discussions)" ||
+    fail "cannot read the open Discussions of ${owner}/${repo}"
+fi
 
 list="$(git worktree list --porcelain)" || fail "cannot list worktrees"
 worktrees="$(awk '/^worktree / { path = substr($0, 10) }
@@ -72,7 +79,8 @@ worktrees="$(awk '/^worktree / { path = substr($0, 10) }
   done | jq -sc '.')" || fail "cannot read the worktrees"
 
 # Bodies make the reads large, so they go through stdin rather than arguments, which the OS caps.
-printf '%s\n' "${issues}" "${prs}" "${worktrees}" |
-  jq -sc --arg repo "${owner}/${repo}" --argjson limit "${limit}" --argjson discussions "${discussions}" \
-    '{repo: $repo, viewer: .[0].viewer, limit: $limit, issues: .[0].nodes, prs: .[1].nodes, worktrees: .[2]}' |
+printf '%s\n' "${issues}" "${prs}" "${worktrees}" "${discussion_read}" |
+  jq -sc --arg repo "${owner}/${repo}" --argjson limit "${limit}" \
+    '{repo: $repo, viewer: .[0].viewer, limit: $limit, issues: .[0].nodes, prs: .[1].nodes, worktrees: .[2],
+      discussions: .[3].nodes}' |
   jq -c -f "${dir}/pick.jq" || fail "cannot rank the facts"

@@ -1,18 +1,22 @@
 # Every rule pick-next uses to group and order the facts pick.sh collects.
-# Input: {repo, viewer, limit, issues, prs, worktrees}, where issues and prs are the GraphQL nodes of
-# pick-issues.graphql and pick-prs.graphql, and worktrees is [{path, branch, dirty}].
+# Input: {repo, viewer, limit, issues, prs, worktrees, discussions}, where issues, prs, and discussions are the
+# GraphQL nodes of pick-issues.graphql, pick-prs.graphql, and pick-discussions.graphql, discussions is null when
+# they were not read, and worktrees is [{path, branch, dirty}].
 #
 # Groups
 #   owner    open pull requests whose checks passed or never ran and whose review asks for no changes
 #   next     unblocked Issues, and pull requests that close no open Issue and do not wait on the owner
 #   blocked  Issues with at least one open blocker
 #   local    dirty worktrees whose branch belongs to no open Issue or pull request
+#   discussions  open Discussions, only when they were read. Ideas and questions, not work, so they are never
+#                ranked with Issues
 # An Epic, an Issue with sub-issues, is in no group: its children are the work.
 # An Issue assigned only to others is in no group: someone else owns it.
 #
 # next order: work in progress, then the number of open Issues it unblocks, then a parent Epic with progress, then
 # the lower number. In progress means a worktree, an open pull request, or the viewer among the assignees.
 # blocked order: fewer open blockers, then more Issues unblocked, then the lower number.
+# discussions order: the most recently updated, then the lower number.
 
 def checks: .commits.nodes[0].commit.statusCheckRollup.state // null;
 
@@ -79,3 +83,10 @@ def body_excerpt: (.body // "")[0:1500];
      next: $next[0:$in.limit], nextTotal: ($next | length),
      blocked: $blocked[0:$in.limit], blockedTotal: ($blocked | length),
      local: $local}
+  + if $in.discussions == null then {} else
+      ([$in.discussions[]
+        | {kind: "discussion", number, title, url, body: body_excerpt, category: .category.name,
+           answered: .isAnswered, updatedAt}]
+       | sort_by(.updatedAt, -.number) | reverse) as $discussions
+      | {discussions: $discussions, discussionsTotal: ($discussions | length)}
+    end
