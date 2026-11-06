@@ -38,6 +38,7 @@ Judge whether the context is clear on each axis:
 | Acceptance criteria | Can completion be confirmed with numbered verification steps? |
 | Specification | Are there implementation choices that could be interpreted more than one way, where the reading changes a requirement, a dependency, or a verification outcome? |
 | Premise | Was every claim the plan rests on checked? A claim about how a tool, file, or system behaves, or about a count or usage, is unclear when the context gives no measurement, reproduction, source reference, or observed data for it |
+| Coverage | When a report from a specific customer starts the work, does the context name every item of that customer the change affects, and the shape of the production data that a dev check must reproduce? |
 
 Judge each axis on its own: a checked premise does not make any other axis clear.
 

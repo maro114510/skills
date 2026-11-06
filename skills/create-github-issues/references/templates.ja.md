@@ -2,7 +2,7 @@
 
 ## Step 1.5: Clarification Question Format
 
-Enumerate each unclear item and ask for a response using the following format. The four labeled subsections below (`[粒度]` / `[受け入れ条件]` / `[仕様]` / `[前提]`) are illustrative, not a fixed checklist — include only the subsection(s) for the axis/axes actually unclear this run.
+Enumerate each unclear item and ask for a response using the following format. The five labeled subsections below (`[粒度]` / `[受け入れ条件]` / `[仕様]` / `[前提]` / `[網羅性]`) are illustrative, not a fixed checklist — include only the subsection(s) for the axis/axes actually unclear this run.
 
 ```
 以下の点が不明確です。回答してから続行します。
@@ -18,6 +18,9 @@ Enumerate each unclear item and ask for a response using the following format. T
 
 **[前提] <主張>について**
 <その主張と出どころ、確かめる方法を示し、Issue を作る前に確かめるかを尋ねる。確かめる方法の例は「X を実行して Y になるか見る」>
+
+**[網羅性] <顧客報告>について**
+<その顧客のうち変更が影響する全項目と、本番データがどのような形をしているかを尋ねる。手動確認が影響する全項目を覆い、開発環境のチェックがその形を再現できるようにする>
 
 すべての質問に回答してから Issue 作成を続行します。
 仕様が未確定のまま進める場合は「とりあえず作って」と返信してください（[要確認] タグを付与して進みます）。
