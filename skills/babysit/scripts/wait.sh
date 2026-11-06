@@ -91,6 +91,12 @@ graphql_reset() {
   [[ "${reset}" =~ ^[0-9]+$ ]] && ((reset > now)) && printf '%s\n' "${reset}"
 }
 
+# Prints the idle event and ends the call.
+idle() {
+  jq -nc --arg repo "${repo}" --argjson pr "${pr}" '{event: "idle", repo: $repo, pr: $pr}'
+  exit 0
+}
+
 # Evaluates the snapshot in snap against the ledger in ledger.
 evaluate() {
   printf '%s\n%s\n' "${snap}" "${ledger}" |
@@ -146,8 +152,7 @@ while true; do
     jq -c --argjson now "${now}" '.lock.heartbeat = $now' <<<"${ledger}" |
       babysit_ledger_write "${path}" || usage "Cannot write ledger: ${path}"
     if ((now >= call_end)); then
-      jq -nc --arg repo "${repo}" --argjson pr "${pr}" '{event: "idle", repo: $repo, pr: $pr}'
-      exit 0
+      idle
     fi
     echo "GitHub GraphQL rate limit exhausted; waiting until $(jq -nr --argjson t "${reset}" '$t | todate')" >&2
     pause=$((reset - now))
@@ -168,8 +173,7 @@ while true; do
     ((pause <= BACKOFF_MAX)) || pause="${BACKOFF_MAX}"
   fi
   if ((now >= deadline)); then
-    jq -nc --arg repo "${repo}" --argjson pr "${pr}" '{event: "idle", repo: $repo, pr: $pr}'
-    exit 0
+    idle
   fi
   ((pause <= deadline - now)) || pause=$((deadline - now))
   "${SLEEP}" "${pause}"
