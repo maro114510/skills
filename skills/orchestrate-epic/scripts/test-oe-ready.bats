@@ -1192,7 +1192,8 @@ JSON
 
   [ "${status}" -eq 0 ]
   [ "$(action_of 5)" = start-owner ]
-  case "${lines[0]}" in
+  IFS=$'\t' read -r _ _ reason _ <<<"${lines[0]}"
+  case "${reason}" in
   *"checks failed on "*": check-150") ;;
   *) return 1 ;;
   esac
@@ -1210,7 +1211,8 @@ JSON
 
   [ "${status}" -eq 0 ]
   [ "$(action_of 5)" = wait-base ]
-  case "${lines[0]}" in
+  IFS=$'\t' read -r _ _ reason _ <<<"${lines[0]}"
+  case "${reason}" in
   *"checks failed on main head "*": check-150") ;;
   *) return 1 ;;
   esac

@@ -144,7 +144,11 @@ JSON
 }
 
 @test "invalid arguments start nothing" {
-  run --separate-stderr bash "${oe}" start owner o/r 54 52
+  run --separate-stderr bash "${oe}" start owner o/r five
+
+  [ "${status}" -eq 2 ]
+
+  run --separate-stderr bash "${oe}" start verifier o/r 5 "a reason"
 
   [ "${status}" -eq 2 ]
   [ ! -e "${tmp}/shared-oe" ]

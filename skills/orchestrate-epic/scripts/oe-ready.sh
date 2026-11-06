@@ -16,7 +16,8 @@
 #
 # Output
 #
-# - Each line holds an Issue number, an action, and a reason, separated by tabs.
+# - Each line holds an Issue number, an action, a reason, and the oe start command that the action runs, separated by tabs.
+#   The command is empty for an action that starts no agent.
 # - Lines are sorted by Issue number.
 # - oe-ready.jq lists every action and the row it comes from.
 #
@@ -186,6 +187,22 @@ pending) gate_reason="checks pending on ${default_name} head ${default_sha:0:7}:
 failed) gate_reason="checks failed on ${default_name} head ${default_sha:0:7}: ${default_detail}" ;;
 esac
 
+# Prints out's lines with a fourth field: the oe start command for an action that starts an agent, and nothing otherwise.
+# The command is complete and quoted, so a session that lost SKILL.md can run it as printed.
+with_start() {
+  local n action reason oe_cmd
+  oe_cmd="bash $(printf '%q' "${dir}/oe")"
+  while IFS=$'\t' read -r n action reason; do
+    [[ -n "${n}" ]] || continue
+    case "${action}" in
+    claim) printf '%s\t%s\t%s\t%s start owner %s %s --claim %q\n' "${n}" "${action}" "${reason}" "${oe_cmd}" "${repo}" "${n}" "${reason}" ;;
+    start-owner) printf '%s\t%s\t%s\t%s start owner %s %s %q\n' "${n}" "${action}" "${reason}" "${oe_cmd}" "${repo}" "${n}" "${reason}" ;;
+    start-verifier) printf '%s\t%s\t%s\t%s start verifier %s %s\n' "${n}" "${action}" "${reason}" "${oe_cmd}" "${repo}" "${n}" ;;
+    *) printf '%s\t%s\t%s\t\n' "${n}" "${action}" "${reason}" ;;
+    esac
+  done <<<"$1"
+}
+
 sorted=()
 if [[ ${#issues[@]} -gt 0 ]]; then
   while read -r n; do
@@ -203,7 +220,11 @@ if [[ -n "${gate_reason}" ]]; then
         '{number: $n, action: "wait-base", reason: $reason}')"$'\n' || fail "cannot format Issue #${n}"
     fi
   done
-  printf '%s' "${out}"
+  if [[ "${entry}" == classify ]]; then
+    with_start "${out}"
+  else
+    printf '%s' "${out}"
+  fi
   exit 0
 fi
 
@@ -256,4 +277,8 @@ for n in ${sorted[@]+"${sorted[@]}"}; do
     fail "Issue #${n} read failed: $(head -n1 "${err}")"
   out+="${line}"$'\n'
 done
-printf '%s' "${out}"
+if [[ "${entry}" == classify ]]; then
+  with_start "${out}"
+else
+  printf '%s' "${out}"
+fi

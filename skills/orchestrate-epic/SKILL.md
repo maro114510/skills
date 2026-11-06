@@ -90,27 +90,19 @@ When the Issue numbers and actions differ from the previous pass, set `<idle-sin
 
 ### 3.2 Start agents
 
-Each line holds an Issue number, an action, and a reason, separated by tabs.
+Each line holds an Issue number, an action, a reason, and a start command, separated by tabs.
 Take the lines whose action is `start-verifier`, then `start-owner`, then `claim`, and start one agent per line while fewer than `max-agents` agents run.
-Every other action needs nothing from this session: `done`, `parked`, and each `wait-*` wait for CI, an answer, a dependency, or an engineer.
+Every other action has an empty start command and needs nothing from this session: `done`, `parked`, and each `wait-*` wait for CI, an answer, a dependency, or an engineer.
 
-| Action | Commands, in order | Then start |
-|---|---|---|
-| `claim` | `oe claim <repo> <n>`, then the `start-owner` row. Exit 4 means the branch already exists: skip the Issue this pass | pr-owner |
-| `start-owner` | `oe attempt <repo> <n>`; `oe worktree add <n>`, which prints `<path>`; `oe brief owner <repo> <n> <path> "<reason>"` | pr-owner |
-| `start-verifier` | `oe worktree add <n> --detach`, which prints `<path>`; `oe brief verifier <repo> <n> <path>` | pr-verify |
-
-- Any non-zero exit in a row means: start no agent for that Issue this pass. When a worktree was already created, run `oe worktree remove <n>`. Exit 4 from `oe attempt` or `oe brief` is a limit or a moved head that the next `oe ready` reports.
-- `oe brief verifier` records the start on GitHub, so start the Verifier right after it, and never build its brief any other way.
-
+For each line to start, run its start command exactly as printed, an `oe start` call that runs every step the start needs.
+On exit 0 it printed the agent's whole prompt; on any other exit, start no agent for that Issue this pass, because the next `oe ready` reports a limit or a moved head.
 Start the agent in the background where your harness can, so the loop keeps running while it works:
 
-| Role | Agent type | Prompt |
+| Start command | Agent type | Prompt |
 |---|---|---|
-| pr-owner | `pr-owner` | The canonical path of `<skills-root>/pr-owner/SKILL.md` on one line, then the brief `oe brief` printed |
-| pr-verify | `pr-verify` | The canonical path of `<skills-root>/pr-verify/SKILL.md` on one line, then the brief `oe brief` printed |
+| `oe start owner …` | `pr-owner` | Exactly what `oe start` printed |
+| `oe start verifier …` | `pr-verify` | Exactly what `oe start` printed |
 
-- Resolve the canonical path with `cd <skills-root>/<skill> && pwd -P`.
 - Start it with the tool the Harnesses table below names for the tools you have.
 - Never give an agent anything else: no PR body, earlier report, or summary, because a Verifier must see only the Issue and the code.
 

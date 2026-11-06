@@ -27,7 +27,7 @@ set -uo pipefail
 dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 case "${1:-}" in
-ready | status | board | wait | claim | attempt | question | rereview | brief | verdict | records | forget | worktree | lock)
+ready | status | board | wait | start | claim | attempt | question | rereview | brief | verdict | records | forget | worktree | lock)
   sub="$1"
   shift
   exec bash "${dir}/oe-${sub}.sh" "$@"
@@ -38,6 +38,8 @@ Usage: oe ready <owner/repo> <epic-number> [--running <issue-number>]... [--fact
        oe status <owner/repo> <epic-number> [--watch]
        oe board <owner/repo> <epic-number>
        oe wait <owner/repo> <epic-number> [--running <issue-number>]... [--timeout <seconds>] [--idle-since <epoch>]
+       oe start owner <owner/repo> <issue-number> [--claim] [<reason>]
+       oe start verifier <owner/repo> <issue-number>
        oe claim <owner/repo> <issue-number>
        oe attempt <owner/repo> <issue-number>
        oe question <owner/repo> <issue-number> < question
