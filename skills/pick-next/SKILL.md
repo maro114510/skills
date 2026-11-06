@@ -44,7 +44,7 @@ It only reads: never create, switch, edit, or close an Issue, PR, branch, or wor
 
 The owner must understand every item without opening GitHub.
 
-- Start with what the work does, in plain words drawn from `title` and `body`, and never with a number. A `blockedBy` entry has only a `title`, so reword it and end it with its reference.
+- Start with what the work does, in plain words drawn from `title` and `body`, and never with a number. A `blockedBy` entry has only a `title`, so reword it.
 - Give why it matters now from the signals present on the item, and when none is present, say only what it does:
 
   | Signal | Say |
@@ -53,5 +53,5 @@ The owner must understand every item without opening GitHub.
   | `unblocks` above 0 | How many waiting Issues it frees |
   | `epic` with `completed` above 0 | Which larger effort it moves forward, by what that effort does, and its progress as `completed` of `total` |
 
-- Put the reference only at the end, as `(Issue <number>)`, `(PR <number>)`, or `(Discussion <number>)`, never alone.
+- Put each reference, as `(Issue <number>)`, `(PR <number>)`, or `(Discussion <number>)`, right after the words that describe what it names, never alone: the item's own reference ends the sentence that says what the work does, and a blocker's reference ends the words that name the blocker. Two references never stand side by side.
 - Name local state that changes the pick on the item itself: a worktree with `dirty: true` holds uncommitted changes, and a PR whose `pr.checks` is `FAILURE` needs repair before new work.
