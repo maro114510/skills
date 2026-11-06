@@ -3,18 +3,21 @@ name: pick-next
 description: >
   Pick what to work on next in the current repository: what waits on the owner, the few Issues or PRs to start next, and what is blocked and on what, each explained in plain words.
   With discussions, also lists the open Discussions, the ideas and questions not yet turned into work.
-  Use when the user asks "what should I work on next", "what's next", "which Issue next", "pick the next task", "次に何やる", "次どのIssueやればいい", "今やるべきことは", or "Discussionも含めて".
+  With watch, sets up a Herdr automation that notifies the owner when the pick changes.
+  Use when the user asks "what should I work on next", "what's next", "which Issue next", "pick the next task", "次に何やる", "次どのIssueやればいい", "今やるべきことは", "Discussionも含めて", "notify me when the pick changes", or "定期的に更新して".
   Not for one Epic's run, which orchestrate-epic's oe ready covers.
 allowed-tools: Bash, Read
-argument-hint: "[lang <ja|en>] [limit <n>] [discussions]"
+argument-hint: "[lang <ja|en>] [limit <n>] [discussions] [watch]"
 ---
 
 # pick-next
 
 Answer "what should I work on next" from one read of the repository, so the order is the same in every session.
-It only reads: never create, switch, edit, or close an Issue, PR, branch, or worktree.
+It only reads: never create, switch, edit, or close an Issue, PR, branch, or worktree. Watch writes only its automation file and, on each run, its record in the clone's git directory.
 
 `<scripts>` is the `scripts/` directory next to this file, and `<skills-root>` is the parent of this skill's directory.
+
+When `$ARGUMENTS` holds the word `watch`, follow Watch instead of Steps.
 
 ## Steps
 
@@ -55,3 +58,19 @@ The owner must understand every item without opening GitHub.
 
 - Put each reference, as `(Issue <number>)`, `(PR <number>)`, or `(Discussion <number>)`, right after the words that describe what it names, never alone: the item's own reference ends the sentence that says what the work does, and a blocker's reference ends the words that name the blocker. Two references never stand side by side. An item carries no other reference: describe its Epic, its PR, its linked Issues, and any number in its `body` in words only.
 - Name local state that changes the pick on the item itself: a worktree with `dirty: true` holds uncommitted changes, and a PR whose `pr.checks` is `FAILURE` needs repair before new work.
+
+## Watch
+
+Watch sets up a pick every 5 minutes for this clone that notifies the owner, through Herdr, only when the items under Waits on you or Start next change, and once when a read starts failing. No model runs on a schedule: `<scripts>/watch.sh` compares the picks and writes the one-line notification.
+
+1. Run step 1 of Steps to choose the reply's language.
+2. Run `bash <scripts>/watch-setup.sh` from the repository.
+
+   | Exit | Action |
+   |---|---|
+   | 0 | Continue with step 3 |
+   | 1 | The automation file could not be written, or `herdr-automate check` rejected it. Show the error and stop |
+   | 2 | Not inside Herdr, `herdr-automate` missing, not a clone whose origin is on GitHub, or a path holding a single quote. Show the error and stop |
+
+3. Reply with the automation file's path from the first line of the output, what the plan does in plain words, and every line after the plan, each naming a command the owner runs. `herdr-automate` is `/Applications/Herdr.app/Contents/MacOS/herdr-automate` when it is not on PATH; write it that way in every command. Then ask the owner to approve the file by running `herdr-automate approve <file>` in their own terminal. Never approve it yourself.
+4. Say that `herdr-automate disable <file>` stops the watch, and that running watch again rewrites the file, which then needs approval again; do that after the skill moves to another path.
