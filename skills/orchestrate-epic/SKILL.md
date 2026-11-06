@@ -163,7 +163,7 @@ The harness wakes you when an agent ends or the wait returns, and whichever come
 ```markdown
 ## orchestrate-epic: Epic #<epic> を終了しました
 
-終了理由: <すべて完了 | 人の対応待ちのみ | 変化がないまま待機上限に到達 | default branch にチェックが無い | GitHub の読み取りが続けて失敗>
+終了理由: <すべて完了 | 人の対応待ちのみ | 変化がないまま待機上限に到達 | GitHub の読み取りが続けて失敗>
 
 | Issue | 状態 | 次に必要なこと |
 |---|---|---|
