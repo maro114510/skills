@@ -103,7 +103,6 @@ Recheck the relevant files after setup. If the fetched base changed a material p
 ## Commit Handoff (Phases 6.5 and 7)
 
 Commit any uncommitted work with the `commit` skill, so the range holds the whole change.
-Tell it that Phase 7 classifies and approves the whole range before push, so its Step 6 does not ask about this commit.
 Give it the Issue number and whether anything is deferred, as Phase 5 says.
 
 ---

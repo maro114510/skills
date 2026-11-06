@@ -2,11 +2,11 @@
 name: commit
 description: >
   Stage and commit the current working tree changes with a high-quality Conventional Commits message.
-  Analyzes the diff to infer type, scope, and intent, screens for secrets and other risky changes, and pauses to ask only when the change is genuinely ambiguous or high-risk.
-  Otherwise it commits automatically and reports what it did.
+  Analyzes the diff to infer type, scope, and intent, and screens for secrets and other risky changes.
+  It never asks: it leaves a suspected secret out, commits the rest, and reports what it did, excluded, or flagged.
   Called by create-pr and implement when they need to commit changes.
   Can also be invoked directly with phrases like "commit this," "write a commit message," or "commit these changes."
-allowed-tools: Bash(git status:*, git diff:*, git log:*, git add:*, git restore:*, git commit:*, gh issue view:*), Read, AskUserQuestion
+allowed-tools: Bash(git status:*, git diff:*, git log:*, git add:*, git restore:*, git commit:*, gh issue view:*), Read
 argument-hint: "[optional hint, e.g. an issue number or message override]"
 ---
 
@@ -26,10 +26,11 @@ git log --format="--- %h%n%B" origin/HEAD..HEAD 2>/dev/null
 
 If both `git status --short` and `git diff --staged` are empty, report "nothing to commit" and stop.
 
-If `git status --short` holds any change this session did not make itself, touch nothing, including your own changes, and ask the user once via `AskUserQuestion`.
-When no human can answer, as in an autonomous run, do not ask or wait: end with `STOPPED: foreign changes` and the paths.
+If `git status --short` holds any change this session did not make itself, touch nothing, including your own changes, and end with `STOPPED: foreign changes` and the paths.
 
-## Step 2. Screen for secrets (always blocks auto-commit)
+This skill never asks the user and never waits for an answer, in a chat session or without a human. Every step below resolves its own findings and lists them in Step 8.
+
+## Step 2. Screen for secrets
 
 Cover staged, unstaged, and untracked changes: a suspected secret never ends up in a commit, however it got into the working tree.
 
@@ -39,8 +40,8 @@ Cover staged, unstaged, and untracked changes: a suspected secret never ends up 
 This is a best-effort heuristic: when in doubt, treat it as a match. For every match:
 
 - If the file is staged, unstage it: `git restore --staged -- <path>`.
-- Never `git add` it, even in auto-commit mode.
-- Tell the user which files, or which lines for a content match, were excluded and why, and ask what to do with them. This always needs a human decision, whatever Step 6 decides.
+- Never `git add` it.
+- List in Step 8 each excluded file and why, with the line number for a content match, never the matched value. What to do with it is the user's decision, so leave it uncommitted.
 - Continue Steps 3-7 with the remaining files, so an unrelated change is not held hostage to the secret.
 
 ## Step 3. Stage the change
@@ -78,32 +79,22 @@ Incorporate any hint in `$ARGUMENTS`: an issue number, a message override, or co
 
 Re-read the bullets. Cut what/how, verification results, and file enumeration. Split or trim a "because/since/so/which" chain. Over 4 bullets, or one wrapped by character count: shorten, defer to the PR description, or split the change. Otherwise keep as written. Never remove a trailer such as `Removed-Test:`.
 
-## Step 6. Decide: auto-commit or ask first
+## Step 6. Check the staged change
 
-One classifier decides, `<skill-dir>/scripts/classify-approval.sh`; its header lists the conditions. Its path, size, and deletion conditions are mechanical, and no repository setting changes them. Pass what only you can judge as `--require <reason>`, one per finding:
+Resolve each finding yourself and list it in Step 8:
 
-- The diff mixes clearly unrelated concerns, such as an unrelated `fix` bundled with a `feat`.
-- Some changed files look unrelated to the rest, possibly stray edits in the same working tree.
-- A confident Conventional Commits type/scope cannot be determined.
-- The caller reports a critical decision from its decision log: `--require "critical decision: <decision>"`.
+- The diff mixes clearly unrelated concerns, such as an unrelated `fix` bundled with a `feat`: keep one concern staged, unstage the rest with `git restore --staged -- <path>`, commit it, then run Steps 3 to 8 again for the rest.
+- Some changed files look unrelated to the rest, possibly stray edits: unstage them and leave them uncommitted.
+- A confident Conventional Commits type/scope cannot be determined: use the closest type and omit the scope.
+
+Then run the classifier; its header lists the conditions. Pass each critical decision the caller reports from its decision log:
 
 ```bash
-bash <skill-dir>/scripts/classify-approval.sh --staged [--require "<reason>"]...
+bash <skill-dir>/scripts/classify-approval.sh --staged [--require "critical decision: <decision>"]...
 ```
 
-| Exit | Action |
-|---|---|
-| 0 | Go to Step 7 and commit without asking |
-| 10 or any other | Ask via `AskUserQuestion` before committing, showing the `reason:` lines, the staged diff summary, and the message after Step 5 |
-
-Three cases skip asking about the mechanical `reason:` lines and the caller's critical decisions; commit and list them in Step 8:
-
-- The caller reports it classifies the whole `base..HEAD` range with this classifier before push and gets human approval when the range needs it, as implement does in normal mode. Leave its critical decisions out here: the range classification covers them, since a path counts when any commit in the range touches it.
-- The caller reports that no human is reachable and that a human approves the pushed range as a PR, as implement does for pr-owner.
-- A difit window you opened closed with no comments, and `git status --porcelain` and the hash of `git diff HEAD`, both recorded when it opened, are unchanged at commit time.
-
-Your own findings above are still asked about in both, since they concern how this commit is cut, which a range review cannot fix; for a type/scope you cannot determine confidently, ask about the message only.
-A failing-test-only change is not by itself a reason to ask; commit it as `test:`.
+Whatever it exits, go to Step 7, and list every printed `reason:` line in Step 8. Approval belongs to the push, through implement's range review or the PR review, and a local commit can still be undone before then.
+A failing-test-only change is committed as `test:`.
 
 ## Step 7. Commit
 
@@ -124,4 +115,5 @@ A merge commit keeps red `test:` commits on the default branch, so bisect with `
 
 ## Step 8. Report
 
-After every commit, auto or approved, show the commit hash and subject in one short line. Never commit silently.
+After every commit, show the commit hash and subject in one short line. Never commit silently.
+Under it, list each file Step 2 or Step 6 left uncommitted and why, each type chosen without confidence, and each `reason:` line from Step 6.
