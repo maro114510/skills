@@ -514,4 +514,40 @@ r=0
 grep -q -- "POST .*/pulls .*head=feat-x " "${STUB_DIR}/log" || r=1
 check "origin in the target repository sends head as the bare branch" "${r}"
 
+setup $'Summary\n\nCloses #12'
+create --owner orchestrate-epic
+r=0
+[[ "${rc}" == 0 ]] || r=1
+[[ "$(cat "${STUB_DIR}/created_body" 2>/dev/null)" == $'Summary\n\nCloses #12\n\n<!-- automation-owner: orchestrate-epic -->' ]] || r=1
+has_line "LINKED #12" || r=1
+check "--owner appends the owner line to a body that lacks it" "${r}"
+
+setup $'Summary\n  <!--automation-owner:orchestrate-epic-->  \nOwned by orchestrate-epic.'
+create --owner orchestrate-epic
+r=0
+[[ "${rc}" == 0 ]] || r=1
+[[ "$(cat "${STUB_DIR}/created_body" 2>/dev/null)" == $'Summary\n  <!--automation-owner:orchestrate-epic-->  \nOwned by orchestrate-epic.' ]] || r=1
+check "--owner leaves a body that already holds the owner line unchanged" "${r}"
+
+setup $'Add the line <!-- automation-owner: orchestrate-epic --> to opt out.\n<!-- automation-owner: orchestrateXepic -->'
+create --owner orchestrate.epic
+r=0
+[[ "${rc}" == 0 ]] || r=1
+[[ "$(tail -n 1 "${STUB_DIR}/created_body" 2>/dev/null)" == "<!-- automation-owner: orchestrate.epic -->" ]] || r=1
+check "--owner appends the line when the marker appears only inline or for another id" "${r}"
+
+setup $'Summary'
+create --owner "two words"
+r=0
+[[ "${rc}" == 2 ]] || r=1
+called "POST .*/pulls " && r=1
+check "--owner with an id outside [A-Za-z0-9._-] is rejected before creating" "${r}"
+
+setup $'Summary'
+run --link 7 --owner orchestrate-epic
+r=0
+[[ "${rc}" == 2 ]] || r=1
+called "PATCH" && r=1
+check "--owner with --link is rejected without touching the PR" "${r}"
+
 exit "${fail}"
