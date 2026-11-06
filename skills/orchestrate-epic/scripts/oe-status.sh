@@ -97,7 +97,7 @@ agent_of() {
 
 # Prints the whole view once, or fails with the reason on stderr and prints nothing.
 render() {
-  local facts now line n head started since rows="" findings="" found action
+  local facts now line n head started since rows="" findings="" found action needs=""
   local done_n=0 progress_n=0 waiting_n=0 owner_n=0
   facts="$(bash "${dir}/oe-ready.sh" "${repo}" "${epic}" --facts)" || return 1
   now="${OE_NOW:-$(date -u +%s)}"
@@ -111,7 +111,17 @@ render() {
     action="$(jq -r .action <<<"${line}")" || return 1
     case "${action}" in
     done) done_n=$((done_n + 1)) ;;
-    wait-answer | parked | wait-engineer | wait-merge) owner_n=$((owner_n + 1)) ;;
+    wait-answer | parked | wait-engineer | wait-merge)
+      owner_n=$((owner_n + 1))
+      needs+="$(jq -r --arg repo "${repo}" '
+        {"wait-answer": "Answer the Owner'\''s question with a comment on the Issue",
+          "parked": "Fix it by hand, or delete its branch so the AI starts over",
+          "wait-engineer": "Close the Issue, reopen the PR, or delete its branch so the AI starts over",
+          "wait-merge": "Review the PR, run its manual checks, and merge it"}[.action] as $todo
+        | (if .action != "wait-answer" and .pr then "pull/\(.pr)" else "issues/\(.number)" end) as $path
+        | "- #\(.number) \($todo)\n  https://github.com/\($repo)/\($path)\n  why: \(.reason)"' \
+        <<<"${line}")"$'\n' || return 1
+      ;;
     wait-dependencies | wait-base) waiting_n=$((waiting_n + 1)) ;;
     *) progress_n=$((progress_n + 1)) ;;
     esac
@@ -134,7 +144,11 @@ render() {
 
   printf 'Epic #%s: %s done, %s in progress, %s waiting, %s waiting on you\n' \
     "${epic}" "${done_n}" "${progress_n}" "${waiting_n}" "${owner_n}"
-  ((owner_n > 0)) || printf 'Nothing waits on you.\n'
+  if ((owner_n > 0)); then
+    printf '%s\n' "${needs}"
+  else
+    printf 'Nothing waits on you.\n\n'
+  fi
 
   # Every column but the last is padded to its widest value, so a reason with spaces stays one column.
   printf 'ISSUE\tSTEP\tPR\tCI\tVERDICT\tATTEMPTS\tAGENT\tSINCE\tREASON\n%s' "${rows}" | awk -F '\t' '
