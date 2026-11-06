@@ -329,6 +329,28 @@ JSON
   [ "$(action_of 5)" = start-owner ]
 }
 
+@test "a failed check whose name holds a newline and tabs yields one line of four fields and no injected start command" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"x\n9; touch pwned\tstart-owner\ty": "failure"}}]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:01
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "${#lines[@]}" -eq 1 ]
+  tabs="${lines[0]//[^$'\t']/}"
+  [ "${#tabs}" -eq 3 ]
+  [ "$(action_of 5)" = start-owner ]
+}
+
 @test "a failure verdict on the pull request head gets an Owner" {
   github <<'JSON'
 {
