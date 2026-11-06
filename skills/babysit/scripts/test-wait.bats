@@ -704,6 +704,53 @@ EOF
   expect "$(ledger .api_failures)" 5
 }
 
+# The rate_limit endpoint's reset when GitHub has drained the bucket 10 minutes before it refills.
+reset_in_10_minutes=1000600
+exhausted="GraphQL: API rate limit already exceeded for user ID 1."
+
+@test "an exhausted GraphQL bucket shows the reset time, waits until it, and then polls again" {
+  fake_gh "${exhausted}" 0 "${reset_in_10_minutes}"
+  recording_sleep
+  recovering_pr_state
+  run bash "${scripts}/wait.sh" o/r 7 --max 60 --session "${token}"
+  [ "${status}" -eq 0 ]
+  grep -qF "waiting until 1970-01-12T13:56:40Z" <<<"${output}"
+  expect "$(sleeps)" "600 "
+  expect "$(jq -r .event <<<"$(tail -n1 <<<"${output}")")" ready
+  expect "$(ledger .api_failures)" 0
+}
+
+@test "a rate-limit wait longer than --max ends at --max" {
+  fake_gh "${exhausted}" 0 "${reset_in_10_minutes}"
+  recording_sleep
+  recovering_pr_state
+  run bash "${scripts}/wait.sh" o/r 7 --max 1 --session "${token}"
+  [ "${status}" -eq 0 ]
+  expect "$(sleeps)" "60 "
+  expect "$(jq -r .event <<<"$(tail -n1 <<<"${output}")")" ready
+}
+
+@test "a rate-limited call at --max returns idle without counting a failure and refreshes the heartbeat" {
+  fake_gh "${exhausted}" 0 "${reset_in_10_minutes}"
+  BABYSIT_NOW=$((BABYSIT_NOW + 5)) run bash "${scripts}/wait.sh" o/r 7 --max 0 --session "${token}"
+  [ "${status}" -eq 0 ]
+  expect "$(jq -r .event <<<"$(tail -n1 <<<"${output}")")" idle
+  expect "$(ledger .api_failures)" 0
+  expect "$(ledger .lock.heartbeat)" $((BABYSIT_NOW + 5))
+}
+
+@test "past the 8-hour mark a rate-limited call waits for the reset instead of returning at once" {
+  eight_hours_later=$((BABYSIT_NOW + 28800))
+  fake_gh "${exhausted}" 0 $((eight_hours_later + 600))
+  recording_sleep
+  recovering_pr_state
+  set_snap "${waiting}"
+  BABYSIT_NOW="${eight_hours_later}" run bash "${scripts}/wait.sh" o/r 7 --max 60 --session "${token}"
+  [ "${status}" -eq 0 ]
+  expect "$(sleeps)" "600 "
+  expect "$(jq -r .event <<<"$(tail -n1 <<<"${output}")")" limit
+}
+
 @test "ledger start refuses a live lock, takes over a stale one, and resets the session" {
   record c:IC1 reported --hash h1
   run bash "${scripts}/ledger.sh" start o/r 7 tok-2
