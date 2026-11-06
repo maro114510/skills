@@ -238,3 +238,12 @@ ended() {
   kill -0 "${first}"
   kill "${first}" "${other}"
 }
+
+@test "a wait that ends on its own leaves no record of itself" {
+  pr_15_checks_running
+
+  run bash "${oe}" wait o/r 1 --timeout 0 --running 5
+
+  [ "${status}" -eq 5 ]
+  [ -z "$(find "${OE_STATE_DIR}" -path '*/waits/*' -type f 2>/dev/null)" ]
+}
