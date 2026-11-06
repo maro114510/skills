@@ -34,7 +34,7 @@ When the caller says no human is reachable, as pr-owner does, the phases below r
 - Work in the worktree the caller names. Take no Issue Claim, and skip Phase 4.
 - Where Phase 2 or Phase 3 would ask, write every open question with its options where the caller says, and stop.
 - Implement every planned unit in order, in one run. Run One Unit does not apply.
-- Skip Phase 6.5 and Phase 7's approval, because a human approves the pushed range as a PR. Commit with the `commit` skill, telling it so, and never push.
+- Skip Phase 6.5 and Phase 7's approval, because a human approves the pushed range as a PR. Commit with the `commit` skill, and never push.
 
 ---
 
@@ -179,6 +179,7 @@ Route each part of the task in the Phase 3 plan. A playbook, relative to this sk
 Before the first edit, read `references/test-policy.md` and the routed playbook, and put the playbook's steps verbatim at the top of the todo list. Mark a step you skip `skip: <reason>`.
 
 Commit each step with the `commit` skill, giving it the type the playbook names, because it infers `test:` for a test-only diff, any `Removed-Test` trailer, and, when the work traces to an Issue, its number and whether anything is deferred so far, counting units Run One Unit deferred. Never push.
+The `commit` skill never asks, so carry every file it left uncommitted and every `reason:` line it listed into your final report.
 
 A test that is hard to write is a signal to revisit the design. Touch nothing beyond what the task requires.
 
