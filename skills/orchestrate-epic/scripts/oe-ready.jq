@@ -32,8 +32,11 @@ def indexes(f): . as $a | [range(0; length) | select($a[.] | f)];
 #
 # - A check passes when its conclusion is success, neutral, or skipped.
 # - Only the latest run of each check counts.
+# - A cancelled run does not count when a run of the same name from the same workflow started later in another check suite,
+#   as when a workflow cancels its own run in progress.
 # - The verdict status is oe's own, so it never counts as a check.
 def check_name: .name // .context // "unnamed check";
+def check_time: .startedAt // .createdAt // "";
 def check_class:
   if .__typename == "CheckRun" then
     if .status != "COMPLETED" then "pending"
@@ -48,6 +51,12 @@ def check_key($i):
   if .__typename == "StatusContext" then ["status", check_name]
   elif (.checkSuite.databaseId | type) == "number" then ["suite", (.checkSuite.databaseId | tostring), check_name]
   else ["unkeyed", ($i | tostring)] end;
+def check_workflow: .checkSuite.workflowRun.workflow.databaseId;
+# A check from an app other than Actions has no workflow, so nothing ties its runs together and none supersedes another.
+def superseded($runs):
+  .__typename == "CheckRun" and .conclusion == "CANCELLED" and check_workflow != null
+  and (check_name as $n | check_workflow as $w | check_time as $t
+    | any($runs[]; .__typename == "CheckRun" and check_name == $n and check_workflow == $w and check_time > $t));
 def ci:
   .oid as $oid
   | if .statusCheckRollup == null then {state: "none", detail: ""}
@@ -59,7 +68,9 @@ def ci:
         | select(.__typename != "StatusContext" or .context != verify_context)
         | {key: check_key($i), value: .}]
     | group_by(.key)
-    | map(map(.value) | sort_by(.startedAt // .createdAt // "") | last | {name: check_name, class: check_class})
+    | map(map(.value) | sort_by(check_time) | last)
+    | . as $latest
+    | map(select(superseded($latest) | not) | {name: check_name, class: check_class})
     | (map(select(.class == "failed") | .name)) as $failed
     | (map(select(.class == "pending") | .name)) as $pending
     | if ($failed | length) > 0 then {state: "failed", detail: ($failed | join(", "))}
