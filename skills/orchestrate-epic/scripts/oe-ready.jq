@@ -32,7 +32,7 @@ def indexes(f): . as $a | [range(0; length) | select($a[.] | f)];
 #
 # - A check passes when its conclusion is success, neutral, or skipped.
 # - Only the latest run of each check counts.
-# - A cancelled run does not count when a run of the same name started later in another check suite,
+# - A cancelled run does not count when a run of the same name from the same workflow started later in another check suite,
 #   as when a workflow cancels its own run in progress.
 # - The verdict status is oe's own, so it never counts as a check.
 def check_name: .name // .context // "unnamed check";
@@ -51,10 +51,12 @@ def check_key($i):
   if .__typename == "StatusContext" then ["status", check_name]
   elif (.checkSuite.databaseId | type) == "number" then ["suite", (.checkSuite.databaseId | tostring), check_name]
   else ["unkeyed", ($i | tostring)] end;
+def check_workflow: .checkSuite.workflowRun.workflow.databaseId;
+# A check from an app other than Actions has no workflow, so nothing ties its runs together and none supersedes another.
 def superseded($runs):
-  .__typename == "CheckRun" and .conclusion == "CANCELLED"
-  and (check_name as $n | check_time as $t
-    | any($runs[]; .__typename == "CheckRun" and check_name == $n and check_time > $t));
+  .__typename == "CheckRun" and .conclusion == "CANCELLED" and check_workflow != null
+  and (check_name as $n | check_workflow as $w | check_time as $t
+    | any($runs[]; .__typename == "CheckRun" and check_name == $n and check_workflow == $w and check_time > $t));
 def ci:
   .oid as $oid
   | if .statusCheckRollup == null then {state: "none", detail: ""}

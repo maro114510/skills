@@ -60,7 +60,7 @@ fragment HeadChecks on Commit {
       pageInfo { hasNextPage endCursor }
       nodes {
         __typename
-        ... on CheckRun { name status conclusion startedAt checkSuite { databaseId } }
+        ... on CheckRun { name status conclusion startedAt checkSuite { databaseId workflowRun { workflow { databaseId } } } }
         ... on StatusContext { context state createdAt }
       }
     }
