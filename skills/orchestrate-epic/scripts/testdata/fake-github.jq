@@ -57,7 +57,7 @@
 # | pushed_during_read | Whether a new head arrived after the pull request list was read | false |
 # | committed | The commit time of its head | Same as opened |
 # | checks | Check name to result on its head | No checks |
-# | check_runs | Further check runs on its head, each with name, result, suite, and started, so one name can run in several check suites | None |
+# | check_runs | Further check runs on its head, each with name, result, suite, started, and optionally the workflow that ran it, so one name can run in several check suites | None |
 # | verdicts | oe/verify states on its head, newest first | None |
 # | reviews | Changes requested reviews, each with by, at, and body | None |
 # | approvals | Approved reviews, each with by, at, and the sha it approved | None |
@@ -85,7 +85,8 @@ def status_context($context; $state):
 def rollup_nodes:
   if .checks == null and .check_runs == null and .statuses == null then null
   else [(.checks // {} | to_entries[] | check_run(.key; .value)),
-      (.check_runs[]? | check_run(.name; .result) + {startedAt: (.started | time), checkSuite: {databaseId: .suite}}),
+      (.check_runs[]? | check_run(.name; .result) + {startedAt: (.started | time),
+        checkSuite: {databaseId: .suite, workflowRun: (if .workflow then {workflow: {databaseId: .workflow}} else null end)}}),
       (.statuses // {} | to_entries[] | status_context(.key; .value))]
   end;
 
