@@ -260,6 +260,7 @@ def classify:
 # | pr | The pull request opened from the branch after the latest claim, or null |
 # | head | The full SHA of that pull request's open head, or null |
 # | ci, verdict | The CI state and the oe/verify state of that head, or null |
+# | starts | Verifier starts on that head, or null |
 # | attempts | Owner attempts after the latest claim, or null for a closed Issue |
 # | started | Epoch seconds when the Issue entered its step, or null when no read shows it |
 #
@@ -273,7 +274,7 @@ def facts:
   if .data.repository.issue.state == "CLOSED" then .data.repository.issue | {number, action: "done", reason: "closed"}
   else issue_state
     | (next_action | split("\t")) as [$n, $action, $reason]
-    | {number, action: $action, reason: $reason, pr, head: .head.oid, ci: .head.ci, verdict: .head.verdict, attempts,
+    | {number, action: $action, reason: $reason, pr, head: .head.oid, ci: .head.ci, verdict: .head.verdict, starts: .head.starts, attempts,
         started: (
           if $action == "wait-answer" then .question_at | epoch
           elif $action == "wait-ci" or $action == "start-verifier" or $action == "wait-merge" then .head.pushed

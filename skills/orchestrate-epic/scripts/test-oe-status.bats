@@ -53,6 +53,24 @@ verdict_record() {
     '{kind: "verdict", at: "2027-01-15T07:30:00Z", sha: $sha, state: $state, findings: $findings}' >>"$(record_file "$1")"
 }
 
+# Starts agent $2, owner or verifier, on Issue $1 the way oe start leaves it:
+# a running session holds the Epic's lock, and the agent's worktree exists, on the Issue branch for an Owner and detached for a Verifier.
+# The test's working directory becomes the clone the session runs in.
+agent_running() {
+  local wt="${tmp}/clone-oe/issue-$1"
+  git init -q "${tmp}/clone"
+  git -C "${tmp}/clone" -c user.name=test -c user.email=test@example.com commit -q --no-verify --allow-empty -m base
+  if [ "$2" = owner ]; then
+    git -C "${tmp}/clone" worktree add -q -b "feat/issue-$1" "${wt}"
+  else
+    git -C "${tmp}/clone" worktree add -q --detach "${wt}"
+  fi
+  cd "${tmp}/clone" || return 1
+  sleep 600 >/dev/null 2>&1 3>&- &
+  sessions+=("$!")
+  OE_SESSION_PID="$!" bash "${oe}" lock acquire o/r 1 >/dev/null
+}
+
 # Prints the row of Issue $1 from the output, or nothing.
 row_of() {
   printf '%s\n' "${lines[@]}" | while read -r issue rest; do
@@ -99,6 +117,140 @@ JSON
   records 5 claim@07:00 attempt@07:01
   verdict_record 5 bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb50 failure $'criterion 1 -> none\ncriterion 2 -> [behavior] bats passed'
   records 6 claim@07:00 attempt@07:02
+}
+
+@test "with nothing waiting on the owner, the first line counts the Issues by state and the next says nothing waits, above the table" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [
+    {"number": 5, "closed": true},
+    {"number": 6, "branch": true,
+      "pull_requests": [{"number": 60, "opened": "07:10", "checks": {"test": "in_progress"}}]},
+    {"number": 7, "blocked_by": [{"number": 6, "state": "open"}]}
+  ]
+}
+JSON
+  records 6 claim@07:00 attempt@07:01
+
+  run --separate-stderr bash "${oe}" status o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "${lines[0]}" = "Epic #1: 1 done, 1 in progress, 1 waiting, 0 waiting on you" ]
+  [ "${lines[1]}" = "Nothing waits on you." ]
+  printf '%s\n' "${lines[2]}" | grep -q '^ISSUE  *STEP '
+}
+
+@test "an open question shows under the first line with the action, the Issue's URL, and why it stopped" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [
+    {"number": 5, "branch": true,
+      "comments": [{"by": "OWNER", "at": "07:05", "body": "<!-- oe:question -->\nWhich option?"}],
+      "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}}]}
+  ]
+}
+JSON
+  records 5 claim@07:00 attempt@07:01
+
+  run --separate-stderr bash "${oe}" status o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "${lines[0]}" = "Epic #1: 0 done, 0 in progress, 0 waiting, 1 waiting on you" ]
+  [ "${lines[1]}" = "- #5 Answer the Owner's question with a comment on the Issue" ]
+  [ "${lines[2]}" = "  https://github.com/o/r/issues/5" ]
+  [ "${lines[3]}" = "  why: the question has no unmarked comment from a trusted role yet" ]
+  printf '%s\n' "${lines[4]}" | grep -q '^ISSUE  *STEP '
+}
+
+@test "a parked Issue with a PR shows under the first line with the action, the PR's URL, and why it stopped" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [
+    {"number": 5, "branch": true,
+      "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["failure"]}]}
+  ]
+}
+JSON
+  records 5 claim@07:00 attempt@07:01 attempt@07:20 attempt@07:40
+
+  run --separate-stderr bash "${oe}" status o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "${lines[0]}" = "Epic #1: 0 done, 0 in progress, 0 waiting, 1 waiting on you" ]
+  [ "${lines[1]}" = "- #5 Fix it by hand, or delete its branch so the AI starts over" ]
+  [ "${lines[2]}" = "  https://github.com/o/r/pull/50" ]
+  [ "${lines[3]}" = "  why: 3 attempts used; still: failure verdict on bbbbbbb" ]
+}
+
+@test "an Issue waiting for an engineer or for the merge shows under the first line, in Issue order" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [
+    {"number": 5, "branch": true,
+      "pull_requests": [{"number": 50, "state": "closed", "opened": "07:10"}]},
+    {"number": 6, "branch": true,
+      "pull_requests": [{"number": 60, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"]}]}
+  ]
+}
+JSON
+  records 5 claim@07:00 attempt@07:01
+  records 6 claim@07:00 attempt@07:01
+
+  run --separate-stderr bash "${oe}" status o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "${lines[0]}" = "Epic #1: 0 done, 0 in progress, 0 waiting, 2 waiting on you" ]
+  [ "${lines[1]}" = "- #5 Close the Issue, reopen the PR, or delete its branch so the AI starts over" ]
+  [ "${lines[2]}" = "  https://github.com/o/r/pull/50" ]
+  [ "${lines[3]}" = "  why: PR #50 closed without merging" ]
+  [ "${lines[4]}" = "- #6 Review the PR, run its manual checks, and merge it" ]
+  [ "${lines[5]}" = "  https://github.com/o/r/pull/60" ]
+  [ "${lines[6]}" = "  why: success verdict on bbbbbbb" ]
+}
+
+@test "an Issue whose Owner runs shows that Owner and its current attempt instead of the next action, and counts in progress" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{"number": 5, "branch": true}]
+}
+JSON
+  # The Owner's attempt record is written before it starts, and it has pushed no PR yet.
+  records 5 claim@07:00 attempt@07:01
+  agent_running 5 owner
+
+  run --separate-stderr bash "${oe}" status o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "${lines[0]}" = "Epic #1: 0 done, 1 in progress, 0 waiting, 0 waiting on you" ]
+  [ "$(column_of 5 2)" = running ]
+  [ "$(column_of 5 6)" = 1/3 ]
+  [ "$(column_of 5 7)" = owner ]
+  [ "$(column_of 5 9)" = "Owner attempt 1 of 3" ]
+}
+
+@test "an Issue whose Verifier runs its last start shows that Verifier and its start, not a park waiting on the owner" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{"number": 5, "branch": true,
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["pending", "pending"]}]}]
+}
+JSON
+  records 5 claim@07:00 attempt@07:01
+  agent_running 5 verifier
+
+  run --separate-stderr bash "${oe}" status o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "${lines[0]}" = "Epic #1: 0 done, 1 in progress, 0 waiting, 0 waiting on you" ]
+  [ "$(column_of 5 2)" = running ]
+  [ "$(column_of 5 7)" = verifier ]
+  [ "$(column_of 5 9)" = "Verifier start 2 of 2 on bbbbbbb" ]
 }
 
 @test "every Issue shows its step, PR, CI result, verdict, attempts, agent, time in step, and reason" {
