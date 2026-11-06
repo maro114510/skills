@@ -187,3 +187,54 @@ JSON
 
   [ "${status}" -eq 2 ]
 }
+
+# Starts oe wait for Epic $1 in the background with a long timeout, and prints its process ID.
+# The new wait polls once a second, so it stays in its loop until stopped.
+background_wait() {
+  OE_WAIT_INTERVAL=1 bash "${oe}" wait o/r "$1" --timeout 600 --running 5 >/dev/null 2>&1 3>&- &
+  echo $! >>"${BATS_TEST_TMPDIR}/waits"
+  echo $!
+}
+
+# Stops every wait a test started, so a failed test leaves none running.
+teardown() {
+  [ -e "${BATS_TEST_TMPDIR}/waits" ] || return 0
+  while read -r pid; do
+    pkill -P "${pid}" 2>/dev/null || true
+    kill "${pid}" 2>/dev/null || true
+  done <"${BATS_TEST_TMPDIR}/waits"
+}
+
+# Succeeds once process $1 has ended, within about five seconds.
+ended() {
+  local _
+  for _ in $(seq 50); do
+    kill -0 "$1" 2>/dev/null || return 0
+    sleep 0.1
+  done
+  return 1
+}
+
+@test "a second wait for the same Epic stops the first, so at most one runs" {
+  pr_15_checks_running
+  first="$(background_wait 1)"
+  sleep 1
+
+  second="$(background_wait 1)"
+
+  ended "${first}"
+  kill -0 "${second}"
+  kill "${second}"
+}
+
+@test "a wait for another Epic leaves the first running" {
+  pr_15_checks_running
+  first="$(background_wait 1)"
+  sleep 1
+
+  other="$(background_wait 2)"
+  sleep 1
+
+  kill -0 "${first}"
+  kill "${first}" "${other}"
+}
