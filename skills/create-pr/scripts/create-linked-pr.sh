@@ -41,6 +41,8 @@ done
 
 # The owner line is written only into the body of a PR this script creates.
 [[ -n "${owner_id}" && -n "${link_pr}" ]] && usage
+# Same id charset as babysit's pr-state.sh, which reads the line.
+[[ -z "${owner_id}" || "${owner_id}" =~ ^[A-Za-z0-9._-]+$ ]] || usage
 
 # --link takes the PR's URL as well as its number; the URL names the repository.
 if [[ -z "${repo}" && "${link_pr}" =~ ^https?://[^/]+/([^/]+/[^/]+)/pull/[0-9]+ ]]; then
@@ -220,6 +222,13 @@ fi
 if [[ -z "${base}" ]]; then
   [[ -n "${branch}" ]] && base="$(git config --get "branch.${branch}.gh-merge-base" 2>/dev/null)"
   [[ -n "${base}" ]] || base="${default}"
+fi
+
+# --owner appends the owner line when the body lacks it, so a writer that forgot the line still opens an owned PR.
+if [[ -n "${owner_id}" ]] &&
+  ! grep -Eq "^[[:space:]]*<!--[[:space:]]*automation-owner:[[:space:]]*${owner_id//./\\.}[[:space:]]*-->[[:space:]]*$" "${tmp}"; then
+  [[ -s "${tmp}" && -n "$(tail -c 1 "${tmp}")" ]] && echo >>"${tmp}"
+  printf '\n<!-- automation-owner: %s -->\n' "${owner_id}" >>"${tmp}"
 fi
 
 issues="$(closing "${tmp}")"
