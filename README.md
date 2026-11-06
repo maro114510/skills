@@ -28,6 +28,7 @@ gh skill install maro114510/skills --agent claude-code --scope user
 | `locate` | Find the local worktree, branch, and current state for a pull request or Issue URL before working on it. |
 | `manage-design-documents` | Decide whether a change needs a Design Doc, an ADR, both, or neither, and keep them small and free of metadata Git already holds. |
 | `orchestrate-epic` | Turn an Epic's child Issues into verified PRs in dependency order, leaving every merge to a human. |
+| `pick-next` | Pick what to work on next in the current repository, and say what waits on you and what is blocked. |
 | `pr-doc-review-pe` | Review design documents from a Principal Engineer perspective. |
 | `pr-review-pe` | Review code diffs from a Principal Engineer perspective. |
 | `research-transfer-checker` | Check whether a claim stays within the scope of its cited research. |
