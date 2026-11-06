@@ -101,6 +101,28 @@ JSON
   records 6 claim@07:00 attempt@07:02
 }
 
+@test "with nothing waiting on the owner, the first line counts the Issues by state and the next says nothing waits, above the table" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [
+    {"number": 5, "closed": true},
+    {"number": 6, "branch": true,
+      "pull_requests": [{"number": 60, "opened": "07:10", "checks": {"test": "in_progress"}}]},
+    {"number": 7, "blocked_by": [{"number": 6, "state": "open"}]}
+  ]
+}
+JSON
+  records 6 claim@07:00 attempt@07:01
+
+  run --separate-stderr bash "${oe}" status o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "${lines[0]}" = "Epic #1: 1 done, 1 in progress, 1 waiting, 0 waiting on you" ]
+  [ "${lines[1]}" = "Nothing waits on you." ]
+  printf '%s\n' "${lines[2]}" | grep -q '^ISSUE  *STEP '
+}
+
 @test "every Issue shows its step, PR, CI result, verdict, attempts, agent, time in step, and reason" {
   three_issues
 
