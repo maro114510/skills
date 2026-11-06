@@ -49,8 +49,10 @@ EOF
 #   --subs <completed>/<total>      makes it an Epic with that progress
 #   --assignee <login>              an assignee
 #   --branch <name>                 a branch GitHub links to it
+#   --more <connection>             GitHub holds one more node of that connection than the read returns
+# Every connection's totalCount matches its nodes unless --more says otherwise.
 issue() {
-  local num="$1" title="$2" blocked='[]' blocks='[]' parent=null subs='{"total":0,"completed":0}' assignees='[]' branches='[]'
+  local num="$1" title="$2" blocked='[]' blocks='[]' parent=null subs='{"total":0,"completed":0}' assignees='[]' branches='[]' more=''
   shift 2
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -63,6 +65,7 @@ issue() {
     --subs) subs="$(jq -nc --argjson c "${2%/*}" --argjson t "${2#*/}" '{completed: $c, total: $t}')" ;;
     --assignee) assignees="$(jq -c --arg l "$2" '. + [{login: $l}]' <<<"${assignees}")" ;;
     --branch) branches="$(jq -c --arg b "$2" '. + [{ref: {name: $b}}]' <<<"${branches}")" ;;
+    --more) more="$2" ;;
     *)
       echo "unknown issue option $1" >&2
       return 1
@@ -72,9 +75,12 @@ issue() {
   done
   jq -nc --argjson n "${num}" --arg t "${title}" --argjson blocked "${blocked}" --argjson blocks "${blocks}" \
     --argjson parent "${parent}" --argjson subs "${subs}" --argjson assignees "${assignees}" --argjson branches "${branches}" \
+    --arg more "${more}" \
     '{number: $n, title: $t, url: ("https://github.com/o/r/issues/" + ($n | tostring)), body: ("Body of " + $t),
       assignees: {nodes: $assignees}, parent: $parent, subIssuesSummary: $subs,
-      blockedBy: {nodes: $blocked}, blocking: {nodes: $blocks}, linkedBranches: {nodes: $branches}}' >>"${issues}"
+      blockedBy: {nodes: $blocked}, blocking: {nodes: $blocks}, linkedBranches: {nodes: $branches}}
+     | reduce ("assignees", "blockedBy", "blocking", "linkedBranches") as $c (.;
+         .[$c].totalCount = (.[$c].nodes | length) + (if $c == $more then 1 else 0 end))' >>"${issues}"
 }
 
 # Adds open pull request $1 titled $2 from branch $3 with checks $4 (SUCCESS, FAILURE, PENDING, or none).
@@ -290,6 +296,18 @@ expect() {
   expect "${status}" 0
   expect "$(field '.next[0] | {kind, title, url, body}')" '{"kind":"issue","title":"Explainable","url":"https://github.com/o/r/issues/7","body":"Body of Explainable"}'
   expect "$(field '.repo')" o/r
+}
+
+@test "an Issue with more blockers, blocked Issues, or linked branches than one read returns exits 1 naming it" {
+  local connection
+  for connection in blockedBy blocking linkedBranches; do
+    : >"${issues}"
+    issue 1 "Fine"
+    issue 2 "Too many" --more "${connection}"
+    run bash "${target}"
+    expect "${status}" 1
+    expect "$(grep -c 'Issue 2 ' <<<"${output}")" 1
+  done
 }
 
 @test "a GitHub read that fails exits 1" {
