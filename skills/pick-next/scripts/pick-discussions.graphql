@@ -1,0 +1,19 @@
+# The read of every open Discussion in pick-next, one page per call; gh api --paginate supplies $endCursor.
+# pick.sh runs it only with --discussions.
+query($owner: String!, $repo: String!, $endCursor: String) {
+  repository(owner: $owner, name: $repo) {
+    discussions(states: OPEN, first: 100, after: $endCursor, orderBy: {field: CREATED_AT, direction: ASC}) {
+      pageInfo { hasNextPage endCursor }
+      nodes {
+        number
+        title
+        url
+        body
+        updatedAt
+        # null when the category takes no answers.
+        isAnswered
+        category { name }
+      }
+    }
+  }
+}

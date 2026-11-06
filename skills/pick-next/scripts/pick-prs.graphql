@@ -1,0 +1,20 @@
+# The read of every open pull request in pick-next, one page per call; gh api --paginate supplies $endCursor.
+query($owner: String!, $repo: String!, $endCursor: String) {
+  repository(owner: $owner, name: $repo) {
+    pullRequests(states: OPEN, first: 100, after: $endCursor, orderBy: {field: CREATED_AT, direction: ASC}) {
+      pageInfo { hasNextPage endCursor }
+      nodes {
+        number
+        title
+        url
+        body
+        isDraft
+        headRefName
+        reviewDecision
+        # pick.sh fails on a pull request whose totalCount exceeds the nodes read, rather than offer an Issue it closes.
+        closingIssuesReferences(first: 20) { totalCount nodes { number } }
+        commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
+      }
+    }
+  }
+}

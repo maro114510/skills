@@ -1,0 +1,23 @@
+# The read of every open Issue in pick-next, one page per call; gh api --paginate supplies $endCursor.
+query($owner: String!, $repo: String!, $endCursor: String) {
+  viewer { login }
+  repository(owner: $owner, name: $repo) {
+    issues(states: OPEN, first: 100, after: $endCursor, orderBy: {field: CREATED_AT, direction: ASC}) {
+      pageInfo { hasNextPage endCursor }
+      nodes {
+        number
+        title
+        url
+        body
+        # GitHub allows at most 10 assignees, so one page holds them all.
+        assignees(first: 10) { nodes { login } }
+        parent { number title subIssuesSummary { completed total } }
+        subIssuesSummary { completed total }
+        # pick.sh fails on an Issue whose totalCount exceeds the nodes read, rather than rank it on partial relations.
+        blockedBy(first: 100) { totalCount nodes { number title state } }
+        blocking(first: 100) { totalCount nodes { number state } }
+        linkedBranches(first: 100) { totalCount nodes { ref { name } } }
+      }
+    }
+  }
+}
