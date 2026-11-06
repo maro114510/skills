@@ -268,7 +268,9 @@ recorded() {
   bystander=$!
   echo "${bystander}" >>"${BATS_TEST_TMPDIR}/waits"
   record="$(find "${OE_STATE_DIR}" -path '*/waits/*' -type f)"
-  sed "s/^${first} /${bystander} /" "${record}" >"${record}.new" && mv "${record}.new" "${record}"
+  # ps prints start times to the second, so the first wait's start time could match a bystander started in the same second.
+  start_no_process_has="Thu Jan  1 00:00:00 1970"
+  printf '%s %s\n' "${bystander}" "${start_no_process_has}" >"${record}"
 
   run bash "${oe}" wait o/r 1 --timeout 0 --running 5
 
