@@ -45,7 +45,7 @@ exit code 3 (gh 一時障害) も同様に停止し、ユーザーに手動指�
 未検出の場合は `$LOCAL_REPO_PATH=""` とし、以降の git コマンドは `gh` API に差し替える。
 
 ```bash
-ghq list --full-path 2>/dev/null | grep -F "/$REPO_SLUG$" | head -1
+ghq list --full-path --exact "$REPO_SLUG" 2>/dev/null | head -1
 ```
 
 ## Step 2: データ収集
