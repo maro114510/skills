@@ -17,8 +17,8 @@ It only reads: never create, switch, edit, or close an Issue, PR, branch, or wor
 
 ## Steps
 
-1. Run `bash <skills-root>/create-pr/scripts/lang.sh [<value after lang in $ARGUMENTS>]`. On a non-zero exit, show its output and stop. Write the reply in the language it prints.
-2. Run `bash <scripts>/pick.sh [--limit <value after limit in $ARGUMENTS>]` from the repository. It prints one JSON object, already grouped and ordered by `<scripts>/pick.jq`.
+1. Run `bash <skills-root>/create-pr/scripts/lang.sh [<value after lang in $ARGUMENTS>]`. On a non-zero exit, show its output and stop. Write the whole reply, headings included, in the language its first word names.
+2. Run `bash <scripts>/pick.sh [--limit <value after limit in $ARGUMENTS>]` from the repository. It prints one JSON object, already grouped and ordered by `<scripts>/pick.jq`, holding at most 3 items each in `next` and `blocked` unless a limit is given.
 
    | Exit | Action |
    |---|---|
@@ -30,27 +30,26 @@ It only reads: never create, switch, edit, or close an Issue, PR, branch, or wor
 
    | Group | JSON | Each item says |
    |---|---|---|
-   | Waits on you | `owner` | What the PR changes, and what the owner does now: review and merge it, or mark the draft ready |
+   | Waits on you | `owner` | What the PR changes, then the owner's action: mark it ready when `isDraft` is true, otherwise review and merge it. Its checks passed or never ran, so it waits only on the owner |
    | Start next | `next` | What the work does and why it matters now |
-   | Blocked | `blocked` | What the work does, and what it waits on, described the same way |
+   | Blocked | `blocked` | What the work does, why it matters now, and each Issue in `blockedBy` it waits on |
    | Local state | `local` | The worktree path, its branch, and that it holds uncommitted changes |
 
    - Keep the JSON's order, which is the ranking. Never reorder, add, or drop an item.
-   - Under Start next and Blocked, when `nextTotal` or `blockedTotal` exceeds the items shown, end with how many more there are.
+   - Under Start next and Blocked, when `nextTotal` or `blockedTotal` exceeds the items shown, end with the difference as the number of items not shown.
 
 ## Writing an Item
 
 The owner must understand every item without opening GitHub.
 
-- Start with what the work does, in plain words drawn from `title` and `body`, and never with a number.
-- Give why it matters now from the signals that put it there:
+- Start with what the work does, in plain words drawn from `title` and `body`, and never with a number. A `blockedBy` entry has only a `title`, so reword it and end it with its reference.
+- Give why it matters now from the signals present on the item, and when none is present, say only what it does:
 
   | Signal | Say |
   |---|---|
-  | `inProgress` | Work already started: name the worktree or the PR's state from `pr` |
+  | `inProgress` | Work already started: the worktree in `worktrees`, the PR's state in `pr`, or, with neither, that it is assigned to you |
   | `unblocks` above 0 | How many waiting Issues it frees |
-  | `epic` with `completed` above 0 | Which larger effort it moves forward, by what that effort does, and its progress |
+  | `epic` with `completed` above 0 | Which larger effort it moves forward, by what that effort does, and its progress as `completed` of `total` |
 
 - Put the Issue or PR reference only at the end, as `(Issue <number>)` or `(PR <number>)`, never alone.
-- Name local state that changes the pick on the item itself: a worktree with `dirty: true` holds uncommitted changes, and a PR in `pr` whose `checks` is `FAILURE` needs repair before new work.
-- For a blocked item, describe each blocker in `blockedBy` by what it does, then its number.
+- Name local state that changes the pick on the item itself: a worktree with `dirty: true` holds uncommitted changes, and a PR whose `pr.checks` is `FAILURE` needs repair before new work.
