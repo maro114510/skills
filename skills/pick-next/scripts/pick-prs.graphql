@@ -11,7 +11,8 @@ query($owner: String!, $repo: String!, $endCursor: String) {
         isDraft
         headRefName
         reviewDecision
-        closingIssuesReferences(first: 20) { nodes { number } }
+        # pick.sh fails on a pull request whose totalCount exceeds the nodes read, rather than offer an Issue it closes.
+        closingIssuesReferences(first: 20) { totalCount nodes { number } }
         commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
       }
     }

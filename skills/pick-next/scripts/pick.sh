@@ -9,7 +9,8 @@
 # Reads, in order: every open Issue (pick-issues.graphql), every open pull request (pick-prs.graphql), with
 # --discussions every open Discussion (pick-discussions.graphql), and git worktree list with git status of each
 # worktree. A detached worktree has no branch and is skipped.
-# Exit: 0 printed, 1 GitHub or a worktree could not be read, or an Issue has more relations than one read returns,
+# Exit: 0 printed, 1 GitHub or a worktree could not be read, or an Issue has more relations or a pull request more
+#   closing Issues than one read returns,
 #   2 usage error or an origin not on GitHub.
 set -uo pipefail
 
@@ -62,6 +63,9 @@ over="$(jq -r '[.nodes[] | select(any(.blockedBy, .blocking, .linkedBranches; .t
   | .number] | map(tostring) | join(", ")' <<<"${issues}")" || fail "unexpected Issue read"
 [[ -z "${over}" ]] || fail "Issue ${over} has more blockers, blocked Issues, or linked branches than one read returns"
 prs="$(read_all pick-prs.graphql pullRequests)" || fail "cannot read the open pull requests of ${owner}/${repo}"
+over="$(jq -r '[.nodes[] | select(.closingIssuesReferences | .totalCount > (.nodes | length))
+  | .number] | map(tostring) | join(", ")' <<<"${prs}")" || fail "unexpected pull request read"
+[[ -z "${over}" ]] || fail "pull request ${over} closes more Issues than one read returns"
 discussion_read=null
 if [[ "${discussions}" == true ]]; then
   discussion_read="$(read_all pick-discussions.graphql discussions)" ||
