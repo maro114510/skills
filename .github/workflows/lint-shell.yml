@@ -6,14 +6,16 @@ on:
     paths:
       - '**.sh'
       - '**.bats'
-      - 'tests/implement-repro/**'
+      - 'skills/*/scripts/**'
+      - 'tests/**'
       - '.shellcheckrc'
       - '.github/workflows/lint-shell.yml'
   pull_request:
     paths:
       - '**.sh'
       - '**.bats'
-      - 'tests/implement-repro/**'
+      - 'skills/*/scripts/**'
+      - 'tests/**'
       - '.shellcheckrc'
       - '.github/workflows/lint-shell.yml'
 
