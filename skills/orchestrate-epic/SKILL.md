@@ -123,7 +123,7 @@ Pick the first row whose tools you have, by the tool names and parameters you se
 - In batch, the calls return once every agent of the batch has ended, so the slowest agent delays every other Issue. Handle each returned agent as the "An agent ended" wake below, then go to 3.1 without a wait. Run 3.3 only on a pass that started no agent.
 - Codex wakes no idle session: neither an ended agent nor an exited command starts a turn. So in Codex never end your turn before Step 4 is done. An agent that ends arrives as a message after a poll returns: stop the wait by writing Ctrl-C, `\u0003`, to its session, then handle the agent as the "An agent ended" wake.
 - Never fork your conversation into a Codex agent, because a Verifier must see only its brief. Codex reports an ended agent as a message from its `task_name`, which names the Issue.
-- Codex refuses a spawn once its thread limit is reached, by default 3 agents with `fork_turns` and 6 with `fork_context`, so keep `max-agents` at or below it and say so when you lower it. A refused spawn counts as a non-zero exit in its row. With `fork_context`, an ended agent holds its slot until you call `close_agent` on it, so do that in the "An agent ended" wake.
+- Codex refuses a spawn once its thread limit is reached, by default 3 agents with `fork_turns` and 6 with `fork_context`, so keep `max-agents` at or below it and say so when you lower it. After a refused spawn, run `oe worktree remove <n>` and start no agent for that Issue this pass. With `fork_context`, an ended agent holds its slot until you call `close_agent` on it, so do that in the "An agent ended" wake.
 
 ### 3.3 Wait
 
