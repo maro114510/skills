@@ -16,7 +16,8 @@
 #
 # Output
 #
-# - Each line holds an Issue number, an action, and a reason, separated by tabs.
+# - Each line holds an Issue number, an action, a reason, and the oe start command that the action runs, separated by tabs.
+#   The command is empty for an action that starts no agent.
 # - Lines are sorted by Issue number.
 # - oe-ready.jq lists every action and the row it comes from.
 #
@@ -173,8 +174,34 @@ IFS=$'\t' read -r default_name default_sha default_ci default_detail <<<"${defau
 # and each pull request's own CI still runs on its merge base.
 gate_reason=""
 if [[ "${default_ci}" == failed ]]; then
-  gate_reason="checks failed on ${default_name} head ${default_sha:0:7}: ${default_detail}"
+  gate_reason="checks failed on ${default_name} head ${default_sha:0:7}: ${default_detail//[$'\t\r']/ }"
 fi
+
+# Prints $1 in single quotes, so a shell reads it back unchanged in any locale.
+shell_quote() {
+  local q="'\\''"
+  printf "'%s'" "${1//\'/${q}}"
+}
+
+# Prints out's lines with a fourth field: the oe start command for an action that starts an agent, and nothing otherwise.
+# The command is complete and quoted, so a session that lost SKILL.md can run it as printed.
+with_start() {
+  local n action reason start lines=""
+  while IFS=$'\t' read -r n action reason; do
+    [[ -n "${n}" ]] || continue
+    # A start command runs as printed, so a line that is not exactly what classify writes fails the read instead.
+    [[ "${n}" =~ ^[1-9][0-9]*$ && "${action}" =~ ^[a-z-]+$ && "${reason}" != *$'\t'* ]] ||
+      fail "unexpected line for Issue ${n}"
+    case "${action}" in
+    claim) start="owner ${repo} ${n} --claim $(shell_quote "${reason}")" ;;
+    start-owner) start="owner ${repo} ${n} $(shell_quote "${reason}")" ;;
+    start-verifier) start="verifier ${repo} ${n}" ;;
+    *) start="" ;;
+    esac
+    lines+="$(printf '%s\t%s\t%s\t%s' "${n}" "${action}" "${reason}" "${start:+bash $(shell_quote "${dir}/oe") start ${start}}")"$'\n'
+  done <<<"$1"
+  printf '%s' "${lines}"
+}
 
 sorted=()
 if [[ ${#issues[@]} -gt 0 ]]; then
@@ -193,7 +220,11 @@ if [[ -n "${gate_reason}" ]]; then
         '{number: $n, action: "wait-base", reason: $reason}')"$'\n' || fail "cannot format Issue #${n}"
     fi
   done
-  printf '%s' "${out}"
+  if [[ "${entry}" == classify ]]; then
+    with_start "${out}"
+  else
+    printf '%s' "${out}"
+  fi
   exit 0
 fi
 
@@ -246,4 +277,8 @@ for n in ${sorted[@]+"${sorted[@]}"}; do
     fail "Issue #${n} read failed: $(head -n1 "${err}")"
   out+="${line}"$'\n'
 done
-printf '%s' "${out}"
+if [[ "${entry}" == classify ]]; then
+  with_start "${out}"
+else
+  printf '%s' "${out}"
+fi

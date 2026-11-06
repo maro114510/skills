@@ -7,7 +7,7 @@
 # | locks.git | One ref per Epic that a session holds | oe lock; read by oe status through lock_held |
 # | records/<repo-key>/<issue>.jsonl | One Issue's records, oldest first, one JSON object per line | oe claim, oe attempt, oe verdict; dropped by oe forget |
 # | boards/<repo-key>/<epic> | The Herdr pane of the Epic's board and the server it is on, as JSON | oe board, which overwrites it |
-# | waits/<repo-key>/<epic> | The process ID and start time of the Epic's latest oe wait | oe wait, which stops that process first and drops the file when it ends on its own |
+# | waits/<repo-key>/<epic> | The process ID and start time of the Epic's latest oe wait | oe wait, which stops that process first and drops the file when it ends on its own; oe lock release stops that process |
 #
 # - The state directory is OE_STATE_DIR when set, and orchestrate-epic under XDG_STATE_HOME or ~/.local/state otherwise.
 #   Either default lies outside every checkout, so no agent's worktree ever holds the state.
@@ -149,4 +149,38 @@ lock_held() {
   [[ -d "$(lock_store)" ]] || return 1
   blob="$(git --git-dir="$(lock_store)" rev-parse --quiet --verify "$(lock_ref "$1" "$2")")" || return 1
   lock_holder_running "${blob}"
+}
+
+# Prints the record file of the oe wait for Epic $2 in repository $1.
+wait_record() {
+  local key
+  key="$(repo_key "$1")" || return 1
+  printf '%s/waits/%s/%s' "$(state_dir)" "${key}" "$2"
+}
+
+# Prints process $1 and every process below it.
+process_tree() {
+  local child
+  printf '%s\n' "$1"
+  for child in $(pgrep -P "$1" 2>/dev/null); do
+    process_tree "${child}"
+  done
+}
+
+# Stops the oe wait recorded for Epic $2 in repository $1, unless it is process $3.
+# - The record holds the process ID and its start time, so a reused process ID is never stopped.
+# - The wait is suspended while its tree is read, then killed before anything below it,
+#   so it never sees a failed poll and exits 1, and runs no exit trap that could drop a record a newer wait just wrote.
+# - It gets KILL, not TERM: bash 5 prints "Terminated" when it reaps a child that TERM killed, before any trap runs.
+stop_recorded_wait() {
+  local file pid lstart tree
+  file="$(wait_record "$1" "$2")" || return 0
+  read -r pid lstart 2>/dev/null <"${file}" || return 0
+  [[ "${pid}" =~ ^[1-9][0-9]*$ && "${pid}" != "${3:-}" && -n "${lstart:-}" ]] || return 0
+  [[ "$(process_start "${pid}")" == "${lstart}" ]] || return 0
+  kill -STOP "${pid}" 2>/dev/null || true
+  tree="$(process_tree "${pid}")"
+  kill -KILL "${pid}" 2>/dev/null || true
+  # shellcheck disable=SC2086 # one process ID per word
+  kill -TERM ${tree} 2>/dev/null || true
 }
