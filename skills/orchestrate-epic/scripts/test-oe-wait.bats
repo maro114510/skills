@@ -189,14 +189,16 @@ JSON
 }
 
 # Starts oe wait for Epic $1 in the background with a long timeout, and prints its process ID.
-# The new wait polls once a second, so it stays in its loop until stopped.
+# Its output goes to wait-<pid>.out, and it polls once a second, so it stays in its loop until stopped.
 background_wait() {
-  OE_WAIT_INTERVAL=1 bash "${oe}" wait o/r "$1" --timeout 600 --running 5 >/dev/null 2>&1 3>&- &
+  local out="${BATS_TEST_TMPDIR}/wait.$$.${RANDOM}.out"
+  OE_WAIT_INTERVAL=1 bash "${oe}" wait o/r "$1" --timeout 600 --running 5 >"${out}" 2>&1 3>&- &
   echo $! >>"${BATS_TEST_TMPDIR}/waits"
+  mv "${out}" "${BATS_TEST_TMPDIR}/wait-$!.out"
   echo $!
 }
 
-# Stops every wait a test started, so a failed test leaves none running.
+# Stops every wait a test started, with its process tree, so a failed test leaves none running.
 teardown() {
   [ -e "${BATS_TEST_TMPDIR}/waits" ] || return 0
   while read -r pid; do
@@ -215,28 +217,65 @@ ended() {
   return 1
 }
 
-@test "a second wait for the same Epic stops the first, so at most one runs" {
+# Succeeds once oe wait has recorded process $1 for an Epic, within about five seconds.
+recorded() {
+  local _
+  for _ in $(seq 50); do
+    find "${OE_STATE_DIR}" -path '*/waits/*' -type f -exec grep -qx "$1 .*" {} \; -print 2>/dev/null | grep -q . && return 0
+    sleep 0.1
+  done
+  return 1
+}
+
+@test "a second wait for the same Epic stops the first quietly, so at most one runs" {
   pr_15_checks_running
   first="$(background_wait 1)"
-  sleep 1
+  recorded "${first}"
 
   second="$(background_wait 1)"
 
   ended "${first}"
+  [ ! -s "${BATS_TEST_TMPDIR}/wait-${first}.out" ]
   kill -0 "${second}"
-  kill "${second}"
 }
 
 @test "a wait for another Epic leaves the first running" {
   pr_15_checks_running
   first="$(background_wait 1)"
-  sleep 1
+  recorded "${first}"
 
   other="$(background_wait 2)"
-  sleep 1
+  recorded "${other}"
 
   kill -0 "${first}"
-  kill "${first}" "${other}"
+}
+
+@test "an invalid wait leaves the running one alone" {
+  pr_15_checks_running
+  first="$(background_wait 1)"
+  recorded "${first}"
+
+  run env OE_WAIT_INTERVAL=soon bash "${oe}" wait o/r 1 --timeout 0
+
+  [ "${status}" -eq 2 ]
+  kill -0 "${first}"
+}
+
+@test "a recorded process that is no longer a wait is left running" {
+  pr_15_checks_running
+  first="$(background_wait 1)"
+  recorded "${first}"
+  kill "${first}"
+  ended "${first}"
+  sleep 30 &
+  bystander=$!
+  echo "${bystander}" >>"${BATS_TEST_TMPDIR}/waits"
+  record="$(find "${OE_STATE_DIR}" -path '*/waits/*' -type f)"
+  sed "s/^${first} /${bystander} /" "${record}" >"${record}.new" && mv "${record}.new" "${record}"
+
+  run bash "${oe}" wait o/r 1 --timeout 0 --running 5
+
+  kill -0 "${bystander}"
 }
 
 @test "a wait that ends on its own leaves no record of itself" {
