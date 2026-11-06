@@ -210,7 +210,8 @@ def issue_state:
 #   - A Changes requested review
 #   - A review-thread comment
 # - A listed bot wrote a finding after the latest attempt, its round is unused, and no trusted user approved the head
-def act($action; $reason): "\(.number)\t\($action)\t\($reason)";
+# A reason quotes check names and logins from GitHub, so tabs and line breaks in it become spaces and cannot add a field or a line.
+def act($action; $reason): "\(.number)\t\($action)\t\($reason | gsub("[\t\r\n]"; " "))";
 def next_action:
   if .closed then act("done"; "closed")
   elif .merged_pr != null then act("wait-engineer"; "PR #\(.merged_pr) merged; the Issue is still open")
