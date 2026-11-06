@@ -97,7 +97,8 @@ agent_of() {
 
 # Prints the whole view once, or fails with the reason on stderr and prints nothing.
 render() {
-  local facts now line n head started since rows="" findings="" found
+  local facts now line n head started since rows="" findings="" found action
+  local done_n=0 progress_n=0 waiting_n=0 owner_n=0
   facts="$(bash "${dir}/oe-ready.sh" "${repo}" "${epic}" --facts)" || return 1
   now="${OE_NOW:-$(date -u +%s)}"
   held=no
@@ -107,6 +108,13 @@ render() {
   while read -r line; do
     [[ -n "${line}" ]] || continue
     n="$(jq -r .number <<<"${line}")" || return 1
+    action="$(jq -r .action <<<"${line}")" || return 1
+    case "${action}" in
+    done) done_n=$((done_n + 1)) ;;
+    wait-answer | parked | wait-engineer | wait-merge) owner_n=$((owner_n + 1)) ;;
+    wait-dependencies | wait-base) waiting_n=$((waiting_n + 1)) ;;
+    *) progress_n=$((progress_n + 1)) ;;
+    esac
     started="$(jq -r '.started // empty' <<<"${line}")" || return 1
     since=-
     [[ -z "${started}" ]] || since="$(duration "$((now - started))")"
@@ -123,6 +131,10 @@ render() {
       [[ -z "${found}" ]] || findings+=$'\n'"#${n} failure verdict on ${head:0:7}:"$'\n'"  ${found//$'\n'/$'\n'  }"$'\n'
     fi
   done <<<"${facts}"
+
+  printf 'Epic #%s: %s done, %s in progress, %s waiting, %s waiting on you\n' \
+    "${epic}" "${done_n}" "${progress_n}" "${waiting_n}" "${owner_n}"
+  ((owner_n > 0)) || printf 'Nothing waits on you.\n'
 
   # Every column but the last is padded to its widest value, so a reason with spaces stays one column.
   printf 'ISSUE\tSTEP\tPR\tCI\tVERDICT\tATTEMPTS\tAGENT\tSINCE\tREASON\n%s' "${rows}" | awk -F '\t' '
