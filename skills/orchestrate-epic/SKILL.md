@@ -14,8 +14,6 @@ argument-hint: "epic <number|url> [repo <owner/repo>] [max-agents <n>]"
 
 # orchestrate-epic
 
-This file ends with the line `<!-- end of orchestrate-epic -->`. If you cannot see that line, your harness cut the file short, as Codex does after 8,000 bytes for a skill from a plugin: read the whole file from its path before doing anything else.
-
 Drive an Epic's child Issues to verified PRs, one step per fresh agent, with every state read from GitHub and from oe's records on this host.
 
 `<skill-dir>` is the directory containing this file, and `<skills-root>` is its parent.
@@ -83,35 +81,27 @@ Pass `--running` for every Issue whose agent is running. Act on the exit code:
 |---|---|
 | 0 | Go to 3.2 with the lines |
 | 1 | A GitHub read failed and decides nothing. Start nothing and go to 3.3 |
-| 3 | The default branch head has no checks. End the session as in Step 4, because CI is required |
 | 2 or other | End the session as in Step 4 and show the error |
 
 When every line's action is `done`, end the session as in Step 4.
+When no agent runs and every line's action is `done`, `parked`, `wait-merge`, `wait-answer`, `wait-dependencies`, or `wait-engineer`, end the session as in Step 4 without starting a wait, because only a person moves those Issues and a rerun resumes from GitHub. Any other action, such as `wait-ci` or `wait-base`, keeps the loop running.
 When the Issue numbers and actions differ from the previous pass, set `<idle-since>` to now.
 
 ### 3.2 Start agents
 
-Each line holds an Issue number, an action, and a reason, separated by tabs.
+Each line holds an Issue number, an action, a reason, and a start command, separated by tabs.
 Take the lines whose action is `start-verifier`, then `start-owner`, then `claim`, and start one agent per line while fewer than `max-agents` agents run.
-Every other action needs nothing from this session: `done`, `parked`, and each `wait-*` wait for CI, an answer, a dependency, or an engineer.
+Every other action has an empty start command and needs nothing from this session: `done`, `parked`, and each `wait-*` wait for CI, an answer, a dependency, or an engineer.
 
-| Action | Commands, in order | Then start |
-|---|---|---|
-| `claim` | `oe claim <repo> <n>`, then the `start-owner` row. Exit 4 means the branch already exists: skip the Issue this pass | pr-owner |
-| `start-owner` | `oe attempt <repo> <n>`; `oe worktree add <n>`, which prints `<path>`; `oe brief owner <repo> <n> <path> "<reason>"` | pr-owner |
-| `start-verifier` | `oe worktree add <n> --detach`, which prints `<path>`; `oe brief verifier <repo> <n> <path>` | pr-verify |
-
-- Any non-zero exit in a row means: start no agent for that Issue this pass. When a worktree was already created, run `oe worktree remove <n>`. Exit 4 from `oe attempt` or `oe brief` is a limit or a moved head that the next `oe ready` reports.
-- `oe brief verifier` records the start on GitHub, so start the Verifier right after it, and never build its brief any other way.
-
+For each line to start, run its start command exactly as printed, an `oe start` call that runs every step the start needs.
+On exit 0 it printed the agent's whole prompt; on any other exit, start no agent for that Issue this pass, because the next `oe ready` reports a limit or a moved head.
 Start the agent in the background where your harness can, so the loop keeps running while it works:
 
-| Role | Agent type | Prompt |
+| Start command | Agent type | Prompt |
 |---|---|---|
-| pr-owner | `pr-owner` | The canonical path of `<skills-root>/pr-owner/SKILL.md` on one line, then the brief `oe brief` printed |
-| pr-verify | `pr-verify` | The canonical path of `<skills-root>/pr-verify/SKILL.md` on one line, then the brief `oe brief` printed |
+| `oe start owner …` | `pr-owner` | Exactly what `oe start` printed |
+| `oe start verifier …` | `pr-verify` | Exactly what `oe start` printed |
 
-- Resolve the canonical path with `cd <skills-root>/<skill> && pwd -P`.
 - Start it with the tool the Harnesses table below names for the tools you have.
 - Never give an agent anything else: no PR body, earlier report, or summary, because a Verifier must see only the Issue and the code.
 
@@ -133,7 +123,7 @@ Pick the first row whose tools you have, by the tool names and parameters you se
 - In batch, the calls return once every agent of the batch has ended, so the slowest agent delays every other Issue. Handle each returned agent as the "An agent ended" wake below, then go to 3.1 without a wait. Run 3.3 only on a pass that started no agent.
 - Codex wakes no idle session: neither an ended agent nor an exited command starts a turn. So in Codex never end your turn before Step 4 is done. An agent that ends arrives as a message after a poll returns: stop the wait by writing Ctrl-C, `\u0003`, to its session, then handle the agent as the "An agent ended" wake.
 - Never fork your conversation into a Codex agent, because a Verifier must see only its brief. Codex reports an ended agent as a message from its `task_name`, which names the Issue.
-- Codex refuses a spawn once its thread limit is reached, by default 3 agents with `fork_turns` and 6 with `fork_context`, so keep `max-agents` at or below it and say so when you lower it. A refused spawn counts as a non-zero exit in its row. With `fork_context`, an ended agent holds its slot until you call `close_agent` on it, so do that in the "An agent ended" wake.
+- Codex refuses a spawn once its thread limit is reached, by default 3 agents with `fork_turns` and 6 with `fork_context`, so keep `max-agents` at or below it and say so when you lower it. After a refused spawn, run `oe worktree remove <n>` and start no agent for that Issue this pass. With `fork_context`, an ended agent holds its slot until you call `close_agent` on it, so do that in the "An agent ended" wake.
 
 ### 3.3 Wait
 
@@ -151,14 +141,13 @@ The harness wakes you when an agent ends or the wait returns, and whichever come
 | An agent ended | `oe worktree remove <n>` for its Issue, drop it from the running agents, set `<idle-since>` to now, and go to 3.1. Its final line goes into the summary only |
 | The wait exited 0 or 5 | Go to 3.1 |
 | The wait exited 1 | Go to 3.1, and end the session as in Step 4 after three exit-1 wakes in a row |
-| The wait exited 3 | End the session as in Step 4 |
 | The harness stopped the wait, as on a time limit | Go to 3.1 |
 | The wait exited 6 | No agent runs and nothing changed for the idle limit: end the session as in Step 4 |
 | A wait you already replaced returns | Ignore it |
 
 ## Step 4: End the session
 
-1. Start nothing new. Wait for each running agent to end, in Codex with `wait_agent`, then run `oe worktree remove <n>` for it.
+1. Start nothing new, and stop the wait if one is still running, so it never wakes the session after the lock is released. Wait for each running agent to end, in Codex with `wait_agent`, then run `oe worktree remove <n>` for it.
 2. When every Issue is `done`, run `oe forget <repo> <epic>`. Report a non-zero exit and go on.
 3. Release the lock: `oe lock release <repo> <epic> <token>`.
 4. Report to the user in Japanese with the format below, from the last `oe ready` output and the agents' final lines.
@@ -166,13 +155,11 @@ The harness wakes you when an agent ends or the wait returns, and whichever come
 ```markdown
 ## orchestrate-epic: Epic #<epic> を終了しました
 
-終了理由: <すべて完了 | 変化がないまま待機上限に到達 | default branch にチェックが無い | GitHub の読み取りが続けて失敗>
+終了理由: <すべて完了 | 人の対応待ちのみ | 変化がないまま待機上限に到達 | GitHub の読み取りが続けて失敗>
 
 | Issue | 状態 | 次に必要なこと |
 |---|---|---|
-| #<n> | <oe ready の action> | <例: PR #<pr> のレビューと merge / 質問への回答 / parked の理由を見て判断> |
+| #<n> | <oe ready の action> | <例: PR #<pr> のレビューと merge / 質問への回答 / parked の理由を見て判断 / 依存 Issue #<m> の完了 / merge 済み PR のある Issue の確認> |
 
 再開するには同じホストで同じ引数でもう一度実行してください。状態は GitHub とこのホストの記録から読み直します。
 ```
-
-<!-- end of orchestrate-epic -->

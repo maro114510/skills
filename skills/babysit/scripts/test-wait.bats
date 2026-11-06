@@ -8,6 +8,8 @@ setup() {
   git init -q "${BATS_TEST_TMPDIR}/repo"
   cd "${BATS_TEST_TMPDIR}/repo" || return 1
   export BABYSIT_NOW=1000000
+  # A park wait makes itself must not show a real notification.
+  export BABYSIT_OSASCRIPT="${BATS_TEST_TMPDIR}/no-osascript"
   token="tok-1"
   snap="${BATS_TEST_TMPDIR}/snap.json"
   # READY: open, mergeable, one passing Actions check, approved without a review body, nothing pending.
@@ -22,7 +24,7 @@ setup() {
     "reviews":[{"id":"R1","author":"bob","authorAssociation":"MEMBER","body":"","bodyHash":"e0","createdAt":"2026-01-01T00:00:00Z",
       "url":"u","isMinimized":false,"state":"APPROVED"}],
     "comments":[]}'
-  comment='{"id":"IC1","author":"carol","authorAssociation":"NONE","body":"please rename","bodyHash":"h1",
+  comment='{"id":"IC1","author":"carol","authorAssociation":"COLLABORATOR","body":"please rename","bodyHash":"h1",
     "createdAt":"2026-01-02T00:00:00Z","url":"u","isMinimized":false}'
   bash "${scripts}/ledger.sh" start o/r 7 "${token}" >/dev/null
   set_snap '.'
@@ -132,7 +134,8 @@ waiting='.reviewRequests = [{reviewer: "dave", type: "User"}]'
   poll
   expect "$(event)" comment
   expect "$(field .key)" "c:IC1"
-  expect "$(field .comment.body)" "please rename"
+  expect "$(field .comment.excerpt)" "please rename"
+  expect "$(field .comment.bodyLength)" 13
   report_current
   poll
   expect "$(event)" idle
@@ -195,11 +198,74 @@ waiting='.reviewRequests = [{reviewer: "dave", type: "User"}]'
   expect "$(event)" idle
 }
 
+# A comment created before the session started (BABYSIT_NOW is 1970-01-12) and one by the viewer "me".
+# shellcheck disable=SC2016 # $comment is a jq variable bound by set_snap.
+before_start='.comments = [($comment | .id = "IC_old" | .author = "bot" | .bodyHash = "o1" | .createdAt = "1970-01-01T00:00:00Z"),
+  ($comment | .id = "IC_mine" | .author = "me" | .bodyHash = "m1")]'
+
+@test "watch fires no event for comments older than the session or by the viewer, and the report lists them" {
+  set_snap "${waiting} | ${before_start}"
+  poll
+  expect "$(event)" idle
+  set_snap "${before_start} | .state = \"CLOSED\""
+  poll
+  expect "$(event)" closed
+  expect "$(field '[.report.muted[] | "\(.key) \(.author)"] | join(",")')" "c:IC_old bot,c:IC_mine me"
+}
+
+@test "watch fires an edit to a comment older than the session" {
+  set_snap "${waiting} | ${before_start}"
+  poll
+  expect "$(event)" idle
+  set_snap "${waiting} | ${before_start} | .comments[0].bodyHash = \"o2\""
+  poll
+  expect "$(event)" comment
+  expect "$(field .key)" c:IC_old
+}
+
+@test "a comment event carries a 200-character excerpt and the body length, not the body" {
+  set_snap "${waiting} | .comments = [\$comment | .body = (\"x\" * 5000)]"
+  poll
+  expect "$(event)" comment
+  expect "$(field '.comment.excerpt | length')" 200
+  expect "$(field .comment.bodyLength)" 5000
+  expect "$(field .hash)" h1
+  expect "$(field '.comment | has("body")')" false
+}
+
+@test "a new watch session takes a new baseline" {
+  set_snap "${waiting} | ${before_start}"
+  poll
+  expect "$(ledger '.baseline["c:IC_old"]')" o1
+  bash "${scripts}/ledger.sh" stop o/r 7 "${token}"
+  bash "${scripts}/ledger.sh" start o/r 7 tok-2 >/dev/null
+  expect "$(ledger '.baseline // "none"')" none
+}
+
+@test "drive still acts on comments older than the session and on the viewer's own" {
+  set_snap "${waiting} | ${before_start}"
+  poll --mode drive
+  expect "$(field .key)" c:IC_old
+  record c:IC_old handled --hash o1
+  poll --mode drive
+  expect "$(field .key)" c:IC_mine
+}
+
+@test "an unresolved thread hidden by the baseline still blocks READY" {
+  set_snap ".threads = [{id: \"T1\", isResolved: false, path: \"a\", line: 1,
+    comments: [\$comment | .id = \"TC_old\" | .createdAt = \"1970-01-01T00:00:00Z\"]}]"
+  poll
+  expect "$(event)" idle
+  run bash "${scripts}/check.sh" o/r 7 --snapshot "${snap}"
+  expect "$(field '.event')" null
+  expect "$(field '.blockers | join(",")')" "1 unresolved review thread(s)"
+}
+
 @test "an approval without a body is not an event, and a review body is" {
   set_snap "${waiting}"
   poll
   expect "$(event)" idle
-  set_snap "${waiting} | .reviews += [{id: \"R2\", author: \"bob\", body: \"nit: naming\", bodyHash: \"r2\", state: \"COMMENTED\", isMinimized: false, createdAt: \"2026-01-03\"}]"
+  set_snap "${waiting} | .reviews += [{id: \"R2\", author: \"bob\", authorAssociation: \"MEMBER\", body: \"nit: naming\", bodyHash: \"r2\", state: \"COMMENTED\", isMinimized: false, createdAt: \"2026-01-03\"}]"
   poll
   expect "$(event)" comment
   expect "$(field .comment.kind)" review
@@ -238,6 +304,85 @@ waiting='.reviewRequests = [{reviewer: "dave", type: "User"}]'
   set_snap '.'
   poll
   expect "$(event)" ready
+}
+
+@test "a draft approved at its head stops with approved in watch and drive" {
+  set_snap '.isDraft = true | .latestReviews = [{author: "bob", state: "APPROVED", commit: "aaa"}]'
+  poll
+  expect "$(event)" approved
+  expect "$(field '.report | has("parked") and has("unresolved")')" true
+  poll --mode drive
+  expect "$(event)" approved
+  run bash "${scripts}/check.sh" o/r 7 --snapshot "${snap}"
+  expect "$(field .event.event)" approved
+}
+
+@test "an approval on an older commit is not approved" {
+  set_snap '.isDraft = true | .latestReviews = [{author: "bob", state: "APPROVED", commit: "old"}]'
+  poll
+  expect "$(event)" idle
+}
+
+@test "an approval at the head beside another reviewer's change request is not approved" {
+  set_snap '.isDraft = true | .latestReviews = [{author: "bob", state: "APPROVED", commit: "aaa"},
+    {author: "carol", state: "CHANGES_REQUESTED", commit: "aaa"}]'
+  poll
+  expect "$(event)" idle
+}
+
+@test "a bot's approval at the head is not approved" {
+  set_snap '.isDraft = true | .latestReviews = [{author: "coderabbitai", authorType: "Bot", state: "APPROVED", commit: "aaa"}]'
+  poll
+  expect "$(event)" idle
+}
+
+@test "an approval at the head with a failing check is not approved, so drive repairs it" {
+  set_snap '.latestReviews = [{author: "bob", state: "APPROVED", commit: "aaa"}]
+    | .checks[0].status = "failed"'
+  poll --mode drive
+  expect "$(event)" check_failed
+}
+
+@test "an approval at the head with a check still running is not approved" {
+  set_snap '.isDraft = true | .latestReviews = [{author: "bob", state: "APPROVED", commit: "aaa"}]
+    | .checks[0].status = "pending"'
+  poll
+  expect "$(event)" idle
+}
+
+@test "an approval at the head that conflicts with the base is not approved, so drive merges the base" {
+  set_snap '.latestReviews = [{author: "bob", state: "APPROVED", commit: "aaa"}]
+    | .mergeable = "CONFLICTING" | .mergeStateStatus = "DIRTY"'
+  poll --mode drive
+  expect "$(event)" conflict
+}
+
+@test "an approval at the head whose mergeability GitHub has not computed is not approved" {
+  set_snap '.isDraft = true | .latestReviews = [{author: "bob", state: "APPROVED", commit: "aaa"}]
+    | .mergeable = "UNKNOWN"'
+  poll
+  expect "$(event)" idle
+}
+
+@test "an approval at a head without checks waits until the head counts as having no CI" {
+  set_snap '.isDraft = true | .latestReviews = [{author: "bob", state: "APPROVED", commit: "aaa"}] | .checks = []'
+  poll
+  expect "$(event)" idle
+  BABYSIT_NOW=$((BABYSIT_NOW + 600)) poll
+  expect "$(event)" approved
+}
+
+@test "merged and closed outrank approved, and approved outranks READY" {
+  approved_at_head='.latestReviews = [{author: "bob", state: "APPROVED", commit: "aaa"}]'
+  set_snap "${approved_at_head} | .state = \"MERGED\""
+  poll
+  expect "$(event)" merged
+  set_snap "${approved_at_head} | .state = \"CLOSED\""
+  poll
+  expect "$(event)" closed
+  set_snap "${approved_at_head}"
+  poll
+  expect "$(event)" approved
 }
 
 @test "a reviewer who never started blocks READY instead of reading as zero feedback" {
@@ -300,16 +445,20 @@ waiting='.reviewRequests = [{reviewer: "dave", type: "User"}]'
     "test https://example.invalid/run/100"
 }
 
-@test "drive acts on items watch only reported, and stalls once only parked blockers remain" {
+@test "drive leaves a reported comment quiet until its text changes, and stalls once only parked blockers remain" {
   set_snap "${waiting} | .threads = [{id: \"T1\", isResolved: false, path: \"a\", line: 1, comments: [\$comment | .id = \"TC1\"]}]"
-  poll
-  expect "$(event)" comment
-  report_current
-  poll
-  expect "$(event)" idle
   poll --mode drive
   expect "$(event)" comment
-  record c:TC1 parked --hash h1
+  report_current
+  poll --mode drive
+  expect "$(event)" idle
+  run bash "${scripts}/check.sh" o/r 7 --mode drive --snapshot "${snap}"
+  expect "$(field '.report.reported[0]')" c:TC1
+  set_snap "${waiting} | .threads = [{id: \"T1\", isResolved: false, path: \"a\", line: 1,
+    comments: [\$comment | .id = \"TC1\" | .bodyHash = \"h2\"]}]"
+  poll --mode drive
+  expect "$(event)" comment
+  record c:TC1 parked --hash h2
   poll --mode drive
   expect "$(event)" stalled
   expect "$(field '.report.parked[0]')" c:TC1
@@ -321,6 +470,101 @@ waiting='.reviewRequests = [{reviewer: "dave", type: "User"}]'
   poll --mode drive
   expect "$(event)" stalled
   expect "$(field '.report.reasons["c:TC1"]')" "asks for a schema change"
+}
+
+@test "drive parks a comment whose author has no association as an untrusted author and returns no event" {
+  set_snap "${waiting} | .comments = [\$comment | .authorAssociation = \"NONE\"]"
+  poll --mode drive
+  expect "$(event)" idle
+  expect "$(ledger '.items["c:IC1"].disposition')" parked
+  expect "$(ledger '.items["c:IC1"].reason')" "untrusted author"
+  expect "$(ledger '.items["c:IC1"].hash')" h1
+}
+
+@test "drive parks a comment from a contributor, a first-timer, or an unknown association as an untrusted author" {
+  set_snap "${waiting} | .comments = [
+    (\$comment | .id = \"IC_contributor\" | .authorAssociation = \"CONTRIBUTOR\"),
+    (\$comment | .id = \"IC_first_timer\" | .authorAssociation = \"FIRST_TIMER\"),
+    (\$comment | .id = \"IC_first_contribution\" | .authorAssociation = \"FIRST_TIME_CONTRIBUTOR\"),
+    (\$comment | .id = \"IC_mannequin\" | .authorAssociation = \"MANNEQUIN\"),
+    (\$comment | .id = \"IC_unknown\" | del(.authorAssociation))]"
+  poll --mode drive
+  expect "$(event)" idle
+  for id in IC_contributor IC_first_timer IC_first_contribution IC_mannequin IC_unknown; do
+    expect "$(ledger ".items[\"c:${id}\"].reason")" "untrusted author"
+  done
+}
+
+@test "drive hands an OWNER, MEMBER, or COLLABORATOR comment over as a comment event" {
+  for association in OWNER MEMBER COLLABORATOR; do
+    set_snap "${waiting} | .comments = [\$comment | .authorAssociation = \"${association}\"]"
+    poll --mode drive
+    expect "$(event)" comment
+    expect "$(field .key)" c:IC1
+  done
+}
+
+@test "drive hands a listed review bot's comment over as a comment event although the bot has no association" {
+  for bot in coderabbitai chatgpt-codex-connector; do
+    set_snap "${waiting} | .comments = [\$comment | .author = \"${bot}\" | .authorType = \"Bot\" | .authorAssociation = \"NONE\"]"
+    poll --mode drive
+    expect "$(event)" comment
+    expect "$(field .comment.author)" "${bot}"
+  done
+}
+
+@test "drive parks a user who holds a listed bot's login, and a bot that is not listed, as untrusted authors" {
+  set_snap "${waiting} | .comments = [
+    (\$comment | .id = \"IC_user\" | .author = \"coderabbitai\" | .authorType = \"User\" | .authorAssociation = \"NONE\"),
+    (\$comment | .id = \"IC_bot\" | .author = \"renovate\" | .authorType = \"Bot\" | .authorAssociation = \"NONE\")]"
+  poll --mode drive
+  expect "$(event)" idle
+  expect "$(ledger '.items["c:IC_user"].reason')" "untrusted author"
+  expect "$(ledger '.items["c:IC_bot"].reason')" "untrusted author"
+}
+
+@test "drive parks an untrusted thread comment and review body, and stalls once only they block" {
+  set_snap "${waiting} | .threads = [{id: \"T1\", isResolved: false, path: \"a\", line: 1,
+      comments: [\$comment | .id = \"TC1\" | .authorAssociation = \"NONE\"]}]
+    | .reviews += [\$comment | .id = \"R2\" | .authorAssociation = \"NONE\" | .state = \"COMMENTED\"]"
+  poll --mode drive
+  expect "$(event)" stalled
+  expect "$(field '.report.reasons["c:TC1"]')" "untrusted author"
+  expect "$(field '.report.reasons["c:R2"]')" "untrusted author"
+}
+
+@test "drive parks an untrusted comment and returns the trusted comment after it in the same call" {
+  set_snap "${waiting} | .comments = [(\$comment | .id = \"IC_out\" | .authorAssociation = \"NONE\"),
+    (\$comment | .id = \"IC_in\" | .createdAt = \"2026-01-03T00:00:00Z\")]"
+  poll --mode drive
+  expect "$(event)" comment
+  expect "$(field .key)" c:IC_in
+  expect "$(ledger '.items["c:IC_out"].reason')" "untrusted author"
+}
+
+@test "an edited untrusted comment is parked again with its new text" {
+  record c:IC1 parked --hash h1 --reason "untrusted author"
+  set_snap "${waiting} | .comments = [\$comment | .authorAssociation = \"NONE\" | .bodyHash = \"h2\"]"
+  poll --mode drive
+  expect "$(event)" idle
+  expect "$(ledger '.items["c:IC1"].hash')" h2
+}
+
+@test "5 used rounds do not fire the limit for an untrusted comment, which is parked instead" {
+  path="$(bash "${scripts}/ledger.sh" path o/r 7)"
+  jq '.rounds = 5' "${path}" >"${path}.new" && mv "${path}.new" "${path}"
+  set_snap "${waiting} | .comments = [\$comment | .authorAssociation = \"NONE\"]"
+  poll --mode drive
+  expect "$(event)" idle
+  expect "$(ledger '.items["c:IC1"].reason')" "untrusted author"
+}
+
+@test "watch reports an untrusted comment as untrusted_comment and parks nothing" {
+  set_snap "${waiting} | .comments = [\$comment | .authorAssociation = \"NONE\"]"
+  poll
+  expect "$(event)" untrusted_comment
+  expect "$(field .key)" c:IC1
+  expect "$(ledger '.items["c:IC1"] // "none"')" none
 }
 
 @test "a re-run check waits for a newer run, which confirms a failure" {

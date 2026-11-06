@@ -30,8 +30,19 @@ if [ -n "\$expr" ]; then jq -r "\$expr" <<<"\$resp"; else echo "\$resp"; fi
 EOF
   chmod +x "${tmp}/gh"
   export BABYSIT_GH="${tmp}/gh"
+  # A stub pr-state that prints the pull request as snap.json holds it, or fails on demand.
+  printf '#!/usr/bin/env bash\n[ -e "%s/pr-state-fails" ] && exit 1\ncat "%s/snap.json"\n' "${tmp}" "${tmp}" >"${tmp}/pr-state"
+  chmod +x "${tmp}/pr-state"
+  export BABYSIT_PR_STATE="${tmp}/pr-state"
+  owned_by null
   printf 'Fixed in abc1234.\nありがとう\n' >"${tmp}/body.md"
   bash "${scripts}/ledger.sh" start o/r 7 "${token}" >/dev/null
+}
+
+# Writes a pull request whose automationOwner is the JSON value $1.
+owned_by() {
+  jq -nc --argjson owner "$1" '{repo: "o/r", number: 7, state: "OPEN", author: "me", viewer: "me",
+    isCrossRepository: false, automationOwner: $owner}' >"${tmp}/snap.json"
 }
 
 reply() {
@@ -78,6 +89,40 @@ expect() {
   expect "$(calls)" 0
 }
 
+@test "a reply on a pull request another automation owns exits 11, names it, posts nothing, and counts nothing" {
+  owned_by '"orchestrate-epic"'
+  reply --thread T1
+  [ "${status}" -eq 11 ]
+  expect "$(jq -r .posted <<<"${output}")" false
+  expect "$(jq -r .owner <<<"${output}")" orchestrate-epic
+  expect "$(calls)" 0
+  expect "$(ledger '.replies.T1 // 0')" 0
+  expect "$(ledger '.own.replies // [] | length')" 0
+}
+
+@test "a reply when the pull request cannot be read exits 1 and posts nothing" {
+  : >"${tmp}/pr-state-fails"
+  reply --conversation
+  [ "${status}" -eq 1 ]
+  expect "$(jq -r .posted <<<"${output}")" false
+  expect "$(calls)" 0
+  rm "${tmp}/pr-state-fails"
+  jq -nc '{repo: "o/r", number: 7}' >"${tmp}/snap.json"
+  reply --conversation
+  [ "${status}" -eq 1 ]
+  expect "$(calls)" 0
+}
+
+@test "an owned pull request takes no reply until a human deletes the marker, then the reply goes out" {
+  owned_by '"orchestrate-epic"'
+  reply --thread T1
+  [ "${status}" -eq 11 ]
+  owned_by null
+  reply --thread T1
+  [ "${status}" -eq 0 ]
+  expect "$(calls)" 1
+}
+
 @test "a thread reply goes to that thread, takes its comment id, and counts on the thread" {
   reply --thread T1
   [ "${status}" -eq 0 ]
@@ -120,6 +165,102 @@ expect() {
   reply --conversation
   [ "${status}" -eq 10 ]
   expect "$(calls)" 2
+}
+
+@test "a body asking CodeRabbit to approve exits 11, posts nothing, and leaves the ledger as it was" {
+  before="$(bash "${scripts}/ledger.sh" show o/r 7)"
+  printf 'Fixed in abc1234.\n@coderabbitai approve\n' >"${tmp}/body.md"
+  # A later clock makes any ledger write, even a heartbeat refresh, show up in the comparison.
+  export BABYSIT_NOW=1000100
+  reply --thread T1
+  [ "${status}" -eq 11 ]
+  expect "$(jq -r .posted <<<"${output}")" false
+  expect "$(calls)" 0
+  expect "$(bash "${scripts}/ledger.sh" show o/r 7)" "${before}"
+}
+
+@test "a body asking CodeRabbit to resolve exits 11 and posts nothing" {
+  printf '@coderabbitai resolve\n' >"${tmp}/body.md"
+  reply --conversation
+  [ "${status}" -eq 11 ]
+  expect "$(jq -r .posted <<<"${output}")" false
+  expect "$(calls)" 0
+}
+
+@test "the approval command is refused whatever its letter case" {
+  printf '@CodeRabbitAI  Approve\n' >"${tmp}/body.md"
+  reply --thread T1
+  [ "${status}" -eq 11 ]
+  expect "$(calls)" 0
+}
+
+@test "a body mentioning CodeRabbit without a command exits 11, because a bare mention already reaches the bot" {
+  printf '@coderabbitai fixed in abc1234; the approval flow is unchanged.\n' >"${tmp}/body.md"
+  reply --thread T1
+  [ "${status}" -eq 11 ]
+  expect "$(jq -r .posted <<<"${output}")" false
+  expect "$(calls)" 0
+}
+
+@test "an approval reworded around the mention exits 11 and posts nothing" {
+  for body in '@coderabbitai please approve' '@coderabbitai: approve' '@codex review and approve'; do
+    printf 'Fixed in abc1234.\n%s\n' "${body}" >"${tmp}/body.md"
+    reply --thread T1
+    [ "${status}" -eq 11 ] || {
+      echo "posted: ${body}" >&2
+      return 1
+    }
+  done
+  expect "$(calls)" 0
+}
+
+@test "a mention of any listed review bot, not only CodeRabbit, exits 11" {
+  for bot in codex chatgpt-codex-connector copilot gemini-code-assist claude cursor greptileai sourcery-ai \
+    dependabot renovate mergify kodiak; do
+    printf 'Thanks (@%s) for the note.\n' "${bot}" >"${tmp}/body.md"
+    reply --thread T1
+    [ "${status}" -eq 11 ] || {
+      echo "posted: @${bot}" >&2
+      return 1
+    }
+  done
+  expect "$(calls)" 0
+}
+
+@test "a line that starts with a slash command exits 11 and posts nothing" {
+  for cmd in '/approve' '  /lgtm' '/merge now'; do
+    printf 'Fixed in abc1234.\n%s\n' "${cmd}" >"${tmp}/body.md"
+    reply --conversation
+    [ "${status}" -eq 11 ] || {
+      echo "posted: ${cmd}" >&2
+      return 1
+    }
+  done
+  expect "$(calls)" 0
+}
+
+@test "a line that is only a re-review request to a listed bot is posted" {
+  printf 'Fixed in abc1234.\n@codex review\n' >"${tmp}/body.md"
+  reply --thread T1
+  [ "${status}" -eq 0 ]
+  printf '  @CodeRabbitAI Review  \n' >"${tmp}/body.md"
+  reply --thread T2
+  [ "${status}" -eq 0 ]
+  expect "$(calls)" 2
+}
+
+@test "an address, a longer name, or a bot named without @ is not a mention and is posted" {
+  printf 'Mail a@codex.com or ping @codexfoo; coderabbitai and codex reviewed this.\n' >"${tmp}/body.md"
+  reply --thread T1
+  [ "${status}" -eq 0 ]
+  expect "$(calls)" 1
+}
+
+@test "a path or a slash word that does not start its line is posted" {
+  printf '/tmp/x holds the log.\nRun it, then /approve is not needed.\n' >"${tmp}/body.md"
+  reply --thread T1
+  [ "${status}" -eq 0 ]
+  expect "$(calls)" 1
 }
 
 @test "no call ever resolves a thread" {

@@ -1,7 +1,7 @@
 # Interactive Shell
 
 What normal mode adds around the core phases in SKILL.md: the Issue Claim, how to ask, Phase 4, Phase 6.5, and Phase 7.
-Only normal mode reads this file; an autonomous worker never does.
+A run without a human never reads this file.
 Each section below belongs to the SKILL.md phase it names, so Phase numbers match.
 
 `<skill-dir>` is the directory containing SKILL.md, the parent of the directory holding this file.
@@ -103,7 +103,6 @@ Recheck the relevant files after setup. If the fetched base changed a material p
 ## Commit Handoff (Phases 6.5 and 7)
 
 Commit any uncommitted work with the `commit` skill, so the range holds the whole change.
-Tell it that Phase 7 classifies and approves the whole range before push, so its Step 6 does not ask about this commit.
 Give it the Issue number and whether anything is deferred, as Phase 5 says.
 
 ---
@@ -129,6 +128,7 @@ The first pass covers that full range. A second pass after a fix covers only the
    | 1 or 4 | `failed`, or `empty` (no output, which is never "no findings") | Show the printed log tail and retry once, through the harness's escalation if a sandbox blocked it. If the retry also fails, `not-run (<cause>)`; if it exits 0 with `status=reviewed`, treat it as a completed review (exit 0 row) |
    | 2 | Unsupported harness, bad path or base, or no commits in the range | `not-run (<printed reason>)` |
    | 3 | Reviewer modified the worktree or moved HEAD | Stop, show `git status` and `git log -1`, and ask the user |
+   | 5 | `incomplete`: OpenCode output ended without a `REVIEW_VERDICT:` line, so the review never finished | Show the printed output and log tail and retry once, as for exit 1. If the retry also fails, `not-run (incomplete)`; if it exits 0 with `status=reviewed`, treat it as a completed review (exit 0 row) |
 
    Only exit 0 with a `SELF_REVIEW status=reviewed` line is a completed review. Exit 0 without that line is `not-run (no result line)`.
 
@@ -151,7 +151,7 @@ Phase 6.5 ends in exactly one outcome. The reviewed HEAD is the `head=` of the l
 | `clean` | Reviewed, nothing to fix |
 | `findings-fixed` | Genuine findings were fixed and committed |
 | `findings-left` | Genuine findings remain |
-| `not-run (<reason>)` | No pass completed: exit 1, 2, or 4, an unsupported harness, or a CLI missing from PATH. Never `clean`, never silent |
+| `not-run (<reason>)` | No pass completed: exit 1, 2, 4, or 5, an unsupported harness, or a CLI missing from PATH. Never `clean`, never silent |
 
 Then proceed to Phase 6.9.
 

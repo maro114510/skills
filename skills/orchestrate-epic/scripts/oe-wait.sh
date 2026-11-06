@@ -2,7 +2,7 @@
 # oe wait
 #
 # Blocks inside one call until oe ready's next actions change, so waiting for CI or a human costs the session no tokens.
-# It reads GitHub only through oe ready, and writes nothing.
+# It reads GitHub only through oe ready, and writes only its own process record, waits/<repo-key>/<epic> in the state oe-store.sh lays out.
 #
 # Usage
 #
@@ -11,6 +11,7 @@
 # - --running is passed to oe ready, and also means an agent is still running.
 # - --timeout bounds this call, wait_timeout seconds by default.
 #   The deadline is checked before each poll, so the call can run up to one poll interval past it.
+# - Starting a wait stops an earlier oe wait for the same Epic on this host, so at most one runs.
 # - --idle-since is when the caller last saw a next action change, or when the session started, in epoch seconds.
 #   With no --running, the session is idle once idle_limit seconds have passed since then.
 # - OE_NOW sets the current time in epoch seconds, as in oe ready.
@@ -31,9 +32,9 @@
 # | 0 | An Issue's next action changed, or an Issue appeared or left | The new output |
 # | 1 | A GitHub read failed | Nothing |
 # | 2 | The arguments are invalid | Nothing |
-# | 3 | oe ready ended the session: the default branch head has no checks after no_checks_grace | The end line |
 # | 5 | The timeout passed with every next action unchanged | The latest output |
 # | 6 | The session is idle: no agent runs and idle_limit has passed since --idle-since | The latest output, as the session's summary |
+# | 137 | A later oe wait for the same Epic, or oe lock release, killed this one | Nothing |
 #
 # After exit 6 the session ends, and a rerun of orchestrate-epic resumes from GitHub, where every state lives.
 set -uo pipefail
@@ -80,6 +81,29 @@ interval="${OE_WAIT_INTERVAL:-${wait_interval}}"
 [[ "${interval}" =~ ^[0-9]+$ ]] || usage "OE_WAIT_INTERVAL must be whole seconds"
 [[ -z "${OE_NOW:-}" || "${OE_NOW}" =~ ^[0-9]+$ ]] || usage "OE_NOW must be epoch seconds"
 
+# shellcheck source-path=SCRIPTDIR
+source "${dir}/oe-store.sh"
+
+# Stops an earlier wait for this Epic on this host, then records this one, so at most one runs.
+wait_file=""
+single_wait() {
+  wait_file="$(wait_record "${repo}" "${epic}")" || return 0
+  stop_recorded_wait "${repo}" "${epic}" "$$"
+  mkdir -p "${wait_file%/*}" 2>/dev/null &&
+    printf '%s %s\n' "$$" "$(process_start "$$")" >"${wait_file}" 2>/dev/null || true
+}
+
+# Drops this wait's record when it ends on its own, unless a later wait already replaced it.
+# shellcheck disable=SC2329 # invoked by the EXIT trap below
+drop_wait_record() {
+  local pid _
+  [[ -n "${wait_file}" ]] && read -r pid _ 2>/dev/null <"${wait_file}" && [[ "${pid}" == "$$" ]] && rm -f "${wait_file}"
+  return 0
+}
+trap drop_wait_record EXIT
+trap 'trap - EXIT; exit 143' TERM
+single_wait
+
 now() {
   printf '%s' "${OE_NOW:-$(date -u +%s)}"
 }
@@ -89,20 +113,10 @@ emit() {
   [[ -z "${current}" ]] || printf '%s\n' "${current}"
 }
 
-# Runs oe ready into $current, and ends the wait when oe ready ended the session or failed.
+# Runs oe ready into $current, and ends the wait when oe ready failed.
 # oe ready's own stderr names the failed read.
 poll() {
-  local rc
-  current="$(bash "${dir}/oe-ready.sh" "${repo}" "${epic}" ${running[@]+"${running[@]}"})"
-  rc=$?
-  case "${rc}" in
-  0) ;;
-  3)
-    emit
-    exit 3
-    ;;
-  *) exit 1 ;;
-  esac
+  current="$(bash "${dir}/oe-ready.sh" "${repo}" "${epic}" ${running[@]+"${running[@]}"})" || exit 1
 }
 
 # Prints the Issue number and action of every line of $1, the part of oe ready's output a change is judged on.

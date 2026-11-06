@@ -11,14 +11,27 @@ argument-hint: "<pr-number or url>"
 コード差分 PR を 4 phase (Brainstorm → Self-Refine → Filter → Meta-Review) でレビューする orchestrator。
 本スキルは Layer-1 (コード差分) に専念する。
 
+## 厳守事項
+
+- `pr-review-pe-identify-pr.sh` は PATH に含まれている。スクリプト名のみで呼び出すこと。`bash <path>` 形式や推測パス（.claude/skills/.../bin/ など）は絶対に使わない。
+- `$LOCAL_REPO_PATH` が確定するまでカレントディレクトリを起点にしたファイル読み込みや git コマンド（`git log`・`git blame`・`Read <相対パス>`・`rg`・`git grep` 等）を実行してはならない。
+- specialist に渡す `<skill-dir>` は、スキル起動時にハーネスが提示するこのスキルの base directory（この SKILL.md があるディレクトリ）の絶対パスに置き換える（インストール先を推測しない。`skills/pr-review-pe/references/` のようなカレントディレクトリ相対パスも使わない）。
+
+## 参照ファイル
+
+| ファイル | 読むとき |
+|---|---|
+| `references/ai-specific-risks.md` | Step 3 で correctness-reviewer と security-reviewer に読ませる |
+| `references/observability-gap.md` | Step 3 で operational-reviewer に読ませる |
+| `references/existing-pattern-matching.md` | Step 6 の Filter で既存パターン一致の候補を扱うとき |
+| `references/specialist-restart.md` | Step 4 または Step 5 で specialist を再起動するとき |
+
 ## Step 1: PR 特定とメタ取得
 
 決定論的なパースとメタ取得は `bin/pr-review-pe-identify-pr.sh` に集約する。
 `$ARGUMENTS` を渡すと、PR 番号・GitHub URL・未指定の 3 分岐を解決して `gh pr view` のメタ JSON を返す。
 
 ```bash
-# このスクリプトは PATH に含まれている。スクリプト名のみで呼び出すこと。
-# `bash <path>` 形式や推測パス（.claude/skills/.../bin/ など）は絶対に使わない。
 pr-review-pe-identify-pr.sh "$ARGUMENTS"
 ```
 
@@ -32,11 +45,8 @@ exit code 3 (gh 一時障害) も同様に停止し、ユーザーに手動指�
 未検出の場合は `$LOCAL_REPO_PATH=""` とし、以降の git コマンドは `gh` API に差し替える。
 
 ```bash
-ghq list --full-path 2>/dev/null | grep -F "/$REPO_SLUG$" | head -1
+ghq list --full-path --exact "$REPO_SLUG" 2>/dev/null | head -1
 ```
-
-**絶対遵守**: `$LOCAL_REPO_PATH` が確定するまでカレントディレクトリを起点にしたファイル読み込みや
-git コマンド（`git log`・`git blame`・`Read <相対パス>`・`rg`・`git grep` 等）を実行してはならない。
 
 ## Step 2: データ収集
 
@@ -111,8 +121,7 @@ $SPECIALISTS に含まれる specialist のみを `Agent` (subagent_type: genera
 各プロンプトは責務に絞り、低 confidence でも候補に含めるよう指示する。
 返却は `path:line` + 引用元 + 仮重要度を必須とする。
 各 specialist の冒頭で `Read <skill-dir>/references/<該当>.md` を読ませてからレビューさせる。
-`<skill-dir>` はスキル起動時にハーネスが提示するこのスキルの base directory（この SKILL.md があるディレクトリ）の絶対パスに置き換えて渡す
-（インストール先を推測しない。`skills/pr-review-pe/references/` のようなカレントディレクトリ相対パスも使わない）。
+`<skill-dir>` は厳守事項のとおり絶対パスに置き換えて渡す。
 
 - **correctness-reviewer**: PR description と実装の一致、ビジネスロジック、状態遷移、条件分岐、エッジケース処理。
   必須サブ質問は null/nil/空配列/0/負数/MaxInt/空文字列の全パストレースと、AI 生成テストの確認バイアス (テストと実装が同じ誤前提を共有していないか)。
@@ -141,15 +150,13 @@ specialist 返却を 1 件ずつ surface / mid / deep に分類する。
 - **deep**: 設計層 (責務漏れ、依存方向逆転、Observability Gap、リリース順依存、並行安全性、API 契約破壊)。
 
 deep 候補が 0〜2 件しかない specialist は「go deeper: design-layer の漏れを 2 件追加で出す」プロンプトで再起動する。
-Agent 呼び出しはデフォルトでステートレスであり、この再起動は同一 Agent の続行ではなく新規の独立した Agent 起動である。
-そのため再起動時は「go deeper」の追加指示だけでなく、diff・specialist の役割定義・Step 3 で与えた関連コンテキストを含む元のプロンプト全体と、その specialist 自身がそれまでに返した候補一覧を併せて再送する。
+再起動は `references/specialist-restart.md` に従う。
 
 ## Step 5: Mandatory Pillars 確認
 
 Filter の前に、以下 4 Pillar を specialist 候補から確認する。
 各 Pillar について候補がゼロの場合は、担当 specialist を「force-investigate this pillar: <pillar name>」プロンプトで再起動する。
-Step 4 の go deeper 再起動と同様、Agent 呼び出しはデフォルトでステートレスであり、この再起動も同一 Agent の続行ではなく新規の独立した Agent 起動である。
-そのため再起動時は「force-investigate」の追加指示だけでなく、diff・specialist の役割定義・Step 3 で与えた関連コンテキストを含む元のプロンプト全体と、その specialist 自身がそれまでに返した候補一覧を併せて再送する。
+再起動は `references/specialist-restart.md` に従う。
 再起動後も発見なければ `N/A: scope confirmed — <確認した具体的根拠 (ファイルパス・ADR ID・メトリクス名) を 20 語以上で記録>` とする。
 
 1. **Existing-code alignment**: ADR・CLAUDE.md・AGENTS.md・既存実装パターン・ユビキタス言語との整合。担当: architecture-reviewer。

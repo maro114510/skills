@@ -10,6 +10,17 @@ def no_ci_seconds: 600;
 def session_seconds: 28800;
 def max_rounds: 5;
 def stuck_repairs: 2;
+# An event carries this much of a comment body; the skill reads the rest from pr-state only when it acts.
+def excerpt_chars: 200;
+
+# The review bots whose comments drive may act on, by GraphQL login. The same logins as
+# skills/orchestrate-epic/scripts/oe-bots.jq, which cannot be included here because it needs oe-records.jq.
+def review_bots: ["coderabbitai", "chatgpt-codex-connector"];
+
+# Succeeds for a comment drive may act on: one from a repository owner, member, or collaborator, or from a
+# listed review bot, which has no association. A user who takes a bot's login is not a Bot.
+def trusted: (.authorAssociation | IN("OWNER", "MEMBER", "COLLABORATOR"))
+  or (.authorType == "Bot" and (.author | IN(review_bots[])));
 
 # The item keys of the ledger that still describe this head; comment keys never carry a head.
 def relevant($head; $gen): select(startswith("c:") or endswith("@\($head)#\($gen)") or . == "x:\($head)#\($gen)");
@@ -25,8 +36,9 @@ def relevant($head; $gen): select(startswith("c:") or endswith("@\($head)#\($gen
 | $head.gen as $g
 | (($l.heads // {}) | if .[$s.head] == null then .[$s.head] = {first_seen: $t} else . end) as $heads
 | ($l.items // {}) as $items
-# In watch a report settles an item; in drive only a handled or parked one is settled, so drive still acts.
-| (if $mode == "drive" then ["handled", "parked"] else ["reported", "handled", "parked"] end) as $done
+| ($l.started_at // null) as $started
+# A report settles an item in both modes: drive.sh reports a review bot's status comment instead of acting on it.
+| ["reported", "handled", "parked"] as $done
 | def settled($key; $hash):
     ($items[$key] // null) as $d
     | $d != null and ($d.disposition | IN($done[])) and ($hash == null or $d.hash == $hash);
@@ -59,9 +71,24 @@ def relevant($head; $gen): select(startswith("c:") or endswith("@\($head)#\($gen
       | .comments[] | . + {kind: "thread_comment", thread: $th.id, path: $th.path, line: $th.line}) ]
   | map(select((.isMinimized | not) and (own_reply(.) | not)))
   | sort_by(.createdAt // "")
-  | map(("c:" + .id) as $k | select(settled($k; .bodyHash) | not)
-      | {row: 10, event: "comment", key: $k, hash: .bodyHash,
-         comment: {id, kind, author, authorAssociation, url, body, thread, path, line, review_state: .state}})
+  as $comments
+
+# In watch, comments created before the session started are a baseline taken on the first poll; each stays
+# quiet until its body hash changes. The viewer's own comments stay quiet too. Drive acts on both.
+| (if $mode == "watch" and $started != null
+   then $l.baseline // ([$comments[] | select((.createdAt // "" | try fromdateiso8601 catch null) as $c
+                          | $c != null and $c < $started) | {key: ("c:" + .id), value: .bodyHash}] | from_entries)
+   else null end) as $baseline
+| def muted: $baseline != null
+    and (($s.viewer != null and .author == $s.viewer) or $baseline["c:" + .id] == .bodyHash);
+  [$comments[] | select(muted) | {key: ("c:" + .id), author}] as $muted
+| [ $comments[] | select(muted | not)
+    | ("c:" + .id) as $k | select(settled($k; .bodyHash) | not)
+    # An untrusted author's comment sorts first and never counts toward the limit, so drive parks it before acting.
+    | (if trusted then {row: 10, event: "comment"} else {row: 5, event: "untrusted_comment"} end)
+    + {key: $k, hash: .bodyHash,
+       comment: {id, kind, author, authorAssociation, url, excerpt: ((.body // "")[:excerpt_chars]),
+         bodyLength: ((.body // "") | length), thread, path, line, review_state: .state}} ]
   as $comment_items
 
 | ($conflict_items + $check_items + $comment_items) as $pending
@@ -94,7 +121,6 @@ def relevant($head; $gen): select(startswith("c:") or endswith("@\($head)#\($gen
     ($s.reviews[] | select(.state == "CHANGES_REQUESTED" and (.author | IN($rejecting[]))) | "c:\(.id)")
   ] as $blocker_keys
 
-| ($l.started_at // null) as $started
 | (($started != null and ($t - $started) >= session_seconds)
    or ((($l.rounds // 0) >= max_rounds) and any($firing[]; .row | IN(6, 9, 10)))) as $limit
 | (($pending | length) == 0 and any($blocker_keys[]; ($items[.] // {}).disposition == "parked")) as $stalled
@@ -107,8 +133,16 @@ def relevant($head; $gen): select(startswith("c:") or endswith("@\($head)#\($gen
     reported: [$keys[] | select($items[.].disposition == "reported")],
     handled: [$keys[] | select($items[.].disposition == "handled")],
     unresolved: $blockers,
+    muted: $muted,
     pending: $pending_list,
     reasons: ([$keys[] | select($items[.].reason != null) | {key: ., value: $items[.].reason}] | from_entries) } as $report
+
+# Nothing dismisses an approval when a later commit is pushed, so only one on the head counts.
+# A bot's approval never counts, and a head that still needs a repair or a base merge is not approved.
+| (any($s.latestReviews[]; .state == "APPROVED" and .commit == $s.head and .authorType != "Bot")
+   and all($s.latestReviews[]; .state != "CHANGES_REQUESTED")
+   and $s.mergeable == "MERGEABLE"
+   and ($no_ci or (($s.checks | length) > 0 and all($s.checks[]; .status == "pass")))) as $approved
 
 | {repo: $s.repo, pr: $s.number, head: $s.head, gen: $g} as $base
 | def stop($name): $base + {event: $name, report: $report};
@@ -116,11 +150,12 @@ def relevant($head; $gen): select(startswith("c:") or endswith("@\($head)#\($gen
    elif $s.state == "CLOSED" then "CLOSED"
    elif ($blockers | length) == 0 then "READY"
    else "NOT_READY" end) as $status
-| { ledger: {head: $head, heads: $heads},
+| { ledger: ({head: $head, heads: $heads} + (if $baseline != null then {baseline: $baseline} else {} end)),
     status: $status,
     event: (
       if $status == "MERGED" then stop("merged")
       elif $status == "CLOSED" then stop("closed")
+      elif $approved then stop("approved")
       elif $status == "READY" then stop("ready")
       elif $limit then stop("limit")
       elif $stalled then stop("stalled")

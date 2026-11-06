@@ -12,185 +12,75 @@ argument-hint: "[repo <owner/repo>] [lang <ja|en>] [project <n>]"
 
 # create-github-issues
 
-Create a GitHub Epic and child Issues from conversation context.
-Write concise, length-capped bodies (requirements separated from specs), model dependencies explicitly, then link hierarchy and dependencies via native `gh` CLI flags and render the dependency graph in the Epic.
+Create a GitHub Epic and child Issues from conversation context, with length-capped bodies, explicit dependencies, native `gh` hierarchy and dependency links, and a dependency graph in the Epic.
 
-**Core rule that governs every step below: an Issue body may only contain facts already surfaced and approved earlier in this flow (Step 1.5 / Step 2 / Step 3). Step 4 is formatting, not authoring — never introduce a new requirement, spec detail, or dependency for the first time while writing the final Markdown body.** If you notice you need to state something new while writing a body, stop, go back to Step 3, and get it approved there first.
+**Core rule for every step: an Issue body may only contain facts already surfaced and approved in Step 1.5, 2, or 3. Step 4 is formatting, not authoring — never introduce a new requirement, spec detail, or dependency while writing a body.** If a body needs something new, go back to Step 3 and get it approved there first.
 
----
+Paths below are relative to this skill's directory. Read each reference file when its step says so.
 
 ## Step 0: Determine Output Language
 
 Before anything else, run `bash <skills-root>/create-pr/scripts/lang.sh [<value after lang in $ARGUMENTS>]`, where `<skills-root>` is the parent of this skill's directory, and on a non-zero exit show its output and stop.
 Otherwise show `Language: ` and its whole output line, such as `Language: en (git config)`, then write everything in this run in its first word, `LANG`, reading only `references/templates.<LANG>.md`.
 
----
-
 ## Step 1: Identify Repository
 
-Check `$ARGUMENTS`:
-
-- If `repo <owner/repo>` is provided, use that repository.
-- Otherwise, auto-detect from the current repository:
-
-```bash
-gh repo view --json nameWithOwner -q .nameWithOwner
-```
-
-Store the printed `owner/repo` as `REPO`.
-
-Also check `$ARGUMENTS` for `project <number>` and store it as `PROJECT_NUM` — an optional GitHub Project to link the Epic and every created Issue to, added after creation per 5.7. `gh issue create` has no `--project` flag, so linking happens after creation. Without `project`, 5.7 is skipped.
-
----
+Use `repo <owner/repo>` from `$ARGUMENTS`, or else `gh repo view --json nameWithOwner -q .nameWithOwner`, and store it as `REPO`.
+Store `project <number>` from `$ARGUMENTS`, if given, as `PROJECT_NUM`; Step 5 links to it after creation.
 
 ## Step 1.5: Specification Clarification
 
-Scan the conversation context across three axes and determine whether enough information is available to write high-quality Issues.
-
-### Evaluation Axes
+Judge whether the context is clear on each axis:
 
 | Axis | Criterion |
 |------|-----------|
 | Granularity | Can each task be implemented and merged as an independent PR? |
 | Acceptance criteria | Can completion be confirmed with numbered verification steps? |
-| Specification | Are there implementation choices that could be interpreted more than one way? |
+| Specification | Are there implementation choices that could be interpreted more than one way, where the reading changes a requirement, a dependency, or a verification outcome? |
+| Premise | Was every claim the plan rests on checked? A claim about how a tool, file, or system behaves, or about a count or usage, is unclear when the context gives no measurement, reproduction, source reference, or observed data for it |
 
-### Decision Branches
+Judge each axis on its own: a checked premise does not make any other axis clear.
 
-**All axes are clear:**
-Skip to Step 2. Do not ask any questions.
+- All clear: go to Step 2 without asking.
+- Any unclear: ask with **AskUserQuestion** in the "Step 1.5: Clarification Question Format" of `references/templates.<LANG>.md`, using only the unclear axes' subsections, with concrete answer choices per item, in one call of up to 4 questions, highest-impact first. **Stop after calling AskUserQuestion; do not proceed to Step 2 until the user responds.**
+- The user says to proceed with items unresolved: output the "Step 1.5: Warning Format" and mark those sections with its confirmation tag.
 
-**One or more axes are unclear:**
-Use **AskUserQuestion** to surface the ambiguities, following the "Step 1.5: Clarification Question Format" template in `references/templates.<LANG>.md` — use only the labeled subsection(s) for the axis/axes actually unclear, not all three unconditionally. For each unclear item, present specific answer choices (e.g., "(A) include JWT refresh in the same Issue / (B) split into a separate Issue"). Batch all unclear items into a single AskUserQuestion call (up to 4 questions); if more than 4 items are unclear, prioritize the ones with the highest impact on Issue scope.
-
-**Stop after calling AskUserQuestion. Do not proceed to Step 2 until the user has responded.**
-
-**User instructs to proceed with unresolved items:**
-Output the warning using the "Step 1.5: Warning Format" template in `references/templates.<LANG>.md`, then proceed to Step 2.
-Mark unresolved sections in Issue bodies with the confirmation tag defined in that template.
-
-Anything that stays unresolved after this step must **not** be silently decided later. Either it gets the confirmation tag, or it gets left out of the Issue entirely — never invented.
-
----
+Anything still unresolved is never decided later: it gets the confirmation tag or stays out of the Issue.
 
 ## Step 2: Structure Tasks and Dependencies
 
-Analyze the current conversation context (recent plans, investigations, TODO lists) and extract:
-
-**Epic (parent Issue)**
-- Title: one phrase that captures the entire work stream
-- Purpose: why this work is needed (background, motivation)
-- Scope: what is included in this Epic
-
-**Child Issue list**
-- **Hierarchy is at most three levels: Epic → `Tn` → `Tn.m`. A `Tn.m` is never a parent.** Every `Tn` is a leaf by default, carrying its own Requirements/Specs/Verification. When a `Tn` overflows the 5-bullet cap in Step 4, split it into a sibling `Tn` by default — for fragments the Epic-level reader would find independently interesting, or when there are only two. The one exception: a Verification list owned by an upstream authoritative document uses Step 4's point option instead of splitting — see the cap rule below. Split into `Tn.m` grandchildren instead only when three or more fragments share one cohesive theme already named by the original `Tn`. In that case `Tn` becomes a pure container: it drops its own Requirements/Specs/Verification and keeps only background, scope, and a dependency diagram of its `Tn.m` children — see Step 4's Container `Tn` body. A `Tn.m` is never split further; that overflow becomes a new sibling `Tn` instead.
-- Split each task into independently implementable and verifiable units
-- **Split a `Tn` by implement's change-unit rules as well as the 5-bullet cap.** Read `../implement/references/change-units.md` and apply its reasons, never-split list, and ordering to every task, ignoring its closing lines on the decision log and Phase 2; never copy its reasons here. A task with one reason to change and at most 5 bullets stays one `Tn` however large it is. Never judge by line count or PR size, and put no such estimate in the Step 3 summary.
-- **If the design-doc reason applies, make the document its own `Tn` and make each code `Tn` that needs it depend on it.** The doc-update `Tn` below is different: it only repairs an already-merged document.
-- Assign each a short temporary ID: `T1`, `T2`, `T3`, ... (used only during this conversation; never shown to the end reader)
-- Title and a one-line summary of each task's role in the Epic
-- For each task, capture its **requirement bullets** (what must be true — observable/functional, no implementation detail) and its **spec bullets** (only if the conversation already settled concrete technical decisions). Cap each list at 5, one line each.
-- **The cap is a split signal, not a compression target.** If a task genuinely needs more than 5 bullets to describe — or, as shown at Step 4, more than 5 distinct verification scenarios (one happy path plus several failure/retry/rollback cases is a common trigger) — that is evidence the task is doing too much for one child Issue. Three options exist. **Split** (the default): break the task into more `Tn` (e.g. "happy path" vs "error handling / compensating recovery") rather than cramming everything into one Issue or silently dropping items to fit the cap. **Compress**: rejected — never silently drop or squeeze items to fit the cap, since that discards the plan's analysis. **Point**: only when an upstream authoritative document (typically a merged, already-reviewed implementation plan) owns the full list — keep 5 verification items chosen by failure mode rather than happy path, and add a prose pointer to the document as the authoritative full list, exactly as Step 4 specifies. Without such a document, point is unavailable and split remains the default.
-- Never write step-by-step procedures (`a→b→c→d`), pseudocode, or function-level implementation detail into these bullets. That level of detail belongs in a design doc, not an Issue body — reference it by path instead.
-- **If Step 1.5's answers changed a merged design doc or implementation plan that the Issues cite, add a doc-update `Tn`** whose job is updating that document to match the answers. Give it no `depends_on` — it belongs in the earliest wave so it can start immediately, since many repositories require the document PR to merge before the implementation PRs that follow it. Every `Tn` whose content those answers changed must depend on it, directly (its `depends_on` lists the doc-update `Tn`) or transitively (through another `Tn` that depends on it directly), and must state which of the two applies. A run whose Step 1.5 changed nothing produces no such extra `Tn`.
-
-**Dependency extraction**
-- For each `Tn`, list `depends_on: [Tm, ...]` based only on dependencies explicitly stated or clearly implied in the conversation (e.g., "merge A before starting B"). Do not infer a dependency that wasn't actually discussed. A statement that a task is merely independent of unrelated *existing* code (not another `Tn`) is not a `depends_on` entry — leave it out of the dependency list entirely; it's background/requirement framing at most.
-- A grandchild `Tn.m`'s `depends_on` may only reference sibling `Tn.m` under the same parent `Tn` — never a different `Tn`'s child, and never a `Tn` itself. If work genuinely depends on something in a different theme, that dependency belongs at the `Tn` level (the whole container depends on the whole other theme), not wired directly between grandchildren across trees.
-- Compute **waves** by topological order: Wave 1 = tasks with no dependencies; Wave *k* = tasks whose dependencies all fall in Wave 1..*k-1*. Tasks in the same wave can be implemented in parallel.
-- If a cycle is detected, treat it as an unresolved ambiguity and raise it via **AskUserQuestion** before continuing — do not silently break the cycle.
-- **If splitting a task per the cap rule or the change-unit rule above, and another `Tn` already depends on the task being split, re-wire that dependency**: point it at whichever new piece represents the completion of the original scope (usually the last piece in the split's natural sequence). If it's genuinely ambiguous which piece satisfies the original dependency, depend on all of the resulting pieces rather than guessing one.
-- A dependency **between the new pieces created by a split** (e.g., "error handling" depends on the "happy path" it wraps) may be inferred from the decomposition itself — this is not the kind of invented dependency the "do not infer" rule above is guarding against, since the pieces didn't exist as separate units in the conversation to begin with.
-- **The 12-task threshold above governs rendering only (Mermaid vs. table) — it says nothing about whether one Epic is still the right unit of work.** Separately: if the dependency graph splits into two or more fully independent connected components (no `depends_on` edge between them in either direction) and the total child count is large (rule of thumb: 15+), that's a sign the work may belong in separate Epics — one per component — rather than one Epic covering several unrelated parallel tracks. Don't decide this yourself: note it as a suggestion in the Step 3 summary (see template) and let the user choose.
-
----
+Read `references/structure.md` in full first, and follow it.
+From the context, extract the Epic (title, purpose, scope) and child tasks `T1`, `T2`, ... with title, role, at most 5 requirement bullets and 5 spec bullets, and `depends_on` taken only from what the conversation stated or clearly implied. Compute waves by topological order. On a dependency cycle, ask with **AskUserQuestion** instead of breaking it.
 
 ## Step 3: Show Summary and Get Approval
 
-Use the "Step 3: Summary Format" in `references/templates.<LANG>.md`. This preview must show, per task: its `Tn` id, title, wave/dependency, one-line background, requirement bullets, spec bullets, one-line target state, and the full verification bullet list (up to 5) — plus, when a task uses Step 4's point option, the one-line prose pointer to the upstream document, so the pointer is approved at the same gate — plus a dependency preview keyed by `Tn` (real Issue numbers don't exist yet), and, for the Epic, its own one-line background and scope (included/excluded). When Step 1.5 changed a merged document and a doc-update `Tn` exists, the summary must also state that the document is currently out of sync with the answers. **Apply the same 12-task threshold as the Epic body here**: a Mermaid flowchart for 12 or fewer tasks, the compact wave table for more — the user is approving the same structure that Step 4 will render, so the two must never diverge in form.
+Use the "Step 3: Summary Format" in `references/templates.<LANG>.md`. Per task, or once for tasks that differ only in one value as the template allows, show its `Tn` id, title, wave/dependency, one-line background, requirement bullets, spec bullets, one-line target state, the full verification list, and any point-option pointer; for the Epic, its background, scope, target state, and verification; and a dependency preview keyed by `Tn` — Mermaid for 12 or fewer tasks, the wave table for more, the same form Step 4 renders. When a doc-update `Tn` exists, state that the document is out of sync with the answers. Step 4.5 is skipped by default, so approving this summary must be equivalent to approving the final bodies.
 
-This preview is allowed to be more detailed than the final Issue bodies — its job is to surface every piece of content that will end up in an Issue, so nothing new gets invented in Step 4. Because Step 4.5's full-body review is skipped by default (see Step 4.5), this is the substantive approval gate: it must carry enough detail that approving it is equivalent to approving the final bodies, not just their shape.
-
-**End your response here and wait for the user's reply.**
-**Do not proceed to Step 4 until approval is received.**
-If the user requests changes, update the summary (including the dependency graph and wave assignment if affected) and show it again before proceeding.
-
----
+**End your response here and wait for the user's reply. Do not proceed to Step 4 until approval is received.**
+On requested changes, update the summary, including the graph and waves, and show it again.
 
 ## Step 4: Generate Issue Bodies
 
-After approval, write the Markdown body for the Epic and each child Issue using the templates in `references/templates.<LANG>.md`. Use only content already approved in Step 3 — do not add, soften, or elaborate on requirements/specs while formatting.
-
-**Leaf Issues** — every non-container `Tn`, and every `Tn.m`:
-- Requirements section: the approved requirement bullets, verbatim in substance (may be copy-edited for clarity, not expanded).
-- Specs section: the approved spec bullets. Omit this section entirely if no technical decision was actually settled in the conversation — do not fill it with invented detail.
-- Dependencies section: one line referencing the sibling it depends on, or the template's "none" phrasing. Which parent it points to differs by level:
-  - `Tn`: points to the Epic for the full dependency picture.
-  - `Tn.m`: points to its parent `Tn`'s body instead — the Epic never shows grandchildren, per Step 2's dependency-scope rule.
-  Don't restate the full dependency chain here; that lives only in the parent.
-- Acceptance Criteria section: concrete, verifiable statements equivalent to "Given X, When Y, Then Z", not vague phrases like "works correctly". Cap the Verification subsection at 5 items. If the real scenarios don't fit in 5, the Step 2 options apply. **Split** (the default): go back to Step 2, split this task into more siblings or grandchildren, and re-run Step 3 approval before writing bodies again. **Compress**: rejected — never silently drop or squeeze items to fit the cap, since that discards the plan's analysis. **Point** (only when an upstream authoritative document — typically a merged, already-reviewed implementation plan — owns the full list): keep 5 items chosen by failure mode rather than happy path, and write a single prose line after the bullets — never as a sixth bullet — pointing to that document as the authoritative full list, consistent with the existing rule to add a single line linking to an existing design doc and never restate the doc inline. Without such a document, point is unavailable and split remains the default.
-- Verification has two lists under the template's headings, and an empty one is omitted. The cap counts both.
-  - Automated checks: an agent can run them in the repository or CI.
-  - Manual checks: they need a human, such as another machine, a real device, or production. Make a check manual only when no automated check can show it, because pr-verify judges only the automated list.
-
-**Container `Tn`** — only when Step 2 promoted it:
-- No Requirements, Specs, or Acceptance Criteria section — those live only on its `Tn.m` leaves.
-- Background and Scope sections, same shape as the Epic's but scoped to this one theme: what the grouped `Tn.m` children cover.
-- Dependencies & Sub-tasks section: a small Mermaid `flowchart` grouping its own `Tn.m` children by wave, using `{{Tn.m}}` tokens. Past 12 grandchildren, use the wave table instead — same threshold as the Epic, rarely reached in practice. Scoped to this container only: never another `Tn`'s children, and the Epic's own diagram still shows this `Tn` as a single node, exactly like a leaf.
-
-**Epic:**
-- Dependencies & Parallel Execution Plan section: a Mermaid `flowchart` grouping child Issues into `subgraph` blocks per wave, using `{{Tn}}` tokens (double curly braces) everywhere a real Issue number will later be substituted — both in node labels and in any prose. **If there are more than 12 child Issues, replace the flowchart with the compact wave table** in `references/templates.<LANG>.md` instead — a graph that large stops being readable.
-  - **Escaping in node labels:** if a title contains a double quote, write it as the entity code `#quot;` inside the `["..."]` label — never a raw `"` (it terminates the label) and never a backslash-escaped `\"` (Mermaid does not support backslash escaping and the diagram fails to render). Same rule applies to the Step 3 dependency preview.
-- This diagram is a rendering of the same `depends_on`/wave data that Step 5 also uses to set native GitHub blocked-by/blocking relations on each child Issue. Both are generated once, from the same approved data, in the same run — the diagram is a human-readable view, not a hand-maintained duplicate that can drift from the real relations after creation.
-
-Do not use any `{{Tn}}` or `{{Tn.m}}` token in a leaf body (a non-container `Tn`, or any `Tn.m`) — leaves stay abstract (`T1`, not `{{T1}}`) and are never rewritten after creation. Only the Epic body (`{{Tn}}` tokens) and a container `Tn`'s own body (`{{Tn.m}}` tokens for its own children only) get a substitution pass, both in Step 5.
-
----
+Read `references/bodies.md` in full first. Write the Epic and child bodies from the templates in `references/templates.<LANG>.md`, using only the content approved in Step 3, without adding, softening, or elaborating it.
 
 ## Step 4.5: Full Draft Review (only if requested)
 
-By default, skip this step: go straight from Step 3's approval to Step 4.6 validation and then Step 5, without re-displaying the generated bodies. Run this step only when the user explicitly asks to see the full draft before creation (e.g. "ドラフト見せて", "本文を確認したい", "show me the draft") — whether that request is part of their Step 3 approval reply or said earlier in the conversation.
-
-When triggered, use the "Step 4.5: Body Review Format" template in `references/templates.<LANG>.md` to display the Epic and all child Issues in order. Note explicitly that `{{Tn}}` tokens in the Epic body are placeholders that will be replaced with real Issue numbers (`#123`) once the child Issues exist.
-
-**Stop after presenting. Do not proceed to Step 4.6 until the user explicitly approves.**
-
-If the user requests changes, apply them and re-display the updated bodies before proceeding.
-
----
+Skip by default. Run only when the user explicitly asked to see the full draft (e.g. "ドラフト見せて", "本文を確認したい", "show me the draft"), in their Step 3 reply or earlier.
+Then display the Epic and every child in the "Step 4.5: Body Review Format", noting that `{{Tn}}` tokens become real numbers (`#123`) after creation. **Stop after presenting; do not proceed to Step 4.6 until the user explicitly approves.** Apply requested changes and display again.
 
 ## Step 4.6: Automated Pre-Creation Validation
 
-Always run this step, whether or not Step 4.5 ran — it is the safety net that replaces routine human re-review of the mechanical formatting Step 4 performs. Check the generated bodies programmatically; there is no need to show them to the user unless a check fails:
-
-- Every leaf Issue's (non-container `Tn`, or any `Tn.m`) Requirements / Specs / Verification bullet lists stay within the 5-item cap. The three Step 2 options — split (default), compress (rejected), point (doc-owned) — agree here: an Issue using point still passes this check, because the pointer is a prose line after the bullets, not a bullet, so the Verification list stays at 5 items.
-- Every leaf Issue's Verification items sit under the template's check headings, spelled exactly as written there.
-- No Mermaid node label (Step 3 preview, Epic body, or a container `Tn` body) contains a raw `"` — a title with a quote must use `#quot;` instead.
-- Leaf bodies never contain a `{{Tn}}` or `{{Tn.m}}` token — that substitution syntax is container-body-only (the Epic for its `Tn` tokens, a container `Tn` for its own `Tn.m` tokens).
-- Collect every `{{Tn}}` token appearing anywhere in the Epic body (diagram/table node labels, dependency-column references, prose) and confirm that set of ids exactly matches the set of `Tn` (leaf and container alike) about to be created — none missing, none referring to a `Tn` that doesn't exist. Separately, for each container `Tn`, collect every `{{Tn.m}}` token in its own body and confirm that set exactly matches the set of its own `Tn.m` grandchildren — none missing, none referring to a different container's child. A given id may legitimately appear more than once within its own scope (e.g. once as its own row, again in another row's dependency column), so check set membership, not occurrence count.
-
-If any check fails, stop, report the specific problem and its location to the user, and fix it before proceeding. Never silently patch it and never create Issues with a body known to be broken.
-
----
+Always run every check in `references/bodies.md` § Pre-Creation Checks. If any check fails, stop, report the problem and its location to the user, and fix it before proceeding. Never silently patch it and never create Issues with a body known to be broken.
 
 ## Step 5: Create Issues
 
-See `references/commands.md` for the exact commands. Every command starts with `gh` to match the declared `allowed-tools`; read that file's "Tool permission contract" before adding or changing one.
+Follow `references/commands.md`, including its failure rules. Every command starts with `gh` to match `allowed-tools`; read its "Tool permission contract" before adding or changing one.
 
-**The Epic is created first**, since `--parent` needs it to already exist. Every `Tn` — leaf or container — is created next in wave order, each with `--parent <the Epic's number>` and `--blocked-by <already-known real numbers>`; never `--parent` pointing at another `Tn`, per the hierarchy rule in Step 2. A container `Tn`'s own body still carries unsubstituted `{{Tn.m}}` tokens at this point, since its grandchildren don't exist yet. Once every `Tn` exists, create each container's `Tn.m` grandchildren with `--parent` set to that `Tn`'s real number and `--blocked-by` limited to sibling `Tn.m` it depends on — never a `Tn`, never a different container's child, per Step 2's dependency-scope rule.
-
-Substitution then happens bottom-up: for each container `Tn`, substitute its own body's `{{Tn.m}}` placeholders with the real grandchild numbers and update it via `gh issue edit`, before touching the Epic. Only after every container is updated, substitute the Epic body's `{{Tn}}` placeholders — leaf and container alike — and update the Epic. Before each `gh issue edit`, confirm no token remains in that body's scope; if one does and the failure case below doesn't explain it, the substitution missed it — fix it before submitting.
-
-If a `Tn`'s creation fails, skip creating its would-be `Tn.m` grandchildren entirely — there is no valid parent for them — flag it in the Step 6 report, and replace its `{{Tn}}` reference in the Epic body with a short inline note such as "creation failed". If a `Tn.m`'s creation fails instead, its container is still created/updated normally; replace only that grandchild's `{{Tn.m}}` reference in the container's own body with the same note. Neither failure aborts the rest of the run.
-
-A failed `Tn`/`Tn.m` never gets a real number, so any not-yet-created sibling whose `depends_on` names it must drop that id from its own `--blocked-by` list — never pass a number that doesn't exist. Note the dropped edge in the Step 6 report so the user knows that dependency was never wired, rather than silently creating an Issue that was supposed to wait but isn't blocked on anything.
-
-Note in the completion report (Step 6) that the Epic's number is lowest, `Tn` numbers come next in wave order, and each container's `Tn.m` numbers come after their parent.
-
-**Optional project linking (only when asked).** When `$ARGUMENTS` contained `project <n>` (Step 1), run section 5.7 of `references/commands.md` after 5.6 — it adds the Epic and every created Issue to the target project, so the run never improvises project commands. Skip it entirely when no `project` argument was given. Never map this run's Wave numbers onto a project field named `Stage` or `Wave`; keep waves in the Epic body.
-
----
+- Create the Epic first, then every `Tn` in wave order with `--parent <Epic>` and `--blocked-by` for created dependencies, then each container's `Tn.m` with `--parent <that Tn>` and `--blocked-by` limited to its siblings. Never pass a number that does not exist.
+- Substitute bottom-up: each container's `{{Tn.m}}` first, then the Epic's `{{Tn}}`; a failed create becomes "creation failed", and a failed `Tn` gets no grandchildren.
+- Verify the sub-issue and blocked-by relations against GitHub before Step 6, and stop on a mismatch.
+- Only when `PROJECT_NUM` is set, run 5.7. Never map Wave numbers onto a `Stage` or `Wave` project field.
 
 ## Step 6: Report Completion
 
-Use the "Step 6: Completion Report" template in `references/templates.<LANG>.md`. When the doc-update `Tn`'s dependency was wired transitively rather than directly, the report must say so explicitly — a later reader may otherwise "fix" the ordering by adding or removing edges.
+Use the "Step 6: Completion Report" template in `references/templates.<LANG>.md`, including failed creates, dropped edges, and the numbering order. When the doc-update `Tn`'s dependency was wired transitively rather than directly, say so explicitly — a later reader may otherwise "fix" the ordering by adding or removing edges.

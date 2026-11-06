@@ -2,7 +2,7 @@
 
 ## Step 1.5: Clarification Question Format
 
-Enumerate each unclear item and ask for a response using the following format. The three labeled subsections below (`[粒度]` / `[受け入れ条件]` / `[仕様]`) are illustrative, not a fixed checklist — include only the subsection(s) for the axis/axes actually unclear this run.
+Enumerate each unclear item and ask for a response using the following format. The four labeled subsections below (`[粒度]` / `[受け入れ条件]` / `[仕様]` / `[前提]`) are illustrative, not a fixed checklist — include only the subsection(s) for the axis/axes actually unclear this run.
 
 ```
 以下の点が不明確です。回答してから続行します。
@@ -15,6 +15,9 @@ Enumerate each unclear item and ask for a response using the following format. T
 
 **[仕様] <項目名>について**
 <解釈の余地がある点を明示した二択または質問>
+
+**[前提] <主張>について**
+<その主張と出どころ、確かめる方法を示し、Issue を作る前に確かめるかを尋ねる。確かめる方法の例は「X を実行して Y になるか見る」>
 
 すべての質問に回答してから Issue 作成を続行します。
 仕様が未確定のまま進める場合は「とりあえず作って」と返信してください（[要確認] タグを付与して進みます）。
@@ -35,6 +38,8 @@ Output this when the user instructs to proceed with unresolved items:
 
 Output this block and ask for approval. This is the main checkpoint for catching invented or misplaced content before it's written into a real Issue, and — by default — the *only* checkpoint before creation: Step 4.5's full-body re-display is skipped unless the user asks for it (see Step 4.5), so this summary must carry enough substance (background, full verification list) that approving it is equivalent to approving the final bodies.
 
+Tasks that differ only in one value, such as a service name, may be shown as one full entry plus a table of each task's id, title, and value, since approving that still covers every body.
+
 Use the same 12-task threshold as the Epic body template below: Mermaid for 12 or fewer tasks, the wave table for more. This preview must render in the same form the Epic will actually use — never show a Mermaid graph here if Step 4 is going to render a table, or vice versa.
 
 In any Mermaid node label, a double quote in a title must be written as `#quot;` — never a raw `"` or a backslash-escaped `\"` (backslash escaping breaks rendering).
@@ -48,6 +53,8 @@ In any Mermaid node label, a double quote in a title must be written as `#quot;`
 **背景**: <この Epic が必要になった経緯を1〜2文で>
 **スコープ（含む）**: <bullet> / <bullet>
 **スコープ（含まない）**: <該当する場合のみ。会話で明示的に除外された項目がなければこの行ごと省略>
+**目標状態**: <すべての子 Issue が完了したときに成り立つ状態を1行で>
+**検証**: <Epic 全体の完了を確かめる方法。下の子 Issue の検証だけから組み立てる>
 
 （会話で挙げられたタスク数と子 Issue 数が一致しない場合のみ記載: **会話からの構成変更**: <どのタスクをどう分割/統合したか、その理由を1〜2文で>）
 
@@ -82,8 +89,9 @@ flowchart LR
 - 要件: <bullet> / <bullet>
 - 仕様: <bullet>（決定済み事項がなければ「なし」と書く）
 - 理想状態: <完了時に成り立つべき状態を1行で>
-- 自動確認: <bullet>
+- 自動確認: <bullet>、またはなし（その場合は pr-verify が判定するものがないと添える）
 - 手動確認: <bullet>、またはなし
+- 全項目: <文書のパスと節>（このタスクがポイント方式を使う場合のみ）
 
 #### T2: <タイトル>（Wave 2 / 依存: T1）
 - 背景: <1行>
@@ -93,11 +101,11 @@ flowchart LR
 - 自動確認: <bullet>
 - 手動確認: なし
 
-Step 1.5 で統合済み文書が変更され、この Tn の内容が変わった場合は、依存行を単純な「依存: ...」ではなく「（T<doc> に直接）」または「（T<via> を介して推移的）」と書く — サマリーでどちらになるかを承認する必要がある。
+Step 1.5 で統合済み文書が変更され、この Tn の内容が変わった場合は、見出しの依存部分を単純な「依存: ...」ではなく「依存: T<doc>（直接）」または「依存: T<via>（T<doc> に推移的）」と完全な形で書く — サマリーでどちらになるかを承認する必要がある。
 
 コンテナに昇格した Tn がある場合のみ、以下の形で示す。要件・仕様・検証方法は Tn.m 側にのみ書く。
 
-#### T3: <タイトル>（コンテナ / 依存: なし）
+#### T3: <タイトル>（コンテナ / Wave 1 / 依存: なし）
 - 背景: <このテーマが独立したまとまりとして必要な理由を1行で>
 - スコープ: <T3.1, T3.2 が含まれる、など>
 
@@ -224,7 +232,7 @@ flowchart LR
 
 ## 依存関係
 
-{`Tn` なら: "Tn の完了後に着手可能。全体の依存関係は Epic を参照。" / `Tn.m` なら: "Tn.m の完了後に着手可能。同じ親 Tn 配下の依存関係は Tn 本文を参照。" または "なし（並列着手可能）"。ステップ列挙や理由の詳細はここに書かない。Step 1.5 で統合済み文書が変更され、この Tn の内容が変わった場合は、代わりに文書更新 Tn への依存が直接か推移的かを明記する（直接: "文書更新 T<doc> の完了後に着手可能" / 推移的: "T<via> の完了後に着手可能。T<via> は文書更新 T<doc> に依存する"）。}
+{依存先は読者に見えない一時 ID `Tn` ではなく、タイトルで書く。`Tn` なら: "<タイトル> の完了後に着手可能。全体の依存関係は Epic を参照。" / `Tn.m` なら: "<タイトル> の完了後に着手可能。同じ親配下の依存関係は親 Issue を参照。" または "なし（並列着手可能）"。ステップ列挙や理由の詳細はここに書かない。Step 1.5 で統合済み文書が変更され、この Tn の内容が変わった場合は、代わりに文書更新タスクへの依存が直接か推移的かを明記する（直接: "文書更新タスク <文書更新のタイトル> の完了後に着手可能（直接依存）" / 推移的: "<タイトル> の完了後に着手可能。これは文書更新タスク <文書更新のタイトル> に依存する（推移的依存）"）。「全体の依存関係は Epic を参照」の一文は残す。}
 
 ## 受け入れ条件
 
@@ -294,7 +302,7 @@ Only used when the user explicitly asked to see the full draft (see Step 4.5 in 
 
 ### Epic
 - #<number> <title>  (<URL>)
-  Epic を先に作成しているため、Epic の番号は子 Issue より小さくなります。
+  Epic を先に作成しているため、Epic の番号は子 Issue より小さくなります。子 Issue は wave 順に続きます<。孫はすべての子 Issue の後に続きます — コンテナがある場合のみ>。
 
 ### 子Issue
 - #<number> <title>
@@ -307,6 +315,10 @@ Epic と各Tn、コンテナ化されたTnと各孫Issueは `gh issue create --p
 依存関係は `--blocked-by` による Blocked-by/Blocking 関係として設定済みです — 孫同士の依存は同じ親Tn配下のみです。
 GitHub 上の Issue サイドバー（Sub-issues / Relationships）で確認できます。
 Epic 本文の依存関係図（または表）とコンテナ化されたTn本文の依存関係図は、いずれも実際の Issue 番号で確定済みです。
+
+（作成に失敗した Issue がある場合のみ:
+### 作成失敗
+- <タイトル>: <gh が出力したエラー>。本来これに依存する <Issue 番号> はこれにブロックされていません。親 #<Epic またはコンテナ>、blocked-by <自身の依存先の番号> で手動作成し、それらの Issue に blocked-by として追加し、Epic 本文の「(creation failed)」をその番号に置き換えてください。）
 
 （文書更新 Tn への依存を推移的に配線した場合のみ: <Tn群> は文書更新 Tn に直接ブロックされておらず、<Tvia> を介して推移的に依存しています。この順序は意図的なものです。エッジの追加/削除で"修正"しないでください。）
 ```

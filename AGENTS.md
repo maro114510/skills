@@ -28,6 +28,9 @@ Repository instructions for coding agents.
 | `.github/workflows/release.yml` | Creates a GitHub Release on a `v*` tag push after checking the tag matches both manifests |
 | `cliff.toml` | `git-cliff` config used by `make release` |
 
+`docs/design` holds only Design Docs that describe the current target, as `manage-design-documents` defines them; work the owner decided to build is an Issue.
+Ideas, experiments, and open questions go to [Discussions](https://github.com/maro114510/skills/discussions) as [Discussion #638](https://github.com/maro114510/skills/discussions/638) describes, never to Issues. The repository is public, so a post never carries work context.
+
 ## Versions and Releases
 
 - Update both manifests together; updating only one breaks `claude plugin install`
@@ -75,7 +78,7 @@ argument-hint: "[ready] [base <branch>]"
 - Japanese stays only in `description` trigger phrases and user-facing output templates
 - Convert an older Japanese body only when already editing it for another reason
 - Declare only the tools a skill needs; prefer scoped `Bash(cmd:*)` when the command set is small and predictable
-- This repository relies on the `PreToolUse` hook in `.claude/settings.json` to stop an unapproved `git push`; that stop is intended behavior. A range that `implement` Phase 7 approved counts as approved for a push of its `approved-head`, so `create-pr` appends the marker without asking
+- Push approval has one mechanism and no hook: `implement` Phase 7 classifies the push range with `commit`'s `classify-approval.sh` and has the user approve it in difit when required, and `create-pr` pushes once the user asks for a PR. Under orchestrate-epic, pr-owner pushes an Issue branch without that approval, and the human approves the PR instead
 
 ## Target Repository Config
 
@@ -86,6 +89,7 @@ Skills read them with `git config --get <key>`, so git decides between local and
 |---|---|---|
 | `skills.lang` | `ja`, `en` | `skills/create-pr/scripts/lang.sh` only; its header holds the precedence, and skills call it instead of restating it |
 | `skills.herdr` | `true`, `false`; unset means `false` | `skills/orchestrate-epic/scripts/oe-board.sh` only, and only inside Herdr; `true` opens the Epic's board pane |
+| `skills.babysit.agent` | An agent command, such as `claude -p`; unset makes `drive.sh` exit 2 | `skills/babysit/scripts/drive.sh` only; split on whitespace, with the prompt appended as the last argument |
 
 ## Workflow
 

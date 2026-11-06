@@ -1,6 +1,7 @@
 #!/usr/bin/env bats
 # Tests for self-review.sh, using a stub reviewer CLI on PATH.
 # shellcheck disable=SC2292 # bats fails a test on a mid-test `[[ ]]` only under bash 4.1+; `[ ]` works on every bash.
+# shellcheck disable=SC2030,SC2031 # result_line reads ${lines} inside the same @test subshell that `run` set it in.
 
 setup() {
   target="${BATS_TEST_DIRNAME}/self-review.sh"
@@ -32,23 +33,18 @@ run_stub() {
   run env TMPDIR="${work}" PATH="${bin}:${PATH}" bash "${target}" "${harness}" "${repo}"
 }
 
-# Prints a stub OpenCode body that answers `run --help` and `--version` as OpenCode $1 would, then runs $2.
-# v2 offers `--standalone` and no `--command`; v1 offers `--command` and no `--standalone`; none offers
-# neither; v2-command is a 2.x release offering only `--command`. Help text must not contain `%`.
+# Prints a stub OpenCode body that answers `run --help` as OpenCode $1 would, then runs $2.
+# v2 offers `--standalone`; v1 is a 1.x release offering only `--command`; none offers neither.
+# Help text must not contain `%`.
 opencode_stub() {
-  local help version=2.0.30
+  local help
   case "$1" in
   v2) help='      --standalone   run in a private server\n      --agent        agent to use' ;;
-  v1)
-    help='      --command      the command to run, use message for args\n      --agent        agent to use'
-    version=1.19.3
-    ;;
-  v2-command) help='      --command      the command to run, use message for args' ;;
+  v1) help='      --command      the command to run, use message for args\n      --agent        agent to use' ;;
   none) help='      --agent        agent to use' ;;
   esac
   # shellcheck disable=SC2016 # expanded by the stub, not here
-  printf 'if [ "$1 $2" = "run --help" ]; then printf "%s\\n"; exit 0; fi\nif [ "$1" = "--version" ]; then echo %s; exit 0; fi\n%s' \
-    "${help}" "${version}" "$2"
+  printf 'if [ "$1 $2" = "run --help" ]; then printf "%s\\n"; exit 0; fi\n%s' "${help}" "$2"
 }
 
 # Prints the flags in the opencode argv echoed as `ARGS: ...` by the stub, one per line.
@@ -87,7 +83,7 @@ bash_permission() {
 # Sets ${config} to the OpenCode config self-review.sh passes to the reviewer.
 load_opencode_config() {
   # shellcheck disable=SC2016 # expanded by the stub, not here
-  run_stub "$(opencode_stub v2 'printf "%s" "${OPENCODE_CONFIG_CONTENT}" | jq -c .')" '' opencode
+  run_stub "$(opencode_stub v2 'printf "%s" "${OPENCODE_CONFIG_CONTENT}" | jq -c .; echo; echo "REVIEW_VERDICT: none"')" '' opencode
   [ "${status}" -eq 0 ]
   config="$(grep -m1 '^{' <<<"${output}")"
   [ -n "${config}" ]
@@ -166,34 +162,23 @@ expect_permission() {
 
 @test "opencode passes the review prompt as the message and asks for one command per call" {
   # shellcheck disable=SC2016 # expanded by the stub, not here
-  run_stub "$(opencode_stub v2 'echo "ARGS: $*"')" '' opencode
+  run_stub "$(opencode_stub v2 'echo "ARGS: $*"; echo "REVIEW_VERDICT: none"')" '' opencode
   [ "${status}" -eq 0 ]
   grep -qF -- "ARGS: run --standalone Review the uncommitted changes." <<<"${output}"
   grep -qF -- "one command per bash call" <<<"${output}"
   if grep -qF -- "--agent" <<<"${output}"; then return 1; fi
 }
 
-# OpenCode v1 and v2 accept disjoint flags for this call, and each rejects the other's with help and
-# exit 1 before reading the diff, so the stub below answers `run --help` like the version under test.
-# v2 needs `--standalone` because its shared background service ignores OPENCODE_CONFIG_CONTENT,
-# which would leave the deny block below inert. v1 has no such flag, applies the config without it,
-# and ships the `review` command.
-@test "opencode v2 runs the review standalone, and --standalone is its only flag" {
+# OpenCode v2 needs `--standalone` because its shared background service ignores OPENCODE_CONFIG_CONTENT,
+# which would leave the deny block below inert.
+@test "opencode runs the review standalone, and --standalone is its only flag" {
   # shellcheck disable=SC2016 # expanded by the stub, not here
-  run_stub "$(opencode_stub v2 'echo "ARGS: $*"')" '' opencode
+  run_stub "$(opencode_stub v2 'echo "ARGS: $*"; echo "REVIEW_VERDICT: none"')" '' opencode
   [ "${status}" -eq 0 ]
   [ "$(argv_flags)" = "--standalone" ]
 }
 
-@test "opencode v1 runs the review command, and --command is its only flag" {
-  # shellcheck disable=SC2016 # expanded by the stub, not here
-  run_stub "$(opencode_stub v1 'echo "ARGS: $*"')" '' opencode
-  [ "${status}" -eq 0 ]
-  grep -qF -- "ARGS: run --command review Review the uncommitted changes." <<<"${output}"
-  [ "$(argv_flags)" = "--command" ]
-}
-
-@test "opencode without either flag fails before the review runs" {
+@test "opencode without --standalone fails before the review runs" {
   # shellcheck disable=SC2016 # expanded by the stub, not here
   run_stub "$(opencode_stub none 'echo "ARGS: $*"')" '' opencode
   [ "${status}" -eq 1 ]
@@ -202,10 +187,10 @@ expect_permission() {
   has_line "REVIEWER_EXIT=unsupported"
 }
 
-# A 2.x release that drops `--standalone` would ignore the deny block on the `--command` form.
-@test "opencode 2.x offering only --command fails closed" {
+# A 1.x release that offers `--command` is still refused: only v2 is supported.
+@test "opencode 1.x offering only --command fails closed" {
   # shellcheck disable=SC2016 # expanded by the stub, not here
-  run_stub "$(opencode_stub v2-command 'echo "ARGS: $*"')" '' opencode
+  run_stub "$(opencode_stub v1 'echo "ARGS: $*"')" '' opencode
   [ "${status}" -eq 1 ]
   if grep -qF -- "ARGS:" <<<"${output}"; then return 1; fi
   has_line "REVIEWER_EXIT=unsupported"
@@ -223,7 +208,7 @@ expect_permission() {
   real="$(command -v opencode)" || skip "opencode is not installed"
   # shellcheck disable=SC2016 # expanded by the stub, not here
   run_stub "if [ \"\$1 \$2\" = \"run --help\" ] || [ \"\$1\" = --version ]; then exec '${real}' \"\$@\"; fi"'
-echo "ARGS: $*"' '' opencode
+echo "ARGS: $*"; echo "REVIEW_VERDICT: none"' '' opencode
   [ "${status}" -eq 0 ]
   flags="$(argv_flags)"
   [ -n "${flags}" ]
@@ -252,20 +237,9 @@ echo "ARGS: $*"' '' opencode
 }
 
 @test "opencode reviewer writing a file exits 3" {
-  for version in v1 v2; do
-    run_stub "$(opencode_stub "${version}" 'touch pwned.txt')" '' opencode
-    [ "${status}" -eq 3 ]
-    has_line "REVIEWER_CHANGED_WORKTREE"
-  done
-}
-
-@test "opencode v1 receives the same read-only config as v2" {
-  load_opencode_config
-  v2="${config}"
-  # shellcheck disable=SC2016 # expanded by the stub, not here
-  run_stub "$(opencode_stub v1 'printf "%s" "${OPENCODE_CONFIG_CONTENT}" | jq -c .')" '' opencode
-  [ "${status}" -eq 0 ]
-  [ "$(grep -m1 '^{' <<<"${output}")" = "${v2}" ]
+  run_stub "$(opencode_stub v2 'touch pwned.txt')" '' opencode
+  [ "${status}" -eq 3 ]
+  has_line "REVIEWER_CHANGED_WORKTREE"
 }
 
 @test "temp files are removed" {
@@ -352,13 +326,11 @@ run_range_stub() {
 }
 
 @test "opencode names the committed range in the review message" {
-  for version in v1 v2; do
-    # shellcheck disable=SC2016 # expanded by the stub, not here
-    run_range_stub "$(opencode_stub "${version}" 'echo "ARGS: $*"')" opencode
-    [ "${status}" -eq 0 ]
-    grep -qF -- "Review the committed changes in ${mb}..HEAD." <<<"${output}"
-    if grep -qF -- "uncommitted" <<<"${output}"; then return 1; fi
-  done
+  # shellcheck disable=SC2016 # expanded by the stub, not here
+  run_range_stub "$(opencode_stub v2 'echo "ARGS: $*"; echo "REVIEW_VERDICT: none"')" opencode
+  [ "${status}" -eq 0 ]
+  grep -qF -- "Review the committed changes in ${mb}..HEAD." <<<"${output}"
+  if grep -qF -- "uncommitted" <<<"${output}"; then return 1; fi
 }
 
 @test "reviewer moving HEAD in range mode exits 3" {
@@ -413,7 +385,8 @@ result_line() {
   [ "${status}" -eq 4 ]
   has_line "reviewer log line"
   [[ "$(result_line)" == "SELF_REVIEW status=empty "* ]]
-  [ "${lines[-1]}" = "$(result_line)" ]
+  # A negative array subscript needs bash 4.3; macOS ships bash 3.2, so index from the length instead.
+  [ "${lines[${#lines[@]} - 1]}" = "$(result_line)" ]
 }
 
 @test "whitespace-only output counts as empty" {
@@ -464,6 +437,42 @@ result_line() {
 @test "a reviewer that fails with no output still exits 1" {
   run_stub 'exit 2'
   [ "${status}" -eq 1 ]
+}
+
+@test "opencode asks the reviewer to end with a verdict line" {
+  # shellcheck disable=SC2016 # expanded by the stub, not here
+  run_stub "$(opencode_stub v2 'echo "ARGS: $*"; echo "REVIEW_VERDICT: none"')" '' opencode
+  [ "${status}" -eq 0 ]
+  grep -qF -- "REVIEW_VERDICT: findings" <<<"${output}"
+  grep -qF -- "never end a turn with a progress message" <<<"${output}"
+}
+
+@test "opencode narration without a verdict exits 5, reports status=incomplete, and shows the tails" {
+  run_stub "$(opencode_stub v2 'echo "Diff review done, now checking the tests."; echo "reviewer log line" >&2')" '' opencode
+  [ "${status}" -eq 5 ]
+  has_line "Diff review done, now checking the tests."
+  has_line "reviewer log line"
+  has_line "REVIEWER_NO_VERDICT"
+  [[ "$(result_line)" == "SELF_REVIEW status=incomplete "* ]]
+  [ "$(tail -n 1 <<<"${output}")" = "$(result_line)" ]
+}
+
+@test "opencode verdict followed by more text exits 5" {
+  run_stub "$(opencode_stub v2 'echo "REVIEW_VERDICT: none"; echo "Now checking gofmt."')" '' opencode
+  [ "${status}" -eq 5 ]
+  [[ "$(result_line)" == "SELF_REVIEW status=incomplete "* ]]
+}
+
+@test "opencode findings with REVIEW_VERDICT: findings exit 0 and report verdict=findings" {
+  run_stub "$(opencode_stub v2 'echo "main.go:3 nil dereference"; echo "REVIEW_VERDICT: findings"')" '' opencode
+  [ "${status}" -eq 0 ]
+  [[ "$(result_line)" == "SELF_REVIEW status=reviewed "*" verdict=findings" ]]
+}
+
+@test "opencode REVIEW_VERDICT: none exits 0 and reports verdict=none" {
+  run_stub "$(opencode_stub v2 'echo "REVIEW_VERDICT: none"')" '' opencode
+  [ "${status}" -eq 0 ]
+  [[ "$(result_line)" == "SELF_REVIEW status=reviewed "*" verdict=none" ]]
 }
 
 @test "usage errors print no result line" {

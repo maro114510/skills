@@ -1,0 +1,46 @@
+name: Lint Mermaid
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**.md'
+      - '.github/workflows/lint-mermaid.yml'
+  pull_request:
+    paths:
+      - 'docs/**.md'
+      - '.github/workflows/lint-mermaid.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mermaid:
+    name: Validate Mermaid blocks in docs
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+
+      # skills/ is out of scope: its Mermaid blocks are output templates with placeholders.
+      # mmdc exits 1 on a parse error and 0 for a file with no Mermaid block.
+      - name: Render every Mermaid block in docs/**/*.md
+        run: |
+          tmp="$(mktemp -d)"
+          # Ubuntu runners restrict unprivileged user namespaces, so Chromium cannot sandbox itself.
+          echo '{"args": ["--no-sandbox"]}' > "${tmp}/puppeteer.json"
+          rc=0
+          while IFS= read -r -d '' f; do
+            echo "::group::${f}"
+            npx -y -p @mermaid-js/mermaid-cli@12 mmdc -q -p "${tmp}/puppeteer.json" -i "${f}" -o "${tmp}/out.md" || { echo "::error file=${f}::Mermaid parse error"; rc=1; }
+            echo "::endgroup::"
+          done < <(find docs -name '*.md' -print0 | sort -z)
+          exit "${rc}"

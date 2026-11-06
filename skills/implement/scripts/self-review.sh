@@ -4,9 +4,10 @@
 # With <base>, the review covers the commits from the merge base of <base> and HEAD to HEAD, and ignores
 # uncommitted changes. Without it, the review covers the uncommitted changes.
 # Exit: 0 reviewed, 1 failed, 2 usage error or no commits after <base>, 3 reviewer changed the worktree or HEAD,
-# 4 reviewer returned no output. 3 wins over 1 and 4.
+# 4 reviewer returned no output, 5 OpenCode output ended without a verdict line. 3 wins over 1, 4, and 5.
 # Every run that reached the reviewer ends with:
-#   SELF_REVIEW status=<reviewed|empty|failed|changed> range=<merge-base>..<head>|uncommitted head=<sha> bytes=<n>
+#   SELF_REVIEW status=<reviewed|empty|failed|changed|incomplete> range=<merge-base>..<head>|uncommitted head=<sha> bytes=<n>
+# A reviewed OpenCode run appends ` verdict=<findings|none>` to that line.
 set -uo pipefail
 
 harness="${1:-}"
@@ -53,7 +54,7 @@ shown_range=uncommitted
 [[ -z "${range}" ]] || shown_range="${mb}..${reviewed_head}"
 # Prints the outcome line the caller reads instead of the reviewer's free text.
 result() {
-  echo "SELF_REVIEW status=$1 range=${shown_range} head=${reviewed_head} bytes=${bytes}"
+  echo "SELF_REVIEW status=$1 range=${shown_range} head=${reviewed_head} bytes=${bytes}${2:+ verdict=$2}"
 }
 
 # Gitignored paths are left out so build output from local checks does not count as a change.
@@ -67,20 +68,17 @@ fingerprint() {
   } | git hash-object --stdin
 }
 
-# OpenCode v1 and v2 reject each other's flags, so the installed CLI's help picks the form.
-# v2: `--standalone`, without which OPENCODE_CONFIG_CONTENT and the deny block below are ignored.
-# v1: `--command review`, gated on 1.x so a future release without `--standalone` fails closed.
+# Only OpenCode v2 is supported. `--standalone` runs a private server; without it the shared background
+# service ignores OPENCODE_CONFIG_CONTENT, which would leave the deny block below inert. A CLI without it
+# fails closed, whatever its version.
 opencode_flags=()
 if [[ "${harness}" == opencode ]]; then
   opencode_help="$(opencode run --help 2>&1 </dev/null)"
   help_rc=$?
-  has_flag() { grep -qE -- "(^|[[:space:]])$1([[:space:],=]|$)" <<<"${opencode_help}"; }
-  if has_flag --standalone; then
+  if grep -qE -- "(^|[[:space:]])--standalone([[:space:],=]|$)" <<<"${opencode_help}"; then
     opencode_flags=(--standalone)
-  elif has_flag --command && [[ "$(opencode --version 2>/dev/null </dev/null)" == 1.* ]]; then
-    opencode_flags=(--command review)
   else
-    echo "Unsupported OpenCode CLI: 'opencode run --help' lists no --standalone, and no --command on a 1.x version" >&2
+    echo "Unsupported OpenCode CLI: 'opencode run --help' lists no --standalone (OpenCode v2 is required)" >&2
     head -n 5 <<<"${opencode_help}" >&2
     if [[ "${help_rc}" -ne 0 ]]; then echo "REVIEWER_EXIT=${help_rc}"; else echo "REVIEWER_EXIT=unsupported"; fi
     result failed
@@ -128,7 +126,7 @@ opencode)
     "go *-exec*":"deny","go *-toolexec*":"deny","go vet*-vettool*":"deny","rg*--pre*":"deny",
     "rg*--hostname-bin*":"deny",
     "*--output*":"deny","*>*":"deny"}}}' \
-    opencode run "${opencode_flags[@]}" "${opencode_prompt} Run exactly one command per bash call, with no pipes, &&, ;, or redirects such as 2>&1." </dev/null >"${out}" 2>"${log}"
+    opencode run "${opencode_flags[@]}" "${opencode_prompt} Run exactly one command per bash call, with no pipes, &&, ;, or redirects such as 2>&1. End your final message with exactly one line, \`REVIEW_VERDICT: findings\` or \`REVIEW_VERDICT: none\`, and never end a turn with a progress message." </dev/null >"${out}" 2>"${log}"
   ;;
 esac
 reviewer_rc=$?
@@ -155,5 +153,21 @@ if [[ "${bytes}" -eq 0 ]]; then
   result empty
   exit 4
 fi
-result reviewed
+# `opencode run` ends when a step stops without a tool call, so narration alone can look like a finished review.
+# Claude and Codex run built-in reviews with their own prompts, so only OpenCode is asked for a verdict.
+verdict=""
+if [[ "${harness}" == opencode ]]; then
+  last_line="$(grep -v '^[[:space:]]*$' "${out}" | tail -n 1 | tr -d '\r' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+  case "${last_line}" in
+  "REVIEW_VERDICT: findings") verdict=findings ;;
+  "REVIEW_VERDICT: none") verdict=none ;;
+  *)
+    tail -n 20 "${log}"
+    echo "REVIEWER_NO_VERDICT"
+    result incomplete
+    exit 5
+    ;;
+  esac
+fi
+result reviewed "${verdict}"
 exit 0

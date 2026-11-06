@@ -12,6 +12,8 @@
 # - OE_SESSION_PID is the process that lives as long as the session, normally the harness: pass "$PPID" from its shell.
 # - acquire prints token=<token>. The session keeps it, and passes it again to re-acquire after a resume or to release.
 # - The holder is running while its process exists and started when it did, so a reused PID never keeps a lock.
+# - The start time is recorded in UTC and the C locale, so whether the holder runs does not depend on the reader's TZ or locale.
+#   A lock taken before that holds its taker's TZ and locale, and is read correctly only under the same ones until its holder acquires again or ends.
 # - A lock whose holder is no longer running is taken over by the next acquire.
 #
 # Storage
@@ -23,7 +25,7 @@
 #
 # | Code | Meaning |
 # |---|---|
-# | 0 | acquire: this session holds the lock. release: the lock is free |
+# | 0 | acquire: this session holds the lock. release: the lock is free, and the Epic's oe wait, if one runs, is stopped |
 # | 1 | The lock store failed |
 # | 2 | The arguments are invalid, or OE_SESSION_PID is not a running process |
 # | 4 | Another running session holds the lock |
@@ -92,9 +94,12 @@ refuse() {
 
 if [[ "${cmd}" == release ]]; then
   current="$(holder)" || exit 1
-  [[ -n "${current}" ]] || exit 0
-  [[ "$(lock_field token "${current}")" == "${token}" ]] || refuse "${current}"
-  store_git update-ref -d "${ref}" "${current}" || fail "cannot release ${repo}#${epic}"
+  if [[ -n "${current}" ]]; then
+    [[ "$(lock_field token "${current}")" == "${token}" ]] || refuse "${current}"
+    store_git update-ref -d "${ref}" "${current}" || fail "cannot release ${repo}#${epic}"
+  fi
+  # A session that ends leaves no wait behind for the Epic.
+  stop_recorded_wait "${repo}" "${epic}"
   exit 0
 fi
 

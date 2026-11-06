@@ -2,7 +2,7 @@
 # The skill's writes to the babysit ledger at $(git-common-dir)/babysit/<owner>/<repo>/<pr>.json.
 # wait.sh owns head, heads, and api_failures; every other field is written here.
 # Usage: ledger.sh path   <owner/repo> <pr>
-#        ledger.sh start  <owner/repo> <pr> <token>   take the lock and reset the session fields
+#        ledger.sh start  <owner/repo> <pr> <token>   take the lock and reset the session fields; rounds and repairs last the PR's lifetime
 #        ledger.sh record <owner/repo> <pr> <token> <key> <reported|handled|parked|rerun> [--hash <h>] [--run-id <n>] [--reason <text>]
 #        ledger.sh stop   <owner/repo> <pr> <token>   clear the lock
 #        ledger.sh show   <owner/repo> <pr>
@@ -88,8 +88,8 @@ start)
     ((age >= STALE_SECONDS)) || lost "Held by session ${owner}, heartbeat ${age}s ago"
   fi
   jq -c --argjson now "${now}" --arg token "${token}" '
-    . + {started_at: $now, rounds: 0, repairs: {}, replies: {}, api_failures: 0,
-         lock: {token: $token, heartbeat: $now}}' <<<"${ledger}" | write
+    . + {started_at: $now, rounds: (.rounds // 0), repairs: (.repairs // {}), replies: {}, api_failures: 0,
+         lock: {token: $token, heartbeat: $now}} | del(.baseline)' <<<"${ledger}" | write
   echo "started"
   ;;
 record)

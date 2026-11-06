@@ -18,13 +18,14 @@ query($owner: String!, $repo: String!, $epic: Int!) {
 
 fragment HeadChecks on Commit {
   oid
-  committedDate
   statusCheckRollup {
     contexts(first: 100) {
       totalCount
+      # oe-ready.sh reads the remaining pages with oe-ready-checks.graphql.
+      pageInfo { hasNextPage endCursor }
       nodes {
         __typename
-        ... on CheckRun { name status conclusion startedAt checkSuite { databaseId } }
+        ... on CheckRun { name status conclusion startedAt checkSuite { databaseId workflowRun { workflow { databaseId } } } }
         ... on StatusContext { context state createdAt }
       }
     }

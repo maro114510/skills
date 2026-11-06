@@ -163,7 +163,7 @@ JSON
   esac
 }
 
-@test "a default branch head without checks past the grace ends the wait with the end line" {
+@test "a default branch head without checks past the grace keeps the wait running until the timeout" {
   github <<'JSON'
 {
   "default_branch": {"pushed": "07:00"},
@@ -171,13 +171,10 @@ JSON
 }
 JSON
 
-  run bash "${oe}" wait o/r 1 --timeout 60
+  run bash "${oe}" wait o/r 1 --timeout 1
 
-  [ "${status}" -eq 3 ]
-  case "${lines[0]}" in
-  end$'\t'*) ;;
-  *) return 1 ;;
-  esac
+  [ "${status}" -eq 5 ]
+  [ "$(action_of 5)" = claim ]
 }
 
 @test "a timeout that is not a whole number of seconds is refused" {
@@ -186,4 +183,124 @@ JSON
   run --separate-stderr bash "${oe}" wait o/r 1 --timeout soon
 
   [ "${status}" -eq 2 ]
+}
+
+# Starts oe wait for Epic $1 in the background with a long timeout, and prints its process ID.
+# Its output goes to wait-<pid>.out, and it polls once a second, so it stays in its loop until stopped.
+background_wait() {
+  local out="${BATS_TEST_TMPDIR}/wait.$$.${RANDOM}.out"
+  OE_WAIT_INTERVAL=1 bash "${oe}" wait o/r "$1" --timeout 600 --running 5 >"${out}" 2>&1 3>&- &
+  echo $! >>"${BATS_TEST_TMPDIR}/waits"
+  mv "${out}" "${BATS_TEST_TMPDIR}/wait-$!.out"
+  echo $!
+}
+
+# Stops every wait a test started, with its process tree, so a failed test leaves none running.
+teardown() {
+  [ -e "${BATS_TEST_TMPDIR}/waits" ] || return 0
+  while read -r pid; do
+    pkill -P "${pid}" 2>/dev/null || true
+    kill "${pid}" 2>/dev/null || true
+  done <"${BATS_TEST_TMPDIR}/waits"
+}
+
+# Succeeds once process $1 has ended, within about five seconds.
+ended() {
+  local _
+  for _ in $(seq 50); do
+    kill -0 "$1" 2>/dev/null || return 0
+    sleep 0.1
+  done
+  return 1
+}
+
+# Succeeds once oe wait has recorded process $1 for an Epic, within about five seconds.
+recorded() {
+  local _
+  for _ in $(seq 50); do
+    find "${OE_STATE_DIR}" -path '*/waits/*' -type f -exec grep -qx "$1 .*" {} \; -print 2>/dev/null | grep -q . && return 0
+    sleep 0.1
+  done
+  return 1
+}
+
+@test "a second wait for the same Epic stops the first quietly, so at most one runs" {
+  pr_15_checks_running
+  first="$(background_wait 1)"
+  recorded "${first}"
+
+  second="$(background_wait 1)"
+
+  ended "${first}"
+  [ ! -s "${BATS_TEST_TMPDIR}/wait-${first}.out" ]
+  kill -0 "${second}"
+}
+
+@test "a wait for another Epic leaves the first running" {
+  pr_15_checks_running
+  first="$(background_wait 1)"
+  recorded "${first}"
+
+  other="$(background_wait 2)"
+  recorded "${other}"
+
+  kill -0 "${first}"
+}
+
+@test "an invalid wait leaves the running one alone" {
+  pr_15_checks_running
+  first="$(background_wait 1)"
+  recorded "${first}"
+
+  run env OE_WAIT_INTERVAL=soon bash "${oe}" wait o/r 1 --timeout 0
+
+  [ "${status}" -eq 2 ]
+  kill -0 "${first}"
+}
+
+@test "a recorded process that is no longer a wait is left running" {
+  pr_15_checks_running
+  first="$(background_wait 1)"
+  recorded "${first}"
+  kill "${first}"
+  ended "${first}"
+  sleep 30 &
+  bystander=$!
+  echo "${bystander}" >>"${BATS_TEST_TMPDIR}/waits"
+  record="$(find "${OE_STATE_DIR}" -path '*/waits/*' -type f)"
+  # ps prints start times to the second, so the first wait's start time could match a bystander started in the same second.
+  start_no_process_has="Thu Jan  1 00:00:00 1970"
+  printf '%s %s\n' "${bystander}" "${start_no_process_has}" >"${record}"
+
+  run bash "${oe}" wait o/r 1 --timeout 0 --running 5
+
+  kill -0 "${bystander}"
+}
+
+@test "a wait that ends on its own leaves no record of itself" {
+  pr_15_checks_running
+
+  run bash "${oe}" wait o/r 1 --timeout 0 --running 5
+
+  [ "${status}" -eq 5 ]
+  [ -z "$(find "${OE_STATE_DIR}" -path '*/waits/*' -type f 2>/dev/null)" ]
+}
+
+@test "releasing the Epic's lock stops its wait, and leaves another Epic's wait running" {
+  pr_15_checks_running
+  sleep 600 >/dev/null 2>&1 3>&- &
+  session=$!
+  echo "${session}" >>"${BATS_TEST_TMPDIR}/waits"
+  token="$(OE_SESSION_PID="${session}" bash "${oe}" lock acquire o/r 1 | sed -n 's/^token=//p')"
+  first="$(background_wait 1)"
+  other="$(background_wait 2)"
+  recorded "${first}"
+  recorded "${other}"
+
+  run bash "${oe}" lock release o/r 1 "${token}"
+
+  [ "${status}" -eq 0 ]
+  ended "${first}"
+  [ ! -s "${BATS_TEST_TMPDIR}/wait-${first}.out" ]
+  kill -0 "${other}"
 }

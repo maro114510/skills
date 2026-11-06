@@ -18,22 +18,36 @@
 #
 # Output
 #
-# A table with one row per child Issue, sorted by Issue number. A column without a value shows -.
+# The first line counts the child Issues by their step, after a running agent replaces the step as the STEP column says.
+#
+# | Count | Steps |
+# |---|---|
+# | done | done |
+# | waiting on you | wait-answer, parked, wait-engineer, wait-merge |
+# | waiting | wait-dependencies, wait-base |
+# | in progress | Any other, running included |
+#
+# Under it, each Issue waiting on the owner shows three lines, sorted by Issue number, or one line says nothing waits:
+#
+# - `- #<n>` and what the owner does next
+# - The URL to do it at: the Issue for a question, else the pull request, or the Issue without one
+# - `why:` and oe ready's reason
+#
+# Then a table with one row per child Issue, sorted by Issue number. A column without a value shows -.
 #
 # | Column | Holds |
 # |---|---|
 # | ISSUE | The Issue number |
-# | STEP | The next action oe ready gives the Issue, which names the step it is in |
+# | STEP | running while an agent runs, so that agent's own attempt shows instead of the next one; else the next action oe ready gives the Issue, which names the step it is in |
 # | PR | The pull request opened from its branch after the latest claim |
 # | CI | The CI state of that pull request's open head |
 # | VERDICT | The oe/verify state on that head |
 # | ATTEMPTS | Owner attempts since the latest claim, out of max_attempts |
 # | AGENT | owner or verifier while a running session holds the Epic's lock and that agent's worktree exists |
 # | SINCE | Time since the Issue entered its step, as facts in oe-ready.jq defines it |
-# | REASON | oe ready's reason for the step |
+# | REASON | For a running agent, its attempt or start out of the cap; else oe ready's reason for the step |
 #
 # - Under the table, each Issue whose head has a failure verdict shows that verdict's findings, one line each.
-# - When oe ready ends the session for a default branch head without checks, the view is its end line alone.
 #
 # Exit codes
 #
@@ -98,14 +112,9 @@ agent_of() {
 
 # Prints the whole view once, or fails with the reason on stderr and prints nothing.
 render() {
-  local facts rc now line n head started since rows="" findings="" found
-  facts="$(bash "${dir}/oe-ready.sh" "${repo}" "${epic}" --facts)"
-  rc=$?
-  if ((rc == 3)); then
-    printf 'end: %s\n' "${facts#end$'\t'}"
-    return 0
-  fi
-  ((rc == 0)) || return 1
+  local facts now line n head started since rows="" findings="" found action agent needs=""
+  local done_n=0 progress_n=0 waiting_n=0 owner_n=0
+  facts="$(bash "${dir}/oe-ready.sh" "${repo}" "${epic}" --facts)" || return 1
   now="${OE_NOW:-$(date -u +%s)}"
   held=no
   ! lock_held "${repo}" "${epic}" || held=yes
@@ -114,10 +123,35 @@ render() {
   while read -r line; do
     [[ -n "${line}" ]] || continue
     n="$(jq -r .number <<<"${line}")" || return 1
+    agent="$(agent_of "${n}")"
+    # A running agent's own attempt already counts, so oe ready's next action would describe the attempt after it.
+    if [[ "${agent}" != - && "$(jq -r .action <<<"${line}")" != "done" ]]; then
+      line="$(jq -c --arg agent "${agent}" --argjson max "${max_attempts}" --argjson vmax "${max_verifier_starts}" '
+        .action = "running"
+        | .reason = (if $agent == "owner" then "Owner attempt \(.attempts // 0) of \($max)"
+            else "Verifier start \(.starts // 0) of \($vmax) on \((.head // "")[0:7])" end)' <<<"${line}")" || return 1
+    fi
+    action="$(jq -r .action <<<"${line}")" || return 1
+    case "${action}" in
+    done) done_n=$((done_n + 1)) ;;
+    wait-answer | parked | wait-engineer | wait-merge)
+      owner_n=$((owner_n + 1))
+      needs+="$(jq -r --arg repo "${repo}" '
+        {"wait-answer": "Answer the Owner'\''s question with a comment on the Issue",
+          "parked": "Fix it by hand, or delete its branch so the AI starts over",
+          "wait-engineer": "Close the Issue, reopen the PR, or delete its branch so the AI starts over",
+          "wait-merge": "Review the PR, run its manual checks, and merge it"}[.action] as $todo
+        | (if .action != "wait-answer" and .pr then "pull/\(.pr)" else "issues/\(.number)" end) as $path
+        | "- #\(.number) \($todo)\n  https://github.com/\($repo)/\($path)\n  why: \(.reason)"' \
+        <<<"${line}")"$'\n' || return 1
+      ;;
+    wait-dependencies | wait-base) waiting_n=$((waiting_n + 1)) ;;
+    *) progress_n=$((progress_n + 1)) ;;
+    esac
     started="$(jq -r '.started // empty' <<<"${line}")" || return 1
     since=-
     [[ -z "${started}" ]] || since="$(duration "$((now - started))")"
-    rows+="$(jq -r --arg agent "$(agent_of "${n}")" --arg since "${since}" --argjson max "${max_attempts}" \
+    rows+="$(jq -r --arg agent "${agent}" --arg since "${since}" --argjson max "${max_attempts}" \
       '["#\(.number)", .action, (if .pr then "#\(.pr)" else "-" end), (.ci // "-"),
         (if .verdict == null or .verdict == "none" then "-" else .verdict end),
         (if .attempts == null then "-" else "\(.attempts)/\($max)" end), $agent, $since, .reason] | join("\t")' \
@@ -130,6 +164,14 @@ render() {
       [[ -z "${found}" ]] || findings+=$'\n'"#${n} failure verdict on ${head:0:7}:"$'\n'"  ${found//$'\n'/$'\n'  }"$'\n'
     fi
   done <<<"${facts}"
+
+  printf 'Epic #%s: %s done, %s in progress, %s waiting, %s waiting on you\n' \
+    "${epic}" "${done_n}" "${progress_n}" "${waiting_n}" "${owner_n}"
+  if ((owner_n > 0)); then
+    printf '%s\n' "${needs}"
+  else
+    printf 'Nothing waits on you.\n\n'
+  fi
 
   # Every column but the last is padded to its widest value, so a reason with spaces stays one column.
   printf 'ISSUE\tSTEP\tPR\tCI\tVERDICT\tATTEMPTS\tAGENT\tSINCE\tREASON\n%s' "${rows}" | awk -F '\t' '

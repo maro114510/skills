@@ -4,9 +4,11 @@
 # Usage: pr-state.sh <owner/repo> <pr>
 #        pr-state.sh --normalize <file|->   normalize one saved, complete response of the same query
 # Output fields: repo, number, url, state, isDraft, author, viewer, isCrossRepository, baseRef,
-# headRef, head, mergeable, mergeStateStatus, reviewDecision, checks, reviewRequests, latestReviews,
-# threads, reviews, comments. Each comment carries id, author, authorAssociation, body, bodyHash,
-# createdAt, url, and isMinimized. Each check is the latest run of its key.
+# headRef, head, mergeable, mergeStateStatus, reviewDecision, automationOwner, checks, reviewRequests,
+# latestReviews, threads, reviews, comments. automationOwner is the id of the first PR body line that
+# holds only <!-- automation-owner: <id> -->, or null. Each comment carries id, author, authorType,
+# authorAssociation, body, bodyHash, createdAt, url, and isMinimized. Each check is the latest run of its key.
+# Each latest review carries author, authorType, state, and the commit it reviewed.
 # Exit: 0 printed, 1 GitHub could not be read completely, 2 usage error.
 set -uo pipefail
 
@@ -26,7 +28,7 @@ fail() {
   exit 1
 }
 
-COMMENT_FIELDS='id body createdAt url isMinimized authorAssociation author { login }'
+COMMENT_FIELDS='id body createdAt url isMinimized authorAssociation author { __typename login }'
 
 # One query shape for every page. Each connection is fetched only while its @include flag is true,
 # so later pages carry just the connections that still have a next page.
@@ -39,7 +41,7 @@ QUERY='query($owner: String!, $repo: String!, $num: Int!,
   repository(owner: $owner, name: $repo) {
     pullRequest(number: $num) {
       number url state isDraft isCrossRepository mergeable mergeStateStatus reviewDecision
-      baseRefName headRefName headRefOid author { login }
+      baseRefName headRefName headRefOid body author { login }
       reviewThreads(first: '"${PAGE}"', after: $cThreads) @include(if: $wThreads) {
         totalCount pageInfo { hasNextPage endCursor }
         nodes { id isResolved isOutdated path line
@@ -53,7 +55,7 @@ QUERY='query($owner: String!, $repo: String!, $num: Int!,
         nodes { requestedReviewer { __typename
           ... on User { login } ... on Team { slug } ... on Bot { login } ... on Mannequin { login } } } }
       latestOpinionatedReviews(first: '"${PAGE}"', after: $cLatest) @include(if: $wLatest) {
-        totalCount pageInfo { hasNextPage endCursor } nodes { state author { login } } }
+        totalCount pageInfo { hasNextPage endCursor } nodes { state author { __typename login } commit { oid } } }
       commits(last: 1) @include(if: $wChecks) { nodes { commit { oid statusCheckRollup {
         contexts(first: '"${PAGE}"', after: $cChecks) { totalCount pageInfo { hasNextPage endCursor } nodes { __typename
           ... on CheckRun { databaseId name status conclusion startedAt detailsUrl
@@ -111,8 +113,8 @@ COMPLETE='
 # latest run of a key counts. A run not started yet has no timestamp and counts as the latest.
 # shellcheck disable=SC2016 # jq program, not shell expansion.
 NORMALIZE='
-  def comment: {id, author: (.author.login // null), authorAssociation, body: (.body // ""), createdAt, url,
-    isMinimized: (.isMinimized == true)};
+  def comment: {id, author: (.author.login // null), authorType: (.author.__typename // null), authorAssociation,
+    body: (.body // ""), createdAt, url, isMinimized: (.isMinimized == true)};
   def check_class:
     if .__typename == "CheckRun" then
       if (.status | type) != "string" then "unreadable"
@@ -145,11 +147,14 @@ NORMALIZE='
       author: ($p.author.login // null), viewer: .viewer, isCrossRepository: $p.isCrossRepository,
       baseRef: $p.baseRefName, headRef: $p.headRefName, head: $p.headRefOid,
       mergeable: $p.mergeable, mergeStateStatus: $p.mergeStateStatus, reviewDecision: $p.reviewDecision,
+      automationOwner: ([($p.body // "") | splits("\n")
+        | capture("^\\s*<!--\\s*automation-owner:\\s*(?<id>[A-Za-z0-9._-]+)\\s*-->\\s*$").id] | first),
       checks: ([.conns.checks.nodes[] | check] | group_by(.key)
         | map(sort_by([.startedAt == null, .startedAt // "", .runId // 0]) | last)),
       reviewRequests: [.conns.reviewRequests.nodes[] | .requestedReviewer
         | {reviewer: (.login // .slug // null), type: .__typename}],
-      latestReviews: [.conns.latestOpinionatedReviews.nodes[] | {author: (.author.login // null), state}],
+      latestReviews: [.conns.latestOpinionatedReviews.nodes[] | {author: (.author.login // null),
+        authorType: (.author.__typename // null), state, commit: (.commit.oid // null)}],
       threads: [.conns.reviewThreads.nodes[] | {id, isResolved, isOutdated, path, line,
         comments: [.comments.nodes[] | comment]}],
       reviews: [.conns.reviews.nodes[] | comment + {state}],

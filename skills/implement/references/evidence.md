@@ -27,7 +27,7 @@ A criterion that reads both ways, for any kind of file, is a behavior criterion.
 |---|---|
 | Final state | It comes from a fresh run on the final state of the change. An edit to anything the run depends on, made after it, voids it until it is run again. A hook or formatter that rewrites a file at commit time is such an edit |
 | This change | It runs what the worktree builds, never an installed copy: `go run ./cmd/greet` or a binary built from the worktree, not `greet` found on `PATH`. The record names what ran |
-| Reproducible | Its record lets someone else run it again under the same conditions. Prefer a test or script the change already needs, so its command is the record. When no deterministic check exists, as for an agent instruction file, record the exact input: the procedure's file path and the concrete input. Keep the input on the line when it is short. Otherwise keep it in the Phase 6.9 output and the PR body in normal mode, or in `SUMMARY` in autonomous mode. Never add a file only to hold it |
+| Reproducible | Its record lets someone else run it again under the same conditions. Prefer a test or script the change already needs, so its command is the record. When no deterministic check exists, as for an agent instruction file, record the exact input: the procedure's file path and the concrete input. Keep the input on the line when it is short. Otherwise keep it in the Phase 6.9 output and the PR body. Never add a file only to hold it |
 | Untouched worktree | No run or observation changes the worktree's source. Never stash, reset, check out, or edit it to make one. Build and cache output that running a check writes is allowed |
 | No outside effects | No run pushes, publishes, or changes state outside the worktree, such as a GitHub Issue or comment, a shared database, or a deployed service. Show such an outcome against a fake, a local sandbox, or a dry run whose output names the effect it would have. A criterion that only the real effect can show is `No evidence` |
 | Named check | When the criterion itself is that a named check passes, such as "`claude plugin validate .` passes", a fresh run of that check is its `[behavior]` evidence, and section 2.2 does not apply |
@@ -59,7 +59,7 @@ The context that wrote a procedure already knows the intended answer, so run it 
 - Give the fresh context the absolute path of the changed file in the worktree, tell it to read and follow that file, and give it the concrete input. Never give it the criterion or the expected outcome. Never invoke the procedure by its installed name, and never start the prompt with the input when the input is a slash command, because either runs the installed copy, not the change. Quote such an input inside the prompt as data.
 - Tell it never to edit the worktree, commit, push, or publish anything, such as a pull request, an Issue, or a comment, and to stop before any such step and report the exact step it would take. This guard is not knowledge of the answer.
 - When the procedure can take such a step, start the fresh context as a new harness session in its harness's read-only mode, such as `claude -p --permission-mode plan "<prompt>"` or `codex exec --sandbox read-only "<prompt>"`, never as a subagent that inherits write permissions. Without a read-only mode, such a criterion is `No evidence`. Otherwise a subagent will do.
-- Fingerprint the worktree before and after the run: `git rev-parse HEAD`, `git status --porcelain --untracked-files=all`, `git diff HEAD`, and the hash of each untracked file, as `scripts/self-review.sh` does. If the fingerprint changed, the run is not evidence. Leave the worktree as it is and undo nothing: in autonomous mode return FAILED naming the changed paths, and in normal mode stop and ask the user.
+- Fingerprint the worktree before and after the run: `git rev-parse HEAD`, `git status --porcelain --untracked-files=all`, `git diff HEAD`, and the hash of each untracked file, as `scripts/self-review.sh` does. If the fingerprint changed, the run is not evidence. Leave the worktree as it is and undo nothing: stop and ask the user, or, without a human, stop and name the changed paths.
 
 The reported step is the observed outcome.
 It settles a criterion about what the procedure does, such as the command it runs.
@@ -70,13 +70,17 @@ A criterion about the state the step leaves, such as a pull request that exists 
 - Record the command or input and the observed result, summarized. Evidence can be published on GitHub, so never paste a token, credential, or environment value.
 - When an observation surprises you, by failing or by passing where it should fail, suspect the observation first: a stale build, a cached result, the wrong directory, commit, binary, file, or target. Conclude about the system only after the method checks out.
 
+### 2.5 Behavior Only the Running App Shows
+
+Use this only when no test or command in the repository reaches the behavior. Start the app with its documented command, drive the feature as a user does, record the command and result outside the worktree, and tear down what you started; if no usable app results, report `No evidence`.
+
 ## 3. Never Evidence
 
-- A check run cited for a criterion that does not name that check, such as `make ci -> exit 0` or `go test ./... -> exit 0` for a criterion about a feature. It shows that nothing broke, not that the behavior exists. Report it as a check, under `CHECKS` in autonomous mode.
+- A check run cited for a criterion that does not name that check, such as `make ci -> exit 0` or `go test ./... -> exit 0` for a criterion about a feature. It shows that nothing broke, not that the behavior exists. Report it as a check.
 - For a behavior criterion: a file path, a `file:line`, or reading the code.
 - A replayed result instead of a run on the final state: a cached test result such as Go's `(cached)`, a remote cache hit, or an earlier run's output.
 - A run or observation that broke any rule in section 2.
-- A commit message, a code comment, or another agent's account of its own work, such as a worker's `CRITERIA`. Each is a lead to check. A fresh-context run under section 2.3 is an observation, not such an account.
+- A commit message, a code comment, or another agent's account of its own work, such as a worker's report. Each is a lead to check. A fresh-context run under section 2.3 is an observation, not such an account.
 - A TODO, a new Issue, out of scope, future work, or a later Epic.
 - A user decision. It can justify deferring a criterion, which is reported as deferred, never as met.
 
@@ -95,7 +99,6 @@ Report it as `-> manual` without evidence. It is never `No evidence` or deferred
 ## 5. Report Lines
 
 Each criterion takes one line, quoted verbatim or prefixed `(derived)`.
-In autonomous mode these lines are the `CRITERIA` field.
 Any line this file puts into a report field, including a criterion in `SKIPPED` and an input in `SUMMARY`, that would start with capital letters or underscores followed by a colon, such as `ERROR:` or `HEAD_SHA:`, starts with `> ` instead, because the report parser reads such a line as a new field.
 
 ```

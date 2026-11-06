@@ -2,7 +2,7 @@
 
 ## Step 1.5: Clarification Question Format
 
-Enumerate each unclear item and ask for a response using the following format. The three labeled subsections below (`[Granularity]` / `[Acceptance criteria]` / `[Specification]`) are illustrative, not a fixed checklist — include only the subsection(s) for the axis/axes actually unclear this run.
+Enumerate each unclear item and ask for a response using the following format. The four labeled subsections below (`[Granularity]` / `[Acceptance criteria]` / `[Specification]` / `[Premise]`) are illustrative, not a fixed checklist — include only the subsection(s) for the axis/axes actually unclear this run.
 
 ```
 The following points are unclear. Please answer before I continue.
@@ -15,6 +15,9 @@ The following points are unclear. Please answer before I continue.
 
 **[Specification] About <item name>**
 <A two-choice or question that makes the ambiguity explicit>
+
+**[Premise] About <claim>**
+<The claim, where it comes from, and the check that would confirm it, e.g. "run X and see whether Y". Ask whether to check it before creating Issues>
 
 I'll continue creating Issues once all questions are answered.
 If you want to proceed with the specification still undecided, reply "proceed anyway" (I'll add a [NEEDS CONFIRMATION] tag and continue).
@@ -35,6 +38,8 @@ Output this when the user instructs to proceed with unresolved items:
 
 Output this block and ask for approval. This is the main checkpoint for catching invented or misplaced content before it's written into a real Issue, and — by default — the *only* checkpoint before creation: Step 4.5's full-body re-display is skipped unless the user asks for it (see Step 4.5), so this summary must carry enough substance (background, full verification list) that approving it is equivalent to approving the final bodies.
 
+Tasks that differ only in one value, such as a service name, may be shown as one full entry plus a table of each task's id, title, and value, since approving that still covers every body.
+
 Use the same 12-task threshold as the Epic body template below: Mermaid for 12 or fewer tasks, the wave table for more. This preview must render in the same form the Epic will actually use — never show a Mermaid graph here if Step 4 is going to render a table, or vice versa.
 
 In any Mermaid node label, a double quote in a title must be written as `#quot;` — never a raw `"` or a backslash-escaped `\"` (backslash escaping breaks rendering).
@@ -48,6 +53,8 @@ In any Mermaid node label, a double quote in a title must be written as `#quot;`
 **Background**: <what led to needing this Epic, in 1-2 sentences>
 **Scope (included)**: <bullet> / <bullet>
 **Scope (not included)**: <only if applicable. Omit this line entirely if the conversation never named an exclusion>
+**Target state**: <what must be true when every child Issue is done, in one line>
+**Verification**: <how to confirm the whole Epic is done, built only from the children's verification below>
 
 (Only if the number of tasks discussed differs from the number of child Issues: **Restructured from the conversation**: <which tasks were split/merged and why, in 1-2 sentences>)
 
@@ -82,8 +89,9 @@ flowchart LR
 - Requirements: <bullet> / <bullet>
 - Specs: <bullet> (write "none" if nothing was decided)
 - Target state: <what must be true when done, in one line>
-- Automated checks: <bullet>
+- Automated checks: <bullet>, or none, noting that pr-verify then has nothing to judge
 - Manual checks: <bullet>, or none
+- Full list: <document path and section> (only when this task uses the point option)
 
 #### T2: <title> (Wave 2 / Depends on: T1)
 - Background: <one line>
@@ -93,11 +101,11 @@ flowchart LR
 - Automated checks: <bullet>
 - Manual checks: none
 
-When this Tn's content changed because Step 1.5 changed a merged document, write its dependency line as "(directly on T<doc>)" or "(transitively via T<via>)" instead of the plain "Depends on: ..." — the summary must approve which of the two applies.
+When this Tn's content changed because Step 1.5 changed a merged document, write its heading's dependency part in full as "Depends on: T<doc>, directly" or "Depends on: T<via>, transitively on T<doc>" instead of the plain "Depends on: ..." — the summary must approve which of the two applies.
 
 Only when a Tn was promoted to a container, show it in this shape instead — Requirements/Specs/Verification live only on the Tn.m side.
 
-#### T3: <title> (container / Depends on: none)
+#### T3: <title> (container / Wave 1 / Depends on: none)
 - Background: <why this theme needs to be its own grouping, in one line>
 - Scope: <e.g. covers T3.1, T3.2>
 
@@ -224,7 +232,7 @@ Both a non-container `Tn` (leaf) and a `Tn.m` (grandchild) use this shape.
 
 ## Dependencies
 
-{For a `Tn`: "Can start after Tn is done. See the Epic for the full dependency picture." / For a `Tn.m`: "Can start after Tn.m is done. See the Tn body for the full dependency picture within this parent." or "None (can start in parallel)". Don't write step-by-step reasoning or detail here. When this Tn's content changed because Step 1.5 changed a merged document, state instead whether it depends on the doc-update Tn directly ("Can start after the doc-update T<doc> is done") or transitively ("Can start after T<via> is done, which in turn depends on the doc-update T<doc>").}
+{Name each dependency by its title, never by its temporary `Tn` id, which readers never see. For a `Tn`: "Can start after <title> is done. See the Epic for the full dependency picture." / For a `Tn.m`: "Can start after <title> is done. See the parent Issue for the full dependency picture within it." or "None (can start in parallel)". Don't write step-by-step reasoning or detail here. When this Tn's content changed because Step 1.5 changed a merged document, state instead whether it depends on the doc-update task directly ("Can start after the doc-update task <doc-update title> is done, which it depends on directly") or transitively ("Can start after <title> is done, which in turn depends on the doc-update task <doc-update title>, so it depends on it transitively"), keeping the "See the Epic" sentence.}
 
 ## Acceptance Criteria
 
@@ -294,7 +302,7 @@ Let me know which part needs changes. If everything looks good, reply "create th
 
 ### Epic
 - #<number> <title>  (<URL>)
-  (The Epic's number is lower than the child Issues' since it was created first.)
+  (The Epic's number is lower than the child Issues' since it was created first; the child Issues follow in wave order<, and every grandchild comes after all of them — only when a container exists>.)
 
 ### Child Issues
 - #<number> <title>
@@ -307,6 +315,10 @@ The Epic and each Tn, and any container Tn and its grandchild Issues, are linked
 Dependencies are set as Blocked-by/Blocking relationships via `--blocked-by` — grandchild-to-grandchild dependencies only within the same parent Tn.
 You can check both in the Issue sidebar on GitHub (Sub-issues / Relationships).
 The Epic body's dependency diagram (or table), and any container Tn's own dependency diagram, now use the real Issue numbers.
+
+(Only when a create failed:
+### Not created
+- <title>: <the error gh printed>. <Issues that should depend on it, by number> are not blocked by it. Create it by hand with parent #<Epic or container> and blocked-by <its own dependencies, by number>, add it as blocked-by to those Issues, and replace its "(creation failed)" in the Epic body with its number.)
 
 (Only when a doc-update dependency was wired transitively: <Tn(s)> depend on the doc-update Tn transitively via <Tvia> — they are not directly blocked by it. This ordering is intentional; do not "fix" it by adding or removing edges.)
 ```

@@ -38,37 +38,18 @@ action_of() {
 
 # Default branch gate
 
-@test "a default branch head with no checks ten minutes after its push ends the session with a reason" {
+@test "a default branch head with no checks eleven minutes after its push holds nothing and ends nothing" {
   github <<'JSON'
 {
-  "default_branch": {"pushed": "07:00"},
+  "default_branch": {"pushed": "07:49"},
   "issues": [{"number": 5}]
 }
 JSON
 
   run bash "${oe}" ready o/r 1
 
-  [ "${status}" -eq 3 ]
-  [ "${#lines[@]}" -eq 1 ]
-  case "${lines[0]}" in
-  end$'\t'*"no checks"*) ;;
-  *) return 1 ;;
-  esac
-}
-
-@test "a default branch head pushed five minutes ago with no checks makes every Issue wait, even when committed long before" {
-  github <<'JSON'
-{
-  "default_branch": {"committed": "06:00", "pushed": "07:55"},
-  "issues": [{"number": 5}, {"number": 6}]
-}
-JSON
-
-  run bash "${oe}" ready o/r 1
-
   [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = wait-base ]
-  [ "$(action_of 6)" = wait-base ]
+  [ "$(action_of 5)" = claim ]
 }
 
 @test "a failed check on the default branch head makes no Issue ready" {
@@ -85,7 +66,7 @@ JSON
   [ "$(action_of 5)" = wait-base ]
 }
 
-@test "a running check on the default branch head makes no Issue ready" {
+@test "a running check on the default branch head still lets an Issue with completed dependencies be claimed" {
   github <<'JSON'
 {
   "default_branch": {"checks": {"test": "in_progress"}},
@@ -96,20 +77,21 @@ JSON
   run bash "${oe}" ready o/r 1
 
   [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = wait-base ]
+  [ "$(action_of 5)" = claim ]
 }
 
-@test "the oe/verify status on the default branch head does not count as a check" {
+@test "a failure oe/verify status on the default branch head does not count as a failed check" {
   github <<'JSON'
 {
-  "default_branch": {"pushed": "07:00", "statuses": {"oe/verify": "success"}},
+  "default_branch": {"statuses": {"oe/verify": "failure"}},
   "issues": [{"number": 5}]
 }
 JSON
 
   run bash "${oe}" ready o/r 1
 
-  [ "${status}" -eq 3 ]
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = claim ]
 }
 
 # Failed reads
@@ -347,6 +329,28 @@ JSON
   [ "$(action_of 5)" = start-owner ]
 }
 
+@test "a failed check whose name holds a newline and tabs yields one line of four fields and no injected start command" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"x\n9; touch pwned\tstart-owner\ty": "failure"}}]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:01
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "${#lines[@]}" -eq 1 ]
+  tabs="${lines[0]//[^$'\t']/}"
+  [ "${#tabs}" -eq 3 ]
+  [ "$(action_of 5)" = start-owner ]
+}
+
 @test "a failure verdict on the pull request head gets an Owner" {
   github <<'JSON'
 {
@@ -421,6 +425,116 @@ JSON
 
   [ "${status}" -eq 0 ]
   [ "$(action_of 5)" = wait-ci ]
+}
+
+@test "a check cancelled in one suite and passed by a later run of the same name in another suite counts as passed" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{"number": 50, "opened": "07:10", "check_runs": [
+      {"name": "gate", "result": "cancelled", "suite": 1, "workflow": 7, "started": "07:15"},
+      {"name": "gate", "result": "success", "suite": 2, "workflow": 7, "started": "07:16"}
+    ]}]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:01
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-verifier ]
+}
+
+@test "a check cancelled in one suite while a later run of the same name in another suite is running waits for CI" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{"number": 50, "opened": "07:10", "check_runs": [
+      {"name": "gate", "result": "cancelled", "suite": 1, "workflow": 7, "started": "07:15"},
+      {"name": "gate", "result": "in_progress", "suite": 2, "workflow": 7, "started": "07:16"}
+    ]}]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:01
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-ci ]
+}
+
+@test "a cancelled check with no later run of the same name gets an Owner" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{"number": 50, "opened": "07:10", "check_runs": [
+      {"name": "gate", "result": "cancelled", "suite": 2, "workflow": 7, "started": "07:16"},
+      {"name": "lint", "result": "success", "suite": 1, "started": "07:17"}
+    ]}]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:01
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-owner ]
+}
+
+@test "a check cancelled after an earlier run of the same name passed in another suite gets an Owner" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{"number": 50, "opened": "07:10", "check_runs": [
+      {"name": "gate", "result": "success", "suite": 1, "workflow": 7, "started": "07:15"},
+      {"name": "gate", "result": "cancelled", "suite": 2, "workflow": 7, "started": "07:16"}
+    ]}]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:01
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-owner ]
+}
+
+@test "a check cancelled in one workflow and passed by a later run of the same name from another workflow gets an Owner" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{"number": 50, "opened": "07:10", "check_runs": [
+      {"name": "gate", "result": "cancelled", "suite": 1, "workflow": 7, "started": "07:15"},
+      {"name": "gate", "result": "success", "suite": 2, "workflow": 8, "started": "07:16"}
+    ]}]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:01
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-owner ]
 }
 
 @test "a pull request head pushed five minutes ago with no checks waits for CI, even when committed long before" {
@@ -1125,6 +1239,116 @@ JSON
 
   [ "${status}" -eq 0 ]
   [ "$(action_of 5)" = wait-answer ]
+}
+
+# Prints 150 checks named check-1 to check-150, which GitHub returns over two pages.
+# check-150, on the second page, has the result $1, and every other check passed.
+checks_150() {
+  jq -nc --arg last "$1" '[range(1; 150) | {key: "check-\(.)", value: "success"}] + [{key: "check-150", value: $last}] | from_entries'
+}
+
+@test "a pending check on the second page of a pull request head with 150 checks waits for CI" {
+  github <<JSON
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": $(checks_150 in_progress)}]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:01
+
+  run --separate-stderr bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-ci ]
+}
+
+@test "150 passed checks over two pages on a pull request head start the Verifier without a truncation error" {
+  github <<JSON
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": $(checks_150 success)}]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:01
+
+  run --separate-stderr bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-verifier ]
+  case "${stderr}" in
+  *"checks truncated"*) return 1 ;;
+  *) ;;
+  esac
+}
+
+@test "a failed check on the second page of a pull request head with 150 checks gets an Owner that names it" {
+  github <<JSON
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": $(checks_150 failure)}]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:01
+
+  run --separate-stderr bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-owner ]
+  IFS=$'\t' read -r _ _ reason _ <<<"${lines[0]}"
+  case "${reason}" in
+  *"checks failed on "*": check-150") ;;
+  *) return 1 ;;
+  esac
+}
+
+@test "a failed check on the second page of a default branch head with 150 checks makes no Issue ready" {
+  github <<JSON
+{
+  "default_branch": {"checks": $(checks_150 failure)},
+  "issues": [{"number": 5}]
+}
+JSON
+
+  run --separate-stderr bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-base ]
+  IFS=$'\t' read -r _ _ reason _ <<<"${lines[0]}"
+  case "${reason}" in
+  *"checks failed on main head "*": check-150") ;;
+  *) return 1 ;;
+  esac
+}
+
+@test "a failed read of the second page of checks exits non-zero and prints nothing" {
+  github <<JSON
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": $(checks_150 success)}]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:01
+
+  GH_FAIL="after=" run --separate-stderr bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 1 ]
+  [ -z "${output}" ]
 }
 
 @test "a question from before the latest claim does not hold a restarted Issue" {

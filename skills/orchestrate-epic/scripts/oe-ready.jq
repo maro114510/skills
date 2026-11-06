@@ -32,8 +32,11 @@ def indexes(f): . as $a | [range(0; length) | select($a[.] | f)];
 #
 # - A check passes when its conclusion is success, neutral, or skipped.
 # - Only the latest run of each check counts.
+# - A cancelled run does not count when a run of the same name from the same workflow started later in another check suite,
+#   as when a workflow cancels its own run in progress.
 # - The verdict status is oe's own, so it never counts as a check.
 def check_name: .name // .context // "unnamed check";
+def check_time: .startedAt // .createdAt // "";
 def check_class:
   if .__typename == "CheckRun" then
     if .status != "COMPLETED" then "pending"
@@ -48,6 +51,12 @@ def check_key($i):
   if .__typename == "StatusContext" then ["status", check_name]
   elif (.checkSuite.databaseId | type) == "number" then ["suite", (.checkSuite.databaseId | tostring), check_name]
   else ["unkeyed", ($i | tostring)] end;
+def check_workflow: .checkSuite.workflowRun.workflow.databaseId;
+# A check from an app other than Actions has no workflow, so nothing ties its runs together and none supersedes another.
+def superseded($runs):
+  .__typename == "CheckRun" and .conclusion == "CANCELLED" and check_workflow != null
+  and (check_name as $n | check_workflow as $w | check_time as $t
+    | any($runs[]; .__typename == "CheckRun" and check_name == $n and check_workflow == $w and check_time > $t));
 def ci:
   .oid as $oid
   | if .statusCheckRollup == null then {state: "none", detail: ""}
@@ -59,7 +68,9 @@ def ci:
         | select(.__typename != "StatusContext" or .context != verify_context)
         | {key: check_key($i), value: .}]
     | group_by(.key)
-    | map(map(.value) | sort_by(.startedAt // .createdAt // "") | last | {name: check_name, class: check_class})
+    | map(map(.value) | sort_by(check_time) | last)
+    | . as $latest
+    | map(select(superseded($latest) | not) | {name: check_name, class: check_class})
     | (map(select(.class == "failed") | .name)) as $failed
     | (map(select(.class == "pending") | .name)) as $pending
     | if ($failed | length) > 0 then {state: "failed", detail: ($failed | join(", "))}
@@ -74,14 +85,14 @@ def ci:
 #
 # | First field | Other fields |
 # |---|---|
-# | default | Branch name, head SHA, commit time, CI state, failing or pending check names |
+# | default | Branch name, head SHA, CI state, failing or pending check names |
 # | issue | Child Issue number |
 def epic_lines:
   .data.repository as $r
   | if ($r | type) != "object" then error("repository not found") else . end
   | ($r.defaultBranchRef.target // error("default branch head unreadable")) as $head
   | ($head | ci) as $ci
-  | "default\t\($r.defaultBranchRef.name)\t\($head.oid)\t\($head.committedDate | epoch)\t\($ci.state)\t\($ci.detail)",
+  | "default\t\($r.defaultBranchRef.name)\t\($head.oid)\t\($ci.state)\t\($ci.detail)",
     (($r.issue // error("Epic not found")).subIssues
       | if .totalCount > (.nodes | length) then error("more than \(.nodes | length) child Issues") else . end
       | .nodes[]
@@ -210,7 +221,8 @@ def issue_state:
 #   - A Changes requested review
 #   - A review-thread comment
 # - A listed bot wrote a finding after the latest attempt, its round is unused, and no trusted user approved the head
-def act($action; $reason): "\(.number)\t\($action)\t\($reason)";
+# A reason quotes check names and logins from GitHub, so tabs and line breaks in it become spaces and cannot add a field or a line.
+def act($action; $reason): "\(.number)\t\($action)\t\($reason | gsub("[\t\r\n]"; " "))";
 def next_action:
   if .closed then act("done"; "closed")
   elif .merged_pr != null then act("wait-engineer"; "PR #\(.merged_pr) merged; the Issue is still open")
@@ -248,6 +260,7 @@ def classify:
 # | pr | The pull request opened from the branch after the latest claim, or null |
 # | head | The full SHA of that pull request's open head, or null |
 # | ci, verdict | The CI state and the oe/verify state of that head, or null |
+# | starts | Verifier starts on that head, or null |
 # | attempts | Owner attempts after the latest claim, or null for a closed Issue |
 # | started | Epoch seconds when the Issue entered its step, or null when no read shows it |
 #
@@ -261,7 +274,7 @@ def facts:
   if .data.repository.issue.state == "CLOSED" then .data.repository.issue | {number, action: "done", reason: "closed"}
   else issue_state
     | (next_action | split("\t")) as [$n, $action, $reason]
-    | {number, action: $action, reason: $reason, pr, head: .head.oid, ci: .head.ci, verdict: .head.verdict, attempts,
+    | {number, action: $action, reason: $reason, pr, head: .head.oid, ci: .head.ci, verdict: .head.verdict, starts: .head.starts, attempts,
         started: (
           if $action == "wait-answer" then .question_at | epoch
           elif $action == "wait-ci" or $action == "start-verifier" or $action == "wait-merge" then .head.pushed

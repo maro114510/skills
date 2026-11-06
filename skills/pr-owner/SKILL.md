@@ -1,7 +1,7 @@
 ---
 name: pr-owner
 description: >
-  Move one orchestrate-epic Issue one step forward: implement it and open its PR, or repair its open PR, by running implement in autonomous mode and pushing the result.
+  Move one orchestrate-epic Issue one step forward: implement it and open its PR, or repair its open PR, by following implement without a human and pushing the result.
   When it cannot decide, it writes a question with `oe question` and pushes nothing.
   Started by orchestrate-epic with a brief holding the Issue, the base branch, and the Issue branch's worktree.
   Never merges and never enables auto-merge.
@@ -11,8 +11,6 @@ argument-hint: "repo <owner/repo> issue <number> base <branch> worktree <path> [
 ---
 
 # pr-owner
-
-This file ends with the line `<!-- end of pr-owner -->`. If you cannot see that line, your harness cut the file short, as Codex does after 8,000 bytes for a skill from a plugin: read the whole file from its path before doing anything else.
 
 Move one Issue exactly one step forward and leave the result on GitHub.
 
@@ -72,21 +70,9 @@ If any of the first four is missing, end without changing anything and say which
    ```
 
    Resolve each conflict so that both sides' intent holds, then commit the merge with `git -C <worktree> commit --no-edit`. If you cannot tell how to resolve one, run `git -C <worktree> merge --abort`, ask about it with `oe question` as in step 6, and end without running implement or pushing.
-5. Read `<skills-root>/implement/SKILL.md` and follow it with these arguments:
-
-   ```text
-   autonomous branch <branch> worktree <worktree> <task>
-   ```
-
+5. Read `<skills-root>/implement/SKILL.md` and follow it with `<task>` as its arguments, saying that no human is reachable, that the worktree is `<worktree>`, and that questions go to `oe question` as in step 6.
    `<task>` is `Implement GitHub Issue #<issue> in <repo>.` for a new task, or `Repair PR #<pr> for GitHub Issue #<issue> in <repo>.` followed by every present item for a repair. Append the answers from step 3 as the user's decisions.
-   Run every phase autonomous mode runs and end with its report, because step 6 acts on that report.
-6. Act on implement's `STATUS`:
-
-   | Status | Action |
-   |---|---|
-   | `BLOCKED` | Write its `QUESTIONS` with `oe question` as below. Push nothing |
-   | `FAILED` | Push nothing, and end |
-   | `DONE` | Go to step 7 |
+6. If you wrote a question while following implement, push nothing and end. If implement stopped before committing its work, push nothing and end. Otherwise go to step 7. Write a question this way, each with its options:
 
    ```bash
    bash <skills-root>/orchestrate-epic/scripts/oe question <repo> <issue> <<'EOF'
@@ -102,10 +88,10 @@ If any of the first four is missing, end without changing anything and say which
    ```
 
    If the push is rejected, end without retrying.
-9. For a new task, open the PR. Write its title, body, and metadata by `<skills-root>/create-pr/SKILL.md` Steps 1 to 5, in the language its `Arguments:` line resolves, running Step 1 as `bash <skills-root>/create-pr/scripts/pr-context.sh base <base>` in the worktree and ending on its non-zero exit. Check no box that needs a human, as its Step 3.2 says. Then run in the worktree, pasting Step 1's `== create flags` line verbatim as `<create flags>`, which carries `--base`, `--draft`, and `--assignee @me`, and adding one `--label` for each label Step 5.2 chose:
+9. For a new task, open the PR. Write its title, body, and metadata by `<skills-root>/create-pr/SKILL.md` Steps 1 to 5, in the language its `Arguments:` line resolves, running Step 1 as `bash <skills-root>/create-pr/scripts/pr-context.sh base <base>` in the worktree and ending on its non-zero exit. Check no box that needs a human, as its Step 3.2 says. End the body with the line `<!-- automation-owner: orchestrate-epic -->`, alone on its line and exactly as written, then one sentence in the body's language saying that orchestrate-epic owns this PR and that deleting that line hands it over; other automations that honor the marker then neither push nor reply here. `--owner orchestrate-epic` appends the line when the body lacks it, because nothing may add it once the PR exists. Then run in the worktree, pasting Step 1's `== create flags` line verbatim as `<create flags>`, which carries `--base`, `--draft`, and `--assignee @me`, and adding one `--label` for each label Step 5.2 chose:
 
    ```bash
-   bash <skills-root>/create-pr/scripts/create-linked-pr.sh --repo <repo> --head <branch> <create flags> \
+   bash <skills-root>/create-pr/scripts/create-linked-pr.sh --repo <repo> --head <branch> --owner orchestrate-epic <create flags> \
      [--label "<label>"] --title "<title>" --body-file - <<'EOF'
    <body>
    EOF
@@ -128,5 +114,3 @@ End with one line:
 - `RESULT: pushed <sha>` after a repair push, or after a push whose PR could not be opened, followed by the error
 - `RESULT: question <url>` after writing a question
 - `RESULT: none <reason>` when nothing was pushed or written
-
-<!-- end of pr-owner -->

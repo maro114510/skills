@@ -12,6 +12,7 @@
 # | gh call | Answered as |
 # |---|---|
 # | api graphql with the Epic query | epic |
+# | api graphql with the checks page query, oid=SHA, and after=CURSOR | checks SHA:CURSOR |
 # | api graphql with num=N | issue N |
 # | api repos/o/r/pulls | pulls |
 # | api repos/o/r/commits/SHA/statuses | statuses SHA |
@@ -88,6 +89,8 @@ graphql)
       echo "${reads}" >"${OE_GITHUB}.reads"
       [[ "${reads}" -ne 2 ]] || cp "${OE_GITHUB_NEXT}" "${OE_GITHUB}"
     fi
+  elif [[ "${query}" == *"object(oid"* ]]; then
+    call=checks arg="$(jq -r '"\(.oid):\(.after)"' <<<"${fields}")"
   else
     call=issue arg="${num}"
   fi
