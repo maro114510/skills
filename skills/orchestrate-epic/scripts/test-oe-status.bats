@@ -123,6 +123,77 @@ JSON
   printf '%s\n' "${lines[2]}" | grep -q '^ISSUE  *STEP '
 }
 
+@test "an open question shows under the first line with the action, the Issue's URL, and why it stopped" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [
+    {"number": 5, "branch": true,
+      "comments": [{"by": "OWNER", "at": "07:05", "body": "<!-- oe:question -->\nWhich option?"}],
+      "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}}]}
+  ]
+}
+JSON
+  records 5 claim@07:00 attempt@07:01
+
+  run --separate-stderr bash "${oe}" status o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "${lines[0]}" = "Epic #1: 0 done, 0 in progress, 0 waiting, 1 waiting on you" ]
+  [ "${lines[1]}" = "- #5 Answer the Owner's question with a comment on the Issue" ]
+  [ "${lines[2]}" = "  https://github.com/o/r/issues/5" ]
+  [ "${lines[3]}" = "  why: the question has no unmarked comment from a trusted role yet" ]
+  printf '%s\n' "${lines[4]}" | grep -q '^ISSUE  *STEP '
+}
+
+@test "a parked Issue with a PR shows under the first line with the action, the PR's URL, and why it stopped" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [
+    {"number": 5, "branch": true,
+      "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["failure"]}]}
+  ]
+}
+JSON
+  records 5 claim@07:00 attempt@07:01 attempt@07:20 attempt@07:40
+
+  run --separate-stderr bash "${oe}" status o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "${lines[0]}" = "Epic #1: 0 done, 0 in progress, 0 waiting, 1 waiting on you" ]
+  [ "${lines[1]}" = "- #5 Fix it by hand, or delete its branch so the AI starts over" ]
+  [ "${lines[2]}" = "  https://github.com/o/r/pull/50" ]
+  [ "${lines[3]}" = "  why: 3 attempts used; still: failure verdict on bbbbbbb" ]
+}
+
+@test "an Issue waiting for an engineer or for the merge shows under the first line, in Issue order" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [
+    {"number": 5, "branch": true,
+      "pull_requests": [{"number": 50, "state": "closed", "opened": "07:10"}]},
+    {"number": 6, "branch": true,
+      "pull_requests": [{"number": 60, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"]}]}
+  ]
+}
+JSON
+  records 5 claim@07:00 attempt@07:01
+  records 6 claim@07:00 attempt@07:01
+
+  run --separate-stderr bash "${oe}" status o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "${lines[0]}" = "Epic #1: 0 done, 0 in progress, 0 waiting, 2 waiting on you" ]
+  [ "${lines[1]}" = "- #5 Close the Issue, reopen the PR, or delete its branch so the AI starts over" ]
+  [ "${lines[2]}" = "  https://github.com/o/r/pull/50" ]
+  [ "${lines[3]}" = "  why: PR #50 closed without merging" ]
+  [ "${lines[4]}" = "- #6 Review the PR, run its manual checks, and merge it" ]
+  [ "${lines[5]}" = "  https://github.com/o/r/pull/60" ]
+  [ "${lines[6]}" = "  why: success verdict on bbbbbbb" ]
+}
+
 @test "every Issue shows its step, PR, CI result, verdict, attempts, agent, time in step, and reason" {
   three_issues
 
