@@ -1,0 +1,19 @@
+# The read of every open pull request in pick-next, one page per call; gh api --paginate supplies $endCursor.
+query($owner: String!, $repo: String!, $endCursor: String) {
+  repository(owner: $owner, name: $repo) {
+    pullRequests(states: OPEN, first: 100, after: $endCursor, orderBy: {field: CREATED_AT, direction: ASC}) {
+      pageInfo { hasNextPage endCursor }
+      nodes {
+        number
+        title
+        url
+        body
+        isDraft
+        headRefName
+        reviewDecision
+        closingIssuesReferences(first: 20) { nodes { number } }
+        commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
+      }
+    }
+  }
+}
