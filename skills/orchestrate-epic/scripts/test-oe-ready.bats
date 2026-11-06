@@ -38,37 +38,18 @@ action_of() {
 
 # Default branch gate
 
-@test "a default branch head with no checks ten minutes after its push ends the session with a reason" {
+@test "a default branch head with no checks eleven minutes after its push holds nothing and ends nothing" {
   github <<'JSON'
 {
-  "default_branch": {"pushed": "07:00"},
+  "default_branch": {"pushed": "07:49"},
   "issues": [{"number": 5}]
 }
 JSON
 
   run bash "${oe}" ready o/r 1
 
-  [ "${status}" -eq 3 ]
-  [ "${#lines[@]}" -eq 1 ]
-  case "${lines[0]}" in
-  end$'\t'*"no checks"*) ;;
-  *) return 1 ;;
-  esac
-}
-
-@test "a default branch head pushed five minutes ago with no checks makes every Issue wait, even when committed long before" {
-  github <<'JSON'
-{
-  "default_branch": {"committed": "06:00", "pushed": "07:55"},
-  "issues": [{"number": 5}, {"number": 6}]
-}
-JSON
-
-  run bash "${oe}" ready o/r 1
-
   [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = wait-base ]
-  [ "$(action_of 6)" = wait-base ]
+  [ "$(action_of 5)" = claim ]
 }
 
 @test "a failed check on the default branch head makes no Issue ready" {
@@ -85,7 +66,7 @@ JSON
   [ "$(action_of 5)" = wait-base ]
 }
 
-@test "a running check on the default branch head makes no Issue ready" {
+@test "a running check on the default branch head still lets an Issue with completed dependencies be claimed" {
   github <<'JSON'
 {
   "default_branch": {"checks": {"test": "in_progress"}},
@@ -96,20 +77,21 @@ JSON
   run bash "${oe}" ready o/r 1
 
   [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = wait-base ]
+  [ "$(action_of 5)" = claim ]
 }
 
-@test "the oe/verify status on the default branch head does not count as a check" {
+@test "a failure oe/verify status on the default branch head does not count as a failed check" {
   github <<'JSON'
 {
-  "default_branch": {"pushed": "07:00", "statuses": {"oe/verify": "success"}},
+  "default_branch": {"statuses": {"oe/verify": "failure"}},
   "issues": [{"number": 5}]
 }
 JSON
 
   run bash "${oe}" ready o/r 1
 
-  [ "${status}" -eq 3 ]
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = claim ]
 }
 
 # Failed reads

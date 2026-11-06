@@ -32,7 +32,6 @@
 # | 0 | An Issue's next action changed, or an Issue appeared or left | The new output |
 # | 1 | A GitHub read failed | Nothing |
 # | 2 | The arguments are invalid | Nothing |
-# | 3 | oe ready ended the session: the default branch head has no checks after no_checks_grace | The end line |
 # | 5 | The timeout passed with every next action unchanged | The latest output |
 # | 6 | The session is idle: no agent runs and idle_limit has passed since --idle-since | The latest output, as the session's summary |
 # | 137 | A later oe wait for the same Epic killed this one | Nothing |
@@ -136,20 +135,10 @@ emit() {
   [[ -z "${current}" ]] || printf '%s\n' "${current}"
 }
 
-# Runs oe ready into $current, and ends the wait when oe ready ended the session or failed.
+# Runs oe ready into $current, and ends the wait when oe ready failed.
 # oe ready's own stderr names the failed read.
 poll() {
-  local rc
-  current="$(bash "${dir}/oe-ready.sh" "${repo}" "${epic}" ${running[@]+"${running[@]}"})"
-  rc=$?
-  case "${rc}" in
-  0) ;;
-  3)
-    emit
-    exit 3
-    ;;
-  *) exit 1 ;;
-  esac
+  current="$(bash "${dir}/oe-ready.sh" "${repo}" "${epic}" ${running[@]+"${running[@]}"})" || exit 1
 }
 
 # Prints the Issue number and action of every line of $1, the part of oe ready's output a change is judged on.
