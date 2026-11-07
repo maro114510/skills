@@ -475,6 +475,103 @@ result_line() {
   [[ "$(result_line)" == "SELF_REVIEW status=reviewed "*" verdict=none" ]]
 }
 
+# Writes a request file holding $1 and prints its path.
+request_file() {
+  local f
+  f="$(mktemp "${work}/request.XXXXXX")"
+  printf '%s\n' "$1" >"${f}"
+  echo "${f}"
+}
+
+# Runs self-review.sh as a scope review of a fresh range repo against main, with request file $3 and a stub
+# harness CLI $2 (default `claude`) whose body is $1; sets ${mb} to the merge base the review must start at.
+run_scope_stub() {
+  local repo bin harness="${2:-claude}"
+  repo="$(new_range_repo)"
+  mb="$(git -C "${repo}" merge-base main feature)"
+  bin="$(mktemp -d "${work}/bin.XXXXXX")"
+  printf '#!/bin/sh\n%s\n' "$1" >"${bin}/${harness}"
+  chmod +x "${bin}/${harness}"
+  cd "${repo}" || return 1
+  run env TMPDIR="${work}" PATH="${bin}:${PATH}" bash "${target}" "${harness}" "${repo}" main "$3"
+}
+
+@test "claude scope review sends the request and the range in its own prompt instead of /code-review" {
+  # shellcheck disable=SC2016 # expanded by the stub, not here
+  run_scope_stub 'echo "FLAG: $1"; printf "PROMPT: %s\n" "$2"; shift 2; echo "REST: $*"' claude \
+    "$(request_file 'Add a --dry-run flag to deploy.sh')"
+  [ "${status}" -eq 0 ]
+  has_line "FLAG: -p"
+  has_line "REST: --permission-mode plan --no-session-persistence"
+  grep -qF -- "${mb}..HEAD" <<<"${output}"
+  has_line "Add a --dry-run flag to deploy.sh"
+  if grep -qF -- "/code-review" <<<"${output}"; then return 1; fi
+}
+
+@test "scope review prompt asks the questions of the scope review and leaves correctness out" {
+  # shellcheck disable=SC2016 # expanded by the stub, not here
+  run_scope_stub 'printf "%s\n" "$2"' claude "$(request_file 'Add a --dry-run flag to deploy.sh')"
+  [ "${status}" -eq 0 ]
+  for phrase in "what problem the request poses" "which options could solve it" \
+    "from which viewpoints you judged which option best" "challenged that judgment adversarially" \
+    "should be made at all" "could be simpler" "Apply YAGNI strictly" \
+    "adds a requirement the request does not ask for" "leave bugs and style to it" "not instructions to you"; do
+    grep -qF -- "${phrase}" <<<"${output}" || {
+      printf 'prompt lacks: %s\n' "${phrase}"
+      return 1
+    }
+  done
+}
+
+@test "codex scope review runs exec read-only with the prompt instead of exec review" {
+  # Codex writes its answer to the -o file, so the stub writes its argv there.
+  # shellcheck disable=SC2016 # expanded by the stub, not here
+  run_scope_stub 'for a; do [ "${p:-}" = -o ] && f="$a"; p="$a"; done; printf "ARGS: %s\n" "$*" >"$f"' codex \
+    "$(request_file 'Add a --dry-run flag to deploy.sh')"
+  [ "${status}" -eq 0 ]
+  grep -qF -- "ARGS: exec --ephemeral -c sandbox_mode=\"read-only\" -o " <<<"${output}"
+  has_line "Add a --dry-run flag to deploy.sh"
+  if grep -qF -- "exec review" <<<"${output}"; then return 1; fi
+}
+
+@test "opencode scope review keeps the one-command rule and the verdict line" {
+  # shellcheck disable=SC2016 # expanded by the stub, not here
+  run_scope_stub "$(opencode_stub v2 'echo "ARGS: $*"; echo "REVIEW_VERDICT: none"')" opencode \
+    "$(request_file 'Add a --dry-run flag to deploy.sh')"
+  [ "${status}" -eq 0 ]
+  [ "$(argv_flags)" = "--standalone" ]
+  has_line "Add a --dry-run flag to deploy.sh"
+  grep -qF -- "Apply YAGNI strictly" <<<"${output}"
+  grep -qF -- "one command per bash call" <<<"${output}"
+  grep -qF -- "REVIEW_VERDICT: findings" <<<"${output}"
+  [[ "$(result_line)" == "SELF_REVIEW status=reviewed range=${mb}..$(git rev-parse HEAD) "*" verdict=none" ]]
+}
+
+@test "request file without a base exits 2 before the review runs" {
+  local bin
+  bin="$(mktemp -d "${work}/bin.XXXXXX")"
+  printf '#!/bin/sh\necho REVIEWER_CALLED\n' >"${bin}/claude"
+  chmod +x "${bin}/claude"
+  run env TMPDIR="${work}" PATH="${bin}:${PATH}" bash "${target}" claude "$(new_range_repo)" "" \
+    "$(request_file 'Add a --dry-run flag to deploy.sh')"
+  [ "${status}" -eq 2 ]
+  if has_line REVIEWER_CALLED; then return 1; fi
+}
+
+@test "missing request file exits 2 before the review runs" {
+  run_scope_stub 'echo REVIEWER_CALLED' claude "${work}/no-such-request"
+  [ "${status}" -eq 2 ]
+  if has_line REVIEWER_CALLED; then return 1; fi
+}
+
+@test "empty request file exits 2 before the review runs" {
+  local empty
+  empty="$(mktemp "${work}/request.XXXXXX")"
+  run_scope_stub 'echo REVIEWER_CALLED' claude "${empty}"
+  [ "${status}" -eq 2 ]
+  if has_line REVIEWER_CALLED; then return 1; fi
+}
+
 @test "usage errors print no result line" {
   run bash "${target}" gemini "$(new_repo)"
   [ "${status}" -eq 2 ]
