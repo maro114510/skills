@@ -2,7 +2,7 @@
 
 ## Step 1.5: Clarification Question Format
 
-Enumerate each unclear item and ask for a response using the following format. The four labeled subsections below (`[Granularity]` / `[Acceptance criteria]` / `[Specification]` / `[Premise]`) are illustrative, not a fixed checklist — include only the subsection(s) for the axis/axes actually unclear this run.
+Enumerate each unclear item and ask for a response using the following format. The five labeled subsections below (`[Granularity]` / `[Acceptance criteria]` / `[Specification]` / `[Premise]` / `[Coverage]`) are illustrative, not a fixed checklist — include only the subsection(s) for the axis/axes actually unclear this run.
 
 ```
 The following points are unclear. Please answer before I continue.
@@ -18,6 +18,9 @@ The following points are unclear. Please answer before I continue.
 
 **[Premise] About <claim>**
 <The claim, where it comes from, and the check that would confirm it, e.g. "run X and see whether Y". Ask whether to check it before creating Issues>
+
+**[Coverage] About <customer report>**
+<Which items of that customer the change affects, and what the production data looks like, so the manual check can cover every affected item and a dev check can reproduce that shape>
 
 I'll continue creating Issues once all questions are answered.
 If you want to proceed with the specification still undecided, reply "proceed anyway" (I'll add a [NEEDS CONFIRMATION] tag and continue).
