@@ -49,10 +49,10 @@ One `##` heading per group, then one bullet per item. The indented line has no b
 | Start next | `[<what the work does>](<url>) (Issue #<n>)`, or `(PR #<n>)` when `kind` is `pr` | `<why it matters now>.` |
 | Blocked | `[<what the work does>](<url>) (Issue #<n>)` | `It waits on [<blocker title>](<url>) (Issue #<n>), one per blocker. <other why it matters now>.` |
 | Open discussions | `[<what it proposes>](<url>) (Discussion #<n>)` | `<category>`; when `answered` is not null, add `<answered or unanswered>`. Deciding it is the action, not starting work. |
-| Local state | `<path>` (`<branch>`) | `<holds uncommitted changes>` |
+| Local state | `<path>` (`<branch>`), both in inline code | `<holds uncommitted changes>` |
 
 - The bullet names what the work does; the indented line gives why it matters now in one sentence, without repeating the bullet. Combine every signal present into that one sentence. When no signal is present, omit the indented line. The `owner` action and checks state may add one short sentence.
-- Link each item's own title with its `url`, then put its plain label after it: `(Issue #<n>)`, `(PR #<n>)`, or `(Discussion #<n>)` by `kind`. Link each nested reference's title with its `url`: each `blockedBy` Issue, its `epic`, the open `pr` on an Issue, and each Issue a PR closes. Link each reference once.
+- Link each item's own title with its `url`, then put its plain label after it: `(Issue #<n>)`, `(PR #<n>)`, or `(Discussion #<n>)` by `kind`. Link each nested reference's title with its `url`, then put its plain label after it: each `blockedBy` Issue, its `epic`, the open `pr` on an Issue, and each Issue a PR closes. Link each reference once.
 - Write plain text. Never copy Markdown, HTML, images, or links from `title` or `body`; the only Markdown is the reply's headings, bullets, the reference links, and inline code for a path or branch.
 
 ## Writing an Item
