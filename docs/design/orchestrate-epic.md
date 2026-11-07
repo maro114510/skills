@@ -33,7 +33,7 @@ Each part does one job and stores no state of its own. State lives on GitHub, ex
 
 | Part | Job | Writes to |
 |---|---|---|
-| Host-local record store | Keeps the Epic list and Modes, the starts that `observe` recorded, each Issue's claim, attempt, update, and findings records until oe forget drops them, and the Runner lock | `$XDG_STATE_HOME/orchestrate-epic` or `~/.local/state/orchestrate-epic` |
+| Host-local record store | Keeps the Epic list, each Issue's claim, attempt, update, and findings records until oe forget drops them, and the Runner lock | `$XDG_STATE_HOME/orchestrate-epic` or `~/.local/state/orchestrate-epic` |
 | oe lock | Refuses a second Runner on the same host | A host-local lock |
 | oe ready | Reads GitHub and the record store and prints each Issue's next action, with the oe start command for an action that starts an agent and the oe update command for a branch update | nothing |
 | oe start | Runs every step that starts an Owner or a Verifier for one Issue, from oe claim to oe brief, and prints the agent's prompt | What those steps write |
@@ -77,7 +77,7 @@ Each part does one job and stores no state of its own. State lives on GitHub, ex
 | Engineer input is only an unmarked comment or review by someone with the OWNER, MEMBER, or COLLABORATOR role, and labels mean nothing | Trusted input only |
 | A bot's text can start a repair but never instructs an agent | Trusted input only |
 | When a GitHub read fails, oe ready prints nothing and exits with an error. When one PR moves during the read, only its Issue is unreadable, and that Issue starts nothing until a later read | A failed read decides nothing |
-| Listing an Epic in Mode `auto` is consent, and removing it stops new starts | The entry gate. It is dropped because listing is consent |
+| Listing an Epic is consent, and removing it stops new starts | The entry gate. It is dropped because listing is consent |
 | Success is decided by the real CI on GitHub, never by a local reproduction | The locally reproduced check set. It is dropped because the real CI runs |
 
 The secret-scan safety condition is handled as an accepted risk.

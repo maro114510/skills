@@ -37,7 +37,7 @@ flowchart TB
   Design -->|merged| Epic
   Epic -->|approved| Ticket
   Ticket --> Mandate
-  Operator -->|lists Epic, sets Mode| Records[Host-local records]
+  Operator -->|lists Epic| Records[Host-local records]
   Schedule -->|wakes| Runner
   Records --> Runner
   Mandate --> Runner
@@ -58,10 +58,9 @@ flowchart TB
 | Epic | A parent Issue grouping the Tickets derived from one Design. It exists only after a person approved its plan in a Session, so its existence is the approval |
 | Ticket | A child Issue of an Epic. One independently verifiable unit of work whose acceptance criteria are split into automated checks, each naming the command that proves it, and manual checks that need a person |
 | Mandate | A Ticket exists under an open Epic the Operator listed. Covers the Ticket's stated scope only. Wider scope is a new Ticket |
-| Operator | The person who lists Epics and sets each one's Mode |
-| Host-local records | oe's record store on the Runner's host. Holds the Epic list with each Epic's Mode, the starts that `observe` recorded, and the Runner lock, beside the claim, attempt, and findings records `orchestrate-epic.md` defines |
+| Operator | The person who lists Epics. Listing an Epic is the only consent to unattended runs, and unlisting it stops new starts |
+| Host-local records | oe's record store on the Runner's host. Holds the Epic list and the Runner lock, beside the claim, attempt, and findings records `orchestrate-epic.md` defines |
 | Runner | The deterministic program a schedule wakes. Takes the Runner lock, reads the next action of every Ticket of every listed Epic from `oe ready`, starts an Owner or Verifier through an Adapter for each action that needs one, up to the limit of agents at once, waits for them to end, releases the lock, exits |
-| Mode | The Operator's setting for a listed Epic, one of the two below |
 | Adapter | The one harness-specific part. Maps the Executor contract below onto one harness. One Adapter per harness |
 | Executor | A harness session the Runner starts through an Adapter for one agent step, with no person present |
 | Owner | The agent that implements or repairs one Ticket in its own worktree and pushes a branch, as `orchestrate-epic.md` defines |
@@ -72,11 +71,6 @@ flowchart TB
 | Board | The one view that shows every Ticket's Holder and Wait state, each repository whose default branch gate holds with its reason, whether the Runner is healthy, and what happened to one Ticket. A healthy state takes no space |
 | Mergeable | A pull request whose head has a success verdict and no repair signal, as `orchestrate-epic.md` row 13 defines, with the Ticket's manual checks listed in its body for the merger |
 | Attention | The pipeline's measure. Messages and answers people wrote for a pull request, from Session logs and GitHub comments, per mergeable pull request. Read with the rate of reverts and of changes requested after review |
-
-| Mode | Runner behavior |
-|---|---|
-| `observe` | Records which Tickets it would have started, with the action. Starts none and writes nothing to GitHub |
-| `auto` | Starts them |
 
 | Wait state | `oe ready` action | Person's action |
 |---|---|---|
@@ -121,7 +115,7 @@ sequenceDiagram
 
 ### Unattended delivery
 
-The Operator has listed the Epic in `auto`, and nobody is watching.
+The Operator has listed the Epic, and nobody is watching.
 
 ```mermaid
 sequenceDiagram
@@ -172,18 +166,6 @@ sequenceDiagram
     P->>G: Answer
     R->>G: Read the answer
     R->>O: Start a new Owner with the Ticket and the answer
-```
-
-### Observing before trusting
-
-A repository is new to the pipeline.
-
-```mermaid
-flowchart LR
-    L[Operator lists the Epic in Mode observe] --> W[Runner records what it would have started]
-    W --> D{Operator reads the records}
-    D -->|Acceptable| A[Mode auto]
-    D -->|A record is wrong| F[Fix the Design or the Tickets. Mode stays observe]
 ```
 
 ## Invariants
