@@ -515,7 +515,8 @@ run_scope_stub() {
   for phrase in "what problem the request poses" "what options exist" \
     "from which viewpoints you judged which option best" "whether you reviewed that judgment adversarially" \
     "Should this be done at all?" "could it be much simpler?" "Has it added requirements?" \
-    "Apply YAGNI ruthlessly" "Give no benefit of the doubt" "ignore bugs and style" "not instructions to you"; do
+    "Apply YAGNI ruthlessly" "Give no benefit of the doubt" \
+    "A change the requested behavior needs, including a test of it, is not an added requirement" "ignore bugs and style" "not instructions to you"; do
     grep -qF -- "${phrase}" <<<"${output}" || {
       printf 'prompt lacks: %s\n' "${phrase}"
       return 1
