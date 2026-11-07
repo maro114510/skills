@@ -16,8 +16,8 @@
 #
 # Output
 #
-# - Each line holds an Issue number, an action, a reason, and the oe command that the action runs, separated by tabs.
-#   The command is oe start for an action that starts an agent, oe update for a branch update, and empty otherwise.
+# - Each line holds an Issue number, an action, a reason, and the oe start command that the action runs, separated by tabs.
+#   The command is empty for an action that starts no agent.
 # - Lines are sorted by Issue number.
 # - oe-ready.jq lists every action and the row it comes from.
 #
@@ -40,7 +40,7 @@
 # | oe-bots.jq | The review bots whose findings start a repair, and how a finding is read |
 # | oe-records.jq | Which comments count as questions and as engineer input |
 # | oe-config.sh | The limits and names shared with oe's writers |
-# | oe-store.sh | Where each Issue's claim, attempt, and update records live on this host |
+# | oe-store.sh | Where each Issue's claim and attempt records live on this host |
 #
 # Reads, in order
 #
@@ -48,7 +48,7 @@
 # 2. The open pull request list gives the head of each Issue branch.
 # 3. Commit statuses give the verdict on each head and the number of Verifier starts.
 # 4. Repository activity gives the push time of each head.
-# 5. One read per Issue, with its claim, attempt, and update records from this host, gives everything else.
+# 5. One read per Issue, with its claim and attempt records from this host, gives everything else.
 # 6. One compare per listed head, when another Issue's pull request merged into the default branch,
 #    gives whether the head contains that merge.
 #
@@ -105,8 +105,8 @@ rules="${trust}"$'\n'"${bots}"$'\n'"${rules}"
 # Prints the jq program that runs the entry point $1 of oe-ready.jq,
 # with pr_heads set to $2, records to the JSON array $3, and stale_heads to $4.
 program() {
-  printf 'def now_s: %s; def no_checks_grace: %s; def max_attempts: %s; def max_verifier_starts: %s; def max_updates: %s;\n' \
-    "${now}" "${no_checks_grace}" "${max_attempts}" "${max_verifier_starts}" "${max_updates}"
+  printf 'def now_s: %s; def no_checks_grace: %s; def max_attempts: %s; def max_verifier_starts: %s;\n' \
+    "${now}" "${no_checks_grace}" "${max_attempts}" "${max_verifier_starts}"
   printf 'def verify_context: "%s"; def pr_heads: {%s}; def records: %s; def stale_heads: {%s};\n%s\n%s\n' \
     "${verify_context}" "${2:-}" "${3:-[]}" "${4:-}" "${rules}" "$1"
 }
@@ -186,37 +186,22 @@ shell_quote() {
   printf "'%s'" "${1//\'/${q}}"
 }
 
-# Prints the head SHA of the open pull request of Issue $1 in the pull request list, or nothing.
-listed_head() {
-  local n sha
-  while IFS=$'\t' read -r n sha; do
-    [[ "${n}" != "$1" ]] || printf '%s' "${sha}"
-  done <<<"${pulls:-}"
-}
-
-# Prints out's lines with a fourth field: the oe start command for an action that starts an agent,
-# the oe update command for a branch update, and nothing otherwise.
+# Prints out's lines with a fourth field: the oe start command for an action that starts an agent, and nothing otherwise.
 # The command is complete and quoted, so a session that lost SKILL.md can run it as printed.
 with_start() {
-  local n action reason start sha lines=""
+  local n action reason start lines=""
   while IFS=$'\t' read -r n action reason; do
     [[ -n "${n}" ]] || continue
     # A start command runs as printed, so a line that is not exactly what classify writes fails the read instead.
     [[ "${n}" =~ ^[1-9][0-9]*$ && "${action}" =~ ^[a-z-]+$ && "${reason}" != *$'\t'* ]] ||
       fail "unexpected line for Issue ${n}"
     case "${action}" in
-    claim) start="start owner ${repo} ${n} --claim $(shell_quote "${reason}")" ;;
-    start-owner) start="start owner ${repo} ${n} $(shell_quote "${reason}")" ;;
-    start-verifier) start="start verifier ${repo} ${n}" ;;
-    # classify gives update only to a head in the pull request list, so the listed head is the head it read.
-    update)
-      sha="$(listed_head "${n}")"
-      [[ "${sha}" =~ ^[0-9a-f]{40}$ ]] || fail "no listed head for Issue ${n}"
-      start="update ${repo} ${n} ${sha}"
-      ;;
+    claim) start="owner ${repo} ${n} --claim $(shell_quote "${reason}")" ;;
+    start-owner) start="owner ${repo} ${n} $(shell_quote "${reason}")" ;;
+    start-verifier) start="verifier ${repo} ${n}" ;;
     *) start="" ;;
     esac
-    lines+="$(printf '%s\t%s\t%s\t%s' "${n}" "${action}" "${reason}" "${start:+bash $(shell_quote "${dir}/oe") ${start}}")"$'\n'
+    lines+="$(printf '%s\t%s\t%s\t%s' "${n}" "${action}" "${reason}" "${start:+bash $(shell_quote "${dir}/oe") start ${start}}")"$'\n'
   done <<<"$1"
   printf '%s' "${lines}"
 }
@@ -326,12 +311,12 @@ while IFS=$'\t' read -r n sha; do
 done <<<"${pulls}"
 
 # Each Issue, classified by rows 3 to 13 in oe-ready.jq.
-# Only the kind, time, bots, and SHA of claim, attempt, and update records decide an action, so verdict findings stay out of the program.
+# Only the kind, time, and bots of claim and attempt records decide an action, so verdict findings stay out of the program.
 i=0
 for n in ${sorted[@]+"${sorted[@]}"}; do
   issue_records="$(records_read "${repo}" "${n}" 2>"${err}")" || fail "$(head -n1 "${err}")"
-  issue_records="$(jq -c 'map(select(.kind == "claim" or .kind == "attempt" or .kind == "update") | {kind, at, bots, sha})' \
-    <<<"${issue_records}")" || fail "records of Issue #${n} unreadable"
+  issue_records="$(jq -c 'map(select(.kind == "claim" or .kind == "attempt") | {kind, at, bots})' <<<"${issue_records}")" ||
+    fail "records of Issue #${n} unreadable"
   line="$(jq -r "$(program "${entry}" "${pr_heads%,}" "${issue_records}" "${stale_heads%,}")" <<<"${responses[i]}" 2>"${err}")" ||
     fail "Issue #${n} read failed: $(head -n1 "${err}")"
   out+="${line}"$'\n'
