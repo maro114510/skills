@@ -336,6 +336,28 @@ JSON
   [ "$(column_of 6 8)" = 45m ]
 }
 
+@test "a head waiting for its branch update counts from its push, and counts in progress" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [
+    {"number": 4, "closed": true, "pull_requests": [{"number": 40, "state": "merged", "opened": "07:05", "merged": "07:30"}]},
+    {"number": 5, "branch": true,
+      "pull_requests": [{"number": 50, "opened": "07:10", "pushed": "07:20", "checks": {"test": "success"},
+        "verdicts": ["success"], "missing_merges": [40]}]}
+  ]
+}
+JSON
+  records 5 claim@07:00 attempt@07:01
+
+  run --separate-stderr bash "${oe}" status o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "${lines[0]}" = "Epic #1: 1 done, 1 in progress, 0 waiting, 0 waiting on you" ]
+  [ "$(column_of 5 2)" = update ]
+  [ "$(column_of 5 8)" = 40m ]
+}
+
 @test "oe status makes only GET calls to GitHub and leaves the host-local state unchanged" {
   three_issues
   before="$(cd "${OE_STATE_DIR}" && find . -type f | sort | xargs cat)"
