@@ -275,7 +275,7 @@ def classify:
 # | Action | Started at |
 # |---|---|
 # | wait-answer | The latest question |
-# | wait-ci, start-verifier, wait-merge | The push of the head |
+# | wait-ci, update, start-verifier, wait-merge | The push of the head |
 # | start-owner, parked | The latest attempt, or the latest claim without one |
 # | Any other | null |
 def facts:
@@ -285,7 +285,7 @@ def facts:
     | {number, action: $action, reason: $reason, pr, head: .head.oid, ci: .head.ci, verdict: .head.verdict, starts: .head.starts, attempts,
         started: (
           if $action == "wait-answer" then .question_at | epoch
-          elif $action == "wait-ci" or $action == "start-verifier" or $action == "wait-merge" then .head.pushed
+          elif $action == "wait-ci" or $action == "update" or $action == "start-verifier" or $action == "wait-merge" then .head.pushed
           elif $action == "start-owner" or $action == "parked" then .since // null | if . then epoch else null end
           else null end)}
   end;
