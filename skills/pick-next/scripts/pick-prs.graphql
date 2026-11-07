@@ -9,6 +9,8 @@ query($owner: String!, $repo: String!, $endCursor: String) {
         url
         body
         isDraft
+        # The author decides who can mark a draft ready and whether a review waits only on the viewer.
+        author { login }
         headRefName
         reviewDecision
         # pick.sh fails on a pull request whose totalCount exceeds the nodes read, rather than offer an Issue it closes.

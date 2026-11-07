@@ -4,7 +4,8 @@
 # they were not read, and worktrees is [{path, branch, dirty}].
 #
 # Groups
-#   owner    open pull requests whose checks passed or never ran and whose review asks for no changes
+#   owner    open pull requests whose checks passed or never ran and whose review asks for no changes; each carries
+#            its author and the next action
 #   next     unblocked Issues, and pull requests that close no open Issue and do not wait on the owner
 #   blocked  Issues with at least one open blocker
 #   local    dirty worktrees whose branch belongs to no open Issue or pull request
@@ -12,6 +13,8 @@
 #                ranked with Issues
 # An Epic, an Issue with sub-issues, is in no group: its children are the work.
 # An Issue assigned only to others is in no group: someone else owns it.
+# Every reference the reply links carries its title and URL: the item, its blockers, its Epic, its open pull request,
+# and the Issues a pull request closes.
 #
 # next order: work in progress, then the number of open Issues it unblocks, then a parent Epic with progress, then
 # the lower number. In progress means a worktree, an open pull request, or the viewer among the assignees.
@@ -20,6 +23,11 @@
 
 def checks: .commits.nodes[0].commit.statusCheckRollup.state // null;
 
+# The next step a queued pull request needs before it can merge.
+def owner_action: if .isDraft then "markReady" elif .reviewDecision == "REVIEW_REQUIRED" then "review" else "merge" end;
+
+# A pull request that queues for the owner: its checks passed or never ran, and no one requested changes.
+# REVIEW_REQUIRED still queues it; owner_action says a review comes before a merge.
 def waits_on_owner: (checks == null or checks == "SUCCESS") and .reviewDecision != "CHANGES_REQUESTED";
 
 # True when branch name $b follows the issue-<n> convention for Issue $n.
@@ -30,10 +38,11 @@ def body_excerpt: (.body // "")[0:1500];
 . as $in
 | ($in.issues | map(.number)) as $open
 | ($in.prs | map(. + {closes: [.closingIssuesReferences.nodes[].number | select(IN($open[]))]})) as $prs
-| ($in.issues | map({key: (.number | tostring), value: .title}) | from_entries) as $titles
+| ($in.issues | map({key: (.number | tostring), value: {title, url}}) | from_entries) as $meta
 
-| def pr_summary: {number, checks: checks, isDraft, review: .reviewDecision};
+| def pr_summary: {number, title, url, checks: checks, isDraft, review: .reviewDecision};
   def worktrees_on($branches): [$in.worktrees[] | select(.branch | IN($branches[]))];
+  def linked_issue: {number: ., title: $meta[tostring].title, url: $meta[tostring].url};
 
   def issue_item:
     . as $i
@@ -45,12 +54,12 @@ def body_excerpt: (.body // "")[0:1500];
     | {kind: "issue", number, title, url, body: body_excerpt,
        inProgress: (($wts | length) > 0 or ($own_prs | length) > 0 or ($assignees | index($in.viewer)) != null),
        unblocks: ([$i.blocking.nodes[] | select(.state == "OPEN")] | length),
-       epic: (if $i.parent then {number: $i.parent.number, title: $i.parent.title,
+       epic: (if $i.parent then {number: $i.parent.number, title: $i.parent.title, url: $i.parent.url,
                 completed: $i.parent.subIssuesSummary.completed, total: $i.parent.subIssuesSummary.total}
               else null end),
        pr: ($own_prs | max_by(.number) | if . then pr_summary else null end),
        worktrees: $wts,
-       blockedBy: [$i.blockedBy.nodes[] | select(.state == "OPEN") | {number, title}],
+       blockedBy: [$i.blockedBy.nodes[] | select(.state == "OPEN") | {number, title, url}],
        epicContainer: ($i.subIssuesSummary.total > 0),
        assignedElsewhere: (($assignees | length) > 0 and ($assignees | index($in.viewer)) == null),
        waitsOnOwner: any($own_prs[]; waits_on_owner)};
@@ -65,7 +74,8 @@ def body_excerpt: (.body // "")[0:1500];
 
   | [$prs[] | select(waits_on_owner)
      | {kind: "pr", number, title, url, body: body_excerpt, isDraft, checks: checks, review: .reviewDecision,
-        issues: [.closes[] | {number: ., title: $titles[tostring]}], worktrees: worktrees_on([.headRefName])}]
+        author: .author.login, action: owner_action,
+        issues: [.closes[] | linked_issue], worktrees: worktrees_on([.headRefName])}]
     | sort_by(.isDraft, .number) as $owner
 
   | ([$issues[] | select((.blockedBy | length) == 0 and (.waitsOnOwner | not)) | public]

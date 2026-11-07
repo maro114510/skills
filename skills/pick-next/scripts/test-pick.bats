@@ -56,17 +56,18 @@ EOF
 #   --assignee <login>              an assignee
 #   --branch <name>                 a branch GitHub links to it
 #   --more <connection>             GitHub holds one more node of that connection than the read returns
-# Every connection's totalCount matches its nodes unless --more says otherwise.
+# Every connection's totalCount matches its nodes unless --more says otherwise, and every node carries the URL
+# the real query returns.
 issue() {
   local num="$1" title="$2" blocked='[]' blocks='[]' parent=null subs='{"total":0,"completed":0}' assignees='[]' branches='[]' more=''
   shift 2
   while [ $# -gt 0 ]; do
     case "$1" in
-    --blocked-by) blocked="$(jq -c --arg n "${2%%:*}" --arg s "${2#*:}" '. + [{number: ($n | tonumber), title: ("Blocker " + $n), state: $s}]' <<<"${blocked}")" ;;
+    --blocked-by) blocked="$(jq -c --arg n "${2%%:*}" --arg s "${2#*:}" '. + [{number: ($n | tonumber), title: ("Blocker " + $n), state: $s, url: ("https://github.com/o/r/issues/" + $n)}]' <<<"${blocked}")" ;;
     --blocks) blocks="$(jq -c --argjson n "$2" '. + [{number: $n, state: "OPEN"}]' <<<"${blocks}")" ;;
     --parent)
       parent="$(jq -nc --argjson n "${2%%:*}" --argjson c "$(cut -d: -f2 <<<"$2" | cut -d/ -f1)" --argjson t "${2##*/}" \
-        '{number: $n, title: ("Epic " + ($n | tostring)), subIssuesSummary: {completed: $c, total: $t}}')"
+        '{number: $n, title: ("Epic " + ($n | tostring)), url: ("https://github.com/o/r/issues/" + ($n | tostring)), subIssuesSummary: {completed: $c, total: $t}}')"
       ;;
     --subs) subs="$(jq -nc --argjson c "${2%/*}" --argjson t "${2#*/}" '{completed: $c, total: $t}')" ;;
     --assignee) assignees="$(jq -c --arg l "$2" '. + [{login: $l}]' <<<"${assignees}")" ;;
@@ -90,10 +91,11 @@ issue() {
 }
 
 # Adds open pull request $1 titled $2 from branch $3 with checks $4 (SUCCESS, FAILURE, PENDING, or none).
-# Options: --draft, --closes <n>, --review <APPROVED|CHANGES_REQUESTED|REVIEW_REQUIRED>, and --more-closes, which makes
-# GitHub hold one more closing Issue than the read returns; otherwise totalCount matches the closing Issues read.
+# Options: --draft, --closes <n>, --review <APPROVED|CHANGES_REQUESTED|REVIEW_REQUIRED>, --author <login> (default me),
+# and --more-closes, which makes GitHub hold one more closing Issue than the read returns; otherwise totalCount matches
+# the closing Issues read.
 pr() {
-  local num="$1" title="$2" branch="$3" checks="$4" draft=false closes='[]' review=null more=0 rollup
+  local num="$1" title="$2" branch="$3" checks="$4" draft=false closes='[]' review=null author=me more=0 rollup
   shift 4
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -109,6 +111,10 @@ pr() {
       review="\"$2\""
       shift 2
       ;;
+    --author)
+      author="$2"
+      shift 2
+      ;;
     --more-closes)
       more=1
       shift
@@ -121,9 +127,10 @@ pr() {
   done
   if [ "${checks}" = none ]; then rollup=null; else rollup="{\"state\":\"${checks}\"}"; fi
   jq -nc --argjson n "${num}" --arg t "${title}" --arg b "${branch}" --argjson draft "${draft}" --argjson closes "${closes}" \
-    --argjson review "${review}" --argjson rollup "${rollup}" --argjson more "${more}" \
+    --argjson review "${review}" --arg author "${author}" --argjson rollup "${rollup}" --argjson more "${more}" \
     '{number: $n, title: $t, url: ("https://github.com/o/r/pull/" + ($n | tostring)), body: ("Body of " + $t),
-      isDraft: $draft, headRefName: $b, reviewDecision: $review, closingIssuesReferences: {totalCount: (($closes | length) + $more), nodes: $closes},
+      isDraft: $draft, author: {login: $author}, headRefName: $b, reviewDecision: $review,
+      closingIssuesReferences: {totalCount: (($closes | length) + $more), nodes: $closes},
       commits: {nodes: [{commit: {statusCheckRollup: $rollup}}]}}' >>"${prs}"
 }
 
@@ -177,7 +184,7 @@ expect() {
   issue 11 "Blocker work" --blocks 10
   run bash "${target}"
   expect "${status}" 0
-  expect "$(field '[.blocked[] | {number, blockedBy}]')" '[{"number":10,"blockedBy":[{"number":11,"title":"Blocker 11"}]}]'
+  expect "$(field '[.blocked[] | {number, blockedBy}]')" '[{"number":10,"blockedBy":[{"number":11,"title":"Blocker 11","url":"https://github.com/o/r/issues/11"}]}]'
   expect "$(field '[.next[].number]')" '[11]'
 }
 
@@ -216,7 +223,7 @@ expect() {
   expect "$(field '[.next[].number]')" '[24,25,23,22,21,19,20,26]'
   expect "$(field '.next[0].inProgress')" true
   expect "$(field '.next[2].unblocks')" 2
-  expect "$(field '.next[4].epic')" '{"number":3,"title":"Epic 3","completed":1,"total":3}'
+  expect "$(field '.next[4].epic')" '{"number":3,"title":"Epic 3","url":"https://github.com/o/r/issues/3","completed":1,"total":3}'
 }
 
 @test "an Epic that has sub-issues is listed in no group" {
@@ -243,9 +250,35 @@ expect() {
   pr 72 "Dependency bump" deps/x SUCCESS --review APPROVED
   run bash "${target}"
   expect "${status}" 0
-  expect "$(field '[.owner[] | {number, isDraft, checks, issues}]')" \
-    '[{"number":71,"isDraft":false,"checks":null,"issues":[{"number":61,"title":"Work with a ready PR"}]},{"number":72,"isDraft":false,"checks":"SUCCESS","issues":[]},{"number":70,"isDraft":true,"checks":"SUCCESS","issues":[{"number":60,"title":"Work with a draft PR"}]}]'
+  expect "$(field '[.owner[] | {number, isDraft, checks, author, action, review, issues}]')" \
+    '[{"number":71,"isDraft":false,"checks":null,"author":"me","action":"merge","review":null,"issues":[{"number":61,"title":"Work with a ready PR","url":"https://github.com/o/r/issues/61"}]},{"number":72,"isDraft":false,"checks":"SUCCESS","author":"me","action":"merge","review":"APPROVED","issues":[]},{"number":70,"isDraft":true,"checks":"SUCCESS","author":"me","action":"markReady","review":null,"issues":[{"number":60,"title":"Work with a draft PR","url":"https://github.com/o/r/issues/60"}]}]'
   expect "$(field '.next')" '[]'
+}
+
+@test "an owner pull request carries its author and next action, and review required is not called mergeable" {
+  issue 65 "Needs review"
+  issue 66 "Other author work"
+  issue 67 "Draft work"
+  pr 78 "Needs review" feat/issue-65 SUCCESS --review REVIEW_REQUIRED --closes 65
+  pr 79 "Other author" fix/x SUCCESS --author other --closes 66
+  pr 80 "Draft" feat/issue-67 SUCCESS --draft --closes 67
+  run bash "${target}"
+  expect "${status}" 0
+  expect "$(field '[.owner[] | {number, author, review, action, isDraft, checks}]')" \
+    '[{"number":78,"author":"me","review":"REVIEW_REQUIRED","action":"review","isDraft":false,"checks":"SUCCESS"},{"number":79,"author":"other","review":null,"action":"merge","isDraft":false,"checks":"SUCCESS"},{"number":80,"author":"me","review":null,"action":"markReady","isDraft":true,"checks":"SUCCESS"}]'
+}
+
+@test "blockers, an Epic, and a linked Issue carry their URLs for links" {
+  issue 1 "Blocker"
+  issue 2 "Blocked" --blocked-by 1:OPEN --parent 3:1/2
+  issue 3 "Epic" --subs 1/2
+  issue 4 "Linked"
+  pr 5 "Linked PR" feat/x SUCCESS --closes 4
+  run bash "${target}"
+  expect "${status}" 0
+  expect "$(field '.blocked[0].blockedBy[0] | {number, url}')" '{"number":1,"url":"https://github.com/o/r/issues/1"}'
+  expect "$(field '.blocked[0].epic | {number, url}')" '{"number":3,"url":"https://github.com/o/r/issues/3"}'
+  expect "$(field '.owner[0].issues[0] | {number, url}')" '{"number":4,"url":"https://github.com/o/r/issues/4"}'
 }
 
 @test "a pull request with changes requested does not wait on the owner, and its Issue stays in progress under next" {
@@ -265,6 +298,7 @@ expect() {
   expect "${status}" 0
   expect "$(field '.owner')" '[]'
   expect "$(field '[.next[] | {number, inProgress, checks: .pr.checks}]')" '[{"number":64,"inProgress":true,"checks":"FAILURE"},{"number":63,"inProgress":false,"checks":null}]'
+  expect "$(field '.next[0].pr | {number, title, url}')" '{"number":74,"title":"Red PR","url":"https://github.com/o/r/pull/74"}'
 }
 
 @test "a pull request with pending checks that closes no Issue is listed under next as a pull request in progress" {

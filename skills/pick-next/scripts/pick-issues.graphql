@@ -11,10 +11,12 @@ query($owner: String!, $repo: String!, $endCursor: String) {
         body
         # GitHub allows at most 10 assignees, so one page holds them all.
         assignees(first: 10) { nodes { login } }
-        parent { number title subIssuesSummary { completed total } }
+        # The parent carries its URL so the reply can link the larger effort.
+        parent { number title url subIssuesSummary { completed total } }
         subIssuesSummary { completed total }
         # pick.sh fails on an Issue whose totalCount exceeds the nodes read, rather than rank it on partial relations.
-        blockedBy(first: 100) { totalCount nodes { number title state } }
+        # Each blocker carries its URL so the reply can link it.
+        blockedBy(first: 100) { totalCount nodes { number title state url } }
         blocking(first: 100) { totalCount nodes { number state } }
         linkedBranches(first: 100) { totalCount nodes { ref { name } } }
       }
