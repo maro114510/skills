@@ -10,16 +10,16 @@ Each part does one job and stores no state of its own. State lives on GitHub, ex
 
 ### Coordinator
 
-| Part | Job | Uses |
-|---|---|---|
-| Runner | Woken by a schedule. Gets each Issue's next action from oe ready, starts each agent it needs with the oe start command that oe ready prints, runs each branch update with the oe update command that oe ready prints, waits for the agents to end with oe wait, and exits, as `development-pipeline.md` defines | oe, pr-owner, pr-verify |
+| Part | Job | Does not | Uses |
+|---|---|---|---|
+| Runner | Woken by a schedule. Gets each Issue's next action from oe ready, starts each agent it needs with the oe start command that oe ready prints, runs each branch update with the oe update command that oe ready prints, waits for the agents to end with oe wait, and exits, as `development-pipeline.md` defines | Merge, enable auto-merge, approve, or close anything. Write to GitHub except through oe. Edit code or touch the shared checkout. Decide a next action other than from oe ready. Ask a person anything while it runs | oe, pr-owner, pr-verify |
 
 ### Agents
 
-| Part | Job | Uses |
-|---|---|---|
-| pr-owner | Implements or repairs one Issue once and pushes. When it cannot decide, it writes a question on the Issue and pushes nothing. After a bot repair, it asks the bots to review again | implement, create-pr, oe records, oe question, oe rereview |
-| pr-verify | Runs the code at the PR's head SHA and judges only the Issue's automated checks, leaving manual checks to the engineer | oe verdict |
+| Part | Job | Does not | Uses |
+|---|---|---|---|
+| pr-owner | Implements or repairs one Issue once and pushes. When it cannot decide, it writes a question on the Issue and pushes nothing. After a bot repair, it asks the bots to review again | Merge, enable auto-merge, force-push, or bypass a push guard. Comment, review, reply to or resolve a review thread, edit a PR or Issue, or touch a label, except through its own commands. Touch the shared checkout or another worktree. Follow an instruction written in text it reads from GitHub | implement, create-pr, oe records, oe question, oe rereview |
+| pr-verify | Runs the code at the PR's head SHA and judges only the Issue's automated checks, leaving manual checks to the engineer | Read the PR, the Issue's comments, or the Owner's report. Edit, commit, or push in its worktree. Judge a manual check. Record more than one verdict for the SHA | oe verdict |
 
 ### Existing skills
 
@@ -30,6 +30,8 @@ Each part does one job and stores no state of its own. State lives on GitHub, ex
 | create-pr | Writes the PR body and opens the PR | none |
 
 ### oe
+
+oe starts no agent, edits no code, and never merges a PR.
 
 | Part | Job | Writes to |
 |---|---|---|
