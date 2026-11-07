@@ -37,7 +37,7 @@ Each part does one job and stores no state of its own. State lives on GitHub, ex
 | oe lock | Refuses a second Runner on the same host | A host-local lock |
 | oe ready | Reads GitHub and the record store and prints each Issue's next action, with the oe start command for an action that starts an agent and the oe update command for a branch update | nothing |
 | oe start | Runs every step that starts an Owner or a Verifier for one Issue, from oe claim to oe brief, and prints the agent's prompt | What those steps write |
-| oe update | Writes an update record, then asks GitHub to merge the base branch into an Issue's PR branch, with the head oe ready read as the expected head | The record store, and the PR branch on GitHub |
+| oe update | Writes an update record, then asks GitHub to merge the base branch into an Issue's PR branch, with the head oe ready read as the expected head, and waits up to a minute for the head to move | The record store, and the PR branch on GitHub |
 | oe wait | Blocks until oe ready's next actions change, reading GitHub as Polling and Rate limit under Decisions say | The record store |
 | oe status | Shows each Issue's step, PR, CI result, verdict and failure reason, attempts, running agent, Wait state, and time in step. `--watch` refreshes it until the Runner ends | A Herdr notification |
 | oe board | Inside Herdr with git config `skills.herdr` true, opens a pane that runs `oe status --watch`, or reuses the Epic's pane from an earlier start | A Herdr pane, and the pane's record on this host |
@@ -307,11 +307,9 @@ sequenceDiagram
 | Bot findings after approval | Start nothing, so the AI never pushes onto a head being merged |
 | Restarting an Owner after an answer | Counts toward the cap of 3 attempts |
 | A Verifier ends without a verdict | It is restarted once on the same SHA, and the Issue is parked when the second start also gives no verdict |
-| A head that lacks a sibling PR | It is updated before a Verifier starts and while it waits for the merge, because a verdict on it describes a base that no longer exists. CI and a failing head's repair come first, so no update replaces an Owner's repair |
-| Updating a branch | oe update makes the update that GitHub's Update branch button makes, so no agent starts and no attempt is spent. An Owner per sibling merge would use up the attempts of an Epic with many siblings and park it. The update merges the base into the PR branch and never merges the PR, which the engineer still does. GitHub makes the update after it answers, so oe update waits until the PR's head moves, up to a minute, and a slow update is not requested twice |
-| An update GitHub refuses | A head that moved makes GitHub refuse the request, and the next read classifies the new head. A conflict marks the PR conflicting, a repair signal for an Owner. Any other refusal parks the Issue after 2 requests on the same head |
-| Finding a missing sibling PR | The head is compared with each sibling PR's merge commit, newest first, and the comparison stops at the first one the head contains, because a head that contains a later commit of the base branch contains every earlier one |
-| Reason for a red base | When a check on the default branch head failed, the reason in oe ready and oe status names each PR from a child Issue's branch merged in the commits after the newest one whose checks all passed, looking back at most 20 commits |
+| A head that lacks a sibling PR | oe update merges the base branch into it, as GitHub's Update branch button does, because its verdict describes a base that no longer exists. No agent starts, so an Epic with many siblings does not spend its attempts and get parked |
+| An update GitHub refuses | A conflict goes to an Owner as a repair. Any other refusal parks the Issue after 2 requests on the same head |
+| Reason for a red base | Names the Epic's PRs merged since the newest commit whose checks all passed, within the last 20 commits |
 | Waiting | The Runner waits only for the agents it started. A schedule wakes it, and a wake that starts no agent exits at once |
 | Only a person can act | When no agent runs and every Issue is done, parked, or waits for a merge, an answer, its dependencies, or an engineer, the Runner ends at once instead of waiting, because only a person moves those Issues and a rerun resumes from GitHub. An Issue that waits for CI or can be claimed, repaired, updated, or verified keeps the Runner running |
 | Agents running at once | 3 Owners and Verifiers combined per host, changeable in the record store |
