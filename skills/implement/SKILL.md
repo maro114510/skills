@@ -10,7 +10,7 @@ description: >
   「これを実装して」「機能を追加して」「バグを修正して」「変更して」「これを作って」
   「リファクタリングして」「対応して」 and similar implementation requests.
   In normal mode implements only the first planned change unit per run, listing the rest as deferred.
-  Works in a worktree, commits as it goes, and before push has a fresh context check that the branch adds nothing the request did not ask for,
+  Works in a worktree, commits as it goes, and before push has a fresh context check that the branch adds nothing the request did not ask for and lacks nothing it asks for,
   then self-reviews the whole branch range on the first pass and only the fix delta on a second,
   then asks for user approval via difit over that range when the commit skill's classifier requires it.
   Claims an Issue locally first, so a second session handed the same Issue stops and asks instead of duplicating the work.
