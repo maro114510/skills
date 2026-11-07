@@ -9,9 +9,6 @@
 # | assign | Issue number | Adds $fields["assignees[]"] to the Issue's assignees | The Issue does not exist |
 # | comment | Issue or pull request number | Appends a comment by the OWNER at 08:00 | Neither exists |
 # | status | Commit SHA | Puts a commit status on that SHA, newest first in written_statuses | Never |
-# | update_branch | Pull request number | Merges the base into its branch: a new head pushed at 08:00, named by f's and the number, with no checks, verdicts, or missing merges | It is not open, its head is not $fields.expected_head_sha, or it sets update_refusal |
-#
-# An update of a pull request that sets update_stalls is accepted and changes nothing.
 
 def create_ref:
   ($fields.ref | capture("^refs/heads/feat/issue-(?<n>[1-9][0-9]*)$") // error("unexpected ref \($fields.ref)"))
@@ -45,23 +42,7 @@ def status($sha):
   ($fields | {sha: $sha, context, state, description, target_url}) as $new
   | {state: ($state | .written_statuses = [$new] + (.written_statuses // [])), response: $new};
 
-def pr_sha: .head_sha // ("\(.number)" as $n | ("b" * (40 - ($n | length))) + $n);
-
-def update_branch($n):
-  ([$state.issues[].pull_requests[]? | select(.number == $n)] | first) as $pr
-  | ("\($n)" as $s | ("f" * (40 - ($s | length))) + $s) as $new
-  | if $pr == null or ($pr.state // "open") != "open" then {error: "Not Found (HTTP 404)"}
-    elif ($pr | pr_sha) != $fields.expected_head_sha then {error: "expected head sha didn't match current head ref. (HTTP 422)"}
-    elif $pr.update_refusal then {error: $pr.update_refusal}
-    elif $pr.update_stalls then {state: $state, response: {message: "Updating pull request branch."}}
-    else {state: ($state | .issues |= map(.pull_requests |= (if . == null then . else map(
-        if .number == $n then . + {head_sha: $new, pushed: "08:00", checks: null, check_runs: null, verdicts: null, missing_merges: null}
-        else . end) end))),
-      response: {message: "Updating pull request branch."}}
-    end;
-
 if $call == "create_ref" then create_ref
-elif $call == "update_branch" then update_branch($arg | tonumber)
 elif $call == "assign" then assign($arg | tonumber)
 elif $call == "comment" then comment($arg | tonumber)
 elif $call == "status" then status($arg)

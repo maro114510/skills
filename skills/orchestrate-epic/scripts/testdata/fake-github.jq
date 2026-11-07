@@ -56,8 +56,6 @@
 # | merged | When it was merged | Not merged |
 # | base | The branch it merges into | main |
 # | missing_merges | Numbers of merged pull requests whose merge commits its head lacks | None |
-# | update_refusal | The error GitHub gives when asked to update its branch | None |
-# | update_stalls | Whether GitHub accepts an update of its branch but never moves the head | false |
 # | from_fork | Whether its branch lives in a fork | false |
 # | conflicting | Whether it conflicts with its base | false |
 # | pushed | When its head was pushed | Same as opened |

@@ -7,9 +7,6 @@
 # | no_checks_grace | 600 | Seconds a commit may go without checks before its CI counts as missing |
 # | max_attempts | 3 | Owner attempts after the latest claim before the Issue parks |
 # | max_verifier_starts | 2 | Verifier starts on one commit before the Issue parks |
-# | max_updates | 2 | Branch update requests on one commit before the Issue parks |
-# | update_timeout | 60 | Seconds oe update waits for GitHub to move the head after its request |
-# | update_interval | 5 | Seconds between two head reads inside oe update |
 # | verify_context | oe/verify | The commit status context that holds the verdict |
 # | branch_prefix | feat/issue- | The prefix of an Issue branch, followed by the Issue number |
 # | wait_timeout | 540 | Seconds one oe wait call waits for oe ready's output to change, under the 10-minute limit Claude Code puts on a background command |
@@ -23,9 +20,6 @@
 no_checks_grace=600
 max_attempts=3
 max_verifier_starts=2
-max_updates=2
-update_timeout=60
-update_interval=5
 verify_context=oe/verify
 branch_prefix=feat/issue-
 wait_timeout=540

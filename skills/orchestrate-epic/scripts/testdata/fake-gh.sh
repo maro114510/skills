@@ -27,7 +27,6 @@
 # | api -X POST repos/o/r/issues/N/assignees | the write assign N |
 # | api -X POST repos/o/r/issues/N/comments | the write comment N, where N is an Issue or a pull request |
 # | api -X POST repos/o/r/statuses/SHA | the write status SHA |
-# | api -X PUT repos/o/r/pulls/N/update-branch | the write update_branch N |
 set -uo pipefail
 
 args="$*"
@@ -62,13 +61,8 @@ unexpected() {
   exit 99
 }
 
-if [[ "${method}" == POST || "${method}" == PUT ]]; then
-  case "${method} ${path}" in
-  "PUT "*/pulls/*/update-branch)
-    n="${path#*/pulls/}"
-    call=update_branch arg="${n%%/*}"
-    ;;
-  "PUT "*) unexpected ;;
+if [[ "${method}" == POST ]]; then
+  case "${path}" in
   */git/refs) call=create_ref arg="" ;;
   */issues/*/assignees)
     n="${path#*/issues/}"
