@@ -17,6 +17,7 @@
 # | api repos/o/r/pulls | pulls |
 # | api repos/o/r/commits/SHA/statuses | statuses SHA |
 # | api repos/o/r/activity with ref=refs/heads/BRANCH | activity BRANCH |
+# | api repos/o/r/compare/BASE...HEAD | compare BASE...HEAD |
 # | api repos/o/r | repo |
 # | api repos/o/r/git/ref/heads/BRANCH | ref BRANCH |
 # | api repos/o/r/issues/N/comments | comments N |
@@ -118,6 +119,10 @@ graphql)
 */issues/*/sub_issues*)
   n="${path#*/issues/}"
   call=sub_issues arg="${n%%/*}"
+  ;;
+*/compare/*)
+  ref="${path#*/compare/}"
+  call=compare arg="${ref%%\?*}"
   ;;
 repos/o/r) call=repo arg="" ;;
 user) call=user arg="" ;;

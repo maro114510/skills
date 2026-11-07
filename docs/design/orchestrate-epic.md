@@ -12,7 +12,7 @@ Each part does one job and stores no state of its own. State lives on GitHub, ex
 
 | Part | Job | Does not | Uses |
 |---|---|---|---|
-| Runner | Woken by a schedule. Gets each Issue's next action from oe ready, starts each agent it needs with the oe start command that oe ready prints, runs each branch update with the oe update command that oe ready prints, waits for the agents to end with oe wait, and exits, as `development-pipeline.md` defines | Merge, enable auto-merge, approve, or close anything. Write to GitHub except through oe. Edit code or touch the shared checkout. Decide a next action other than from oe ready. Ask a person anything while it runs | oe, pr-owner, pr-verify |
+| Runner | Woken by a schedule. Gets each Issue's next action from oe ready, starts each agent it needs with the oe start command that oe ready prints, waits for the agents to end with oe wait, and exits, as `development-pipeline.md` defines | Merge, enable auto-merge, approve, or close anything. Write to GitHub except through oe. Edit code or touch the shared checkout. Decide a next action other than from oe ready. Ask a person anything while it runs | oe, pr-owner, pr-verify |
 
 ### Agents
 
@@ -35,11 +35,10 @@ oe starts no agent, edits no code, and never merges a PR.
 
 | Part | Job | Writes to |
 |---|---|---|
-| Host-local record store | Keeps the Epic list, each Issue's claim, attempt, update, and findings records until oe forget drops them, and the Runner lock | `$XDG_STATE_HOME/orchestrate-epic` or `~/.local/state/orchestrate-epic` |
+| Host-local record store | Keeps the Epic list, each Issue's claim, attempt, and findings records until oe forget drops them, and the Runner lock | `$XDG_STATE_HOME/orchestrate-epic` or `~/.local/state/orchestrate-epic` |
 | oe lock | Refuses a second Runner on the same host | A host-local lock |
-| oe ready | Reads GitHub and the record store and prints each Issue's next action, with the oe start command for an action that starts an agent and the oe update command for a branch update | nothing |
+| oe ready | Reads GitHub and the record store and prints each Issue's next action, with the oe start command for an action that starts an agent | nothing |
 | oe start | Runs every step that starts an Owner or a Verifier for one Issue, from oe claim to oe brief, and prints the agent's prompt | What those steps write |
-| oe update | Writes an update record, then asks GitHub to merge the base branch into an Issue's PR branch, with the head oe ready read as the expected head, and waits up to a minute for the head to move | The record store, and the PR branch on GitHub |
 | oe wait | Blocks until oe ready's next actions change, reading GitHub as Polling and Rate limit under Decisions say | The record store |
 | oe status | Shows each Issue's step, PR, CI result, verdict and failure reason, attempts, running agent, Wait state, and time in step. `--watch` refreshes it until the Runner ends | A Herdr notification |
 | oe board | Inside Herdr with git config `skills.herdr` true, opens a pane that runs `oe status --watch`, or reuses the Epic's pane from an earlier start | A Herdr pane, and the pane's record on this host |
@@ -58,6 +57,7 @@ oe starts no agent, edits no code, and never merges a PR.
 - Answers an Owner's question with a comment on the Issue
 - Reviews the PR's code and submits Changes requested when something must change
 - Resolves a bot's review thread to dismiss its finding
+- Updates a PR's branch with the base branch when its head lacks a merged sibling PR
 - Runs the manual checks, which the PR leaves unchecked
 - Approves and merges the PR
 - Deletes a parked Issue's branch so the AI starts it over
@@ -100,14 +100,13 @@ flowchart TB
   end
   subgraph Check["Verification"]
     Verify["Verifier working"] -->|"Success"| Merge["Waiting for the merge"]
-    Merge -->|"A sibling PR merged"| Update["Updating the branch"]
+    Merge -->|"A sibling PR merged"| Update["Waiting for a branch update"]
   end
   Repair{"Attempts used?"}
   Ready -->|"Claim"| Owner
   CI -->|"Success"| Verify
   CI -->|"Success, and the head lacks a merged sibling PR"| Update
-  Update -->|"New head"| CI
-  Update -->|"Head unchanged after 2 requests"| Parked
+  Update -->|"Engineer updates the branch"| CI
   Merge -->|"Engineer merges"| Done["Done"]
   Owner -->|"Ends with no PR"| Repair
   Ask -->|"Answer"| Repair
@@ -128,7 +127,7 @@ flowchart TB
 
 Every edge into the Attempts used check stands for one of the repair signals listed below the table. Row 4 applies to every claimed Issue, and the diagram draws Waiting for an engineer only from Waiting for CI, Verifier working, and Waiting for the merge.
 
-For each Issue, oe ready reads this table from the top and outputs the action of the first row that matches. Rows 1 and 2 are gates on the default branch and apply to every Issue. Claim, attempt, and update records come from the record store. An Issue whose PR moved during the read matches no row: it starts nothing, and the next read classifies it.
+For each Issue, oe ready reads this table from the top and outputs the action of the first row that matches. Rows 1 and 2 are gates on the default branch and apply to every Issue. Claim and attempt records come from the record store. An Issue whose PR moved during the read matches no row: it starts nothing, and the next read classifies it.
 
 | Row | Phase | State | Next action |
 |---|---|---|---|
@@ -142,7 +141,7 @@ For each Issue, oe ready reads this table from the top and outputs the action of
 | 8 | Work | Any repair signal below is present | Start an Owner, or park the Issue when it already has 3 attempts |
 | 9 | Verification | A check on the PR's head SHA is pending, or the SHA has had no checks for less than 10 minutes | Wait for CI |
 | 10 | Verification | The PR's head SHA still has no checks after 10 minutes | Park the Issue |
-| 11 | Verification | The PR's head SHA does not contain the commit that merged a sibling PR into the base branch | Update the branch with the base branch, or park the Issue when the SHA already has 2 update records |
+| 11 | Verification | The PR's head SHA does not contain the commit that merged a sibling PR into the base branch | Wait for an engineer to update the branch with the base branch |
 | 12 | Verification | The PR's head SHA has neither a success nor a failure verdict | Start a Verifier, or park the Issue when the SHA already has 2 pending statuses |
 | 13 | Verification | The PR's head SHA has a success verdict | Wait for an engineer to merge |
 
@@ -169,7 +168,6 @@ For each Issue, oe ready reads this table from the top and outputs the action of
   - Only records after the latest claim record count, and every record counts when there is no claim record
   - The PR means the latest PR opened from the branch after the latest claim record
   - Verifier starts are counted by the pending statuses that oe puts on the SHA before each start
-  - Branch updates are counted by the update records that oe update writes for the SHA before each request
   - The verify status that oe writes, whether pending, success, or failure, is never counted as a CI check
 - Sibling PRs
   - A sibling PR is a PR merged into the base branch from the branch of another child Issue of the same Epic
@@ -268,7 +266,7 @@ sequenceDiagram
 | Failed verification | The Verifier writes a failure verdict and stores its findings. An Owner reads the findings, repairs, and pushes. The new SHA has no verdict, so CI and verification run again |
 | Manual checks | An Issue with only manual checks left gets a success verdict and waits for the merge |
 | Failed CI | An Owner fixes the failed check on the same branch and pushes |
-| Sibling merged | Issues A and B both wait for the merge, and the engineer merges A. At the next read, B's head lacks A's squash commit, so oe update merges the base branch into B's branch. CI and a Verifier run again on the new head, and B waits for the merge again once that head has a success verdict |
+| Sibling merged | Issues A and B both wait for the merge, and the engineer merges A. At the next read, B's head lacks A's squash commit, so B waits for the engineer to update its branch. CI and a Verifier run again on the new head, and B waits for the merge again once that head has a success verdict |
 | Bot finding | CodeRabbit reports a Major finding. An Owner checks it in the code, repairs, pushes, and asks CodeRabbit to review again. A Major finding in that re-review goes to the engineer. A Minor finding starts nothing |
 | Reached cap | When a repair signal remains after 3 attempts, the Issue is parked and the Issues that depend on it stop too. The engineer either finishes and merges it by hand, or deletes the branch so the AI starts over |
 | Red default branch | While a check on the default branch fails, no claim, Owner, or Verifier starts, so no attempt is spent. The reason names the child Issues' PRs merged since the last passing head, so the engineer sees when the Epic broke its own base. The next wake after the check passes resumes |
@@ -277,7 +275,7 @@ sequenceDiagram
 
 - The token is shared, so a verdict status can be forged
 - When a commit other than a sibling PR lands on the base branch after verification, nothing is verified again
-- A PR the engineer merges before oe updates and verifies it again lands without being verified against a sibling PR merged before it, as when two sibling PRs merge between two reads
+- A PR the engineer merges before its branch is updated and verified again lands without being verified against a sibling PR merged before it, as when two sibling PRs merge between two reads
 - Workflows the AI changed run with the repository's secrets
 - oe does not scan for secrets, and the commit skill screens each commit instead
 - A comment the AI forgot to mark is read as engineer input
@@ -310,11 +308,10 @@ sequenceDiagram
 | Bot findings after approval | Start nothing, so the AI never pushes onto a head being merged |
 | Restarting an Owner after an answer | Counts toward the cap of 3 attempts |
 | A Verifier ends without a verdict | It is restarted once on the same SHA, and the Issue is parked when the second start also gives no verdict |
-| A head that lacks a sibling PR | oe update merges the base branch into it, as GitHub's Update branch button does, because its verdict describes a base that no longer exists. No agent starts, so an Epic with many siblings does not spend its attempts and get parked |
-| An update GitHub refuses | A conflict goes to an Owner as a repair. Any other refusal parks the Issue after 2 requests on the same head |
+| A head that lacks a sibling PR | Waits for the engineer to update the branch, because its verdict describes a base that no longer exists. oe writes nothing to the branch, and no agent starts, so an Epic with many siblings does not spend its attempts and get parked. A head that conflicts with the base goes to an Owner as a repair at row 8 instead |
 | Reason for a red base | Names the Epic's PRs merged since the newest commit whose checks all passed, within the last 20 commits |
 | Waiting | The Runner waits only for the agents it started. A schedule wakes it, and a wake that starts no agent exits at once |
-| Only a person can act | When no agent runs and every Issue is done, parked, or waits for a merge, an answer, its dependencies, or an engineer, the Runner ends at once instead of waiting, because only a person moves those Issues and a rerun resumes from GitHub. An Issue that waits for CI or can be claimed, repaired, updated, or verified keeps the Runner running |
+| Only a person can act | When no agent runs and every Issue is done, parked, or waits for a branch update, a merge, an answer, its dependencies, or an engineer, the Runner ends at once instead of waiting, because only a person moves those Issues and a rerun resumes from GitHub. An Issue that waits for CI or can be claimed, repaired, or verified keeps the Runner running |
 | Agents running at once | 3 Owners and Verifiers combined per host, changeable in the record store |
 | Harnesses | One Adapter per harness maps the Executor contract of `development-pipeline.md` onto that harness. Agents start with no view of any other session |
 | Agent mode | The agents declare `mode: subagent`, because OpenCode V2 refuses to start an agent without it as a subagent. APM drops the key for Codex |

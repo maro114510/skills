@@ -24,6 +24,9 @@ query($owner: String!, $repo: String!, $num: Int!, $branch: String!, $ref: Strin
         state
         createdAt
         mergedAt
+        # A merged pull request of another child Issue is a sibling, whose merge commit every open head must contain.
+        baseRefName
+        mergeCommit { oid }
         isCrossRepository
         headRefOid
         mergeable

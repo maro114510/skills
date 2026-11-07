@@ -84,7 +84,7 @@ Pass `--running` for every Issue whose agent is running. Act on the exit code:
 | 2 or other | End the session as in Step 4 and show the error |
 
 When every line's action is `done`, end the session as in Step 4.
-When no agent runs and every line's action is `done`, `parked`, `wait-merge`, `wait-answer`, `wait-dependencies`, or `wait-engineer`, end the session as in Step 4 without starting a wait, because only a person moves those Issues and a rerun resumes from GitHub. Any other action, such as `wait-ci` or `wait-base`, keeps the loop running.
+When no agent runs and every line's action is `done`, `parked`, `wait-update`, `wait-merge`, `wait-answer`, `wait-dependencies`, or `wait-engineer`, end the session as in Step 4 without starting a wait, because only a person moves those Issues and a rerun resumes from GitHub. Any other action, such as `wait-ci` or `wait-base`, keeps the loop running.
 When the Issue numbers and actions differ from the previous pass, set `<idle-since>` to now.
 
 ### 3.2 Start agents
