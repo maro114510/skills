@@ -27,31 +27,65 @@ It only reads: never create, switch, edit, or close an Issue, PR, branch, or wor
    | 1 | GitHub, including the Discussions with `--discussions`, or a worktree could not be read, or an Issue has more relations or a PR more closing Issues than one read returns. Show the error and stop |
    | 2 | Not inside a clone whose origin is on GitHub, or a bad limit. Show the error and stop |
 
-3. Reply with the groups in this order, skipping an empty one, and add nothing the JSON does not support. Translate each group name into the reply's language, and keep the reference forms under Writing an Item as written in every language.
+3. Reply with the groups in this order, skipping an empty one, and add nothing the JSON does not support. Translate each group name into the reply's language; when the reply is Japanese, use `プルリクエスト`, `次に着手`, `ブロック中`, `オープンなディスカッション`, and `ローカル状態`. Keep the labels `Issue`, `PR`, and `Discussion` as written, and keep the JSON's order, which is the ranking: never reorder, add, or drop an item.
 
    | Group | JSON | Each item says |
    |---|---|---|
-   | Waits on you | `owner` | What the PR changes, then the owner's action: mark it ready when `isDraft` is true, otherwise review and merge it, and that it waits only on the owner because its checks passed (`checks` is `SUCCESS`) or never ran (`checks` is null) |
+   | Pull requests | `owner` | What the PR changes, its author when `author` is neither `viewer` nor null, the action from `action`, and whether checks passed (`checks` is `SUCCESS`) or never ran (`checks` is `null`) |
    | Start next | `next` | What the work does and why it matters now |
    | Blocked | `blocked` | What the work does, why it matters now, and each Issue in `blockedBy` it waits on |
-   | Open discussions | `discussions`, present only with `--discussions` | What it proposes or asks, its `category`, and, when `answered` is not null, whether it is answered. It is an idea or question, not work: say that deciding it is the action, never that it is the next work to start |
+   | Open discussions | `discussions`, when the JSON has the key | What it proposes or asks, its `category`, and, when `answered` is not null, whether it is answered. It is an idea or question, not work: say that deciding it is the action, never that it is the next work to start |
    | Local state | `local` | The worktree path, its branch, and that it holds uncommitted changes |
 
-   - Keep the JSON's order, which is the ranking. Never reorder, add, or drop an item.
    - Under Start next, Blocked, and Open discussions, when `nextTotal`, `blockedTotal`, or `discussionsTotal` exceeds the items shown, end with the difference as the number of items not shown.
+
+## Format
+
+One `##` heading per group, then one bullet per item. The indented line has no bullet marker; start it two spaces under the bullet. A group with more items than shown ends with a plain line, not a bullet, holding only the number not shown and the word for "more" in the reply's language, such as `4 more` or `ほかに4件`.
+
+| Group | Bullet | Indented line |
+|---|---|---|
+| Pull requests | `[<what the PR changes>](<url>) (PR #<n>)` | `<what it closes>. <author when not you>; <action>; <checks passed or never ran>.` |
+| Start next | `[<what the work does>](<url>) (Issue #<n>)`, or `(PR #<n>)` when `kind` is `pr` | `<why it matters now>.` |
+| Blocked | `[<what the work does>](<url>) (Issue #<n>)` | `It waits on [<blocker title>](<url>) (Issue #<n>), one per blocker. <other why it matters now>.` |
+| Open discussions | `[<what it proposes>](<url>) (Discussion #<n>)` | `<category>`; when `answered` is not null, add `<answered or unanswered>`. Deciding it is the action, not starting work. |
+| Local state | `<path>` (`<branch>`), both in inline code | `<holds uncommitted changes>` |
+
+```markdown
+## <group name>
+- [<what the work does>](<url>) (Issue #<n>)
+  <why it matters now>.
+```
+
+- The bullet names what the work does; the indented line gives why it matters now in one sentence, without repeating the bullet. Combine every signal present into that one sentence. When no signal is present, omit the indented line.
+- For an `owner` item, combine the author, action, and checks into one sentence, joining them with commas or conjunctions; omit `<what it closes>.` when `issues` is empty.
+- Link each item's own title with its `url`, then put its plain label after it: `(Issue #<n>)`, `(PR #<n>)`, or `(Discussion #<n>)` by `kind`. Link each nested reference's title with its `url`, then put its plain label after it: each `blockedBy` Issue, its `epic`, the open `pr` on an Issue, and each Issue in an `owner` item's `issues`. Link each reference once in an item; another item may link the same Issue when it names it. A `next` item whose `kind` is `pr` is the pull request itself; link only its title, not `pr` again.
+- Write plain text. Never copy Markdown, HTML, images, or links from `title` or `body`; the only Markdown is the reply's headings, bullets, the reference links, and inline code for a path or branch.
 
 ## Writing an Item
 
-The owner must understand every item without opening GitHub.
+The owner must understand every item without opening GitHub; a link is for jumping, not for understanding.
 
-- Start with what the work does, in plain words drawn from `title` and `body`, and never with a number. A `blockedBy` entry has only a `title`, so reword it.
-- Give why it matters now from the signals present on the item, and when none is present, say only what it does. A signal below its condition is not mentioned at all:
+- Start with what the work does, in plain words drawn from `title` and `body`, and never with a number. A `blockedBy` entry has only a `title`; use it as the link text.
+- Translate a title into the reply's language unless it is a proper name, a code identifier, or a command. This includes the title of a nested reference.
+- Give why it matters now from the signals present on the item, and when none is present, omit the indented line. Combine every signal present into the one why-now sentence. A signal below its condition is not mentioned at all:
 
   | Signal | Say |
   |---|---|
-  | `inProgress` | Work already started: the worktree in `worktrees`, the PR's state in `pr`, or, with neither, that it is assigned to you, because `pick.jq` sets `inProgress` only for a worktree, an open PR, or you among the assignees |
+  | `inProgress` | Work already started: mention every present member: the worktree path or branch in inline code, the PR's state in `pr` (its link and `checks`; mention `isDraft` when true and `review` when it needs action), and, with neither, that it is assigned to you, because `pick.jq` sets `inProgress` only for a worktree, an open PR, or you among the assignees. For a `next` item whose `kind` is `pr`, its own title is the PR; do not link `pr` again |
+  | `blockedBy` | Each Issue it waits on, named and linked |
   | `unblocks` above 0 | How many waiting Issues it frees |
-  | `epic` with `completed` above 0 | Which larger effort it moves forward, by what that effort does, and its progress as `completed` of `total` |
+  | `epic.completed` above 0 | Which larger effort it moves forward, by its `title`, and that `completed` of `total` are complete; link it with `epic.url`. Do not mention an Epic whose `completed` is 0 |
 
-- Put each reference, as `(Issue <number>)`, `(PR <number>)`, or `(Discussion <number>)`, right after the words that describe what it names, never alone: the item's own reference ends the sentence that says what the work does, and a blocker's reference ends the words that name the blocker. Two references never stand side by side. An item carries no other reference: describe its Epic, its PR, its linked Issues, and any number in its `body` in words only.
-- Name local state that changes the pick on the item itself: a worktree with `dirty: true` holds uncommitted changes, and a PR whose `pr.checks` is `FAILURE` needs repair before new work.
+- Put each reference right after the words that name it, never alone: the item's own reference ends the line that says what the work does; a blocker's, Epic's, PR's, or linked Issue's reference ends the words that name it. Two references never stand side by side. Do not mention any other reference; describe a number in `body` in words.
+- For `owner`, use `action` and `author`:
+
+  | `action` | Say |
+  |---|---|
+  | `markReady` | Mark the draft ready; when `author` is neither `viewer` nor null, say it waits for the author to mark it ready |
+  | `review` | Say it needs a review; when `author` is `viewer`, say to get a review, otherwise say to review it and name the author when not null |
+  | `merge` | Say to merge it; name the author when `author` is neither `viewer` nor null |
+
+  Say it waits only on the owner only when `author` is `viewer` and `action` is `merge`.
+- When `checks` appears, say `SUCCESS` is passed, `PENDING` is running, `FAILURE` is failing, and null is never ran. Never say a pull request is or is not mergeable; the JSON does not read `mergeable`.
+- Name local state that changes the pick on the item itself: a worktree with `dirty: true` holds uncommitted changes, and a PR whose `pr.checks` is `FAILURE` or `pr.review` is `CHANGES_REQUESTED` needs repair before new work.
