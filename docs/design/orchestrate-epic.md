@@ -170,7 +170,7 @@ For each Issue, oe ready reads this table from the top and outputs the action of
   - The verify status that oe writes, whether pending, success, or failure, is never counted as a CI check
 - Sibling PRs
   - A sibling PR is a PR merged into the base branch from the branch of another child Issue of the same Epic
-  - A head contains a sibling PR when the commit that merged it, such as its squash commit, is an ancestor of the head
+  - A head contains a sibling PR when the commit that GitHub records as its merge commit is an ancestor of the head. That commit is the merge commit, the squash commit, or for a rebase merge the commit the base branch moved to
 
 A comment is a bot finding when every row holds.
 
