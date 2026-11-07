@@ -47,7 +47,7 @@ One `##` heading per group, then one bullet per item. The indented line has no b
 |---|---|---|
 | Pull requests | `[<what the PR changes>](<url>) (PR #<n>)` | `<author when not you>. <action>. <checks passed or never ran>.` |
 | Start next | `[<what the work does>](<url>) (Issue #<n>)`, or `(PR #<n>)` when `kind` is `pr` | `<why it matters now>.` |
-| Blocked | `[<what the work does>](<url>) (Issue #<n>)` | `<why it matters now>; it waits on [<blocker title>](<url>) (Issue #<n>), one per blocker.` |
+| Blocked | `[<what the work does>](<url>) (Issue #<n>)` | `It waits on [<blocker title>](<url>) (Issue #<n>), one per blocker. <other why it matters now>.` |
 | Open discussions | `[<what it proposes>](<url>) (Discussion #<n>)` | `<category>`; when `answered` is not null, add `<answered or unanswered>`. Deciding it is the action, not starting work. |
 | Local state | `<path>` (`<branch>`) | `<holds uncommitted changes>` |
 
@@ -65,6 +65,7 @@ The owner must understand every item without opening GitHub; a link is for jumpi
   | Signal | Say |
   |---|---|
   | `inProgress` | Work already started: the worktree in `worktrees`, the PR's state in `pr` (its link and `checks`; mention `isDraft` when true and `review` when it needs action), or, with neither, that it is assigned to you, because `pick.jq` sets `inProgress` only for a worktree, an open PR, or you among the assignees |
+  | `blockedBy` | Each Issue it waits on, named and linked |
   | `unblocks` above 0 | How many waiting Issues it frees |
   | `epic.completed` above 0 | Which larger effort it moves forward, by what that effort does, and that `completed` of `total` are complete; link it with `epic.url`. Do not mention an Epic whose `completed` is 0 |
 
