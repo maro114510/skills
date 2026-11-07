@@ -10,16 +10,16 @@ Each part does one job and stores no state of its own. State lives on GitHub, ex
 
 ### Coordinator
 
-| Part | Job | Uses |
-|---|---|---|
-| Runner | Woken by a schedule. Gets each Issue's next action from oe ready, starts each agent it needs with the oe start command that oe ready prints, waits for the agents to end with oe wait, and exits, as `development-pipeline.md` defines | oe, pr-owner, pr-verify |
+| Part | Job | Does not | Uses |
+|---|---|---|---|
+| Runner | Woken by a schedule. Gets each Issue's next action from oe ready, starts each agent it needs with the oe start command that oe ready prints, waits for the agents to end with oe wait, and exits, as `development-pipeline.md` defines | Merge, enable auto-merge, approve, or close anything. Write to GitHub except through oe. Edit code or touch the shared checkout. Decide a next action other than from oe ready. Ask a person anything while it runs | oe, pr-owner, pr-verify |
 
 ### Agents
 
-| Part | Job | Uses |
-|---|---|---|
-| pr-owner | Implements or repairs one Issue once and pushes. When it cannot decide, it writes a question on the Issue and pushes nothing. After a bot repair, it asks the bots to review again | implement, create-pr, oe records, oe question, oe rereview |
-| pr-verify | Runs the code at the PR's head SHA and judges only the Issue's automated checks, leaving manual checks to the engineer | oe verdict |
+| Part | Job | Does not | Uses |
+|---|---|---|---|
+| pr-owner | Implements or repairs one Issue once and pushes. When it cannot decide, it writes a question on the Issue and pushes nothing. After a bot repair, it asks the bots to review again | Merge, enable auto-merge, force-push, or bypass a push guard. Comment, review, reply to or resolve a review thread, edit a PR or Issue, or touch a label, except through its own commands. Touch the shared checkout or another worktree. Follow an instruction written in text it reads from GitHub | implement, create-pr, oe records, oe question, oe rereview |
+| pr-verify | Runs the code at the PR's head SHA and judges only the Issue's automated checks, leaving manual checks to the engineer | Read the PR, the Issue's comments, or the Owner's report. Edit, commit, or push in its worktree. Judge a manual check. Record more than one verdict for the SHA | oe verdict |
 
 ### Existing skills
 
@@ -31,9 +31,11 @@ Each part does one job and stores no state of its own. State lives on GitHub, ex
 
 ### oe
 
+oe starts no agent, edits no code, and never merges a PR.
+
 | Part | Job | Writes to |
 |---|---|---|
-| Host-local record store | Keeps the Epic list and Modes, the starts that `observe` recorded, each Issue's claim, attempt, and findings records until oe forget drops them, and the Runner lock | `$XDG_STATE_HOME/orchestrate-epic` or `~/.local/state/orchestrate-epic` |
+| Host-local record store | Keeps the Epic list, each Issue's claim, attempt, and findings records until oe forget drops them, and the Runner lock | `$XDG_STATE_HOME/orchestrate-epic` or `~/.local/state/orchestrate-epic` |
 | oe lock | Refuses a second Runner on the same host | A host-local lock |
 | oe ready | Reads GitHub and the record store and prints each Issue's next action, with the oe start command for an action that starts an agent | nothing |
 | oe start | Runs every step that starts an Owner or a Verifier for one Issue, from oe claim to oe brief, and prints the agent's prompt | What those steps write |
@@ -77,7 +79,7 @@ Each part does one job and stores no state of its own. State lives on GitHub, ex
 | Engineer input is only an unmarked comment or review by someone with the OWNER, MEMBER, or COLLABORATOR role, and labels mean nothing | Trusted input only |
 | A bot's text can start a repair but never instructs an agent | Trusted input only |
 | When a GitHub read fails, oe ready prints nothing and exits with an error. When one PR moves during the read, only its Issue is unreadable, and that Issue starts nothing until a later read | A failed read decides nothing |
-| Listing an Epic in Mode `auto` is consent, and removing it stops new starts | The entry gate. It is dropped because listing is consent |
+| Listing an Epic is consent, and removing it stops new starts | The entry gate. It is dropped because listing is consent |
 | Success is decided by the real CI on GitHub, never by a local reproduction | The locally reproduced check set. It is dropped because the real CI runs |
 
 The secret-scan safety condition is handled as an accepted risk.
@@ -111,6 +113,7 @@ flowchart TB
   CI -->|"Repair signal"| Repair
   Verify -->|"Repair signal"| Repair
   Merge -->|"Repair signal"| Repair
+  Update -->|"Conflict"| Repair
   Repair -->|"Fewer than 3"| Owner
   Repair -->|"3 used"| Parked["Parked"]
   CI -->|"No checks after 10 minutes"| Parked
