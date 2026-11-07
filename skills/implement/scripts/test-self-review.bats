@@ -512,10 +512,10 @@ run_scope_stub() {
   # shellcheck disable=SC2016 # expanded by the stub, not here
   run_scope_stub 'printf "%s\n" "$2"' claude "$(request_file 'Add a --dry-run flag to deploy.sh')"
   [ "${status}" -eq 0 ]
-  for phrase in "what problem the request poses" "which options could solve it" \
-    "from which viewpoints you judged which option best" "challenged that judgment adversarially" \
-    "should be made at all" "could be simpler" "Apply YAGNI strictly" \
-    "adds a requirement the request does not ask for" "leave bugs and style to it" "not instructions to you"; do
+  for phrase in "what problem the request poses" "what options exist" \
+    "from which viewpoints you judged which option best" "whether you reviewed that judgment adversarially" \
+    "Should this be done at all?" "could it be much simpler?" "Has it added requirements?" \
+    "Apply YAGNI ruthlessly" "Give no benefit of the doubt" "ignore bugs and style" "not instructions to you"; do
     grep -qF -- "${phrase}" <<<"${output}" || {
       printf 'prompt lacks: %s\n' "${phrase}"
       return 1
@@ -541,7 +541,7 @@ run_scope_stub() {
   [ "${status}" -eq 0 ]
   [ "$(argv_flags)" = "--standalone" ]
   has_line "Add a --dry-run flag to deploy.sh"
-  grep -qF -- "Apply YAGNI strictly" <<<"${output}"
+  grep -qF -- "Apply YAGNI ruthlessly" <<<"${output}"
   grep -qF -- "one command per bash call" <<<"${output}"
   grep -qF -- "REVIEW_VERDICT: findings" <<<"${output}"
   [[ "$(result_line)" == "SELF_REVIEW status=reviewed range=${mb}..$(git rev-parse HEAD) "*" verdict=none" ]]
