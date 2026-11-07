@@ -305,7 +305,7 @@ sequenceDiagram
 | Bot findings after approval | Start nothing, so the AI never pushes onto a head being merged |
 | Restarting an Owner after an answer | Counts toward the cap of 3 attempts |
 | A Verifier ends without a verdict | It is restarted once on the same SHA, and the Issue is parked when the second start also gives no verdict |
-| A head that lacks a sibling PR | Waits for the engineer to update the branch, as GitHub's Update branch button does, because its verdict describes a base that no longer exists. oe writes nothing to the branch, and no agent starts, so an Epic with many siblings does not spend its attempts and get parked. A conflict the update finds goes to an Owner as a repair |
+| A head that lacks a sibling PR | Waits for the engineer to update the branch, because its verdict describes a base that no longer exists. oe writes nothing to the branch, and no agent starts, so an Epic with many siblings does not spend its attempts and get parked. A head that conflicts with the base goes to an Owner as a repair at row 8 instead |
 | Reason for a red base | Names the Epic's PRs merged since the newest commit whose checks all passed, within the last 20 commits |
 | Waiting | The Runner waits only for the agents it started. A schedule wakes it, and a wake that starts no agent exits at once |
 | Only a person can act | When no agent runs and every Issue is done, parked, or waits for a branch update, a merge, an answer, its dependencies, or an engineer, the Runner ends at once instead of waiting, because only a person moves those Issues and a rerun resumes from GitHub. An Issue that waits for CI or can be claimed, repaired, or verified keeps the Runner running |
