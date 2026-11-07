@@ -114,6 +114,7 @@ flowchart TB
   CI -->|"Repair signal"| Repair
   Verify -->|"Repair signal"| Repair
   Merge -->|"Repair signal"| Repair
+  Update -->|"Conflict"| Repair
   Repair -->|"Fewer than 3"| Owner
   Repair -->|"3 used"| Parked["Parked"]
   CI -->|"No checks after 10 minutes"| Parked
