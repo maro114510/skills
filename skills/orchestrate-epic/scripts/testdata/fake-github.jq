@@ -14,6 +14,7 @@
 # | comments | Issue number | The comments on that Issue, oldest first |
 # | sub_issues | Epic number | The child Issues, each with its number and state |
 # | checks | Commit SHA and cursor, as SHA:CURSOR | The page of checks on that commit after the cursor |
+# | compare | Two commits, as BASE...HEAD | Whether HEAD contains BASE: ahead when it does, and diverged when it does not |
 #
 # Checks come 100 to a page, in every read that holds them.
 #
@@ -53,6 +54,10 @@
 # | state | open, merged, or closed | open |
 # | opened | When it was opened | Required |
 # | merged | When it was merged | Not merged |
+# | base | The branch it merges into | main |
+# | missing_merges | Numbers of merged pull requests whose merge commits its head lacks | None |
+# | update_refusal | The error GitHub gives when asked to update its branch | None |
+# | update_stalls | Whether GitHub accepts an update of its branch but never moves the head | false |
 # | from_fork | Whether its branch lives in a fork | false |
 # | conflicting | Whether it conflicts with its base | false |
 # | pushed | When its head was pushed | Same as opened |
@@ -76,6 +81,8 @@
 def time: "2027-01-15T\(.):00Z";
 def default_sha: "a" * 40;
 def pr_sha: .head_sha // ("\(.number)" as $n | ("b" * (40 - ($n | length))) + $n);
+# The commit GitHub records as a merged pull request's merge commit.
+def merge_sha: "\(.number)" as $n | ("d" * (40 - ($n | length))) + $n;
 def author: {authorAssociation: .by, body: .body};
 
 def check_run($name; $result):
@@ -137,6 +144,8 @@ def pull_request:
   | {number, isCrossRepository: (.from_fork // false), headRefOid: $sha,
     state: (.state // "open" | ascii_upcase), createdAt: (.opened | time),
     mergedAt: (if .merged then .merged | time else null end),
+    baseRefName: (.base // "main"),
+    mergeCommit: (if .merged then {oid: merge_sha} else null end),
     mergeable: (if .conflicting then "CONFLICTING" else "MERGEABLE" end),
     reviews: {nodes: [.reviews[]? | author + {submittedAt: (.at | time)}]},
     approvals: {nodes: [.approvals[]? | {authorAssociation: (.by // "NONE"), commit: {oid: (.sha // $sha)}}]},
@@ -188,6 +197,12 @@ def checks_response($oid; $after):
    else [.issues[].pull_requests[]? | select(read_sha == $oid)] | first // error("unknown commit \($oid)") end) as $commit
   | {data: {repository: {object: {oid: $oid, statusCheckRollup: ($commit | rollup_nodes | contexts_page($after))}}}};
 
+# Whether the head $head contains the merge commit $base, as GitHub's compare status says.
+def compare_response($base; $head):
+  ([.issues[].pull_requests[]? | select(.merged and merge_sha == $base)] | first // error("unknown commit \($base)")) as $merged
+  | ([.issues[].pull_requests[]? | select(pr_sha == $head)] | first // error("unknown commit \($head)")) as $pr
+  | {status: (if any($pr.missing_merges[]?; . == $merged.number) then "diverged" else "ahead" end)};
+
 $state
 | if $call == "epic" then epic_response
   elif $call == "issue" then issue_response($arg | tonumber)
@@ -200,4 +215,5 @@ $state
   elif $call == "comments" then issue_comments($arg | tonumber)
   elif $call == "sub_issues" then sub_issues
   elif $call == "checks" then ($arg | split(":")) as [$oid, $after] | checks_response($oid; $after | tonumber)
+  elif $call == "compare" then ($arg | split("...")) as [$base, $head] | compare_response($base; $head)
   else error("unknown call \($call)") end

@@ -613,6 +613,99 @@ JSON
   [ "$(action_of 5)" = parked ]
 }
 
+# Sibling pull requests
+
+# Saves a state where Issue 4's PR 40 merged into main at 07:30, and Issue 5's open PR 50 passed its checks
+# with a verdict of $1, none for no verdict, and a head that lacks the merges in the JSON array $2.
+sibling_merged() {
+  jq -n --arg verdict "$1" --argjson missing "$2" '{
+    default_branch: {checks: {test: "success"}},
+    issues: [
+      {number: 4, closed: true, pull_requests: [{number: 40, state: "merged", opened: "07:05", merged: "07:30"}]},
+      {number: 5, branch: true, pull_requests: [{number: 50, opened: "07:10", checks: {test: "success"},
+        verdicts: (if $verdict == "none" then [] else [$verdict] end), missing_merges: $missing}]}
+    ]
+  }' >"${OE_GITHUB}"
+  records 5 claim@07:00 attempt@07:01
+}
+
+@test "a head that passed its checks and lacks a merged sibling pull request is updated instead of verified" {
+  sibling_merged none '[40]'
+
+  run --separate-stderr bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = update ]
+  IFS=$'\t' read -r _ _ reason command <<<"${lines[1]}"
+  [ "${command}" = "bash '${BATS_TEST_DIRNAME}/oe' update o/r 5 bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb50" ]
+  case "${reason}" in
+  *"#40"*) ;;
+  *) return 1 ;;
+  esac
+}
+
+@test "a head with a success verdict that lacks a merged sibling pull request is updated instead of waiting for the merge" {
+  sibling_merged success '[40]'
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = update ]
+}
+
+@test "a head that contains the merged sibling pull request is verified, and one with a success verdict waits for the merge" {
+  sibling_merged none '[]'
+  run bash "${oe}" ready o/r 1
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-verifier ]
+
+  sibling_merged success '[]'
+  run bash "${oe}" ready o/r 1
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-merge ]
+}
+
+@test "a pull request merged into a branch other than the default branch is no sibling" {
+  sibling_merged none '[40]'
+  jq '.issues[0].pull_requests[0].base = "release"' "${OE_GITHUB}" >"${OE_GITHUB}.new" && mv "${OE_GITHUB}.new" "${OE_GITHUB}"
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-verifier ]
+}
+
+@test "a head that lacks a merged sibling and already had two update requests parks the Issue" {
+  sibling_merged none '[40]'
+  update_record 5 bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb50 07:40
+  update_record 5 bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb50 07:45
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = parked ]
+}
+
+@test "update requests on an earlier head do not count toward parking the current head" {
+  sibling_merged none '[40]'
+  update_record 5 cccccccccccccccccccccccccccccccccccccccc 07:40
+  update_record 5 cccccccccccccccccccccccccccccccccccccccc 07:45
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = update ]
+}
+
+@test "a failed read of whether a head contains a merged sibling exits non-zero and prints nothing" {
+  sibling_merged none '[40]'
+
+  GH_FAIL=/compare run --separate-stderr bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 1 ]
+  [ -z "${output}" ]
+}
+
 # Attempts
 
 @test "three attempts after the latest claim park an Issue that still needs repair" {

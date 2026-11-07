@@ -24,6 +24,14 @@ records() {
   done >>"${file}"
 }
 
+# Saves an update record of Issue $1 in o/r on the SHA $2, made at $3, written as HH:MM.
+update_record() {
+  local file
+  file="$(record_file "$1")"
+  mkdir -p "${file%/*}"
+  printf '{"kind":"update","at":"2027-01-15T%s:00Z","sha":"%s"}\n' "$3" "$2" >>"${file}"
+}
+
 # Prints the records of Issue $1 in o/r, one JSON object per line, or nothing when it has none.
 records_of() {
   local file

@@ -17,6 +17,7 @@
 # | api repos/o/r/pulls | pulls |
 # | api repos/o/r/commits/SHA/statuses | statuses SHA |
 # | api repos/o/r/activity with ref=refs/heads/BRANCH | activity BRANCH |
+# | api repos/o/r/compare/BASE...HEAD | compare BASE...HEAD |
 # | api repos/o/r | repo |
 # | api repos/o/r/git/ref/heads/BRANCH | ref BRANCH |
 # | api repos/o/r/issues/N/comments | comments N |
@@ -26,6 +27,7 @@
 # | api -X POST repos/o/r/issues/N/assignees | the write assign N |
 # | api -X POST repos/o/r/issues/N/comments | the write comment N, where N is an Issue or a pull request |
 # | api -X POST repos/o/r/statuses/SHA | the write status SHA |
+# | api -X PUT repos/o/r/pulls/N/update-branch | the write update_branch N |
 set -uo pipefail
 
 args="$*"
@@ -60,8 +62,13 @@ unexpected() {
   exit 99
 }
 
-if [[ "${method}" == POST ]]; then
-  case "${path}" in
+if [[ "${method}" == POST || "${method}" == PUT ]]; then
+  case "${method} ${path}" in
+  "PUT "*/pulls/*/update-branch)
+    n="${path#*/pulls/}"
+    call=update_branch arg="${n%%/*}"
+    ;;
+  "PUT "*) unexpected ;;
   */git/refs) call=create_ref arg="" ;;
   */issues/*/assignees)
     n="${path#*/issues/}"
@@ -118,6 +125,10 @@ graphql)
 */issues/*/sub_issues*)
   n="${path#*/issues/}"
   call=sub_issues arg="${n%%/*}"
+  ;;
+*/compare/*)
+  ref="${path#*/compare/}"
+  call=compare arg="${ref%%\?*}"
   ;;
 repos/o/r) call=repo arg="" ;;
 user) call=user arg="" ;;
