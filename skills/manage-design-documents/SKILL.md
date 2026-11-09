@@ -39,7 +39,7 @@ Delete without asking only when the request replaces or retracts the ADR; ask wh
 
 ## 4. Find Stale Copies
 
-When section 2 or 3 changed or removed a decision, search for the terms that name it and the changed documents' file names: the repository with `git grep`, and open Issues and pull requests with `gh issue list` and `gh pr list` using `--state open --search "<term>" --limit 100 --json number,title,url,body`. Report each hit that still states the old decision, edit none, and say which search could not run.
+When section 2 or 3 changed or removed a decision, search for the terms that name it or its values, and the changed documents' file names: the repository with `git grep`, and open Issues and pull requests with `gh issue list` and `gh pr list` using `--state open --search "<term>" --limit 100 --json number,title,url,body`. Report each hit outside those documents that the change makes false, edit none, and say which search could not run.
 
 ## 5. Review
 
@@ -47,4 +47,4 @@ When asked to review a document, read the matching reference, then list each vio
 
 ## Output
 
-Reply in the user's language with the decision and its reason, the files changed, and the differences or existing format deviations left unresolved, and each stale copy as `<location>: <what it states> -> <what the decision is now>`.
+Reply in the user's language with the decision and its reason, the files changed, and the differences or existing format deviations left unresolved, and each stale copy as `<file:line or URL>: <what it states> -> <what the decision is now>`.
