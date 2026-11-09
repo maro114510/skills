@@ -222,6 +222,26 @@ check_opencode() {
   fi
 }
 
+# A skill reads a file in skills/shared/ through a symlink inside the skill, since APM deploys only
+# skill directories; each link must arrive as a regular file holding the shared file's content.
+check_shared_links() {
+  local target="$1" deployed_skills="$2" shared_root link shared rel deployed
+  shared_root="$(realpath "${repo_root}/skills/shared")"
+  while IFS= read -r link; do
+    shared="$(realpath "${link}")"
+    [[ "${shared}" == "${shared_root}/"* ]] || continue
+    rel="${link#"${repo_root}/skills/"}"
+    deployed="${deployed_skills}/${rel}"
+    if [[ ! -e "${deployed}" ]]; then
+      fail "[${target}] ${rel}, a link to skills/shared, was not deployed"
+    elif [[ -L "${deployed}" || ! -f "${deployed}" ]]; then
+      fail "[${target}] ${rel} was deployed as a link, not a regular file"
+    elif ! cmp -s "${deployed}" "${shared}"; then
+      fail "[${target}] ${rel} does not match skills/shared/${shared#"${shared_root}/"}"
+    fi
+  done < <(find "${repo_root}/skills" -type l -not -path "${repo_root}/skills/shared/*")
+}
+
 for target in "${targets[@]}"; do
   home_dir="${work_root}/${target}/home"
   project_dir="${work_root}/${target}/project"
@@ -235,9 +255,18 @@ for target in "${targets[@]}"; do
   fi
 
   case "${target}" in
-  claude) check_claude "${project_dir}" ;;
-  codex) check_codex "${project_dir}" ;;
-  opencode) check_opencode "${project_dir}" "${home_dir}" "${log_file}" ;;
+  claude)
+    check_claude "${project_dir}"
+    check_shared_links "${target}" "${project_dir}/.claude/skills"
+    ;;
+  codex)
+    check_codex "${project_dir}"
+    check_shared_links "${target}" "${project_dir}/.agents/skills"
+    ;;
+  opencode)
+    check_opencode "${project_dir}" "${home_dir}" "${log_file}"
+    check_shared_links "${target}" "${project_dir}/.agents/skills"
+    ;;
   *) fail "[${target}] unknown target (expected claude, codex, or opencode)" ;;
   esac
 done
