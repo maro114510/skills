@@ -52,7 +52,7 @@ In any Mermaid node label, a double quote in a title must be written as `#quot;`
 **Summary**: <purpose in one line>
 **Background**: <what led to needing this Epic, in 1-2 sentences>
 **Scope (included)**: <bullet> / <bullet>
-**Scope (not included)**: <only if applicable: items the source defers, puts out of scope, or assigns to another Epic, and exclusions the conversation named. Give each item left out of the source with the wording that excludes it, as "<item> (source: "<excluding wording>")". Omit this line entirely if there are none>
+**Scope (not included)**: <only if applicable: items the source defers, puts out of scope, or assigns to another Epic, and exclusions the conversation named. Give each item left out of the source with the wording that excludes it, as "<item> — source: "<excluding wording>"". Omit this line entirely if there are none>
 **Target state**: <what must be true when every child Issue is done, in one line>
 **Verification**: <how to confirm the whole Epic is done, built only from the children's verification below>
 
@@ -115,8 +115,10 @@ Only when a Tn was promoted to a container, show it in this shape instead — Re
 ##### T3.2: <title> (Wave 2 / Depends on: T3.1)
 - Same as above
 
-(Only when you have additions beyond the source. None of them is in the Tn entries above)
-### Proposed additions (not included)
+Only when you have additions beyond the source, write the next section.
+
+### Proposed additions
+None of these is in the Tn entries above.
 - A1: <requirement, spec, or check to add, or a new task> — for: <Tn or new task> — reason: <one line>
 
 OK to proceed to writing the Issue bodies with this structure, dependencies, requirement/spec, and verification drafts?
