@@ -5,7 +5,7 @@ description: >
   本番障害・データ不整合・移行失敗・ロールバック不能・契約破壊、または収益棄損・法務違反・後戻り不能な事業判断に直結する致命的な欠陥だけを指摘し、typo・表記揺れ・体裁・命名の好みには一切触れない。
   「Design Doc レビュー」「ADR を見て」「RFC レビュー」「実装計画書を確認して」「設計レビュー」「設計書のレビューをして」「この設計の穴を探して」などの依頼で使う。
   引数に PR 番号または GitHub URL を渡す。
-allowed-tools: Read, Glob, Grep, Bash(pr-review-pe-identify-pr.sh:*, gh pr diff:*, gh pr view:*, rg:*, git grep:*, git log:*, echo:*), WebFetch, Agent
+allowed-tools: Read, Glob, Grep, Bash(bash *pr-review-pe-identify-pr.sh *, gh pr diff:*, gh pr view:*, rg:*, git grep:*, git log:*, echo:*), WebFetch, Agent
 argument-hint: "<pr-number or url>"
 ---
 
@@ -24,8 +24,10 @@ argument-hint: "<pr-number or url>"
 
 ## データ収集
 
+`<skill-dir>` は、スキル起動時にハーネスが提示するこのスキルの base directory の絶対パスに置き換える。
+
 ```bash
-pr-review-pe-identify-pr.sh "$ARGUMENTS"
+bash <skill-dir>/scripts/pr-review-pe-identify-pr.sh "$ARGUMENTS"
 ```
 
 exit code 2 は PR を特定できない場合、3 は gh の障害であり、どちらも処理を止めてユーザーに案内する。返却 JSON の number・baseRefName・body・comments・reviews をそのまま使い、`gh pr diff` で変更された設計ドキュメントの全文差分を取得する。

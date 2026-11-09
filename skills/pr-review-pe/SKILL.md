@@ -2,7 +2,7 @@
 name: pr-review-pe
 description: >
   コード差分 PR を PE 視点でレビュー。「コードレビュー」「差分レビュー」「PE 視点でレビュー」「PR を見て」で起動。Markdown のみは /pr-doc-review-pe。
-allowed-tools: Read, Glob, Grep, Bash(pr-review-pe-identify-pr.sh:*, gh pr view:*, gh pr diff:*, gh api:*, git fetch:*, git -C:*, git log:*, git blame:*, git grep:*, ghq list:*, rg:*, grep:*, npm:*, go:*, pip:*, echo:*), WebFetch, Agent
+allowed-tools: Read, Glob, Grep, Bash(bash *pr-review-pe-identify-pr.sh *, gh pr view:*, gh pr diff:*, gh api:*, git fetch:*, git -C:*, git log:*, git blame:*, git grep:*, ghq list:*, rg:*, grep:*, npm:*, go:*, pip:*, echo:*), WebFetch, Agent
 argument-hint: "<pr-number or url>"
 ---
 
@@ -13,7 +13,7 @@ argument-hint: "<pr-number or url>"
 
 ## 厳守事項
 
-- `pr-review-pe-identify-pr.sh` は PATH に含まれている。スクリプト名のみで呼び出すこと。`bash <path>` 形式や推測パス（.claude/skills/.../bin/ など）は絶対に使わない。
+- `pr-review-pe-identify-pr.sh` は `bash <skill-dir>/scripts/pr-review-pe-identify-pr.sh` で呼び出す。PATH 上のスクリプト名や推測パス（.claude/skills/.../bin/ など）は使わない。
 - `$LOCAL_REPO_PATH` が確定するまでカレントディレクトリを起点にしたファイル読み込みや git コマンド（`git log`・`git blame`・`Read <相対パス>`・`rg`・`git grep` 等）を実行してはならない。
 - specialist に渡す `<skill-dir>` は、スキル起動時にハーネスが提示するこのスキルの base directory（この SKILL.md があるディレクトリ）の絶対パスに置き換える（インストール先を推測しない。`skills/pr-review-pe/references/` のようなカレントディレクトリ相対パスも使わない）。
 
@@ -28,11 +28,11 @@ argument-hint: "<pr-number or url>"
 
 ## Step 1: PR 特定とメタ取得
 
-決定論的なパースとメタ取得は `bin/pr-review-pe-identify-pr.sh` に集約する。
+決定論的なパースとメタ取得は `scripts/pr-review-pe-identify-pr.sh` に集約する。
 `$ARGUMENTS` を渡すと、PR 番号・GitHub URL・未指定の 3 分岐を解決して `gh pr view` のメタ JSON を返す。
 
 ```bash
-pr-review-pe-identify-pr.sh "$ARGUMENTS"
+bash <skill-dir>/scripts/pr-review-pe-identify-pr.sh "$ARGUMENTS"
 ```
 
 exit code 2 (PR 特定不能) は「現在のブランチに PR が見つかりません。PR 番号または URL を引数で指定してください (例: `9` / `https://github.com/org/repo/pull/9`)。」で停止する。

@@ -81,8 +81,15 @@ if [[ -d "${skills_dir}" ]]; then
   fi
 fi
 
+# Only a Claude Code plugin install puts the repository's bin/ on PATH, and APM never deploys it.
+if [[ -e "${repo_root}/bin" ]]; then
+  find "${repo_root}/bin" -mindepth 1 | sed "s|^${repo_root}/||" >&2
+  printf '%s\n' 'skills must not rely on bin/; put the script in skills/shared/ and link it into each skill that runs it' >&2
+  status=1
+fi
+
 if [[ "${status}" -ne 0 ]]; then
   exit 1
 fi
 
-printf 'agent portability OK (%s agent file(s); skills free of ~/.claude and out-of-skill shared paths)\n' "${count}"
+printf 'agent portability OK (%s agent file(s); skills free of ~/.claude and out-of-skill shared paths; no bin/)\n' "${count}"
