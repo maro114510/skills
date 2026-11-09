@@ -66,10 +66,23 @@ if [[ -d "${skills_dir}" ]]; then
     printf 'grep failed while scanning skills/ (exit %s)\n' "${grep_status}" >&2
     status=1
   fi
+
+  # APM deploys only skill directories, so a path out to skills/shared/ does not resolve there.
+  grep_status=0
+  hits="$(grep -rnE -e '\.\./shared/' -e '<skills-root>/shared/' "${skills_dir}")" || grep_status=$?
+  hits="$(printf '%s\n' "${hits}" | grep -v -e '^$' -e "^${skills_dir}/shared/" || true)"
+  if [[ "${grep_status}" -eq 0 && -n "${hits}" ]]; then
+    printf '%s\n' "${hits}" | sed "s|^${repo_root}/||" >&2
+    printf '%s\n' 'skills must not reach skills/shared/ from outside their own directory; link the shared file into the skill and read the link' >&2
+    status=1
+  elif [[ "${grep_status}" -gt 1 ]]; then
+    printf 'grep failed while scanning skills/ for shared paths (exit %s)\n' "${grep_status}" >&2
+    status=1
+  fi
 fi
 
 if [[ "${status}" -ne 0 ]]; then
   exit 1
 fi
 
-printf 'agent portability OK (%s agent file(s); skills free of ~/.claude paths)\n' "${count}"
+printf 'agent portability OK (%s agent file(s); skills free of ~/.claude and out-of-skill shared paths)\n' "${count}"
