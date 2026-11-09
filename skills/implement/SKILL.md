@@ -205,7 +205,7 @@ Scope the test run to what the diff can affect: the suites that exercise the fil
 
 ## Phase 6.5: Separate-Context Self-Review
 
-Follow `references/self-review.md`, then proceed to Phase 6.9.
+Follow `references/self-review.md`, then proceed to Phase 6.9, unless a question it raised stopped the run.
 
 ---
 
