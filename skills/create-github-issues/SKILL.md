@@ -15,7 +15,7 @@ argument-hint: "[repo <owner/repo>] [lang <ja|en>] [project <n>]"
 Create a GitHub Epic and child Issues from conversation context, with length-capped bodies, explicit dependencies, native `gh` hierarchy and dependency links, and a dependency graph in the Epic.
 
 **Core rule for every step: an Issue body contains only source items and the additions the owner named in Step 3. Step 4 is formatting, not authoring — never introduce a new requirement, spec detail, or dependency while writing a body.** If a body needs something new, go back to Step 3 and get it approved there first.
-Source is only the documents the owner named, the owner's own words, and Step 1.5 answers; your own analysis is not source unless the owner approved that item by name. Anything else, safety or correctness items included, is an addition, and an approval that names no addition includes none.
+Source is only the documents the owner named, the owner's own words, and Step 1.5 answers; your own analysis is not source unless the owner approved that item by name. Anything else, safety or correctness items included, is an addition, and an approval that names no addition includes none. An item the source defers or excludes appears only on the Epic's out-of-scope line, never in a Tn, not even as an exclusion.
 
 Paths below are relative to this skill's directory. Read each reference file when its step says so.
 
