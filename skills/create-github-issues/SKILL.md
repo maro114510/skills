@@ -15,12 +15,7 @@ argument-hint: "[repo <owner/repo>] [lang <ja|en>] [project <n>]"
 Create a GitHub Epic and child Issues from conversation context, with length-capped bodies, explicit dependencies, native `gh` hierarchy and dependency links, and a dependency graph in the Epic.
 
 **Core rule for every step: an Issue body contains only source items and the additions the owner named in Step 3. Step 4 is formatting, not authoring — never introduce a new requirement, spec detail, or dependency while writing a body.** If a body needs something new, go back to Step 3 and get it approved there first.
-
-- Source means only the documents the owner named, the owner's own words, and Step 1.5 answers. Your own analysis or proposals are not source unless the owner approved that item by name.
-- A verification item that only checks a sourced requirement counts as sourced. One that needs new behavior, such as logs or metrics, is an addition.
-- A task split from another inherits its parent's source.
-- Anything not in the source, safety or correctness items included, enters only as an addition the owner picks. An approval that names no addition includes none.
-- Items the source explicitly defers, puts out of scope, or assigns elsewhere are left out without asking, and shown in Step 3. Only the item is dropped, not its task. Items the source leaves silent or ambiguous still go through Step 1.5.
+Source is only the documents the owner named, the owner's own words, and Step 1.5 answers; your own analysis is not source unless the owner approved that item by name. Anything else, safety or correctness items included, is an addition, and an approval that names no addition includes none.
 
 Paths below are relative to this skill's directory. Read each reference file when its step says so.
 
