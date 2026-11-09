@@ -107,8 +107,6 @@ Give it the Issue number and whether anything is deferred, as Phase 5 says.
 
 ---
 
----
-
 ## Phase 7: Approve the Push Range
 
 Approval covers the full push range once, the range Phase 6.5's first pass reviewed, never a single commit or only the fix delta.
