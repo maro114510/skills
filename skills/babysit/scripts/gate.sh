@@ -210,8 +210,9 @@ RE_CI='^\.github/|^\.gitlab-ci\.ya?ml$|^\.gitlab/|^\.circleci/|^\.buildkite/|^\.
 RE_DEPS='(^|/)(package(-lock)?\.json|npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.ya?ml|pnpm-workspace\.ya?ml|bun\.lockb?|\.yarnrc(\.ya?ml)?|\.npmrc|\.pypirc|pip\.conf|go\.(mod|sum|work|work\.sum)|cargo\.(toml|lock)|pyproject\.toml|poetry\.lock|uv\.lock|pipfile(\.lock)?|setup\.(py|cfg)|gemfile(\.lock)?|composer\.(json|lock)|pom\.xml|build\.gradle(\.kts)?|settings\.gradle(\.kts)?|gradle\.properties|gradle-wrapper\.(properties|jar)|mix\.(exs|lock)|package\.swift|package\.resolved|podfile(\.lock)?|cartfile(\.resolved)?|pubspec\.(ya?ml|lock)|flake\.(nix|lock)|deno\.(jsonc?|lock)|brewfile(\.lock\.json)?|renovate\.json5?|nuget\.config|directory\.(packages|build)\.(props|targets)|packages\.lock\.json|\.gitmodules)$|(^|/)requirements[^/]*\.(txt|in)$|(^|/)constraints[^/]*\.txt$|\.(gemspec|csproj|fsproj|vbproj)$|^vendor/|/vendor/|(^|/)node_modules/|^third_party/'
 RE_TESTFILE='(^|/)(tests?|__tests__|specs?|e2e|spec_helper)/|(^|/)[^/]*[._-](test|spec)\.[a-z0-9]+$|(^|/)test_[^/]*\.[a-z0-9]+$|_test\.[a-z0-9]+$|\.bats$|(^|/)[^/]*tests?\.(java|kt|cs|scala|swift)$|(^|/)conftest\.py$'
 # The secret patterns, path and line, live in skills/shared so another skill's scanner reads the same list.
+# secret-patterns.sh here links to that file, because APM deploys only skill directories and copies the link's content.
 # shellcheck source-path=SCRIPTDIR disable=SC1091 # CI does not follow sources.
-source "${script_dir}/../../shared/secret-patterns.sh"
+source "${script_dir}/secret-patterns.sh"
 
 # Line patterns for grep -E
 RE_URL='(https?|ftp|ssh|sftp|git|wss?)://|(^|[^[:alnum:]_.-])git@[A-Za-z0-9.-]+:'
