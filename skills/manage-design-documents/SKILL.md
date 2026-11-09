@@ -42,7 +42,7 @@ Delete without asking only when the request replaces or retracts the ADR; ask wh
 When section 2 or 3 changed or removed a decision rather than only adding one, find what still states the old decision. Plans, Issues, and pull requests copy decisions, and whoever starts from a stale copy rebuilds what was dropped.
 
 - Search for each changed or removed decision by the terms that name it, such as a field, state, or component, and by the file name of each document changed or deleted, because a copy often does not cite its source.
-- Search the repository with `git grep`, skipping the documents this run edited. Search open Issues with `gh issue list --state open --search "<term>" --json number,title,url,body` and open pull requests with `gh pr list` and the same flags.
+- Search the repository with `git grep`, skipping the documents this run edited. Search open Issues with `gh issue list --state open --search "<term>" --limit 100 --json number,title,url,body` and open pull requests with `gh pr list` and the same flags.
 - Keep only hits whose text still states the old decision, not ones that merely mention a term. Edit none of them.
 - If a search cannot run, such as when `gh` fails or the repository has no GitHub remote, say which, and continue.
 
