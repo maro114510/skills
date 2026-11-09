@@ -70,7 +70,7 @@ If any of the first four is missing, end without changing anything and say which
    ```
 
    Resolve each conflict so that both sides' intent holds, then commit the merge with `git -C <worktree> commit --no-edit`. If you cannot tell how to resolve one, run `git -C <worktree> merge --abort`, ask about it with `oe question` as in step 6, and end without running implement or pushing.
-5. Read `<skills-root>/implement/SKILL.md` and follow it with `<task>` as its arguments, saying that no human is reachable, that the worktree is `<worktree>`, and that questions go to `oe question` as in step 6.
+5. Read `<skills-root>/implement/SKILL.md` and follow it with `<task>` as its arguments, saying that no human is reachable, that the worktree is `<worktree>`, that the base branch is `<base>`, and that questions go to `oe question` as in step 6.
    `<task>` is `Implement GitHub Issue #<issue> in <repo>.` for a new task, or `Repair PR #<pr> for GitHub Issue #<issue> in <repo>.` followed by every present item for a repair. Append the answers from step 3 as the user's decisions.
 6. If you wrote a question while following implement, push nothing and end. If implement stopped before committing its work, push nothing and end. Otherwise go to step 7. Write a question this way, each with its options:
 
