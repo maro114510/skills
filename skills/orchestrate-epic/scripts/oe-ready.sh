@@ -153,11 +153,16 @@ epic_lines="$(jq -r "$(program epic_lines)" <<<"${epic_response}" 2>"${err}")" |
   fail "Epic read failed: $(head -n1 "${err}")"
 
 issues=()
+closed=" "
 default_line=""
 while IFS=$'\t' read -r kind a b c d; do
   case "${kind}" in
   default) default_line="${a}"$'\t'"${b}"$'\t'"${c}"$'\t'"${d}" ;;
-  issue) issues+=("${a}") ;;
+  issue)
+    [[ "${b}" =~ ^(OPEN|CLOSED)$ ]] || fail "unknown state of Issue #${a}: ${b}"
+    issues+=("${a}")
+    [[ "${b}" == OPEN ]] || closed+="${a} "
+    ;;
   *) fail "unexpected Epic read line: ${kind}" ;;
   esac
 done <<<"${epic_lines}"
@@ -166,11 +171,11 @@ IFS=$'\t' read -r default_name default_sha default_ci default_detail <<<"${defau
   "${default_ci}" =~ ^(none|pending|failed|passed)$ ]] ||
   fail "default branch head unreadable"
 
-# Rows 1 and 2 of the next-action table gate every Issue on the default branch head.
+# Rows 1 and 2 of the next-action table gate every open Issue on the default branch head.
 #
 # | Row | When | Result |
 # |---|---|---|
-# | 1 | A check on the head failed | Every Issue gets wait-base |
+# | 1 | A check on the head failed | Every open Issue gets wait-base, and every closed Issue gets done |
 # | 2 | A check on the head is pending, or the head has no checks | Every Issue goes on to rows 3 to 13 |
 #
 # Row 2 holds nothing, because a pending or missing check does not show the default branch is broken,
@@ -216,11 +221,17 @@ fi
 out=""
 if [[ -n "${gate_reason}" ]]; then
   for n in ${sorted[@]+"${sorted[@]}"}; do
-    if [[ "${entry}" == classify ]]; then
-      out+="${n}"$'\t'wait-base$'\t'"${gate_reason}"$'\n'
+    # A closed Issue starts nothing, so the gate has nothing to hold, and holding it would hide that the Epic is done.
+    if [[ "${closed}" == *" ${n} "* ]]; then
+      action="done" reason=closed
     else
-      out+="$(jq -cn --argjson n "${n}" --arg reason "${gate_reason}" \
-        '{number: $n, action: "wait-base", reason: $reason}')"$'\n' || fail "cannot format Issue #${n}"
+      action=wait-base reason="${gate_reason}"
+    fi
+    if [[ "${entry}" == classify ]]; then
+      out+="${n}"$'\t'"${action}"$'\t'"${reason}"$'\n'
+    else
+      out+="$(jq -cn --argjson n "${n}" --arg action "${action}" --arg reason "${reason}" \
+        '{number: $n, action: $action, reason: $reason}')"$'\n' || fail "cannot format Issue #${n}"
     fi
   done
   if [[ "${entry}" == classify ]]; then

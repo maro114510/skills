@@ -10,7 +10,7 @@ query($owner: String!, $repo: String!, $epic: Int!) {
     issue(number: $epic) {
       subIssues(first: 100) {
         totalCount
-        nodes { number repository { nameWithOwner } }
+        nodes { number state repository { nameWithOwner } }
       }
     }
   }
