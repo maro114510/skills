@@ -12,12 +12,12 @@ Start each part with its label in the reader's language, and put a blank line be
 A line is at most about 15 words, or 40 characters in Japanese, in the text and in each option field alike.
 
 1. Decision: one line naming what to decide.
-2. Context: 3 lines, one each for the goal of the work, the stage it has reached, and why this question arises now.
+2. Context: 3 lines, one each for the goal of the work, the stage it has reached, and why this question arises now, plus a fourth only for a serious consequence every option shares.
 3. Criteria: 1 or 2 bullets naming what the choice must weigh.
 4. Options: 2 to 4. The label says what it does; a separate line says how it fares on the criteria.
 5. Recommendation: one line with the option, named by its label or a short form of it, and the criterion that decides it.
 
-Leave out history and what every option shares.
+Leave out history and what every option shares, unless it is a serious consequence such as data loss.
 Before asking, count each part's lines and cut any part that is over its cap.
 With a question tool, each option's label and line go in the tool's label and description fields, and the text holds the other four parts.
 
@@ -25,7 +25,7 @@ With a question tool, each option's label and line go in the tool's label and de
 
 Write for a reader who has not seen the session, or has forgotten what the work is.
 
-- Use no name made up during the work; describe the thing instead.
+- Use no name made up during the work, unless choosing it is the decision; describe the thing instead.
 - Say an internal term, such as a role name, in words the reader uses.
 - Never point to "the above", "earlier", or anything else outside the question.
 - Name a file, function, or other code identifier only when it is what is decided, or where the reader must go to decide.
