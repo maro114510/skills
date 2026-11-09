@@ -66,6 +66,21 @@ JSON
   [ "$(action_of 5)" = wait-base ]
 }
 
+@test "a failed check on the default branch head still reports a closed Issue as done and holds an open one" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "failure"}},
+  "issues": [{"number": 5, "closed": true}, {"number": 6}]
+}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = "done" ]
+  [ "$(action_of 6)" = wait-base ]
+}
+
 @test "a running check on the default branch head still lets an Issue with completed dependencies be claimed" {
   github <<'JSON'
 {
