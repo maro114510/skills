@@ -115,7 +115,7 @@ Only when a Tn was promoted to a container, show it in this shape instead — Re
 ##### T3.2: <title> (Wave 2 / Depends on: T3.1)
 - Same as above
 
-Only when you have additions beyond the source, write the next section.
+Only when you have additions beyond the source, write the next section and the closing line that starts with "Additions are included". With no additions, write neither.
 
 ### Proposed additions
 None of these is in the Tn entries above.
