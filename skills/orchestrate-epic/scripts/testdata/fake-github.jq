@@ -113,7 +113,8 @@ def epic_response:
       defaultBranchRef: {name: "main", target: {oid: default_sha,
         committedDate: ($d.committed // $d.pushed // "07:00" | time), statusCheckRollup: ($d | rollup)}},
       issue: {subIssues: {totalCount: (.issues | length),
-        nodes: [.issues[] | {number, repository: {nameWithOwner: "o/r"}}]}}}}};
+        nodes: [.issues[] | {number, state: (if .closed then "CLOSED" else "OPEN" end),
+          repository: {nameWithOwner: "o/r"}}]}}}}};
 
 # The head the Issue read sees, which differs from the listed head after a push during the read.
 def read_sha: if .pushed_during_read then "c" * 40 else pr_sha end;

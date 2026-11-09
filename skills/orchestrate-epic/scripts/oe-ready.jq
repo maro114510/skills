@@ -87,7 +87,7 @@ def ci:
 # | First field | Other fields |
 # |---|---|
 # | default | Branch name, head SHA, CI state, failing or pending check names |
-# | issue | Child Issue number |
+# | issue | Child Issue number, and its state: OPEN or CLOSED |
 def epic_lines:
   .data.repository as $r
   | if ($r | type) != "object" then error("repository not found") else . end
@@ -99,7 +99,7 @@ def epic_lines:
       | .nodes[]
       | if (.repository.nameWithOwner | ascii_downcase) != ($r.nameWithOwner | ascii_downcase)
         then error("child Issue #\(.number) is in \(.repository.nameWithOwner), not \($r.nameWithOwner)")
-        else "issue\t\(.number)" end);
+        else "issue\t\(.number)\t\(.state)" end);
 
 # Reading one Issue
 #
