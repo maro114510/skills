@@ -11,7 +11,7 @@ Write these parts in this order, with one decision per question:
 1. Current state: at most 3 sentences of the facts the decision rests on.
 2. Options: 2 to 4, each in at most 2 lines saying what it does and what it costs or risks.
 3. Recommendation: the recommended option and one reason.
-4. Question: one sentence asking for the decision.
+4. Question: the decision the reader is asked to make.
 
 ## Reader
 
