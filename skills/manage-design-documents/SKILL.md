@@ -3,7 +3,7 @@ name: manage-design-documents
 description: >
   Decide whether a change needs a Design Doc, an ADR, both, or neither, then create, revise, delete, or review them.
   Use for "write a design doc", "add an ADR", "update the design doc", "設計ドキュメントを書いて", "ADR を書いて", "Design Doc を更新して".
-allowed-tools: Read, Glob, Grep, Edit, Write, AskUserQuestion, Bash(git grep:*, git rm:*)
+allowed-tools: Read, Glob, Grep, Edit, Write, AskUserQuestion, Bash(git grep:*, git rm:*, gh issue list:*, gh pr list:*)
 argument-hint: "[change or decision to document | document path to review]"
 ---
 
@@ -37,10 +37,14 @@ Follow `references/design-doc.md` or `references/adr.md` in this skill's directo
 
 Delete without asking only when the request replaces or retracts the ADR; ask when it only seems obsolete. Move any part that still applies into the replacing ADR, or cut the ADR down to that part instead of deleting it. Fix every reference `git grep` finds by its file name, and delete with `git rm`. If `git rm` refuses, Git does not hold the current content, so ask.
 
-## 4. Review
+## 4. Find Stale Copies
+
+When section 2 or 3 changed or removed a decision, search for the terms that name it or its values, and the changed documents' file names: the repository with `git grep`, and open Issues and pull requests with `gh issue list` and `gh pr list` using `--state open --search "<term>" --limit 100 --json number,title,url,body`. Report each hit outside those documents that the change makes false, edit none, and say which search could not run.
+
+## 5. Review
 
 When asked to review a document, read the matching reference, then list each violation of this skill as `<file:line>: <rule> -> <fix>`, and edit nothing.
 
 ## Output
 
-Reply in the user's language with the decision and its reason, the files changed, and the differences or existing format deviations left unresolved.
+Reply in the user's language with the decision and its reason, the files changed, and the differences or existing format deviations left unresolved, and each stale copy as `<file:line or URL>: <what it states> -> <what the decision is now>`.
