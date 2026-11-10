@@ -1,4 +1,4 @@
-# Evaluates one normalized pr-state snapshot against the babysit ledger. docs/design/babysit.md is the spec.
+# Evaluates one normalized pr-state snapshot against the babysit ledger.
 # Input: [snapshot, ledger] from `jq -s`. Args: $now (epoch seconds) and $mode (watch or drive).
 # Output: {ledger, status, event, blockers, pending, report}. ledger holds only the fields wait owns:
 # head and heads. pending and report.pending list each unresolved item with the key, event, and where to look.
