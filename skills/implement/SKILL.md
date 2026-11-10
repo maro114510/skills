@@ -111,7 +111,7 @@ These triggers govern clarification only. Every operational stop elsewhere in th
 When a trigger fires, raise every open triggered item before any repository mutation:
 
 - Ask the user, as `references/interactive.md` § Asking describes. Without a human, write the questions as Without a Human says.
-- Offer concrete, mutually exclusive options, put the recommended one first, and state the consequence of each.
+- Without a human, offer concrete, mutually exclusive options, put the recommended one first, and state the consequence of each.
 - Ask again only when an answer raises a new trigger.
 - If the requested change looks unnecessary or its premise wrong, say so candidly and let the user decide.
 
