@@ -4,7 +4,7 @@
 # Usage: pr-context.sh [ready|draft] [base <branch>] [lang <ja|en>]
 # Language: whatever lang.sh resolves, given the lang argument when there is one.
 # Base: the base argument, else git config branch.<current>.gh-merge-base, else the default branch, as create-linked-pr.sh resolves it.
-# Output on exit 0: an "Arguments:" line, then sections headed "== <name>": create flags, branch, base, commits, diff stat, diff, template <path|none>, issues, manual checks, labels.
+# Output on exit 0: an "Arguments:" line, then sections headed "== <name>": create flags, branch, base, commits, diff stat, diff, template <path|none>, issues, manual checks.
 # Manual checks: "#<n><TAB><item>" for each manual check of an issue the newest footer closes.
 # A stop prints only its reason: ON_BASE_BRANCH <b>, UNCOMMITTED with git status lines, NO_COMMITS origin/<b>, CONFLICT #N lines, or ISSUE_LOOKUP_FAILED #N: <gh error>.
 # Exit: 0 ok, 1 git or gh failed, including an issue gh cannot read, 2 bad arguments or an invalid language, 3 CONFLICT, 4 on the base branch, 5 no commits, 6 uncommitted changes.
@@ -135,8 +135,6 @@ while IFS= read -r line; do
   done < <(manual_checks <<<"${body}")
 done <<<"${refs}"
 
-labels="$(gh api --paginate 'repos/{owner}/{repo}/labels?per_page=100' --jq '.[] | "\(.name)\t\(.description // "")"')" || exit 1
-
 commits="$(git log --reverse --format='--- %h%n%B' "${remote}..HEAD")" || exit 1
 stat="$(git diff --stat "${remote}...HEAD")" || exit 1
 
@@ -191,6 +189,4 @@ echo "== issues"
 printf '%s' "${issues}"
 echo "== manual checks"
 printf '%s' "${manual}"
-echo "== labels"
-[[ -n "${labels}" ]] && echo "${labels}"
 exit 0
