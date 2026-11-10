@@ -48,11 +48,12 @@ Inside a [herdr](https://herdr.dev) pane, the claim records the pane, its agent 
 
 When a Phase 2 trigger fires:
 
+- Read `references/question.md` in full, and write each question as it says.
 - Ask every open triggered item before any repository mutation.
-- Use as few `AskUserQuestion` calls as its four-question limit allows, highest impact first.
+- Use as few `AskUserQuestion` calls as its four-question limit allows, in the order the template sets.
 - Put the recommended option first.
 
-Phase 2 says how to word the options and when to ask again.
+Phase 2 says when to ask again.
 
 Operational stops keep their own handling and are not Phase 2 triggers:
 
