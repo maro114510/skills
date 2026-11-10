@@ -2,23 +2,11 @@
 
 ## Step 1.5: Clarification Question Format
 
-Enumerate each unclear item and ask for a response using the following format. The four labeled subsections below (`[Granularity]` / `[Acceptance criteria]` / `[Specification]` / `[Premise]`) are illustrative, not a fixed checklist — include only the subsection(s) for the axis/axes actually unclear this run.
+Write each question as `references/question.md` says, and start its decision line with the label of its unclear axis: `[Granularity]`, `[Acceptance criteria]`, `[Specification]`, or `[Premise]`.
+
+End the message with these lines:
 
 ```
-The following points are unclear. Please answer before I continue.
-
-**[Granularity] About <task name>**
-<Specific two-choice or multiple-choice question>
-
-**[Acceptance criteria] About <task name>**
-<A specific question, e.g. "Can you state the done condition in one sentence?">
-
-**[Specification] About <item name>**
-<A two-choice or question that makes the ambiguity explicit>
-
-**[Premise] About <claim>**
-<The claim, where it comes from, and the check that would confirm it, e.g. "run X and see whether Y". Ask whether to check it before creating Issues>
-
 I'll continue creating Issues once all questions are answered.
 If you want to proceed with the specification still undecided, reply "proceed anyway" (I'll add a [NEEDS CONFIRMATION] tag and continue).
 ```

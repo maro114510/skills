@@ -43,7 +43,7 @@ Judge whether the context is clear on each axis:
 Judge each axis on its own: a checked premise does not make any other axis clear.
 
 - All clear: go to Step 2 without asking.
-- Any unclear: ask with **AskUserQuestion** in the "Step 1.5: Clarification Question Format" of `references/templates.<LANG>.md`, using only the unclear axes' subsections, with concrete answer choices per item, in one call of up to 4 questions, highest-impact first. **Stop after calling AskUserQuestion; do not proceed to Step 2 until the user responds.**
+- Any unclear: read `references/question.md` in full, then ask with **AskUserQuestion** in the "Step 1.5: Clarification Question Format" of `references/templates.<LANG>.md`, one question per unclear item on the unclear axes only, in one call of up to 4 questions, in the order the template sets. **Stop after calling AskUserQuestion; do not proceed to Step 2 until the user responds.**
 - The user says to proceed with items unresolved: output the "Step 1.5: Warning Format" and mark those sections with its confirmation tag.
 
 Anything still unresolved is never decided later: it gets the confirmation tag or stays out of the Issue.

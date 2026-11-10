@@ -2,23 +2,11 @@
 
 ## Step 1.5: Clarification Question Format
 
-Enumerate each unclear item and ask for a response using the following format. The four labeled subsections below (`[粒度]` / `[受け入れ条件]` / `[仕様]` / `[前提]`) are illustrative, not a fixed checklist — include only the subsection(s) for the axis/axes actually unclear this run.
+Write each question as `references/question.md` says, and start its decision line with the label of its unclear axis: `[粒度]`, `[受け入れ条件]`, `[仕様]`, or `[前提]`.
+
+End the message with these lines:
 
 ```
-以下の点が不明確です。回答してから続行します。
-
-**[粒度] <タスク名>について**
-<具体的な二択または選択肢を提示した質問>
-
-**[受け入れ条件] <タスク名>について**
-<「完了した状態を1文で書けますか？」などの具体的な質問>
-
-**[仕様] <項目名>について**
-<解釈の余地がある点を明示した二択または質問>
-
-**[前提] <主張>について**
-<その主張と出どころ、確かめる方法を示し、Issue を作る前に確かめるかを尋ねる。確かめる方法の例は「X を実行して Y になるか見る」>
-
 すべての質問に回答してから Issue 作成を続行します。
 仕様が未確定のまま進める場合は「とりあえず作って」と返信してください（[要確認] タグを付与して進みます）。
 ```
