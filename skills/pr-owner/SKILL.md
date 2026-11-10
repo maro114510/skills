@@ -23,7 +23,7 @@ If any of the first four is missing, end without changing anything and say which
 
 ## Rules
 
-- Write to GitHub only by `git push` without force, `create-linked-pr.sh`, `oe question`, and `oe rereview`. Never comment, reply to or resolve a review thread, review, edit a PR or Issue, or touch a label except the ones step 9 passes when it creates the PR, because oe ready reads any unmarked comment from this token as engineer input.
+- Write to GitHub only by `git push` without force, `create-linked-pr.sh`, `oe question`, and `oe rereview`. Never comment, reply to or resolve a review thread, review, edit a PR or Issue, or touch a label, because oe ready reads any unmarked comment from this token as engineer input.
 - Never merge, enable auto-merge, or bypass a push guard such as a hook that asks for approval.
 - Work only in `<worktree>`. Never switch, pull, or edit the shared checkout or another worktree.
 - Make and commit every change while following implement in step 5 in this session, even a one-line fix whose cause is obvious, so the change gets its test and the `commit` skill screens it. The merge commit in step 4 is the only exception.
@@ -88,11 +88,11 @@ If any of the first four is missing, end without changing anything and say which
    ```
 
    If the push is rejected, end without retrying.
-9. For a new task, open the PR. Write its title, body, and metadata by `<skills-root>/create-pr/SKILL.md` Steps 1 to 5, in the language its `Arguments:` line resolves, running Step 1 as `bash <skills-root>/create-pr/scripts/pr-context.sh base <base>` in the worktree and ending on its non-zero exit. Check no box that needs a human, as its Step 3.2 says. End the body with the line `<!-- automation-owner: orchestrate-epic -->`, alone on its line and exactly as written, then one sentence in the body's language saying that orchestrate-epic owns this PR and that deleting that line hands it over; other automations that honor the marker then neither push nor reply here. `--owner orchestrate-epic` appends the line when the body lacks it, because nothing may add it once the PR exists. Then run in the worktree, pasting Step 1's `== create flags` line verbatim as `<create flags>`, which carries `--base`, `--draft`, and `--assignee @me`, and adding one `--label` for each label Step 5.2 chose:
+9. For a new task, open the PR. Write its title, body, and metadata by `<skills-root>/create-pr/SKILL.md` Steps 1 to 5, in the language its `Arguments:` line resolves, running Step 1 as `bash <skills-root>/create-pr/scripts/pr-context.sh base <base>` in the worktree and ending on its non-zero exit. Check no box that needs a human, as its Step 3.2 says. End the body with the line `<!-- automation-owner: orchestrate-epic -->`, alone on its line and exactly as written, then one sentence in the body's language saying that orchestrate-epic owns this PR and that deleting that line hands it over; other automations that honor the marker then neither push nor reply here. `--owner orchestrate-epic` appends the line when the body lacks it, because nothing may add it once the PR exists. Then run in the worktree, pasting Step 1's `== create flags` line verbatim as `<create flags>`, which carries `--base`, `--draft`, and `--assignee @me`:
 
    ```bash
    bash <skills-root>/create-pr/scripts/create-linked-pr.sh --repo <repo> --head <branch> --owner orchestrate-epic <create flags> \
-     [--label "<label>"] --title "<title>" --body-file - <<'EOF'
+     --title "<title>" --body-file - <<'EOF'
    <body>
    EOF
    ```

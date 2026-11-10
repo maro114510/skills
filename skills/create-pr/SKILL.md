@@ -55,7 +55,6 @@ It fetches `origin/<base>` and prints everything later steps use. Do not read th
 | `== template <path>` or `== template none` | The PR template's contents, or none | 3 |
 | `== issues` | `Closes #N` or `Related #N` from the newest commit footer, a tab, and the issue title | 2.1 |
 | `== manual checks` | `#N`, a tab, and one manual check of an issue the branch closes, per line | 3 |
-| `== labels` | One `name<TAB>description` per line | 5.2 |
 
 When `== diff` says `omitted`, read only meaningful files with `git diff origin/<base>...HEAD -- <path>...`, skipping generated and vendored code.
 
@@ -118,8 +117,6 @@ Choose metadata from Step 1's output, without running any other command or askin
 
 **5.1 Assignee**: Step 1's create flags already carry `--assignee @me`.
 
-**5.2 Labels**: From `== labels`, apply at most two that clearly match the change type or area; no clear match means no label. Never apply status labels such as `wip` or `draft`, and never create labels. Tell the user the choice and reason in one sentence.
-
 ## Step 6. Push and Create the PR
 
 **6.1 Run one command**
@@ -132,7 +129,6 @@ git push -u origin <current-branch> &&
     --title "<title>" \
     --body-file - \
     <create flags> \
-    [--label "<label>"] \
     --web <<'EOF'
 <description>
 EOF
