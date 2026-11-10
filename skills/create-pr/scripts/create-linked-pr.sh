@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Creates a PR and links each closing line to its issue through the API.
-# Usage: create-linked-pr.sh --title T --body-file F|- [--base B] [--head H] [--repo R] [--draft] [--web] [--assignee A] [--label L]... [--owner ID]
+# Usage: create-linked-pr.sh --title T --body-file F|- [--base B] [--head H] [--repo R] [--draft] [--web] [--assignee A] [--owner ID]
 # Usage: create-linked-pr.sh --link PR [--repo R]
 # Before creating, origin's tip of the head branch must equal local HEAD.
 # Exit: 0 ok, 1 gh or git failed, 2 bad usage or unknown issue, 3 link missing, 4 NOT_PUSHED: head not pushed or stale.
@@ -20,7 +20,6 @@ usage() {
 
 title="" body_file="" base="" head="" repo="" draft=0 web=0 link_pr="" owner_id=""
 assignees=()
-labels=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
   --title) title="${2:-}" && shift ;;
@@ -29,7 +28,6 @@ while [[ $# -gt 0 ]]; do
   --head) head="${2:-}" && shift ;;
   --repo) repo="${2:-}" && shift ;;
   --assignee) assignees+=("${2:-}") && shift ;;
-  --label) labels+=("${2:-}") && shift ;;
   --draft) draft=1 ;;
   --web) web=1 ;;
   --link) link_pr="${2:-}" && shift ;;
@@ -265,7 +263,7 @@ number="${out%%$'\t'*}"
 url="${out#*$'\t'}"
 echo "${url}"
 
-# The pulls endpoint takes neither, so they go on the PR's issue; the PR exists by now, so a failure is only a warning.
+# The pulls endpoint takes no assignees, so they go on the PR's issue; the PR exists by now, so a failure is only a warning.
 meta_args=()
 for a in ${assignees[@]+"${assignees[@]}"}; do
   if [[ "${a}" == "@me" ]] && ! a="$(gh api user --jq .login 2>"${err}")"; then
@@ -274,9 +272,8 @@ for a in ${assignees[@]+"${assignees[@]}"}; do
   fi
   [[ -n "${a}" ]] && meta_args+=(-f "assignees[]=${a}")
 done
-for l in ${labels[@]+"${labels[@]}"}; do meta_args+=(-f "labels[]=${l}"); done
 if [[ ${#meta_args[@]} -gt 0 ]] && ! gh api -X PATCH "${api_repo}/issues/${number}" "${meta_args[@]}" --silent 2>"${err}"; then
-  echo "WARN: could not set assignees or labels on ${url}: $(tr '\n' ' ' <"${err}" | sed 's/[[:space:]]*$//')" >&2
+  echo "WARN: could not set assignees on ${url}: $(tr '\n' ' ' <"${err}" | sed 's/[[:space:]]*$//')" >&2
 fi
 status=0
 [[ -n "${issues}" ]] && {

@@ -14,7 +14,7 @@ fail=0
 # - open.<n>: open sub-issue count of issue <n>, 0 when absent
 # - subs_fail: reading the issue fails for a reason other than its absence
 # - created_body, edited_body: body sent when creating or editing the PR
-# - meta: the call that set the PR's assignees and labels
+# - meta: the call that set the PR's assignees
 # - create_fail, pr_view_fail, link_noop, web_fail, meta_fail, user_fail: force that failure
 # - refs: linked issue numbers. lag: reads that still return the old list
 # - gql_exhausted: every GraphQL call fails on the rate limit
@@ -472,32 +472,38 @@ has_line "NOTICE: GraphQL rate limit exhausted; skipped linking #12" || r=1
 check "GraphQL exhausted: --link says linking #12 was skipped and exits 0" "${r}"
 
 setup $'Closes #12'
-create --assignee @me --label bug --label docs
+create --assignee @me
 r=0
 [[ "${rc}" == 0 ]] || r=1
-grep -qx -- "api -X PATCH repos/{owner}/{repo}/issues/7 -f assignees\[\]=me -f labels\[\]=bug -f labels\[\]=docs --silent" \
-  "${STUB_DIR}/meta" 2>/dev/null || r=1
-check "--assignee @me and --label are set on the created PR, with @me as the login" "${r}"
+grep -qx -- "api -X PATCH repos/{owner}/{repo}/issues/7 -f assignees\[\]=me --silent" "${STUB_DIR}/meta" 2>/dev/null || r=1
+check "--assignee @me is set on the created PR as the login" "${r}"
+
+setup $'Closes #12'
+create --assignee @me --label bug
+r=0
+[[ "${rc}" == 2 ]] || r=1
+called "api -X POST" && r=1
+check "--label is an unknown option: exits 2 without creating a PR" "${r}"
 
 setup $'Closes #12'
 touch "${STUB_DIR}/meta_fail"
-create --label bug
+create --assignee octocat
 r=0
 [[ "${rc}" == 0 ]] || r=1
 has_line "https://github.com/o/r/pull/7" || r=1
 has_line "LINKED #12" || r=1
-grep -q "^WARN: could not set assignees or labels on https://github.com/o/r/pull/7" <<<"${out}" || r=1
-check "a failed label update warns and still exits 0 with the PR created and linked" "${r}"
+grep -q "^WARN: could not set assignees on https://github.com/o/r/pull/7: gh: Validation Failed (HTTP 422)" <<<"${out}" || r=1
+check "a failed assignee update warns and still exits 0 with the PR created and linked" "${r}"
 
 setup $'Closes #12'
 touch "${STUB_DIR}/user_fail"
-create --assignee @me --label bug
+create --assignee @me
 r=0
 [[ "${rc}" == 0 ]] || r=1
 has_line "https://github.com/o/r/pull/7" || r=1
 has_line "WARN: could not resolve @me to assign https://github.com/o/r/pull/7: gh: Resource not accessible by integration (HTTP 403)" || r=1
-grep -qx -- "api -X PATCH repos/{owner}/{repo}/issues/7 -f labels\[\]=bug --silent" "${STUB_DIR}/meta" 2>/dev/null || r=1
-check "an unresolvable @me warns, still sets the labels, and exits 0" "${r}"
+called "api -X PATCH repos/{owner}/{repo}/issues/" && r=1
+check "an unresolvable @me warns, updates nothing on the PR, and exits 0" "${r}"
 
 setup $'Closes #12'
 echo "git@github.com:fork/r.git" >"${STUB_DIR}/origin_url"

@@ -13,7 +13,6 @@ unset GIT_CONFIG GIT_CONFIG_COUNT GIT_CONFIG_PARAMETERS
 
 # Stub state files in $STUB_DIR:
 # - default: repo default branch, main when absent
-# - labels: label lines, printed as gh would after the script's --jq
 # - missing: issue numbers that do not exist
 # - body.<n>: issue n's body, printed after its title when the call asks for the body
 # Every GraphQL-backed subcommand fails on the rate limit, so every case runs with no GraphQL points left and only REST answers.
@@ -23,7 +22,7 @@ cat >"${bin}/gh" <<'STUB'
 #!/usr/bin/env bash
 d="${STUB_DIR}"
 case " $* " in
-*" repo view "* | *" issue view "* | *" label list "*)
+*" repo view "* | *" issue view "*)
   echo "GraphQL: API rate limit already exceeded for user ID 1." >&2
   exit 1
   ;;
@@ -38,7 +37,6 @@ case " $* " in
     cat "${d}/body.${n}" 2>/dev/null || echo
   fi
   ;;
-*" api "*"repos/{owner}/{repo}/labels"*) cat "${d}/labels" 2>/dev/null || true ;;
 *" api repos/{owner}/{repo} "*) cat "${d}/default" 2>/dev/null || echo main ;;
 *) echo "unexpected gh $*" >&2 && exit 1 ;;
 esac
@@ -271,13 +269,12 @@ words="$(eval "printf '%s\n' ${flags}" 2>/dev/null)"
 [[ "${rc}" == 0 && "${words}" == $'--base\nrelease;next\n--draft\n--assignee\n@me' ]] && r=0 || r=1
 check "base with shell metacharacters: create flags parse back to the same base" "${r}"
 
-# 7. Labels arrive as name<TAB>description.
+# 7. Labels are not read: the stub rejects any labels call, and no labels section is printed.
 setup
-printf 'bug\tSomething is broken\ndocs\t\n' >"${STUB_DIR}/labels"
 commit 'feat: a' a
 run
-[[ "${rc}" == 0 && "$(section labels)" == $'bug\tSomething is broken\ndocs\t' ]] && r=0 || r=1
-check "labels: one per line as name<TAB>description" "${r}"
+[[ "${rc}" == 0 ]] && ! grep -q '^== labels' <<<"${out}" && r=0 || r=1
+check "labels: no labels call and no labels section" "${r}"
 
 # 8. Invalid arguments exit 2 without context.
 setup
