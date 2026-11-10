@@ -303,7 +303,7 @@ sequenceDiagram
 | Bot replies | Never count, because anyone can make a bot reply on a public repository |
 | Bot rounds | One per bot per claim, so a bot and the Owner never chase each other and a slower bot still gets its round |
 | Recording a round | oe attempt records it before the Owner starts, so an Owner that ends early cannot restart a chase |
-| Other automations on its PRs | pr-owner writes the line `<!-- automation-owner: orchestrate-epic -->` near the end of each PR body, the owner line that `docs/design/babysit.md` defines, so babysit neither pushes nor replies there. Its replies would otherwise read as engineer input. oe never reads the line, so deleting it while oe still works on the Issue lets two writers act |
+| Other automations on its PRs | pr-owner writes the line `<!-- automation-owner: orchestrate-epic -->` near the end of each PR body, the owner line that babysit's `pr-state.sh` reads, so babysit neither pushes nor replies there. Its replies would otherwise read as engineer input. oe never reads the line, so deleting it while oe still works on the Issue lets two writers act |
 | Re-review request | One PR comment of `<!-- oe:rereview -->` and `@coderabbitai review` or `@codex review`. The marker keeps it from counting as engineer input |
 | Bot findings after approval | Start nothing, so the AI never pushes onto a head being merged |
 | Restarting an Owner after an answer | Counts toward the cap of 3 attempts |

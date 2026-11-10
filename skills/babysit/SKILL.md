@@ -7,7 +7,7 @@ argument-hint: "<pr-url | owner/repo#n | n>"
 
 # babysit
 
-Scripts watch; the model acts only on a change. `docs/design/babysit.md` in the skills repository is the specification.
+Scripts watch; the model acts only on a change.
 
 babysit takes only a PR, and the PR decides what it does.
 
