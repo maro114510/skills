@@ -158,12 +158,15 @@ Follow `references/interactive.md` § Phase 4. Without a human, skip this phase,
 Each artifact explains one thing.
 Do not repeat it in another.
 
-| Artifact | Explains |
-|---|---|
-| Code | How |
-| Tests | What |
-| Commit log | Why |
-| Code comments | Why not: a rejected alternative or a non-obvious constraint |
+| Artifact | Explains | Reader, and how long it stays true |
+|---|---|---|
+| Code | How | Everyone; always current |
+| Tests | What | Whoever changes the behavior; fails once untrue |
+| Commit log | Why | Whoever asks why a line changed; fixed to that change |
+| Code comments | Why not: a rejected alternative or a non-obvious constraint | The next editor of that line; as long as the line stands |
+
+- A doc comment says what its name is for, not what the name already says.
+- History, motive, and the measurements behind a value go in the commit body. A comment keeps only its Why not, even when shortened.
 
 Route each part of the task in the Phase 3 plan. A playbook, relative to this skill's directory, is the only procedure for writing its type's tests.
 
