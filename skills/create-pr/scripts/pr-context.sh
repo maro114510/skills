@@ -163,6 +163,8 @@ done
 # Step 6.2 pastes this line into a shell, and a valid branch name can hold ; & $ or backquotes.
 printf -v quoted_base '%q' "${base}"
 flags="--base ${quoted_base}"
+# Step 6.1 pastes the base line into a shell too.
+printf -v quoted_remote '%q' "${remote}"
 [[ "${draft}" == yes ]] && flags+=" --draft"
 flags+=" --assignee @me"
 
@@ -172,7 +174,7 @@ echo "${flags}"
 echo "== branch"
 echo "${branch}"
 echo "== base"
-echo "${remote}"
+echo "${quoted_remote}"
 echo "== commits"
 echo "${commits}"
 echo "== diff stat"
