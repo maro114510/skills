@@ -220,9 +220,15 @@ sequenceDiagram
   rect rgba(0,200,120,0.08)
     Note over O,G: Implementation
     O->>+W: Start with A
-    W->>+I: Run without a human
-    I-->>-W: Return the commits
-    W->>G: Push
+    W->>+I: Request
+    I-->>-W: Commits, or Questions
+    alt Questions
+      W->>E: question
+      E->>G: Write the question on the Issue
+      Note over W: Push nothing and end
+    else Commits
+      W->>G: Push
+    end
   end
   rect rgba(0,180,200,0.08)
     Note over O,G: PR creation
