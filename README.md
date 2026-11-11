@@ -2,7 +2,21 @@
 
 Personal agent skills for Claude Code and compatible coding agents.
 
+## Supported Harnesses
+
+- Claude Code
+- OpenCode
+- Codex
+
 ## Install
+
+Releases and deploys come from `main`; `make release` refuses to tag from any other branch.
+
+### Claude Code plugin
+
+```sh
+/plugin install skills --marketplace maro114510/skills
+```
 
 ### npx
 
@@ -21,10 +35,14 @@ gh skill install maro114510/skills --agent claude-code --scope user
 | Skill | Goal |
 |---|---|
 | `babysit` | Drive your own pull request by fixing and pushing CI failures, review feedback, and conflicts, without waking the model until checks, comments, or readiness change; any other pull request gets one state report. |
+| `commit` | Commit the working tree with a Conventional Commits message, leaving suspected secrets out. |
+| `create-github-issues` | Turn a plan or TODO list into an Epic Issue with linked child Issues. |
 | `create-pr` | Create a pull request with a useful description. |
 | `diagram-conventions` | Create or review a diagram in the right type's notation without adding or dropping meaning. |
 | `domain-master` | Review domain model and state-transition code for illegal states that bypass validation. |
+| `extreme-compact` | Compact writing down to its essential point without changing its meaning. |
 | `frame-problem` | Frame a vague problem before implementation and converge on a direction. |
+| `implement` | Implement a change with quality first: ground it in the repository, test it, and self-review it before push. |
 | `locate` | Find the local worktree, branch, and current state for a pull request or Issue URL before working on it. |
 | `manage-design-documents` | Decide whether a change needs a Design Doc, an ADR, both, or neither, and keep them small and free of metadata Git already holds. |
 | `orchestrate-epic` | Turn an Epic's child Issues into verified PRs in dependency order, leaving every merge to a human. |
@@ -32,10 +50,13 @@ gh skill install maro114510/skills --agent claude-code --scope user
 | `pr-doc-review-pe` | Review design documents from a Principal Engineer perspective. |
 | `pr-review-pe` | Review code diffs from a Principal Engineer perspective. |
 | `research-transfer-checker` | Check whether a claim stays within the scope of its cited research. |
+| `shakedown` | Generate a pre-release QA runbook from a diff or design document. |
 | `skill-cleaner` | Audit and slim down skill definitions. |
 | `tear-down` | Blank-slate red-team a plan or design instead of defending or polishing it. |
 | `write-researched-document` | Research, verify, and draft an evidence-backed Markdown document. |
 | `why-man` | Challenge assumptions with higher-level Why questions. |
+
+`shared` is not a skill; `skills/shared` holds files that several skills use.
 
 ## Agents
 
@@ -48,7 +69,7 @@ APM deploys `agents/` to multiple harnesses.
 
 | Rule | Detail |
 |---|---|
-| Allowed frontmatter | `name`, `description` |
+| Allowed frontmatter | `name`, `description`, `mode` |
 | Forbidden frontmatter | `model`, `tools`, permissions, `color`, skill preload fields |
 | Runtime policy | Invoking skill or harness configuration |
 | Before committing | Run `make validate` |
