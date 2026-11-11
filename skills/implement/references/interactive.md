@@ -145,5 +145,5 @@ Approval covers the full push range once, the range Phase 6.5's first pass revie
    - Quote the `DIFIT_RESULT` line in the approval report, so the user sees whether difit opened.
 4. If Phase 6.9 left anything deferred and a branch commit carries `Closes #<N>`, tell the user, because create-pr copies that keyword into the PR.
 5. The range is approved when step 2 or step 3 exits 0. Record `approved-head`, the output of `git -C <worktree-path> rev-parse HEAD`, in the approval report. A commit, amend, or rebase after it voids the approval, and this phase repeats from step 1.
-   - At `approved-head` never ask "may I commit?" or "may I push?": `create-pr` pushes exactly that HEAD without asking, once the user requests a PR.
+   - At `approved-head` never ask "may I commit?" or "may I push?": once the user requests a PR, `create-pr` checks that HEAD again by its Step 6.1 and then pushes it.
 6. After the range is approved, release the Issue Claim. Never release it before.

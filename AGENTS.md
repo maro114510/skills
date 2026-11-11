@@ -76,7 +76,7 @@ argument-hint: "[ready] [base <branch>]"
 - Japanese stays only in `description` trigger phrases and user-facing output templates
 - Convert an older Japanese body only when already editing it for another reason
 - Do not declare `allowed-tools`: it only pre-approves tools in Claude Code and has no effect in OpenCode or Pi, so it cannot restrict a skill's tools on every supported harness
-- Push approval has one mechanism and no hook: `implement` Phase 7 classifies the push range with `commit`'s `classify-approval.sh` and has the user approve it in difit when required, and `create-pr` pushes once the user asks for a PR. Under orchestrate-epic, pr-owner pushes an Issue branch without that approval, and the human approves the PR instead
+- Push approval has one mechanism and no hook: `implement` Phase 7 classifies the push range with `commit`'s `classify-approval.sh` and has the user approve it in difit when required, and `create-pr` runs the same check in its Step 6.1 before it pushes, once the user asks for a PR. Under orchestrate-epic, pr-owner pushes an Issue branch without that approval, and the human approves the PR instead
 
 ## Target Repository Config
 

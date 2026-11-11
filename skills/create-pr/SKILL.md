@@ -116,11 +116,42 @@ Choose metadata from Step 1's output, without running any other command or askin
 
 **5.1 Assignee**: Step 1's create flags already carry `--assignee @me`.
 
-## Step 6. Push and Create the PR
+## Step 6. Check, Push, and Create the PR
 
-**6.1 Run one command**
+**6.1 Check the Range**
 
-Run this as one call. Never run `gh pr create` directly, and never stop after showing the command. Paste Step 1's `== create flags` line verbatim as `<create flags>`:
+The Range is every commit from the merge base of Step 1's `== base` ref with HEAD. Nothing is pushed until this check approves it. `<skills-root>` is the parent of `<skill-dir>`. Paste the `== base` line verbatim as `<base ref>`:
+
+```bash
+bash <skills-root>/commit/scripts/classify-approval.sh <base ref>
+```
+
+| Exit | Action |
+|---|---|
+| 0 | Show its `approval: not-required` line; the Range is approved. Continue to 6.2 |
+| 10 or any other | Show every printed `reason:` line, then open difit on the whole Range |
+
+Open difit only with this command, and wait until it ends; it runs until the user closes the window, so background it through the harness when possible. If `npx difit` would need network access in a sandbox without it, request escalated permissions first. Never start `difit` or `npx difit` any other way, and never read comments from an earlier run, a stored comment file, or `difit comment get`.
+
+```bash
+bash <skills-root>/implement/scripts/review-range.sh HEAD "$(git merge-base <base ref> HEAD)"
+```
+
+Quote its last line, `DIFIT_RESULT ...`, to the user. Only exit 0 approves the Range; a run with no such line is not approval either.
+
+| Exit | Meaning | Action |
+|---|---|---|
+| 0 | Closed without comments | The Range is approved. Continue to 6.2 |
+| 10 | Closed with comments, printed above the result line | Not approved. Show the comments verbatim and stop: the user addresses them and runs this skill again |
+| 1 | No launcher started a server | Not approved. Show the printed diagnostics and stop |
+| 3 | A server started but no window closed | Not approved. Say so and run the command once more; a second exit 3 stops |
+| Any other, or no result line | The script did not finish | Not approved. Show the output and stop |
+
+A stop here pushes nothing and opens no PR. Any commit after the approval voids it, and this step runs again.
+
+**6.2 Run one command**
+
+Run this as one call, only once 6.1 approved the Range. Never run `gh pr create` directly, and never stop after showing the command. Paste Step 1's `== create flags` line verbatim as `<create flags>`:
 
 ```bash
 git push -u origin <current-branch> &&
@@ -133,6 +164,6 @@ git push -u origin <current-branch> &&
 EOF
 ```
 
-**6.2 Handle the result**
+**6.3 Handle the result**
 
-After the 6.1 command exits, read `<skill-dir>/references/result.md` in full and act on its exit code as it says.
+After the 6.2 command exits, read `<skill-dir>/references/result.md` in full and act on its exit code as it says.
