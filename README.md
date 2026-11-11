@@ -1,6 +1,8 @@
 # skills
 
-Personal agent skills for Claude Code and compatible coding agents.
+Agent skills working toward human-out-of-the-loop software development.
+
+Today, agents take an Issue to a verified PR with TDD, a separate-context self-review, and Principal Engineer-level reviews, and a human makes only the calls that matter, such as the merge.
 
 ## Supported Harnesses
 
