@@ -19,6 +19,7 @@ implement turns one Request into one Change Unit, committed and verified on its 
 | Dropping an Acceptance Criterion or moving it to another Issue; implement only drafts the edit | A person, by editing the Issue |
 | Person-checked Acceptance Criteria | The engineer |
 | The worktree and the Lock, when the caller hands a worktree over | The caller |
+| Deciding that a Busy Lock is abandoned, then resuming it by handing over a worktree on its branch, or deleting it | The caller |
 | Checking the Range before anything is published, pushing, and opening and merging a pull request | The caller |
 
 ## Domain Model
@@ -134,11 +135,11 @@ sequenceDiagram
 - Only an explicit statement or an established repository convention settles a critical decision, never inference.
 - Whenever a Trigger fires, in any component, the run ends with Questions, keeping the work done so far.
 - A bug-fix test covers every combination of the defect's class of conditions, or the Result names each combination left out.
-- Each new or changed test, with only as much stub as it needs to reach its assertion, is committed test-only before the production change, and seen to fail at its assertion on that commit. A test that pins preserved behavior is seen to fail against a deliberate break instead. A bug-fix test fails on the pre-fix code for the reported reason.
+- Each new or changed test is committed test-only before the production change, and seen to fail at its assertion on that commit. When the interface it calls does not exist, a minimal stub of it is committed alone before the test. A test that pins preserved behavior is seen to fail against a deliberate break instead. A bug-fix test fails on the pre-fix code for the reported reason.
 - No later commit changes a test's lines or the fixtures and helpers it uses. Changing them takes a new test-only commit, observed to fail again.
-- A run ends at a green commit.
+- A run that returns Built ends at a green commit.
 - A test is never weakened or deleted to reach green. A deleted test names where its coverage now lives.
-- Self-Review is started on every run. It never changes the worktree, and one that did not complete is reported as not run, never as clean.
+- Self-Review is started on every run that returns Built. It never changes the worktree, and one that did not complete is reported as not run, never as clean.
 - Self-Review reads only the Range and the Request, and Reconciliation only the Range, the source, and the Acceptance Criteria as written text, never the Decisions, so each can run apart from implement.
 - A final observation is taken on the final HEAD, with the worktree, untracked files included, the same before and after the observation. A failing observation is taken on the test-only commit. A break observation records the commit it starts from and the break. No other observation is Evidence.
 - An observation through a fake or a stub settles only the code between the interface it drives and the fake.
