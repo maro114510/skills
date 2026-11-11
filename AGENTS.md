@@ -61,7 +61,6 @@ name: <skill-name>
 description: >
   <Natural language description, also used for trigger-phrase matching>
 disable-model-invocation: true
-allowed-tools: Bash, Read, Glob, Grep
 argument-hint: "[ready] [base <branch>]"
 ---
 ```
@@ -70,14 +69,13 @@ argument-hint: "[ready] [base <branch>]"
 |---|---|
 | `description` | Matched against user requests; include phrasings users naturally say |
 | `disable-model-invocation` | Optional; `true` only stops Claude from loading the skill automatically. It does not disable the agentic loop: the skill still runs through `/name` and calls its tools normally, as in `orchestrate-epic` |
-| `allowed-tools` | Comma-separated; pre-approves the listed tools for the turn that invokes the skill. It does not restrict which tools are available, so unlisted tools stay governed by normal permissions and `Bash(gh pr view:*)` does not block other Bash commands; use `disallowed-tools` or deny rules to block |
 | `argument-hint` | Shown on `/help` |
 
 - The body is the full prompt; user arguments arrive as `$ARGUMENTS`
 - Body language is English or the target repository's language
 - Japanese stays only in `description` trigger phrases and user-facing output templates
 - Convert an older Japanese body only when already editing it for another reason
-- Declare only the tools a skill needs; prefer scoped `Bash(cmd:*)` when the command set is small and predictable
+- Do not declare `allowed-tools`: it only pre-approves tools in Claude Code and has no effect in OpenCode or Pi, so it cannot restrict a skill's tools on every supported harness
 - Push approval has one mechanism and no hook: `implement` Phase 7 classifies the push range with `commit`'s `classify-approval.sh` and has the user approve it in difit when required, and `create-pr` pushes once the user asks for a PR. Under orchestrate-epic, pr-owner pushes an Issue branch without that approval, and the human approves the PR instead
 
 ## Target Repository Config

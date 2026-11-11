@@ -10,7 +10,6 @@ description: >
   "this AI output is too long", "the argument keeps wandering", "Extreme Compact", or "compact this as much as possible".
   Do not use it for simple typo fixes or general Japanese prose-style polishing.
 argument-hint: "[text | file path]"
-allowed-tools: Read, Write
 ---
 
 # extreme-compact
@@ -31,7 +30,7 @@ Handles pasted chat text or a file path passed via `$ARGUMENTS`. Works regardles
 
 **For Japanese targets, finish any style pass before compressing.** A style pass unfolds brackets into the sentence and replaces bare Latin words with Japanese; both lengthen the text, so compressing first only re-introduces what that pass would have removed.
 
-This skill cannot run that pass itself: `allowed-tools` is Read and Write, with no Bash and no way to invoke another skill. So when the caller has already applied a style pass, compress what it returned. Otherwise compress anyway and note in the reply that a style pass has not run and would improve the result. Never refuse the compression over this.
+This skill cannot run that pass itself: it has no way to invoke another skill. So when the caller has already applied a style pass, compress what it returned. Otherwise compress anyway and note in the reply that a style pass has not run and would improve the result. Never refuse the compression over this.
 
 Either way two rules bind the output: outside a first-use definition, the compressed Japanese carries no parenthetical supplement and no bare Latin word.
 

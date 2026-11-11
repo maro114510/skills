@@ -4,7 +4,6 @@ description: >
   Reviews domain model, entity, and state-transition code for whether an invalid state can be constructed or reached.
   Catches bypassable validators, public fields that break invariants, and scattered transition tables —
   "make illegal states unrepresentable" violations.
-allowed-tools: Read, Glob, Grep, Bash(git diff:*, git show:*, gh pr diff:*, gh pr view:*), AskUserQuestion
 argument-hint: "[pr-number | file-path] (empty = current diff)"
 ---
 

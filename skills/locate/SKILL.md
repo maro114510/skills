@@ -4,7 +4,6 @@ description: >
   Find the local worktree and branch for a GitHub pull request or Issue URL, and state whether it is open or merged, its unresolved review threads, and its failing checks, before any work on it starts.
   Use whenever a PR or Issue URL arrives without the worktree named, such as a pasted URL alone, "pick this PR back up", "find the worktree for this PR", "address the review on <url>", "このPRのworktreeどこ", or "このIssueの続きをやって".
   Not inside implement, which resolves its own worktree.
-allowed-tools: Bash, Read
 argument-hint: "<pr-url | issue-url>"
 ---
 

@@ -5,7 +5,6 @@ description: >
   Started by orchestrate-epic with a brief holding the Issue, the head SHA, the base branch, and a detached worktree at that SHA.
   Never edits, commits, or pushes.
 disable-model-invocation: true
-allowed-tools: Bash, Read, Glob, Grep
 argument-hint: "repo <owner/repo> issue <number> sha <sha> base <branch> worktree <path>"
 ---
 

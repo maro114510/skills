@@ -12,7 +12,6 @@ description: >
   「この変更のQA観点を洗い出して」といった依頼で積極的に使うこと。
   単体〜結合レベルのテストケース列挙は本スキルの担当ではない。PRD(Notion)起点のフラットな
   チェックリスト生成は対象リポジトリの /self-qa が担当なので、それらの依頼には使わない。
-allowed-tools: Read, Glob, Grep, Write, Agent, AskUserQuestion, Bash(git diff:*, git log:*, git show:*, git status:*, git rev-parse:*, git branch:*, gh pr diff:*, gh pr view:*, rg:*, grep:*, ls:*, mkdir:*, date:*)
 argument-hint: "[PR番号 | base..head | design docパス] [ticket <チケットID>]"
 ---
 

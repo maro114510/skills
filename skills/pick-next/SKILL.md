@@ -5,7 +5,6 @@ description: >
   With discussions, also lists the open Discussions, the ideas and questions not yet turned into work.
   Use when the user asks "what should I work on next", "what's next", "which Issue next", "pick the next task", "次に何やる", "次どのIssueやればいい", "今やるべきことは", or "Discussionも含めて".
   Not for one Epic's run, which orchestrate-epic's oe ready covers.
-allowed-tools: Bash, Read
 argument-hint: "[lang <ja|en>] [limit <n>] [discussions]"
 ---
 

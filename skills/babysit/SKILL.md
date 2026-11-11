@@ -1,7 +1,6 @@
 ---
 name: babysit
 description: Drive your own PR by fixing and pushing CI failures, review feedback, and conflicts, waking only when checks, comments, or readiness change; for any other PR, report its state once and stop.
-allowed-tools: Bash, Read, Edit, Write, Glob, Grep
 argument-hint: "<pr-url | owner/repo#n | n>"
 ---
 

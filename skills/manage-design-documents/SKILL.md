@@ -3,7 +3,6 @@ name: manage-design-documents
 description: >
   Decide whether a change needs a Design Doc, an ADR, both, or neither, then create, revise, delete, or review them.
   Use for "write a design doc", "add an ADR", "update the design doc", "設計ドキュメントを書いて", "ADR を書いて", "Design Doc を更新して".
-allowed-tools: Read, Glob, Grep, Edit, Write, AskUserQuestion, Bash(git grep:*, git rm:*, gh issue list:*, gh pr list:*)
 argument-hint: "[change or decision to document | document path to review]"
 ---
 

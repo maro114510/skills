@@ -5,7 +5,6 @@ description: >
   its purpose, triggers, critical constraints, and permission boundaries. Pass a directory instead of a
   file to also scan for skills sharing a duplicate `name:`.
   「スキルを軽くして」「説明を短くして」でも起動。
-allowed-tools: Read, Glob, Edit, Bash(find:*, wc:*, git status:*, git diff:*, git checkout:*), AskUserQuestion
 argument-hint: "<path-to-skill-file-or-skills-dir>"
 ---
 

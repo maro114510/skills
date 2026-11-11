@@ -16,7 +16,6 @@ description: >
   Claims an Issue locally first, so a second session handed the same Issue stops and asks instead of duplicating the work.
   Does not create a PR until the user explicitly requests it.
   Also runs without a human when a caller such as pr-owner says so, writing its questions where the caller names and stopping.
-allowed-tools: AskUserQuestion, Bash, Read, Edit, Write, Glob, Grep
 argument-hint: "[description of what to implement]"
 ---
 

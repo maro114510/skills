@@ -6,7 +6,6 @@ description: >
   Started by orchestrate-epic with a brief holding the Issue, the base branch, and the Issue branch's worktree.
   Never merges and never enables auto-merge.
 disable-model-invocation: true
-allowed-tools: Bash, Read, Edit, Write, Glob, Grep
 argument-hint: "repo <owner/repo> issue <number> base <branch> worktree <path> [reason <text>]"
 ---
 

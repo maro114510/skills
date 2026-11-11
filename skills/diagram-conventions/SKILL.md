@@ -5,7 +5,6 @@ description: >
   follow that type's established notation, and keep the source's meaning exact. Outputs Mermaid.
   Use for "draw this as a diagram", "make a flowchart", "review this diagram",
   "図にして", "フローチャートを書いて", "シーケンス図にして", "この図をレビューして".
-allowed-tools: Read, Glob, Grep, Bash(command -v mmdc:*), Bash(mmdc:*), Bash(npx -y -p @mermaid-js/mermaid-cli@12 mmdc:*)
 argument-hint: "[source text | file path | diagram to review] [type <diagram-type>]"
 ---
 
