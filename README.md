@@ -12,6 +12,14 @@ Personal agent skills for Claude Code and compatible coding agents.
 
 Releases and deploys come from `main`.
 
+### APM (recommended)
+
+[APM](https://github.com/microsoft/apm) installs every skill and both agents into Claude Code, Codex, and OpenCode with one command.
+
+```sh
+apm install -g maro114510/skills -t claude,codex,opencode
+```
+
 ### Claude Code plugin
 
 Requires Claude Code 2.1.275 or later.
