@@ -10,7 +10,7 @@ Personal agent skills for Claude Code and compatible coding agents.
 
 ## Install
 
-Releases and deploys come from `main`; `make release` refuses to tag from any other branch.
+Releases and deploys come from `main`.
 
 ### Claude Code plugin
 
