@@ -14,9 +14,9 @@ Today, agents take an Issue to a verified PR with TDD, a separate-context self-r
 
 Releases and deploys come from `main`.
 
-### APM (recommended)
+### APM
 
-[APM](https://github.com/microsoft/apm) installs every skill and both agents into Claude Code, Codex, and OpenCode with one command.
+APM is the recommended route. [APM](https://github.com/microsoft/apm) installs every skill and both agents into Claude Code, Codex, and OpenCode with one command.
 
 ```sh
 apm install -g maro114510/skills -t claude,codex,opencode
