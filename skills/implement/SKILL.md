@@ -155,7 +155,7 @@ Follow `references/interactive.md` § Phase 4. Without a human, skip this phase,
 
 ## Phase 5: Implement
 
-Each artifact explains one thing, to the reader who looks there, for as long as it stays true.
+Each artifact explains one thing.
 Do not repeat it in another.
 
 | Artifact | Explains | Reader, and how long it stays true |
