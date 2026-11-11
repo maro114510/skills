@@ -8,7 +8,6 @@ description: >
   Invoking it is consent to push branches and open PRs; ending the session stops everything.
   Use when the user runs it to implement an Epic — "Epic を実装して", "この Epic を進めて", "Issue 群を順に実装して", "オーケストレーションして".
 disable-model-invocation: true
-allowed-tools: Agent, Bash, Read
 argument-hint: "epic <number|url> [repo <owner/repo>] [max-agents <n>]"
 ---
 

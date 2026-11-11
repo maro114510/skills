@@ -8,7 +8,6 @@ description: >
   research-transfer-checkerを独立したコンテキストで執筆前後に実行する。
   `$write-researched-document` と明示された場合だけ使用し、一般的なコード実装、
   README・仕様書・議事録の作成、根拠を必要としない文章修正には使用しない。
-allowed-tools: AskUserQuestion, Bash, Read, Edit, Write, Glob, Grep, WebFetch, WebSearch, Agent
 ---
 
 # write-researched-document

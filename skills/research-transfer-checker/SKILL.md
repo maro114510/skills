@@ -8,7 +8,6 @@ description: >
   「この引用は原論文に忠実か」「エビデンスの援用範囲を確認して」
   「研究を政策・教育・採用・医療・報道に使ってよいか」といった依頼で使う。
   研究不正や倫理違反を断定せず、根拠の強さと深刻な誤導リスクを分けて報告する。
-allowed-tools: AskUserQuestion, Read, Glob, Grep, WebFetch, WebSearch
 argument-hint: "[standard|deep|high_impact] <主張> <参照元>"
 ---
 

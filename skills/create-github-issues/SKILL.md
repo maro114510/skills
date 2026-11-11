@@ -6,7 +6,6 @@ description: >
   Requirements (what) and specs (how) are kept separate and length-capped so bodies stay concise, and the Epic also renders a Mermaid diagram (a compact table for large epics) showing which child Issues block each other and which can run in parallel.
   Issue titles, bodies, and every interactive prompt are written in the language that `lang <ja|en>` or git config `skills.lang` selects.
   Use this skill when the user asks to track tasks with an Epic, turn TODOs or a plan into GitHub Issues, or extract action items from a review or investigation.
-allowed-tools: Bash(gh:*)
 argument-hint: "[repo <owner/repo>] [lang <ja|en>] [project <n>]"
 ---
 
@@ -75,7 +74,7 @@ Always run every check in `references/bodies.md` § Pre-Creation Checks. If any 
 
 ## Step 5: Create Issues
 
-Follow `references/commands.md`, including its failure rules. Every command starts with `gh` to match `allowed-tools`; read its "Tool permission contract" before adding or changing one.
+Follow `references/commands.md`, including its failure rules. Every command starts with `gh`; read its "Tool permission contract" before adding or changing one.
 
 - Create the Epic first, then every `Tn` in wave order with `--parent <Epic>` and `--blocked-by` for created dependencies, then each container's `Tn.m` with `--parent <that Tn>` and `--blocked-by` limited to its siblings. Never pass a number that does not exist.
 - Substitute bottom-up: each container's `{{Tn.m}}` first, then the Epic's `{{Tn}}`; a failed create becomes "creation failed", and a failed `Tn` gets no grandchildren.

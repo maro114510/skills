@@ -2,7 +2,6 @@
 name: pr-review-pe
 description: >
   コード差分 PR を PE 視点でレビュー。「コードレビュー」「差分レビュー」「PE 視点でレビュー」「PR を見て」で起動。Markdown のみは /pr-doc-review-pe。
-allowed-tools: Read, Glob, Grep, Bash(bash *pr-review-pe-identify-pr.sh *, gh pr view:*, gh pr diff:*, gh api:*, git fetch:*, git -C:*, git log:*, git blame:*, git grep:*, ghq list:*, rg:*, grep:*, npm:*, go:*, pip:*, echo:*), WebFetch, Agent
 argument-hint: "<pr-number or url>"
 ---
 

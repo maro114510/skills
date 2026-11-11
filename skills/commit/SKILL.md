@@ -6,7 +6,6 @@ description: >
   It never asks: it leaves a suspected secret out, commits the rest, and reports what it did, excluded, or flagged.
   Called by create-pr and implement when they need to commit changes.
   Can also be invoked directly with phrases like "commit this," "write a commit message," or "commit these changes."
-allowed-tools: Bash(git status:*, git diff:*, git log:*, git add:*, git restore:*, git commit:*, gh issue view:*), Read
 argument-hint: "[optional hint, e.g. an issue number or message override]"
 ---
 
