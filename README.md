@@ -14,6 +14,8 @@ Releases and deploys come from `main`.
 
 ### Claude Code plugin
 
+Requires Claude Code 2.1.275 or later.
+
 ```sh
 /plugin install skills --marketplace maro114510/skills
 ```
