@@ -120,7 +120,7 @@ Choose metadata from Step 1's output, without running any other command or askin
 
 **6.1 Check the Range**
 
-Paste Step 1's `== base` line verbatim as `<base ref>`. When the Range needs approval, the script opens difit and waits until the user closes the window, so background it through the harness when possible:
+Paste Step 1's `== base` line verbatim as `<base ref>`. When the Range needs approval, the script opens difit and waits until the user closes the window, so background it through the harness when possible. In a sandbox without network access, run it with escalated permissions, because it may fall back to `npx difit`:
 
 ```bash
 bash <skill-dir>/scripts/check-range.sh <base ref>
