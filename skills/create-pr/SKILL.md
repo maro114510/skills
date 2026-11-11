@@ -47,8 +47,8 @@ It fetches `origin/<base>` and prints everything later steps use. Do not read th
 | Section | Holds | Used in |
 |---|---|---|
 | `Arguments:` line | Resolved `lang` with its source, `draft`, and `base`: the argument, then `branch.<branch>.gh-merge-base`, then the default branch | Arguments, 3.1 |
-| `== create flags` | `--base`, `--draft`, and `--assignee` | 6.1 |
-| `== branch`, `== base` | The current branch, and the fetched `origin/<base>` every comparison uses | 2, 6.1 |
+| `== create flags` | `--base`, `--draft`, and `--assignee` | 6.2 |
+| `== branch`, `== base` | The current branch, and the fetched `origin/<base>` every comparison uses | 2, 6.1, 6.2 |
 | `== commits` | Every commit message in `origin/<base>..HEAD`, oldest first | 2 |
 | `== diff stat`, `== diff` | The stat, and the diff without lockfiles when it fits 20 files and 1,000 lines | 2 |
 | `== template <path>` or `== template none` | The PR template's contents, or none | 3 |
