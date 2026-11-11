@@ -74,6 +74,7 @@
 # - The by field is an author association such as OWNER, MEMBER, or NONE.
 # - A comment in threads holds by, at, body, and, for a bot, login and type.
 #   Its by field defaults to NONE and its type to User, so a bot says type Bot.
+# - A comment or review in comments or reviews may hold login and type like a thread comment, so a bot says type Bot.
 # - An approval approves the pull request's head unless it names another sha.
 
 def time: "2027-01-15T\(.):00Z";
@@ -81,7 +82,7 @@ def default_sha: "a" * 40;
 def pr_sha: .head_sha // ("\(.number)" as $n | ("b" * (40 - ($n | length))) + $n);
 # The commit GitHub records as a merged pull request's merge commit.
 def merge_sha: "\(.number)" as $n | ("d" * (40 - ($n | length))) + $n;
-def author: {authorAssociation: .by, body: .body};
+def author: {authorAssociation: .by, author: {login: (.login // ""), __typename: (.type // "User")}, body: .body};
 
 def check_run($name; $result):
   {__typename: "CheckRun", name: $name, startedAt: ("07:20" | time), checkSuite: {databaseId: 1},

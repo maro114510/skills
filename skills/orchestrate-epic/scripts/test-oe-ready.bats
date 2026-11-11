@@ -27,6 +27,11 @@ github() {
   cat >"${OE_GITHUB}"
 }
 
+# Sets git config skills.bot to the login $1 for the rest of the test.
+configure_bot() {
+  export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=skills.bot GIT_CONFIG_VALUE_0="$1"
+}
+
 # Prints the action that oe ready gave the Issue numbered $1.
 action_of() {
   printf '%s\n' "${lines[@]}" | while IFS=$'\t' read -r n action _; do
@@ -784,6 +789,96 @@ JSON
 
   [ "${status}" -eq 0 ]
   [ "$(action_of 5)" = wait-answer ]
+}
+
+@test "a question record from the configured bot is open although its association is NONE" {
+  configure_bot agent-app
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "NONE", "login": "agent-app", "type": "Bot", "at": "07:10", "body": "<!-- oe:question -->\nWhich option?"}
+    ]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:01
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-answer ]
+}
+
+@test "a comment from the configured bot after a question does not answer it" {
+  configure_bot agent-app
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "OWNER", "at": "07:10", "body": "<!-- oe:question -->\nWhich option?"},
+      {"by": "NONE", "login": "agent-app", "type": "Bot", "at": "07:20", "body": "Use option A"},
+      {"by": "COLLABORATOR", "login": "agent-app", "type": "Bot", "at": "07:21", "body": "Use option A"}
+    ]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:01
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-answer ]
+}
+
+@test "a question record from another bot, or from a user with the configured login, is not open" {
+  configure_bot agent-app
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "NONE", "login": "other-app", "type": "Bot", "at": "07:10", "body": "<!-- oe:question -->\nWhich option?"},
+      {"by": "NONE", "login": "agent-app", "type": "User", "at": "07:11", "body": "<!-- oe:question -->\nWhich option?"}
+    ]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:01
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" != wait-answer ]
+}
+
+@test "a question record from a bot is not open while no bot is configured" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "NONE", "login": "agent-app", "type": "Bot", "at": "07:10", "body": "<!-- oe:question -->\nWhich option?"}
+    ]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:01
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" != wait-answer ]
 }
 
 @test "an unmarked trusted answer after the latest attempt gets an Owner, even on a verified pull request" {
