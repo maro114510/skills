@@ -165,9 +165,8 @@ Do not repeat it in another.
 | Commit log | Why | Whoever asks why a line changed; fixed to that change |
 | Code comments | Why not: a rejected alternative or a non-obvious constraint | The next editor of that line; as long as the line stands |
 
-- The doc comment of an exported or externally read name says what it is for, in the form the repository's conventions ask, never a restatement of its name.
-- A comment never restates the code, never tells the change's history or motive, and never lists the measurements behind a value. When a task asks to record how a value was chosen, the measurements go in the commit body; the comment keeps only the constraint the value must meet and the alternative rejected.
-- Shortening a comment removes restatement, never its Why not.
+- A doc comment says what its name is for, not what the name already says.
+- History, motive, and the measurements behind a value go in the commit body. A comment keeps only its Why not, even when shortened.
 
 Route each part of the task in the Phase 3 plan. A playbook, relative to this skill's directory, is the only procedure for writing its type's tests.
 
