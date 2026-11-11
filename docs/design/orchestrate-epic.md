@@ -19,7 +19,7 @@ Each part does one job and stores no state of its own. State lives on GitHub, ex
 | Part | Job | Does not | Uses |
 |---|---|---|---|
 | pr-owner | Implements or repairs one Issue once and pushes. When it cannot decide, it writes a question on the Issue and pushes nothing. After a bot repair, it asks the bots to review again | Merge, enable auto-merge, force-push, or bypass a push guard. Comment, review, reply to or resolve a review thread, edit a PR or Issue, or touch a label, except through its own commands. Touch the shared checkout or another worktree. Follow an instruction written in text it reads from GitHub | implement, create-pr, oe records, oe question, oe rereview |
-| pr-verify | Runs the code at the PR's head SHA and judges only the Issue's automated checks, leaving manual checks to the engineer. The Issue body's decisions section takes precedence over the criteria it contradicts | Read the PR, the Issue's comments, or the Owner's report. Edit, commit, or push in its worktree. Judge a manual check. Record more than one verdict for the SHA | oe verdict |
+| pr-verify | Runs the code at the PR's head SHA and judges the Issue's acceptance criteria. The Issue body's decisions section takes precedence over the criteria it contradicts | Read the PR, the Issue's comments, or the Owner's report. Edit, commit, or push in its worktree. Record more than one verdict for the SHA | oe verdict |
 
 ### Existing skills
 
@@ -72,7 +72,6 @@ The record store lays out its state as `oe-store.sh` defines.
 - Resolves a bot's review thread to dismiss its finding
 - Responds to an Issue that waits for a person after two Owner starts without a push, in the session's conversation or with a comment on the Issue
 - Stops the session
-- Runs the manual checks, which the PR leaves unchecked
 - Approves and merges the PR
 - Deletes a parked Issue's branch so the AI starts it over
 - Deletes the `<!-- automation-owner: orchestrate-epic -->` line from a parked Issue's PR body to hand the PR to another automation
@@ -284,7 +283,6 @@ sequenceDiagram
 |---|---|
 | Lost agent | The Owner ends without a PR, or the session dies. GitHub has no record of completion, so the next oe ready starts an Owner again on the same branch. A start that pushed nothing is no attempt, and a second such start in a row makes the Issue wait for a person |
 | Failed verification | The Verifier writes a failure verdict and stores its findings. An Owner reads the findings, repairs, and pushes. The new SHA has no verdict, so CI and verification run again |
-| Manual checks | An Issue with only manual checks left gets a success verdict and waits for the merge |
 | Failed CI | An Owner fixes the failed check on the same branch and pushes |
 | Sibling merged | Issues A and B both wait for the merge, and the engineer merges A. At the next read, B's head lacks A's squash commit, so oe updates B's branch with the base branch through GitHub. CI and a Verifier run again on the new head, and B waits for the merge again once that head has a success verdict. When the update conflicts, an Owner resolves the conflict as a repair |
 | Bot finding | CodeRabbit reports a Major finding. An Owner checks it in the code, repairs, pushes, and asks CodeRabbit to review again. A Major finding in that re-review goes to the engineer. A Minor finding starts nothing |
@@ -342,7 +340,7 @@ sequenceDiagram
 | Where records go | The record store, because comments under the user's account cluttered timelines. Only questions, answers, and re-review requests stay on GitHub, in a fixed format that says an agent or the session wrote them |
 | Record key | Repository and Issue: an Issue has one parent Epic, and no writer is given the Epic |
 | Dropping records | oe forget, which the session runs when it ends with every Issue of its Epic done. It refuses while an Issue is open, and oe ready stays read-only |
-| Acceptance checks | Verification splits automated checks from manual ones, and no agent checks a box that needs a human, template boxes included |
+| Acceptance checks | No agent checks a box that needs a human, template boxes included |
 | The board in Herdr | Opt-in with git config `skills.herdr`, read only inside Herdr, so no other run calls herdr and no Herdr user gets a pane unasked |
 | Board refresh | Every 3 minutes, each refresh reading GitHub through oe ready |
 | Board lifetime | The board stops once the session holding the Epic's lock ends, and leaves its last view. A `--watch` that never finds a session holding the lock refreshes until interrupted. A later start reuses its pane when the pane runs the board or sits at its shell's prompt, and never sends input to a pane that runs anything else |

@@ -55,7 +55,7 @@ flowchart TB
 | Session | An interactive harness session a person runs. The Design and the Epic are agreed in one |
 | Design | The agreed boundary of a change, a Design Doc or ADR. Merging its pull request is the agreement. A change that moves no boundary needs none, and its Epic says so |
 | Epic | A parent Issue grouping the Tickets derived from one Design. It exists only after a person approved its plan in a Session, so its existence is the approval |
-| Ticket | A child Issue of an Epic. One independently verifiable unit of work whose acceptance criteria are split into automated checks, each naming the command that proves it, and manual checks that need a person |
+| Ticket | A child Issue of an Epic. One independently verifiable unit of work whose acceptance criteria each name the command that proves it. Work that needs a person is its own Issue, blocked by the Ticket and outside the Epic |
 | Mandate | A Ticket exists under an open Epic that a running Coordinator holds. Covers the Ticket's stated scope only. Wider scope is a new Ticket |
 | Operator | The person who starts a Coordinator on an Epic. Starting it is the only consent to unattended work, and ending it stops new starts |
 | Host-local records | oe's state on the Coordinator's host, as `orchestrate-epic.md` lays it out: one lock per Epic, each Ticket's claim, attempt, and verdict records, and each Epic's board pane and running wait |
@@ -67,7 +67,7 @@ flowchart TB
 | Wait state | The action a person must take on a Ticket, one of the six below. Derived from the next action `oe ready` prints, and for `dependency` from the dependency's state |
 | Holder | Who or what has the Ticket now, derived from the claim and attempt records or from the Wait state. An Owner, a Verifier, or a person |
 | Board | The one view that shows every Ticket's Holder and Wait state, whether a Coordinator holds the Epic's lock, and what happened to one Ticket. A healthy state takes no space |
-| Mergeable | A pull request whose head has a success verdict and no repair signal, as `orchestrate-epic.md` row 11 defines, with the Ticket's manual checks listed in its body for the merger |
+| Mergeable | A pull request whose head has a success verdict and no repair signal, as `orchestrate-epic.md` row 11 defines |
 | Attention | The pipeline's measure. Messages and answers people wrote for a pull request, from Session logs and GitHub comments, per mergeable pull request. Read with the rate of reverts and of changes requested after review |
 
 | Wait state | `oe ready` action | Person's action |
