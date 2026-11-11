@@ -10,6 +10,7 @@ Step numbers below are SKILL.md's.
 | 0 | Continue to 6.4 |
 | 3 | `LINK_MISSING`: rerun once as `bash <skill-dir>/scripts/create-linked-pr.sh --link <url>`, without the push. If still missing, ask the user to link it from the Development sidebar |
 | 4 | `NOT_PUSHED`: rerun the 6.2 command once, which pushes again |
+| 5 | `HEAD_MOVED`: HEAD is no longer the commit 6.1 approved, and nothing was pushed. Stop and say so; the user runs this skill again |
 | Any other non-zero | Stop as SKILL.md Step 1 stops: the output verbatim, then the cause and the user's next step, such as updating a PR that already exists |
 
 A rerun's own exit goes through this table again, except that a second 3 or 4 is not rerun: it takes that row's "if still missing" action, or for 4 stops as the last row says.

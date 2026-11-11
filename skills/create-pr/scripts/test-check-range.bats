@@ -14,6 +14,7 @@ setup() {
   git -C "${repo}" branch base
   base_sha="$(git -C "${repo}" rev-parse base)"
   commit change
+  head_sha="$(git -C "${repo}" rev-parse HEAD)"
 }
 
 commit() {
@@ -31,6 +32,15 @@ review() {
     >"${root}/implement/scripts/review-range.sh"
 }
 
+# Makes the stub at $1 commit before it exits, as another agent committing while it runs.
+advance_during() {
+  local stub
+  stub="$(cat "$1")"
+  printf '%s\n%s\n%s\n' "${stub%%$'\n'*}" \
+    'git -c core.hooksPath=/dev/null -c user.name=t -c user.email=t@t commit -q --allow-empty -m moved' \
+    "${stub#*$'\n'}" >"$1"
+}
+
 check() {
   cd "${repo}" || return 1
   run bash "${root}/create-pr/scripts/check-range.sh" "$@"
@@ -41,7 +51,8 @@ check() {
   review 0 "DIFIT_RESULT status=closed comments=none"
   check base
   [ "${status}" -eq 0 ]
-  [ "${output}" = "approval: not-required" ]
+  [ "${lines[0]}" = "approval: not-required" ]
+  [ "${lines[1]}" = "approved-head=${head_sha}" ]
   [ ! -e "${review_args}" ]
 }
 
@@ -50,9 +61,10 @@ check() {
   review 0 "DIFIT_RESULT status=closed comments=none"
   check base
   [ "${status}" -eq 0 ]
-  [ "$(cat "${review_args}")" = "HEAD ${base_sha}" ]
+  [ "$(cat "${review_args}")" = "${head_sha} ${base_sha}" ]
   [ "${lines[0]}" = "reason: deleted file: a" ]
   [ "${lines[1]}" = "DIFIT_RESULT status=closed comments=none" ]
+  [ "${lines[2]}" = "approved-head=${head_sha}" ]
 }
 
 @test "a flagged range is not approved when difit closes with comments" {
@@ -61,6 +73,7 @@ check() {
   check base
   [ "${status}" -eq 10 ]
   [ "${lines[1]}" = "DIFIT_RESULT status=closed comments=present" ]
+  [ "${output#*approved-head=}" = "${output}" ]
 }
 
 @test "a classifier error opens difit as a flagged range does" {
@@ -68,7 +81,7 @@ check() {
   review 0 "DIFIT_RESULT status=closed comments=none"
   check base
   [ "${status}" -eq 0 ]
-  [ "$(cat "${review_args}")" = "HEAD ${base_sha}" ]
+  [ "$(cat "${review_args}")" = "${head_sha} ${base_sha}" ]
 }
 
 @test "a call without a base ref exits 2 and opens no difit" {
@@ -77,4 +90,21 @@ check() {
   check
   [ "${status}" -eq 2 ]
   [ ! -e "${review_args}" ]
+}
+
+@test "a commit added while difit is open is not approved" {
+  classifier 10 "reason: deleted file: a"
+  review 0 "DIFIT_RESULT status=closed comments=none"
+  advance_during "${root}/implement/scripts/review-range.sh"
+  check base
+  [ "${status}" -eq 4 ]
+  [ "${output#*approved-head=}" = "${output}" ]
+}
+
+@test "a commit added while the classifier runs is not approved" {
+  classifier 0 "approval: not-required"
+  advance_during "${root}/commit/scripts/classify-approval.sh"
+  check base
+  [ "${status}" -eq 4 ]
+  [ "${output#*approved-head=}" = "${output}" ]
 }

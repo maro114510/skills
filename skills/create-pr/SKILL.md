@@ -126,14 +126,15 @@ Paste Step 1's `== base` line verbatim as `<base ref>`. When the Range needs app
 bash <skill-dir>/scripts/check-range.sh <base ref>
 ```
 
-Exit 0 approves the Range: continue to 6.2. Any other exit pushes nothing: show the output verbatim and stop, and the user addresses it and runs this skill again.
+Exit 0 approves the Range, and its last line `approved-head=<sha>` names the only commit that may be pushed: continue to 6.2. Any other exit pushes nothing: show the output verbatim and stop, and the user addresses it and runs this skill again. Exit 4 means HEAD moved during the check.
 
 **6.2 Run one command**
 
-Run this as one call, only once 6.1 approved the Range. Never run `gh pr create` directly, and never stop after showing the command. Paste Step 1's `== create flags` line verbatim as `<create flags>`:
+Run this as one call, only once 6.1 approved the Range. Never run `gh pr create` directly, and never stop after showing the command. Paste the `<sha>` from 6.1's `approved-head=` line as `<approved-head>`, and Step 1's `== create flags` line verbatim as `<create flags>`. The first line pushes nothing unless HEAD is still the approved commit:
 
 ```bash
-git push -u origin <current-branch> &&
+(test "$(git rev-parse HEAD)" = <approved-head> || { echo HEAD_MOVED >&2; exit 5; }) &&
+  git push -u origin <current-branch> &&
   bash <skill-dir>/scripts/create-linked-pr.sh \
     --title "<title>" \
     --body-file - \
