@@ -155,15 +155,19 @@ Follow `references/interactive.md` § Phase 4. Without a human, skip this phase,
 
 ## Phase 5: Implement
 
-Each artifact explains one thing.
+Each artifact explains one thing, to the reader who looks there, for as long as it stays true.
 Do not repeat it in another.
 
-| Artifact | Explains |
-|---|---|
-| Code | How |
-| Tests | What |
-| Commit log | Why |
-| Code comments | Why not: a rejected alternative or a non-obvious constraint |
+| Artifact | Explains | Reader, and how long it stays true |
+|---|---|---|
+| Code | How | Everyone; always current |
+| Tests | What | Whoever changes the behavior; fails once untrue |
+| Commit log | Why | Whoever asks why a line changed; fixed to that change |
+| Code comments | Why not: a rejected alternative or a non-obvious constraint | The next editor of that line; as long as the line stands |
+
+- The doc comment of an exported or externally read name says what it is for, in the form the repository's conventions ask, never a restatement of its name.
+- A comment never restates the code, never tells the change's history or motive, and never lists the measurements behind a value. When a task asks to record how a value was chosen, the measurements go in the commit body; the comment keeps only the constraint the value must meet and the alternative rejected.
+- Shortening a comment removes restatement, never its Why not.
 
 Route each part of the task in the Phase 3 plan. A playbook, relative to this skill's directory, is the only procedure for writing its type's tests.
 
