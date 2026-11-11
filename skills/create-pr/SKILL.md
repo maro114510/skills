@@ -4,9 +4,9 @@ description: >
   Create a GitHub pull request with a high-signal title and description, written
   in the language that `lang <ja|en>` or git config `skills.lang` selects.
   Analyze the branch diff and complete commit history to explain the motivation,
-  impact, risks, implementation choices, and review focus, then push the branch
-  and open the PR through the skill's script, as a draft unless `ready` is
-  given. Use this skill when the user asks to open, create, submit, or send a PR
+  impact, risks, implementation choices, and review focus, then check the
+  commit range, opening difit when it needs approval, push the branch, and open
+  the PR through the skill's script, as a draft unless `ready` is given. Use this skill when the user asks to open, create, submit, or send a PR
   for review.
 argument-hint: "[ready] [base <branch>] [lang <ja|en>]"
 ---
@@ -47,8 +47,8 @@ It fetches `origin/<base>` and prints everything later steps use. Do not read th
 | Section | Holds | Used in |
 |---|---|---|
 | `Arguments:` line | Resolved `lang` with its source, `draft`, and `base`: the argument, then `branch.<branch>.gh-merge-base`, then the default branch | Arguments, 3.1 |
-| `== create flags` | `--base`, `--draft`, and `--assignee` | 6.1 |
-| `== branch`, `== base` | The current branch, and the fetched `origin/<base>` every comparison uses | 2, 6.1 |
+| `== create flags` | `--base`, `--draft`, and `--assignee` | 6.2 |
+| `== branch`, `== base` | The current branch, and the fetched `origin/<base>` every comparison uses, shell-quoted | 2, 6.1, 6.2 |
 | `== commits` | Every commit message in `origin/<base>..HEAD`, oldest first | 2 |
 | `== diff stat`, `== diff` | The stat, and the diff without lockfiles when it fits 20 files and 1,000 lines | 2 |
 | `== template <path>` or `== template none` | The PR template's contents, or none | 3 |
@@ -116,14 +116,25 @@ Choose metadata from Step 1's output, without running any other command or askin
 
 **5.1 Assignee**: Step 1's create flags already carry `--assignee @me`.
 
-## Step 6. Push and Create the PR
+## Step 6. Check, Push, and Create the PR
 
-**6.1 Run one command**
+**6.1 Check the Range**
 
-Run this as one call. Never run `gh pr create` directly, and never stop after showing the command. Paste Step 1's `== create flags` line verbatim as `<create flags>`:
+Paste Step 1's `== base` line verbatim as `<base ref>`. When the Range needs approval, the script opens difit and waits until the user closes the window, so background it through the harness when possible and wait for it to finish before acting on its exit code. In a sandbox without network access, run it with escalated permissions, because it may fall back to `npx difit`:
 
 ```bash
-git push -u origin <current-branch> &&
+bash <skill-dir>/scripts/check-range.sh <base ref>
+```
+
+Exit 0 approves the Range, and its last line `approved-head=<sha>` names the only commit that may be pushed: continue to 6.2. Any other exit pushes nothing: show the output verbatim and stop, and the user addresses it and runs this skill again. Exit 4 means HEAD moved during the check.
+
+**6.2 Run one command**
+
+Run this as one call, only once 6.1 approved the Range. Never run `gh pr create` directly, and never stop after showing the command. Paste the `<sha>` from 6.1's `approved-head=` line as `<approved-head>`, and Step 1's `== create flags` line verbatim as `<create flags>`. The first line pushes nothing unless HEAD is still the approved commit:
+
+```bash
+(test "$(git rev-parse HEAD)" = <approved-head> || { echo HEAD_MOVED >&2; exit 5; }) &&
+  git push -u origin <current-branch> &&
   bash <skill-dir>/scripts/create-linked-pr.sh \
     --title "<title>" \
     --body-file - \
@@ -133,6 +144,6 @@ git push -u origin <current-branch> &&
 EOF
 ```
 
-**6.2 Handle the result**
+**6.3 Handle the result**
 
-After the 6.1 command exits, read `<skill-dir>/references/result.md` in full and act on its exit code as it says.
+After the 6.2 command exits, read `<skill-dir>/references/result.md` in full and act on its exit code as it says.

@@ -268,6 +268,10 @@ flags="$(section 'create flags')"
 words="$(eval "printf '%s\n' ${flags}" 2>/dev/null)"
 [[ "${rc}" == 0 && "${words}" == $'--base\nrelease;next\n--draft\n--assignee\n@me' ]] && r=0 || r=1
 check "base with shell metacharacters: create flags parse back to the same base" "${r}"
+base_out="$(section base)"
+words="$(eval "printf '%s\n' ${base_out}" 2>/dev/null)"
+[[ "${rc}" == 0 && "${words}" == "origin/release;next" ]] && r=0 || r=1
+check "base with shell metacharacters: the base line parses back to the same ref" "${r}"
 
 # 7. Labels are not read: the stub rejects any labels call, and no labels section is printed.
 setup
