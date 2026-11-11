@@ -4,9 +4,9 @@ description: >
   Create a GitHub pull request with a high-signal title and description, written
   in the language that `lang <ja|en>` or git config `skills.lang` selects.
   Analyze the branch diff and complete commit history to explain the motivation,
-  impact, risks, implementation choices, and review focus, then push the branch
-  and open the PR through the skill's script, as a draft unless `ready` is
-  given. Use this skill when the user asks to open, create, submit, or send a PR
+  impact, risks, implementation choices, and review focus, then check the
+  commit range, opening difit when it needs approval, push the branch, and open
+  the PR through the skill's script, as a draft unless `ready` is given. Use this skill when the user asks to open, create, submit, or send a PR
   for review.
 argument-hint: "[ready] [base <branch>] [lang <ja|en>]"
 ---
@@ -120,7 +120,7 @@ Choose metadata from Step 1's output, without running any other command or askin
 
 **6.1 Check the Range**
 
-Paste Step 1's `== base` line verbatim as `<base ref>`. When the Range needs approval, the script opens difit and waits until the user closes the window, so background it through the harness when possible. In a sandbox without network access, run it with escalated permissions, because it may fall back to `npx difit`:
+Paste Step 1's `== base` line verbatim as `<base ref>`. When the Range needs approval, the script opens difit and waits until the user closes the window, so background it through the harness when possible and wait for it to finish before acting on its exit code. In a sandbox without network access, run it with escalated permissions, because it may fall back to `npx difit`:
 
 ```bash
 bash <skill-dir>/scripts/check-range.sh <base ref>
