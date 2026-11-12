@@ -79,3 +79,35 @@ def problems:
 # The options of a question written on an Issue, as {letter, label}, from its body as a string.
 def options:
   [gsub("\r"; "") | split("\n")[] | capture("^- (?<letter>[A-D])\\. (?<label>.+)$")];
+
+# The Decision line of a question written on an Issue, in either language, from its body as a string, or null when it has none.
+def decision_line:
+  [gsub("\r"; "") | split("\n")[] | select(test("^(Decision|判断)[:：]"))] | first;
+
+# One decision as the decisions section holds it: the question's Decision line, the answer under it, and the question's URL.
+# A question without a Decision line, written before the template was enforced, is named by its URL alone.
+def decision_entry($decision; $answer; $url):
+  [(if $decision then "- " + $decision else "- " + $url end),
+    ($answer | gsub("\r"; "") | split("\n") | to_entries[]
+      | if .key == 0 then "  - " + .value elif .value == "" then "" else "    " + .value end),
+    (if $decision then "  - " + $url else empty end)]
+  | join("\n");
+
+# The Issue body, a string, with $entry appended at the end of its section headed `## $heading`.
+# A body without that section gets it at its end, with $note under the heading.
+# Every other line stays as it was, and the body's own line ending joins the new lines.
+def add_decision($heading; $note; $entry):
+  (if test("\r\n") then "\r\n" else "\n" end) as $nl
+  | split($nl) as $lines
+  | ($entry | split("\n")) as $new
+  | ([$lines | to_entries[] | select(.value | sub("[ \t]+$"; "") == "## " + $heading) | .key] | first) as $h
+  | if $h == null then
+      sub("\\s+$"; "") as $kept
+      | (if $kept == "" then "" else $kept + $nl + $nl end) + (["## " + $heading, "", $note, ""] + $new | join($nl))
+    else
+      ([range($h + 1; $lines | length) | select($lines[.] | test("^#{1,2} "))] | first // ($lines | length)) as $end
+      | ([range($h + 1; $end) | select($lines[.] | test("\\S"))] | last // $h) as $last
+      | $lines[:$last + 1] + (if $last == $h then [""] else [] end) + $new
+        + (if $last + 1 == $end and $end < ($lines | length) then [""] else [] end) + $lines[$last + 1:]
+      | join($nl)
+    end;
