@@ -9,6 +9,7 @@
 #   oe wait <owner/repo> <epic-number> [--running <issue-number>]... [--max-agents <n>] [--timeout <seconds>] [--idle-since <epoch>]
 #
 # - --running is passed to oe ready, and also means an agent is still running.
+# - --max-agents is how many agents the session runs at once, 3 by default as in the skill.
 # - --timeout bounds this call, wait_timeout seconds by default.
 #   The deadline is checked before each poll, so the call can run up to one poll interval past it.
 # - Starting a wait stops an earlier oe wait for the same Epic on this host, so at most one runs.
@@ -17,7 +18,8 @@
 # - OE_WAIT_INTERVAL sets the seconds between two polls, wait_interval by default.
 #
 # The first oe ready run is the baseline, and every later run is compared with it.
-# A baseline that already holds an Issue to start ends the wait at once, because no later run would show it as a change.
+# A baseline that already holds an Issue to start ends the wait at once while fewer than --max-agents agents run,
+# because no later run would show it as a change.
 # Only each line's Issue number and action are compared, because a reason carries the seconds since a push,
 # which differ on every run while nothing the session can act on has changed.
 #
@@ -53,12 +55,15 @@ repo="$1"
 epic="$2"
 shift 2
 running=()
+agents=0
+max_agents=3
 timeout="${wait_timeout}"
 while [[ $# -gt 0 ]]; do
   case "$1" in
   --running)
     [[ "${2:-}" =~ ^[1-9][0-9]*$ ]] || usage "Expected --running <issue-number>"
     running+=(--running "$2")
+    agents=$((agents + 1))
     ;;
   --timeout)
     [[ "${2:-}" =~ ^[0-9]+$ ]] || usage "Expected --timeout <seconds>"
@@ -66,6 +71,7 @@ while [[ $# -gt 0 ]]; do
     ;;
   --max-agents)
     [[ "${2:-}" =~ ^[1-9][0-9]*$ ]] || usage "Expected --max-agents <n>"
+    max_agents="$2"
     ;;
   --idle-since)
     [[ "${2:-}" =~ ^[0-9]+$ ]] || usage "Expected --idle-since <epoch>"
@@ -118,9 +124,9 @@ actions() {
   cut -f1,2 <<<"$1"
 }
 
-# Succeeds when a line of $current has a start command, an Issue the session can start now.
+# Succeeds when a line of $current has a start command and fewer than max_agents agents run, so the session can start it now.
 startable() {
-  cut -f4 <<<"${current}" | grep -q .
+  ((agents < max_agents)) && cut -f4 <<<"${current}" | grep -q .
 }
 
 current=""
