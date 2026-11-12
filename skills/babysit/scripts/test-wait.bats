@@ -523,6 +523,24 @@ before_start='.comments = [($comment | .id = "IC_old" | .author = "bot" | .bodyH
   expect "$(ledger '.items["c:IC_bot"].reason')" "untrusted author"
 }
 
+@test "the agents' own bot, named by git config skills.bot, is neither handed over nor parked" {
+  git config skills.bot agent-app
+  set_snap "${waiting} | .comments = [\$comment | .author = \"agent-app\" | .authorType = \"Bot\" | .authorAssociation = \"NONE\"]"
+  poll --mode drive
+  expect "$(event)" idle
+  expect "$(ledger '.items["c:IC1"] // "none"')" none
+  poll --mode watch
+  expect "$(event)" idle
+}
+
+@test "a user who holds the agents' bot login is still parked as an untrusted author" {
+  git config skills.bot agent-app
+  set_snap "${waiting} | .comments = [\$comment | .author = \"agent-app\" | .authorType = \"User\" | .authorAssociation = \"NONE\"]"
+  poll --mode drive
+  expect "$(event)" idle
+  expect "$(ledger '.items["c:IC1"].reason')" "untrusted author"
+}
+
 @test "drive parks an untrusted thread comment and review body, and stalls once only they block" {
   set_snap "${waiting} | .threads = [{id: \"T1\", isResolved: false, path: \"a\", line: 1,
       comments: [\$comment | .id = \"TC1\" | .authorAssociation = \"NONE\"]}]

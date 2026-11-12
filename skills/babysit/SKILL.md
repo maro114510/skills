@@ -98,7 +98,7 @@ Repair, Merge base, Triage, Park, and Stop are sections of `references/drive.md`
 | `check_stuck` | Park with the reason `still failing after 2 repair pushes` |
 | `conflict` | Merge base |
 | `comment` | Triage |
-| `untrusted_comment` | Never returned in drive: `wait.sh` parks a comment whose author is not OWNER, MEMBER, or COLLABORATOR, and not a review bot listed in `review_bots` of `<scripts>/evaluate.jq`, with the reason `untrusted author`. Report lists it in `pending` |
+| `untrusted_comment` | Never returned in drive: `wait.sh` parks a comment whose author is not OWNER, MEMBER, or COLLABORATOR, and not a review bot listed in `review_bots` of `<scripts>/evaluate.jq`, with the reason `untrusted author`. Report lists it in `pending`. A comment from the agents' own bot, which `git config skills.bot` names, is neither returned nor parked, as with drive's own replies |
 | `approved`, `ready`, `merged`, `closed`, `limit`, `stalled` | Stop |
 | Exit 1 | The API failed 5 times in a row. Run `ledger.sh stop <owner/repo> <n> <token>`, report, and stop |
 | Exit 3 | Another session took the PR over. Stop without touching the ledger |

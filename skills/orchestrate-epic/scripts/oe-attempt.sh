@@ -33,7 +33,7 @@
 # |---|---|---|
 # | 0 | The attempt record was written | The attempt record |
 # | 1 | The record store or a GitHub read failed | Nothing |
-# | 2 | The arguments are invalid | Nothing |
+# | 2 | The arguments, or git config skills.bot, are invalid | Nothing |
 # | 4 | max_attempts attempts are already used | Nothing |
 #
 # Two sessions never write for one Epic at once, because oe lock admits one, so reading and then writing does not race.
@@ -79,6 +79,7 @@ fi
 # Read 1: the Issue and its branch's open pull request, as oe ready reads them.
 issue_query="$(<"${dir}/oe-ready-issue.graphql")" || fail "cannot read oe-ready-issue.graphql"
 trust="$(<"${dir}/oe-records.jq")" || fail "cannot read oe-records.jq"
+bot="$(bot_def)" || usage "Invalid git config skills.bot"
 bot_rules="$(<"${dir}/oe-bots.jq")" || fail "cannot read oe-bots.jq"
 
 claimed_at="$(jq -r '(map(.kind == "claim") | rindex(true)) as $claim
@@ -98,7 +99,7 @@ values="$(printf 'def claimed_at: %s; def since_at: %s; def used_bots: %s;\n' \
   "$(quote "${claimed_at}")" "$(quote "${since}")" "${spent}")" || fail "cannot build the read of Issue #${n}"
 
 # shellcheck disable=SC2016 # The jq program names jq's own variables, not the shell's.
-program="$(printf '%s\n%s\n%s\n%s\n' "${trust}" "${bot_rules}" "${values}" '
+program="$(printf '%s\n%s\n%s\n%s\n%s\n' "${bot}" "${trust}" "${bot_rules}" "${values}" '
 .data.repository as $r
 | ([($r.pullRequests.nodes // [])[]
     | select(.isCrossRepository == false)

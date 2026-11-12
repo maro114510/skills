@@ -5,6 +5,7 @@
 # GitHub's create-ref API refuses a ref that already exists, so two claims for one Issue never both succeed.
 # The claim record goes to the record store that oe-store.sh defines, never to GitHub.
 # It then assigns the Issue to the gh user running oe, so GitHub shows who took it; a failed assignment only warns on stderr.
+# A GitHub App cannot be assigned, so oe running as one skips the assignment without a warning.
 #
 # Usage
 #
@@ -77,8 +78,12 @@ records_add "${repo}" "${n}" '{"kind":"claim","at":"'"${at}"'"}' 2>"${err}" ||
   fail "created ${branch}, but recording the claim of Issue #${n} failed: $(head -n1 "${err}")"
 
 # The branch is the claim, so an assignee that fails to land is only a warning.
-if ! login="$(gh api user --jq .login 2>"${err}")" ||
-  ! gh api -X POST "repos/${repo}/issues/${n}/assignees" -f "assignees[]=${login}" --silent 2>"${err}"; then
+# A GitHub App can neither read its user nor be assigned, and only it can list its installation's repositories,
+# so that read tells a bot apart from a failed user read, and the bot skips the assignment.
+if ! login="$(gh api user --jq .login 2>"${err}")"; then
+  gh api "installation/repositories?per_page=1" --silent 2>/dev/null ||
+    echo "oe claim: WARN: could not assign Issue #${n}: $(head -n1 "${err}")" >&2
+elif ! gh api -X POST "repos/${repo}/issues/${n}/assignees" -f "assignees[]=${login}" --silent 2>"${err}"; then
   echo "oe claim: WARN: could not assign Issue #${n}: $(head -n1 "${err}")" >&2
 fi
 printf 'claimed\t%s\t%s\n' "${branch}" "${sha}"

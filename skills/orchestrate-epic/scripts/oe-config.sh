@@ -34,6 +34,20 @@ record_marker() {
   printf '<!-- oe:%s -->' "$1"
 }
 
+# Prints the jq definition of oe_bot, the agents' own bot that oe-records.jq trusts for records.
+# Its login comes from git config skills.bot, without the [bot] suffix REST shows, and is empty when unset.
+# Returns 1 with the reason on stderr when the login is not a GitHub login.
+bot_def() {
+  local login
+  login="$(git config --get skills.bot)"
+  login="${login%\[bot\]}"
+  if [[ -n "${login}" && ! "${login}" =~ ^[A-Za-z0-9][A-Za-z0-9-]*$ ]]; then
+    echo "git config skills.bot is not a GitHub login: ${login}" >&2
+    return 1
+  fi
+  printf 'def oe_bot: "%s";\n' "${login}"
+}
+
 # Prints the number and head SHA of the newest open PR from Issue branch $2 in repository $1, separated by a tab.
 # Prints nothing when the branch has no open PR in that repository; a fork's PR never counts.
 # Returns 1 with the reason on stderr when the read fails or is unreadable.

@@ -114,6 +114,29 @@ JSON
   [ "$(records_of 5 | jq -r .kind | paste -sd, -)" = claim,attempt ]
 }
 
+@test "a claim made as a GitHub App skips the assignment without a warning" {
+  github <<'JSON'
+{"identity": "app", "default_branch": {"checks": {"test": "success"}}, "issues": [{"number": 5}]}
+JSON
+
+  run --separate-stderr bash "${oe}" claim o/r 5
+
+  [ "${status}" -eq 0 ]
+  [ "$(jq -c '.issues[0].assignees' "${OE_GITHUB}")" = null ]
+  [ -z "${stderr}" ]
+}
+
+@test "a claim whose user read fails for another reason still warns" {
+  github <<'JSON'
+{"default_branch": {"checks": {"test": "success"}}, "issues": [{"number": 5}]}
+JSON
+
+  GH_FAIL="api user" run --separate-stderr bash "${oe}" claim o/r 5
+
+  [ "${status}" -eq 0 ]
+  [ "${stderr}" != "${stderr%WARN: could not assign*}" ]
+}
+
 @test "a claimed Owner's start, read with stderr merged as a harness shows it, holds only the prompt" {
   github <<'JSON'
 {"default_branch": {"checks": {"test": "success"}}, "issues": [{"number": 5}]}

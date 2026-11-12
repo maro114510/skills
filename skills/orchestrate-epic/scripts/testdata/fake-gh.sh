@@ -23,6 +23,7 @@
 # | api repos/o/r/issues/N/comments | comments N |
 # | api repos/o/r/issues/N/sub_issues | sub_issues N |
 # | api user | user |
+# | api installation/repositories | installation |
 # | api -X POST repos/o/r/git/refs | the write create_ref |
 # | api -X POST repos/o/r/issues/N/assignees | the write assign N |
 # | api -X POST repos/o/r/issues/N/comments | the write comment N, where N is an Issue or a pull request |
@@ -126,6 +127,7 @@ graphql)
   ;;
 repos/o/r) call=repo arg="" ;;
 user) call=user arg="" ;;
+installation/repositories*) call=installation arg="" ;;
 *) unexpected ;;
 esac
 
