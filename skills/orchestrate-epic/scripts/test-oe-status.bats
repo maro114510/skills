@@ -169,11 +169,12 @@ JSON
 {
   "default_branch": {"checks": {"test": "success"}},
   "issues": [
-    {"number": 5, "branch": true,
-      "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["failure"]}]}
+    {"number": 5, "branch": true, "pushes": ["07:05", "07:25"],
+      "pull_requests": [{"number": 50, "opened": "07:10", "pushed": "07:45", "checks": {"test": "success"}, "verdicts": ["failure"]}]}
   ]
 }
 JSON
+  # Each of the three Owner starts ended in a push.
   records 5 claim@07:00 attempt@07:01 attempt@07:20 attempt@07:40
 
   run --separate-stderr bash "${oe}" status o/r 1
@@ -212,7 +213,7 @@ JSON
   [ "${lines[6]}" = "  why: success verdict on bbbbbbb" ]
 }
 
-@test "an Issue whose Owner runs shows that Owner and its current attempt instead of the next action, and counts in progress" {
+@test "an Issue whose Owner runs shows that Owner and the attempts used instead of the next action, and counts in progress" {
   github <<'JSON'
 {
   "default_branch": {"checks": {"test": "success"}},
@@ -228,9 +229,10 @@ JSON
   [ "${status}" -eq 0 ]
   [ "${lines[0]}" = "Epic #1: 0 done, 1 in progress, 0 waiting, 0 waiting on you" ]
   [ "$(column_of 5 2)" = running ]
-  [ "$(column_of 5 6)" = 1/3 ]
+  # A start counts as an attempt only once it pushes.
+  [ "$(column_of 5 6)" = 0/3 ]
   [ "$(column_of 5 7)" = owner ]
-  [ "$(column_of 5 9)" = "Owner attempt 1 of 3" ]
+  [ "$(column_of 5 9)" = "Owner runs; 0 of 3 attempts used" ]
 }
 
 @test "an Issue whose Verifier runs its last start shows that Verifier and its start, not a park waiting on the owner" {
