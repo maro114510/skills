@@ -288,7 +288,8 @@ JSON
   }]
 }
 JSON
-  records 5 claim@07:00 attempt@07:30
+  # The first Owner start pushed the pull request.
+  records 5 claim@07:00 attempt@07:05
 
   run bash "${oe}" attempt o/r 5
 
