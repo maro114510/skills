@@ -188,7 +188,10 @@ def branch_head($branch):
 
 def issue_comments($n):
   [.issues[] | select(.number == $n)] | first // error("Issue #\($n) not found")
-  | [.comments[]? | {author_association: .by, body, created_at: (.at | time)}];
+  | [.comments // [] | to_entries[] | .key as $i | .value
+    | {author_association: .by, body, created_at: (.at | time),
+      html_url: "https://github.com/o/r/issues/\($n)#issuecomment-\($i + 1)",
+      user: {login: ((.login // "") + (if .type == "Bot" then "[bot]" else "" end)), type: (.type // "User")}}];
 
 def sub_issues:
   [.issues[] | {number, state: (if .closed then "closed" else "open" end)}];
