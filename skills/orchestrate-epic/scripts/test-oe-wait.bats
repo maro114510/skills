@@ -144,6 +144,25 @@ JSON
   [ "$(action_of 5)" = wait-answer ]
 }
 
+# Saves a state where Issue 5 has no branch yet and nothing blocks its claim.
+issue_5_ready_to_claim() {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{"number": 5}]
+}
+JSON
+}
+
+@test "a first read that holds an Issue to start returns it at once, before any change" {
+  issue_5_ready_to_claim
+
+  run bash "${oe}" wait o/r 1 --timeout 2
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = claim ]
+}
+
 @test "a failed GitHub read ends the wait with an error and no next actions" {
   pr_15_checks_running
 
