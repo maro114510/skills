@@ -130,7 +130,7 @@ Exit 0 approves the Range, and its last line `approved-head=<sha>` names the onl
 
 **6.2 Run one command**
 
-Run this as one call, only once 6.1 approved the Range. Never run `gh pr create` directly, and never stop after showing the command. Paste the `<sha>` from 6.1's `approved-head=` line as `<approved-head>`, and Step 1's `== create flags` line verbatim as `<create flags>`. The first line pushes nothing unless HEAD is still the approved commit. The push sets no upstream, because that writes `.git/config`, which a sandbox may refuse:
+Run this as one call, only once 6.1 approved the Range. Never run `gh pr create` directly, and never stop after showing the command. Paste the `<sha>` from 6.1's `approved-head=` line as `<approved-head>`, and Step 1's `== create flags` line verbatim as `<create flags>`. The first line pushes nothing unless HEAD is still the approved commit. The push has no `-u`, because `-u` writes `.git/config`:
 
 ```bash
 (test "$(git rev-parse HEAD)" = <approved-head> || { echo HEAD_MOVED >&2; exit 5; }) &&
