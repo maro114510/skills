@@ -213,6 +213,23 @@ JSON
   [ "${lines[6]}" = "  why: success verdict on bbbbbbb" ]
 }
 
+@test "an Issue waiting after two Owner starts without a push asks the person to comment on the Issue" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{"number": 5, "branch": true}]
+}
+JSON
+  records 5 claim@07:00 attempt@07:01 attempt@07:20
+
+  run --separate-stderr bash "${oe}" status o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "${lines[0]}" = "Epic #1: 0 done, 0 in progress, 0 waiting, 1 waiting on you" ]
+  [ "${lines[1]}" = "- #5 Comment on the Issue to start another Owner, once whatever kept it from pushing is fixed" ]
+  [ "${lines[2]}" = "  https://github.com/o/r/issues/5" ]
+}
+
 @test "an Issue whose Owner runs shows that Owner and the attempts used instead of the next action, and counts in progress" {
   github <<'JSON'
 {
