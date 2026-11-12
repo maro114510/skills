@@ -33,10 +33,15 @@ This skill never asks the user and never waits for an answer, in a chat session 
 
 Cover staged, unstaged, and untracked changes: a suspected secret never ends up in a commit, however it got into the working tree.
 
-- **Filenames** in `git status --short`: `.env*`, `*.pem`, `*.key`, `id_rsa*`, `*credentials*`, `*secret*`, `*.p12`, `service-account*.json`, and similar.
-- **Content** of the staged and unstaged diff, since a token can sit in an ordinary file such as `config.yaml`: AWS keys `AKIA[0-9A-Z]{16}`, private key headers `-----BEGIN [A-Z ]*PRIVATE KEY-----`, GitHub tokens `gh[pousr]_[A-Za-z0-9]{20,}`, OpenAI or Anthropic-style keys `\bsk-[A-Za-z0-9_-]{20,}` (covers `sk-ant-api03-…` and `sk-proj-…`), Slack tokens `xox[baprs]-`, and a literal-looking value assigned to `password` or `token`.
+Run the scanner, which reads the pattern list babysit's gate also screens with:
 
-This is a best-effort heuristic: when in doubt, treat it as a match. For every match:
+```bash
+bash <skill-dir>/scripts/scan-secrets.sh
+```
+
+It prints one `excluded: <path>: <why>` line per match, with a line number for a content match and never the matched value, and exits 10 when it matched and 0 when it did not.
+
+This is a best-effort heuristic: when in doubt, treat it as a match. For every `excluded:` line:
 
 - If the file is staged, unstage it: `git restore --staged -- <path>`.
 - Never `git add` it.
