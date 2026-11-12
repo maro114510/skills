@@ -11,7 +11,8 @@
 # | branch_prefix | feat/issue- | The prefix of an Issue branch, followed by the Issue number |
 # | wait_timeout | 540 | Seconds one oe wait call waits for oe ready's output to change, under the 10-minute limit Claude Code puts on a background command |
 # | wait_interval | 60 | Seconds between two oe ready runs inside oe wait |
-# | board_interval | 180 | Seconds between two refreshes of the board that oe board opens, longer than wait_interval because each refresh reads GitHub as oe ready does |
+# | board_interval | 180 | Seconds between two refreshes of the board that oe board opens |
+# | facts_stale | 300 | Seconds after which oe status marks the facts a session saved as stale, five polls of oe wait |
 # | board_start_timeout | 30 | Seconds oe board waits for the board to start in its pane, enough for a slow shell startup; a normal start takes a second |
 # | notify_repeat | 3600 | Seconds after which oe wait notifies the person again about an item they have not acted on |
 # | notify_failed_reads | 3 | Failed oe ready runs in a row inside one oe wait before it notifies the person, so one transient failure tells nobody |
@@ -26,6 +27,7 @@ branch_prefix=feat/issue-
 wait_timeout=540
 wait_interval=60
 board_interval=180
+facts_stale=300
 board_start_timeout=30
 notify_repeat=3600
 notify_failed_reads=3

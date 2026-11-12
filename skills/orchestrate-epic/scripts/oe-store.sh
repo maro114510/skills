@@ -9,9 +9,13 @@
 # | boards/<repo-key>/<epic> | The Herdr pane of the Epic's board and the server it is on, as JSON | oe board, which overwrites it |
 # | waits/<repo-key>/<epic> | The process ID and start time of the Epic's running oe wait | oe wait, which writes it only while no other wait runs and drops it when it ends on its own; oe lock release, and an acquire by another session, stop that process |
 # | notices/<repo-key>/<epic> | Each item that needed the person at the latest read, with when the person was last notified about it, as tab-separated lines | oe wait, only with git config skills.notify set, which overwrites it |
+# | facts/<repo-key>/<epic> | The facts of the session's latest read of the Epic, and its latest failed read since, as one JSON object | oe ready --save, which oe wait runs on every poll and which overwrites it; read by oe status while a session holds the lock; dropped by oe forget |
 #
 # - The state directory is OE_STATE_DIR when set, and orchestrate-epic under XDG_STATE_HOME or ~/.local/state otherwise.
 #   Either default lies outside every checkout, so no agent's worktree ever holds the state.
+# - The facts record holds wrote, the epoch second of its latest write; at, the epoch second of the latest read that succeeded, or null before one;
+#   lines, the facts of every child Issue in that read, as oe-ready.jq's facts defines them; and failure, null or {at, reason} of a read that failed after it.
+#   A success clears failure, and a failure keeps at and lines, so oe status can show the last facts together with the failure.
 # - An Issue has at most one parent Epic, so its records are keyed by repository and Issue, and oe forget drops an Epic's by its child Issues.
 #
 # | Record | Fields |
@@ -241,4 +245,67 @@ stop_recorded_wait() {
   kill -KILL "${pid}" 2>/dev/null || true
   # shellcheck disable=SC2086 # one process ID per word
   kill -TERM ${tree} 2>/dev/null || true
+}
+
+# Prints the record file of the facts the session last read for Epic $2 in repository $1.
+facts_record() {
+  local key
+  key="$(repo_key "$1")" || return 1
+  printf '%s/facts/%s/%s' "$(state_dir)" "${key}" "$2"
+}
+
+# Replaces the facts record of Epic $2 in repository $1 with the JSON object $3, through a rename, so a reader never sees half of it.
+# Returns 1 with the reason on stderr when it cannot be written.
+facts_put() {
+  local file tmp
+  file="$(facts_record "$1" "$2")" || return 1
+  mkdir -p "${file%/*}" 2>/dev/null || {
+    echo "cannot create ${file%/*}" >&2
+    return 1
+  }
+  tmp="$(mktemp "${file%/*}/.${2}.XXXXXX" 2>/dev/null)" || {
+    echo "cannot write in ${file%/*}" >&2
+    return 1
+  }
+  if printf '%s\n' "$3" >"${tmp}" 2>/dev/null && mv -f "${tmp}" "${file}" 2>/dev/null; then
+    return 0
+  fi
+  rm -f "${tmp}"
+  echo "cannot write the facts to ${file}" >&2
+  return 1
+}
+
+# Saves the facts of a read of Epic $2 in repository $1 that succeeded: $3 holds one JSON object per line, one for each child Issue.
+facts_write() {
+  local now
+  now="${OE_NOW:-$(date -u +%s)}"
+  facts_put "$1" "$2" "$(jq -cs --argjson now "${now}" '{wrote: $now, at: $now, lines: ., failure: null}' <<<"$3")" || return 1
+}
+
+# Records that a read of Epic $2 in repository $1 failed for the reason $3, and keeps the facts of the read before it.
+facts_fail() {
+  local now old file
+  now="${OE_NOW:-$(date -u +%s)}"
+  file="$(facts_record "$1" "$2")" || return 1
+  old="$(jq -c . "${file}" 2>/dev/null)" || old='{"at": null, "lines": []}'
+  facts_put "$1" "$2" "$(jq -c --argjson now "${now}" --arg reason "${3%%$'\n'*}" \
+    '{wrote: $now, at: .at, lines: .lines, failure: {at: $now, reason: $reason}}' <<<"${old}")" || return 1
+}
+
+# Prints the facts record of Epic $2 in repository $1, and fails when there is none or it is not JSON.
+facts_read() {
+  local file
+  file="$(facts_record "$1" "$2")" || return 1
+  jq -c . "${file}" 2>/dev/null
+}
+
+# Drops the facts record of Epic $2 in repository $1.
+facts_drop() {
+  local file
+  file="$(facts_record "$1" "$2")" || return 1
+  rm -f "${file}" 2>/dev/null && [[ ! -e "${file}" ]] || {
+    echo "cannot remove ${file}" >&2
+    return 1
+  }
+  rmdir "${file%/*}" 2>/dev/null || true
 }

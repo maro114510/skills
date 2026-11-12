@@ -2,7 +2,8 @@
 # oe wait
 #
 # Blocks inside one call until oe ready's next actions change, so waiting for CI or a human costs the session no tokens.
-# It reads GitHub only through oe ready, and writes only its own process record, waits/<repo-key>/<epic> in the state oe-store.sh lays out,
+# It reads GitHub only through oe ready --save, which also saves the facts of each read for oe status, and writes only its own process record,
+# waits/<repo-key>/<epic> in the state oe-store.sh lays out, the facts record, facts/<repo-key>/<epic>,
 # and with a notification command set, the notices record, notices/<repo-key>/<epic>.
 #
 # Usage
@@ -206,7 +207,7 @@ waiting_items() {
 # oe ready's own stderr names the failed read.
 poll() {
   local out rc
-  out="$(bash "${dir}/oe-ready.sh" "${repo}" "${epic}")" && rc=0 || rc=$?
+  out="$(bash "${dir}/oe-ready.sh" "${repo}" "${epic}" --save)" && rc=0 || rc=$?
   if ((rc == 1)); then
     failed_reads=$((failed_reads + 1))
     ((failed_reads < notify_failed_reads)) || [[ -z "${notice_file}" ]] ||

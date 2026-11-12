@@ -34,7 +34,7 @@ ready | status | board | wait | start | claim | attempt | question | rereview | 
   ;;
 *)
   cat >&2 <<'EOF'
-Usage: oe ready <owner/repo> <epic-number> [--running <issue-number>]... [--facts]
+Usage: oe ready <owner/repo> <epic-number> [--running <issue-number>]... [--facts | --save]
        oe status <owner/repo> <epic-number> [--watch]
        oe board <owner/repo> <epic-number>
        oe wait <owner/repo> <epic-number> [--running <issue-number>]... [--max-agents <n>] [--timeout <seconds>] [--idle-since <epoch>]

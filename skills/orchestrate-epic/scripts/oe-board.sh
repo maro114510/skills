@@ -9,7 +9,8 @@
 #   oe board <owner/repo> <epic-number>
 #
 # - Run it from the clone the session runs in: the board runs there, and skills.herdr is read there.
-# - The board refreshes every board_interval seconds, and stops by itself once the session holding the Epic's lock ends.
+# - The board refreshes every board_interval seconds. While the session holds the Epic's lock it draws the facts that session's latest read saved, and reads no GitHub.
+#   It draws once more, from GitHub, and stops by itself once that session ends.
 # - OE_BOARD_START_TIMEOUT, for tests, sets the seconds to wait for the board to start, board_start_timeout by default.
 #
 # Where the board goes

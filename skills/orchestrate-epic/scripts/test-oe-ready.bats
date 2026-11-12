@@ -1816,3 +1816,98 @@ JSON
   [ "${status}" -eq 0 ]
   [ "$(action_of 5)" = start-owner ]
 }
+
+# oe ready --save
+
+@test "--save prints what oe ready prints and saves the facts of every Issue, a running one too, with the time of the read" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [
+    {"number": 5, "closed": true},
+    {"number": 6, "branch": true, "pull_requests": [{"number": 60, "opened": "07:10", "checks": {"test": "in_progress"}}]},
+    {"number": 7, "branch": true}
+  ]
+}
+JSON
+  records 6 claim@07:00 attempt@07:01
+  records 7 claim@07:00 attempt@07:01
+  agent_runs 7 owner
+
+  run bash "${oe}" ready o/r 1
+  plain="${output}"
+  run bash "${oe}" ready o/r 1 --save
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "${plain}" ]
+  record="$(cat "$(facts_record o/r 1)")"
+  [ "$(jq -r '.at' <<<"${record}")" = "${OE_NOW}" ]
+  [ "$(jq -r '.failure' <<<"${record}")" = null ]
+  [ "$(jq -r '[.lines[] | "\(.number) \(.action)"] | join(",")' <<<"${record}")" = "5 done,6 wait-ci,7 start-owner" ]
+}
+
+@test "--save with a failed read keeps the facts of the read before it, and records the reason and when it failed" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{"number": 6, "branch": true, "pull_requests": [{"number": 60, "opened": "07:10", "checks": {"test": "in_progress"}}]}]
+}
+JSON
+  records 6 claim@07:00 attempt@07:01
+  bash "${oe}" ready o/r 1 --save >/dev/null
+
+  OE_NOW=$((OE_NOW + 90)) GH_FAIL=subIssues run --separate-stderr bash "${oe}" ready o/r 1 --save
+
+  [ "${status}" -eq 1 ]
+  [ -z "${output}" ]
+  record="$(cat "$(facts_record o/r 1)")"
+  [ "$(jq -r '.at' <<<"${record}")" = "${OE_NOW}" ]
+  [ "$(jq -r '.failure.at' <<<"${record}")" = "$((OE_NOW + 90))" ]
+  [ -n "$(jq -r '.failure.reason' <<<"${record}")" ]
+  [ "$(jq -r '.lines[0].action' <<<"${record}")" = wait-ci ]
+}
+
+@test "--save with a failed read before any read saved records the failure without facts" {
+  github <<'JSON'
+{"issues": [{"number": 6}]}
+JSON
+
+  GH_FAIL=subIssues run --separate-stderr bash "${oe}" ready o/r 1 --save
+
+  [ "${status}" -eq 1 ]
+  record="$(cat "$(facts_record o/r 1)")"
+  [ "$(jq -r '.at' <<<"${record}")" = null ]
+  [ "$(jq -c '.lines' <<<"${record}")" = '[]' ]
+  [ -n "$(jq -r '.failure.reason' <<<"${record}")" ]
+}
+
+@test "a plain oe ready, and one with --facts, saves nothing" {
+  github <<'JSON'
+{"default_branch": {"checks": {"test": "success"}}, "issues": [{"number": 6}]}
+JSON
+
+  run bash "${oe}" ready o/r 1
+  [ "${status}" -eq 0 ]
+  run bash "${oe}" ready o/r 1 --facts
+  [ "${status}" -eq 0 ]
+
+  [ ! -e "$(facts_record o/r 1)" ]
+}
+
+@test "--save cannot be combined with --facts" {
+  run --separate-stderr bash "${oe}" ready o/r 1 --facts --save
+
+  [ "${status}" -eq 2 ]
+  [ ! -e "$(facts_record o/r 1)" ]
+}
+
+@test "--save under a failed default branch check saves each Issue's wait for it" {
+  github <<'JSON'
+{"default_branch": {"checks": {"test": "failure"}}, "issues": [{"number": 6}, {"number": 7, "closed": true}]}
+JSON
+
+  run bash "${oe}" ready o/r 1 --save
+
+  [ "${status}" -eq 0 ]
+  [ "$(jq -r '[.lines[] | "\(.number) \(.action)"] | join(",")' "$(facts_record o/r 1)")" = "6 wait-base,7 done" ]
+}

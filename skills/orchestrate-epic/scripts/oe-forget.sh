@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # oe forget
 #
-# Drops an Epic's records from this host once every child Issue is closed.
+# Drops an Epic's records and saved facts from this host once every child Issue is closed.
 # It refuses while one is open, because dropping its records would reset its attempt cap.
 #
 # Usage
@@ -67,4 +67,5 @@ fi
 for n in ${issues[@]+"${issues[@]}"}; do
   records_drop "${repo}" "${n}" 2>"${err}" || fail "dropping the records of Issue #${n} failed: $(head -n1 "${err}")"
 done
+facts_drop "${repo}" "${epic}" 2>"${err}" || fail "dropping the facts of Epic #${epic} failed: $(head -n1 "${err}")"
 printf 'forgot\t%s\n' "${#issues[@]}"

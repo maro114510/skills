@@ -37,10 +37,10 @@ oe starts no agent, edits no code, and never merges a PR. Its only writes to a P
 |---|---|---|
 | Host-local record store | Keeps each Issue's claim, attempt, run, and verdict records until oe forget drops them, and each Epic's lock, board pane, and running oe wait, as the layout below says | `$OE_STATE_DIR`, or else `$XDG_STATE_HOME/orchestrate-epic` or `~/.local/state/orchestrate-epic` |
 | oe lock | Refuses a second session for the same Epic on the same host while the first one's process runs | The Epic's ref in the lock store |
-| oe ready | Reads GitHub and the record store and prints each Issue's next action, with the oe start command for an action that starts an agent, and names each running agent | nothing |
+| oe ready | Reads GitHub and the record store and prints each Issue's next action, with the oe start command for an action that starts an agent, and names each running agent. With `--save`, as oe wait runs it, also saves the facts of the read, or the reason it failed | nothing, or the Epic's facts |
 | oe start | Runs every step that starts an Owner or a Verifier for one Issue, from oe claim to oe brief, records the agent as running, and prints the agent's prompt | What those steps write, and a run record |
 | oe wait | Blocks until oe ready's next actions change, reading GitHub as Polling and Rate limit under Decisions say, and tells the person as Notifications under Decisions says | The record store, and the configured notification command |
-| oe status | Shows each Issue's step, PR, CI result, verdict and failure reason, attempts, running agent, Wait state, and time in step. `--watch` refreshes it until the session holding the Epic's lock ends | nothing |
+| oe status | Shows each Issue's step, PR, CI result, verdict and failure reason, attempts, running agent, Wait state, and time in step, from the facts the session saved while it holds the Epic's lock, and from its own read of GitHub otherwise. `--watch` refreshes it until that session ends | nothing |
 | oe board | Inside Herdr with git config `skills.herdr` true, opens a pane that runs `oe status --watch`, or reuses the Epic's pane from an earlier start | A Herdr pane, and the pane's record on this host |
 | oe brief | Builds the brief handed to an Owner or a Verifier, and records each Verifier start before its brief | A pending verify status on the SHA, for a Verifier |
 | oe claim | Creates the Issue's branch and writes a claim record | A branch on origin and the record store |
@@ -50,7 +50,7 @@ oe starts no agent, edits no code, and never merges a PR. Its only writes to a P
 | oe rereview | Asks bots to review the PR again | A PR comment |
 | oe verdict | Writes a Verifier's verdict and findings | A commit status on the SHA, and the record store |
 | oe records | Prints an Issue's records from its latest claim on, for an Owner | nothing |
-| oe forget | Drops an Epic's records once every child Issue is closed | The record store |
+| oe forget | Drops an Epic's records and saved facts once every child Issue is closed | The record store |
 
 The record store lays out its state as `oe-store.sh` defines.
 
@@ -61,6 +61,7 @@ The record store lays out its state as `oe-store.sh` defines.
 | `boards/<repo-key>/<epic>` | The Herdr pane of the Epic's board |
 | `waits/<repo-key>/<epic>` | The process of the Epic's running oe wait |
 | `notices/<repo-key>/<epic>` | Each item that needed the person at oe wait's latest read, with when the person was last told about it |
+| `facts/<repo-key>/<epic>` | The facts of the session's latest successful read of the Epic with its time, and the reason and time of a failed read since |
 
 `<repo-key>` is a hash of the lowercased repository name.
 
@@ -308,7 +309,7 @@ sequenceDiagram
 - A finding in a bot's review body, outside any thread, starts nothing
 - A bot that refuses the re-review on a rate limit leaves the repair unreviewed
 - A bot finding the Owner cannot reproduce still uses the bot's round and one of the 2 starts without a push
-- The board is only as fresh as its latest refresh
+- The board is only as fresh as the session's latest read, which it shows with its age
 - An agent runs with the session's identity, so it could record an answer through oe, and with it a decision the Verifier follows over the criteria
 
 ## Decisions
@@ -344,8 +345,8 @@ sequenceDiagram
 | Dropping records | oe forget, which the session runs when it ends with every Issue of its Epic done. It refuses while an Issue is open, and oe ready stays read-only |
 | Acceptance checks | Verification splits automated checks from manual ones, and no agent checks a box that needs a human, template boxes included |
 | The board in Herdr | Opt-in with git config `skills.herdr`, read only inside Herdr, so no other run calls herdr and no Herdr user gets a pane unasked |
-| Board refresh | Every 3 minutes, each refresh reading GitHub through oe ready |
-| Board lifetime | The board stops once the session holding the Epic's lock ends, and leaves its last view. A `--watch` that never finds a session holding the lock refreshes until interrupted. A later start reuses its pane when the pane runs the board or sits at its shell's prompt, and never sends input to a pane that runs anything else |
+| Board refresh | Every 3 minutes. While a session holds the Epic's lock, the board draws the facts that session's latest read saved, shows when they were read, marks them stale when older than 5 minutes, and keeps a failed read on the view until a later read succeeds. It reads GitHub itself only when no session holds the lock |
+| Board lifetime | The board stops once the session holding the Epic's lock ends, and leaves its last view. A `--watch` that finds no session holding the lock at a refresh draws once and exits. A later start reuses its pane when the pane runs the board or sits at its shell's prompt, and never sends input to a pane that runs anything else |
 | Notifications | oe wait calls the command in git config `skills.notify` with a one-line message and a link for each new item that needs the person: a question, a park, an Issue waiting for a person or for the merge, 3 failed reads in a row, and the session's end with its reason. It calls again every hour while the person has not acted. Herdr is one example setting, and no path is Herdr-only. With no command set, oe notifies nobody |
 | Answers | The person answers in the session's conversation or with a comment on the Issue. The session records an answer from its conversation through oe, so the next Owner reads it on the Issue |
 | Decisions section | An answer recorded through oe appends its decision to a decisions section of the Issue body. The Verifier reads it with the body, and it takes precedence over the criteria it contradicts |

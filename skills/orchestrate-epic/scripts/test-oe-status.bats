@@ -5,6 +5,8 @@
 # - testdata/fake-gh.sh stands in for gh and answers every read from that state; the gh wrapper logs every call.
 # - testdata/records.bash writes the host-local records under the test's own OE_STATE_DIR.
 # - Every test runs at 08:00 on the same day, in its own temporary directory.
+# - While a session holds the Epic's lock, oe status draws the facts that session saved with oe ready --save and reads no GitHub,
+#   so a test of that view calls session_reads after the session takes the lock.
 # shellcheck disable=SC2292 # bats fails a test on a mid-test `[[ ]]` only under bash 4.1+; `[ ]` works on every bash.
 
 setup() {
@@ -69,6 +71,38 @@ agent_running() {
   sleep 600 >/dev/null 2>&1 3>&- &
   sessions+=("$!")
   OE_SESSION_PID="$!" bash "${oe}" lock acquire o/r 1 >/dev/null
+}
+
+# Has the session that holds the lock read GitHub once, as its oe wait does, and forgets the calls that read made.
+session_reads() {
+  bash "${oe}" ready o/r 1 --save >/dev/null
+  : >"${calls}"
+}
+
+# Starts a session that is not this shell's child and holds the Epic's lock, and leaves its process ID in $session.
+# The arguments are a command prefix for oe lock acquire, such as env with variables.
+# teardown ends it through the file if the test stops early.
+detached_session() {
+  session="$(
+    sleep 600 >/dev/null 2>&1 3>&- &
+    echo "$!"
+  )"
+  echo "${session}" >"${tmp}/detached-session"
+  OE_SESSION_PID="${session}" "$@" bash "${oe}" lock acquire o/r 1 >/dev/null
+}
+
+# Replaces sleep with a script that runs the shell code $1 at the first sleep of --watch and $2 at the second, then returns at once.
+between_refreshes() {
+  {
+    echo '#!/usr/bin/env bash'
+    echo "n=\"\$(cat '${tmp}/sleeps' 2>/dev/null || echo 0)\""
+    echo "echo \$((n + 1)) >'${tmp}/sleeps'"
+    echo "case \"\$n\" in"
+    echo "0) $1 ;;"
+    echo "1) ${2:-:} ;;"
+    echo 'esac'
+  } >"${tmp}/bin/sleep"
+  chmod +x "${tmp}/bin/sleep"
 }
 
 # Prints the row of Issue $1 from the output, or nothing.
@@ -222,6 +256,7 @@ JSON
   # The Owner's attempt record is written before it starts, and it has pushed no PR yet.
   records 5 claim@07:00 attempt@07:01
   agent_running 5 owner
+  session_reads
 
   run --separate-stderr bash "${oe}" status o/r 1
 
@@ -243,6 +278,7 @@ JSON
 JSON
   records 5 claim@07:00 attempt@07:01
   agent_running 5 verifier
+  session_reads
 
   run --separate-stderr bash "${oe}" status o/r 1
 
@@ -374,7 +410,94 @@ JSON
   run ! grep -Eq -- '(^| )(-X|--method|POST)( |$)' "${calls}"
 }
 
-@test "--watch shows a state change on its next refresh" {
+@test "while a session holds the Epic's lock, the view shows the facts it saved and makes no gh call" {
+  three_issues
+  detached_session
+  session_reads
+
+  run --separate-stderr bash "${oe}" status o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ ! -s "${calls}" ]
+  [ "$(column_of 5 2)" = wait-merge ] || [ "$(column_of 5 2)" = start-owner ] || [ "$(column_of 5 2)" = parked ]
+  [ "$(column_of 6 2)" = wait-ci ]
+  [ "$(column_of 7 2)" = wait-dependencies ]
+}
+
+@test "the view shows when the facts were read, and marks them stale after facts_stale seconds" {
+  three_issues
+  detached_session
+  session_reads
+
+  OE_NOW=$((OE_NOW + 120)) run --separate-stderr bash "${oe}" status o/r 1
+  [ "${status}" -eq 0 ]
+  printf '%s\n' "${lines[@]}" | grep -qx 'Facts read 2m ago by the session\.'
+
+  OE_NOW=$((OE_NOW + 301)) run --separate-stderr bash "${oe}" status o/r 1
+  [ "${status}" -eq 0 ]
+  printf '%s\n' "${lines[@]}" | grep -qx 'Facts read 5m ago by the session (stale: older than 5m)\.'
+  [ ! -s "${calls}" ]
+}
+
+@test "with no session, the view reads GitHub and says so" {
+  three_issues
+
+  run --separate-stderr bash "${oe}" status o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ -s "${calls}" ]
+  printf '%s\n' "${lines[@]}" | grep -qx 'Read from GitHub just now\.'
+}
+
+@test "a session that saved no read since it took the lock shows no Issues and says so, without a gh call" {
+  three_issues
+  # A read saved by an earlier session is older than this session's lock.
+  bash "${oe}" ready o/r 1 --save >/dev/null
+  : >"${calls}"
+  OE_NOW=$((OE_NOW + 60)) detached_session
+
+  OE_NOW=$((OE_NOW + 120)) run --separate-stderr bash "${oe}" status o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ ! -s "${calls}" ]
+  printf '%s\n' "${lines[@]}" | grep -qx 'The session has saved no read of GitHub yet\.'
+  [ -z "$(row_of 5)" ]
+}
+
+@test "a failed read of the session stays on the view with the last facts until a read succeeds" {
+  three_issues
+  detached_session
+  session_reads
+
+  OE_NOW=$((OE_NOW + 180)) GH_FAIL=subIssues run --separate-stderr bash "${oe}" ready o/r 1 --save
+  [ "${status}" -eq 1 ]
+  : >"${calls}"
+
+  OE_NOW=$((OE_NOW + 240)) run --separate-stderr bash "${oe}" status o/r 1
+  [ "${status}" -eq 0 ]
+  [ ! -s "${calls}" ]
+  [ "$(column_of 6 2)" = wait-ci ]
+  printf '%s\n' "${lines[@]}" | grep -qx 'Facts read 4m ago by the session\.'
+  printf '%s\n' "${lines[@]}" | grep -q '^Read failed 1m ago: '
+
+  OE_NOW=$((OE_NOW + 300)) bash "${oe}" ready o/r 1 --save >/dev/null
+  OE_NOW=$((OE_NOW + 300)) run --separate-stderr bash "${oe}" status o/r 1
+  [ "${status}" -eq 0 ]
+  printf '%s\n' "${lines[@]}" | grep -qx 'Facts read 0s ago by the session\.'
+  run ! bash -c 'printf "%s\n" "$@" | grep -q "^Read failed"' _ "${lines[@]}"
+}
+
+@test "--watch with no session holding the Epic's lock draws once and exits 0" {
+  three_issues
+
+  OE_WAIT_INTERVAL=0 OE_STATUS_REFRESHES=5 run --separate-stderr bash "${oe}" status o/r 1 --watch
+
+  [ "${status}" -eq 0 ]
+  [ "$(printf '%s\n' "${lines[@]}" | grep -c '^ISSUE ')" -eq 1 ]
+  [ "$(grep -c 'epic=1' "${calls}")" -eq 1 ]
+}
+
+@test "--watch while a session holds the Epic's lock shows what the session saved next, without reading GitHub itself" {
   github <<'JSON'
 {
   "default_branch": {"checks": {"test": "success"}},
@@ -382,82 +505,66 @@ JSON
     "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "in_progress"}}]}]
 }
 JSON
-  github_at_second_read <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{"number": 5, "branch": true,
-    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}}]}]
-}
-JSON
   records 5 claim@07:00 attempt@07:01
+  detached_session
+  session_reads
+  # The session's oe wait reads again between the two refreshes, after the checks passed.
+  sed 's/in_progress/success/' "${OE_GITHUB}" >"${tmp}/github-passed.json"
+  between_refreshes "OE_GITHUB='${tmp}/github-passed.json' bash '${oe}' ready o/r 1 --save >/dev/null 2>&1; : >'${calls}'"
 
   OE_WAIT_INTERVAL=0 OE_STATUS_REFRESHES=2 run --separate-stderr bash "${oe}" status o/r 1 --watch
 
   [ "${status}" -eq 0 ]
+  [ ! -s "${calls}" ]
   steps="$(row_of 5 | while read -r _ step _; do echo "${step}"; done)"
   [ "${steps}" = $'wait-ci\nstart-verifier' ]
 }
 
-@test "--watch that saw a session hold the Epic's lock shows one more view after the session ends, then exits 0" {
+@test "--watch that saw a session hold the Epic's lock reads GitHub once after the session ends, draws it, and exits 0" {
   three_issues
-  # The session is not this shell's child, so it is reaped as soon as it ends and stops counting as running.
-  # teardown ends it through the file if the test stops early.
-  session="$(
-    sleep 600 >/dev/null 2>&1 3>&- &
-    echo "$!"
-  )"
-  echo "${session}" >"${tmp}/detached-session"
-  OE_SESSION_PID="${session}" bash "${oe}" lock acquire o/r 1 >/dev/null
-  # The session ends during the second refresh's Epic read.
-  cat >"${tmp}/bin/gh" <<EOF
-#!/usr/bin/env bash
-printf '%s\n' "\$*" >>"${calls}"
-[ "\$(grep -c 'epic=1' "${calls}")" -ne 2 ] || kill ${session}
-exec bash "${BATS_TEST_DIRNAME}/testdata/fake-gh.sh" "\$@"
-EOF
-  # Refresh 1 sees the session, refresh 2 reads while it ends, and refresh 3 finds it gone and is the last.
-  views_until_end=3
+  detached_session
+  session_reads
+  between_refreshes "kill ${session}"
 
   OE_WAIT_INTERVAL=0 OE_STATUS_REFRESHES=10 run --separate-stderr bash "${oe}" status o/r 1 --watch
 
   [ "${status}" -eq 0 ]
-  [ "$(printf '%s\n' "${lines[@]}" | grep -c '^ISSUE ')" -eq "${views_until_end}" ]
+  [ "$(printf '%s\n' "${lines[@]}" | grep -c '^ISSUE ')" -eq 2 ]
+  [ "$(grep -c 'epic=1' "${calls}")" -eq 1 ]
 }
 
-@test "--watch whose first read after its session ended fails retries, and exits 0 after it draws the last view" {
+@test "--watch whose read after its session ended fails keeps the failure under the last view, retries, and exits 0 after it draws" {
   three_issues
-  session="$(
-    sleep 600 >/dev/null 2>&1 3>&- &
-    echo "$!"
-  )"
-  echo "${session}" >"${tmp}/detached-session"
-  OE_SESSION_PID="${session}" bash "${oe}" lock acquire o/r 1 >/dev/null
-  # The session ends during the second refresh's Epic read, and the third refresh's Epic read fails.
-  cat >"${tmp}/bin/gh" <<EOF
+  detached_session
+  session_reads
+  cat >"${tmp}/bin/gh" <<GH
 #!/usr/bin/env bash
 printf '%s\n' "\$*" >>"${calls}"
-reads="\$(grep -c 'epic=1' "${calls}")"
-[ "\${reads}" -ne 2 ] || kill ${session}
-[ "\${reads}" -ne 3 ] || exit 1
+[ ! -e "${tmp}/gh-down" ] || exit 1
 exec bash "${BATS_TEST_DIRNAME}/testdata/fake-gh.sh" "\$@"
-EOF
-  # Refreshes 1 and 2 draw views, refresh 3 fails, and refresh 4 draws the last view.
-  views_until_end=3
+GH
+  between_refreshes "kill ${session}; touch '${tmp}/gh-down'" "rm -f '${tmp}/gh-down'"
 
   OE_WAIT_INTERVAL=0 OE_STATUS_REFRESHES=10 run --separate-stderr bash "${oe}" status o/r 1 --watch
 
   [ "${status}" -eq 0 ]
-  [ "$(printf '%s\n' "${lines[@]}" | grep -c '^ISSUE ')" -eq "${views_until_end}" ]
-  [ "$(grep -c 'epic=1' "${calls}")" -eq 4 ]
-}
-
-@test "--watch without a session holding the Epic's lock keeps refreshing" {
-  three_issues
-
-  OE_WAIT_INTERVAL=0 OE_STATUS_REFRESHES=3 run --separate-stderr bash "${oe}" status o/r 1 --watch
-
-  [ "${status}" -eq 0 ]
+  # The first view, the same view with the failure under it, and the last view.
   [ "$(printf '%s\n' "${lines[@]}" | grep -c '^ISSUE ')" -eq 3 ]
+  [ "$(printf '%s\n' "${lines[@]}" | grep -c '^oe status: the read failed')" -eq 1 ]
+  [[ "${stderr}" == *"oe status: the read failed"* ]]
+}
+
+@test "--watch under another TZ and locale shows the facts while the holder that took the lock under UTC and C runs, and reads once after it ends" {
+  three_issues
+  detached_session env -u LC_ALL -u LC_TIME TZ=UTC LANG=C
+  session_reads
+  between_refreshes "kill ${session}"
+
+  OE_WAIT_INTERVAL=0 OE_STATUS_REFRESHES=10 run --separate-stderr env TZ=Asia/Tokyo LC_ALL=ja_JP.UTF-8 bash "${oe}" status o/r 1 --watch
+
+  [ "${status}" -eq 0 ]
+  [ "$(printf '%s\n' "${lines[@]}" | grep -c '^ISSUE ')" -eq 2 ]
+  [ "$(grep -c 'epic=1' "${calls}")" -eq 1 ]
 }
 
 @test "the agent column names the role whose worktree exists while a running session holds the Epic's lock" {
@@ -474,6 +581,7 @@ EOF
   session="$!"
   sessions+=("${session}")
   OE_SESSION_PID="${session}" bash "${oe}" lock acquire o/r 1 >/dev/null
+  session_reads
 
   run --separate-stderr bash "${oe}" status o/r 1
 
@@ -494,41 +602,13 @@ EOF
   git -C "${tmp}/clone" -c user.name=test -c user.email=test@example.com commit -q --no-verify --allow-empty -m base
   git -C "${tmp}/clone" worktree add -q --detach "${tmp}/clone-oe/issue-5"
   cd "${tmp}/clone" || return 1
-  session="$(
-    sleep 600 >/dev/null 2>&1 3>&- &
-    echo "$!"
-  )"
-  echo "${session}" >"${tmp}/detached-session"
-  OE_SESSION_PID="${session}" env -u LC_ALL -u LC_TIME TZ=UTC LANG=C bash "${oe}" lock acquire o/r 1 >/dev/null
+  detached_session env -u LC_ALL -u LC_TIME TZ=UTC LANG=C
+  session_reads
 
   run --separate-stderr env TZ=Asia/Tokyo LC_ALL=ja_JP.UTF-8 bash "${oe}" status o/r 1
 
   [ "${status}" -eq 0 ]
   [ "$(column_of 5 7)" = verifier ]
-}
-
-@test "--watch under another TZ and locale keeps refreshing while the holder that took the lock under UTC and C runs, and stops after it ends" {
-  three_issues
-  session="$(
-    sleep 600 >/dev/null 2>&1 3>&- &
-    echo "$!"
-  )"
-  echo "${session}" >"${tmp}/detached-session"
-  OE_SESSION_PID="${session}" env -u LC_ALL -u LC_TIME TZ=UTC LANG=C bash "${oe}" lock acquire o/r 1 >/dev/null
-  # The session ends during the second refresh's Epic read.
-  cat >"${tmp}/bin/gh" <<EOF
-#!/usr/bin/env bash
-printf '%s\n' "\$*" >>"${calls}"
-[ "\$(grep -c 'epic=1' "${calls}")" -ne 2 ] || kill ${session}
-exec bash "${BATS_TEST_DIRNAME}/testdata/fake-gh.sh" "\$@"
-EOF
-  # Refresh 1 sees the session, refresh 2 reads while it ends, and refresh 3 finds it gone and is the last.
-  views_until_end=3
-
-  OE_WAIT_INTERVAL=0 OE_STATUS_REFRESHES=10 run --separate-stderr env TZ=Asia/Tokyo LC_ALL=ja_JP.UTF-8 bash "${oe}" status o/r 1 --watch
-
-  [ "${status}" -eq 0 ]
-  [ "$(printf '%s\n' "${lines[@]}" | grep -c '^ISSUE ')" -eq "${views_until_end}" ]
 }
 
 @test "under a failed check on the default branch, every Issue waits for it as in oe ready, without reading the Issues" {

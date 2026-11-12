@@ -436,6 +436,29 @@ JSON
   [ "$(records_of 9)" = '{"kind":"claim","at":"2027-01-15T07:20:00Z"}' ]
 }
 
+@test "forgetting an Epic drops the facts saved for it, and keeps them while a child Issue is open" {
+  github <<'JSON'
+{
+  "issues": [{"number": 5, "closed": true}, {"number": 6}]
+}
+JSON
+  mkdir -p "$(dirname "$(facts_record o/r 1)")"
+  echo '{"wrote":1,"at":1,"lines":[],"failure":null}' >"$(facts_record o/r 1)"
+
+  run bash "${oe}" forget o/r 1
+  [ "${status}" -eq 4 ]
+  [ -e "$(facts_record o/r 1)" ]
+
+  github <<'JSON'
+{
+  "issues": [{"number": 5, "closed": true}, {"number": 6, "closed": true}]
+}
+JSON
+  run bash "${oe}" forget o/r 1
+  [ "${status}" -eq 0 ]
+  [ ! -e "$(facts_record o/r 1)" ]
+}
+
 @test "forgetting an Epic with an open child Issue exits 4 and drops nothing" {
   github <<'JSON'
 {
