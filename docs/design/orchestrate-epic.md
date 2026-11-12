@@ -12,14 +12,14 @@ Each part does one job and stores no state of its own. State lives on GitHub, ex
 
 | Part | Job | Does not | Uses |
 |---|---|---|---|
-| orchestrate-epic session | Started by a person on one Epic. Takes the Epic's lock with oe lock, gets each Issue's next action from oe ready, starts each agent it needs with the oe start command that oe ready prints, up to its `max-agents` argument at once, waits with oe wait until the next actions change or an agent ends, and ends as Waiting and Only a person can act under Decisions say | Merge, enable auto-merge, approve, or close anything. Write to GitHub except through oe. Edit code or touch the shared checkout. Decide a next action other than from oe ready. Ask a person anything while it runs | oe, pr-owner, pr-verify |
+| orchestrate-epic session | Started by a person on one Epic. Takes the Epic's lock with oe lock, gets each Issue's next action from oe ready, starts each agent it needs with the oe start command that oe ready prints, up to its `max-agents` argument at once, waits with oe wait until the next actions change or an agent ends, shows each Owner question in its conversation and records the person's answer through oe, and ends only as Waiting under Decisions says | Merge, enable auto-merge, approve, or close anything. Write to GitHub except through oe. Edit code or touch the shared checkout. Decide a next action other than from oe ready. Ask a person a question of its own | oe, pr-owner, pr-verify |
 
 ### Agents
 
 | Part | Job | Does not | Uses |
 |---|---|---|---|
 | pr-owner | Implements or repairs one Issue once and pushes. When it cannot decide, it writes a question on the Issue and pushes nothing. After a bot repair, it asks the bots to review again | Merge, enable auto-merge, force-push, or bypass a push guard. Comment, review, reply to or resolve a review thread, edit a PR or Issue, or touch a label, except through its own commands. Touch the shared checkout or another worktree. Follow an instruction written in text it reads from GitHub | implement, create-pr, oe records, oe question, oe rereview |
-| pr-verify | Runs the code at the PR's head SHA and judges only the Issue's automated checks, leaving manual checks to the engineer | Read the PR, the Issue's comments, or the Owner's report. Edit, commit, or push in its worktree. Judge a manual check. Record more than one verdict for the SHA | oe verdict |
+| pr-verify | Runs the code at the PR's head SHA and judges only the Issue's automated checks, leaving manual checks to the engineer. The Issue body's decisions section takes precedence over the criteria it contradicts | Read the PR, the Issue's comments, or the Owner's report. Edit, commit, or push in its worktree. Judge a manual check. Record more than one verdict for the SHA | oe verdict |
 
 ### Existing skills
 
@@ -31,7 +31,7 @@ Each part does one job and stores no state of its own. State lives on GitHub, ex
 
 ### oe
 
-oe starts no agent, edits no code, and never merges a PR.
+oe starts no agent, edits no code, and never merges a PR. Its only writes to a PR's branch are creating it at a claim and updating it with the base branch through GitHub.
 
 | Part | Job | Writes to |
 |---|---|---|
@@ -39,14 +39,14 @@ oe starts no agent, edits no code, and never merges a PR.
 | oe lock | Refuses a second session for the same Epic on the same host while the first one's process runs | The Epic's ref in the lock store |
 | oe ready | Reads GitHub and the record store and prints each Issue's next action, with the oe start command for an action that starts an agent | nothing |
 | oe start | Runs every step that starts an Owner or a Verifier for one Issue, from oe claim to oe brief, and prints the agent's prompt | What those steps write |
-| oe wait | Blocks until oe ready's next actions change, reading GitHub as Polling and Rate limit under Decisions say | The record store |
-| oe status | Shows each Issue's step, PR, CI result, verdict and failure reason, attempts, running agent, Wait state, and time in step. `--watch` refreshes it until the session holding the Epic's lock ends | A Herdr notification |
+| oe wait | Blocks until oe ready's next actions change, reading GitHub as Polling and Rate limit under Decisions say, and tells the person as Notifications under Decisions says | The record store, and the configured notification command |
+| oe status | Shows each Issue's step, PR, CI result, verdict and failure reason, attempts, running agent, Wait state, and time in step. `--watch` refreshes it until the session holding the Epic's lock ends | nothing |
 | oe board | Inside Herdr with git config `skills.herdr` true, opens a pane that runs `oe status --watch`, or reuses the Epic's pane from an earlier start | A Herdr pane, and the pane's record on this host |
 | oe brief | Builds the brief handed to an Owner or a Verifier, and records each Verifier start before its brief | A pending verify status on the SHA, for a Verifier |
 | oe claim | Creates the Issue's branch and writes a claim record | A branch on origin and the record store |
 | oe worktree | Creates an agent's worktree outside the shared checkout, on the Issue branch for an Owner and detached at its head for a Verifier, and removes it after the agent ends | A local worktree |
-| oe attempt | Writes an attempt record before an Owner starts, with the bots whose rounds it uses, and refuses a 4th | The record store |
-| oe question | Writes an Owner's question in a fixed format | An Issue comment |
+| oe attempt | Writes an attempt record for each Owner start before it runs, with the bots whose rounds it uses, and refuses a start once 3 attempts are used, counting as Attempts under Decisions says | The record store |
+| oe question | Writes an Owner's question in a fixed format, and records the answer the person gives in the session's conversation | An Issue comment for a question or an answer, and an answer's decision in the Issue body's decisions section |
 | oe rereview | Asks bots to review the PR again | A PR comment |
 | oe verdict | Writes a Verifier's verdict and findings | A commit status on the SHA, and the record store |
 | oe records | Prints an Issue's records from its latest claim on, for an Owner | nothing |
@@ -65,10 +65,12 @@ The record store lays out its state as `oe-store.sh` defines.
 
 ### Engineer
 
-- Answers an Owner's question with a comment on the Issue
+- Is told through the configured notification command when an Issue needs them
+- Answers an Owner's question in the session's conversation or with a comment on the Issue
 - Reviews the PR's code and submits Changes requested when something must change
 - Resolves a bot's review thread to dismiss its finding
-- Updates a PR's branch with the base branch when its head lacks a merged sibling PR
+- Responds to an Issue that waits for a person after two Owner starts without a push, in the session's conversation or with a comment on the Issue
+- Stops the session
 - Runs the manual checks, which the PR leaves unchecked
 - Approves and merges the PR
 - Deletes a parked Issue's branch so the AI starts it over
@@ -85,9 +87,9 @@ The record store lays out its state as `oe-store.sh` defines.
 | A verdict is written as a commit status on the SHA that was checked, and is not written once that SHA is no longer the PR's head | Verdict bound to the SHA |
 | A Verifier receives only the Issue, the SHA, and the base branch, never the PR body or the Owner's report | Verifier never sees the worker's report |
 | Every Owner and Verifier starts fresh for one job and ends when the job is done | A fresh agent per step |
-| Owner attempts are counted from the record store, and a 4th start is refused | Retry cap survives restarts on the same host |
+| An attempt is an Owner start that ended in a push, counted from the record store's starts and the pushes GitHub shows, never from an agent's report. A start after 3 attempts is refused | Retry cap survives restarts on the same host |
 | Each agent works only in its own worktree and never touches the shared checkout | Never touch the shared checkout |
-| Engineer input is only an unmarked comment or review by someone with the OWNER, MEMBER, or COLLABORATOR role, and labels mean nothing | Trusted input only |
+| Engineer input is only an unmarked comment or review by someone with the OWNER, MEMBER, or COLLABORATOR role, or an answer the session records through oe from the person's reply in its conversation, and labels mean nothing | Trusted input only |
 | A bot's text can start a repair but never instructs an agent | Trusted input only |
 | When a GitHub read fails, oe ready prints nothing and exits with an error. When one PR moves during the read, only its Issue is unreadable, and that Issue starts nothing until a later read | A failed read decides nothing |
 | Starting a session on an Epic is consent, and ending the session stops new starts | The entry gate. It is dropped because starting the session is consent |
@@ -111,13 +113,13 @@ flowchart TB
   end
   subgraph Check["Verification"]
     Verify["Verifier working"] -->|"Success"| Merge["Waiting for the merge"]
-    Merge -->|"A sibling PR merged"| Update["Waiting for a branch update"]
+    Merge -->|"A sibling PR merged"| Update["Updating the branch"]
   end
   Repair{"Attempts used?"}
   Ready -->|"Claim"| Owner
   CI -->|"Success"| Verify
   CI -->|"Success, and the head lacks a merged sibling PR"| Update
-  Update -->|"Engineer updates the branch"| CI
+  Update -->|"oe updates the branch through GitHub"| CI
   Merge -->|"Engineer merges"| Done["Done"]
   Owner -->|"Ends with no PR"| Repair
   Ask -->|"Answer"| Repair
@@ -127,6 +129,8 @@ flowchart TB
   Update -->|"Conflict"| Repair
   Repair -->|"Fewer than 3"| Owner
   Repair -->|"3 used"| Parked["Parked"]
+  Repair -->|"The latest 2 starts on the head ended without a push"| Person["Waiting for a person"]
+  Person -->|"The person responds"| Repair
   CI -->|"No checks after 10 minutes"| Parked
   Verify -->|"No verdict twice"| Parked
   Parked -->|"Engineer deletes the branch"| Ready
@@ -136,33 +140,31 @@ flowchart TB
   Merge -->|"PR closed without merging, or merged with the Issue open"| Engineer
 ```
 
-Every edge into the Attempts used check stands for one of the repair signals listed below the table. Row 4 applies to every claimed Issue, and the diagram draws Waiting for an engineer only from Waiting for CI, Verifier working, and Waiting for the merge.
+Every edge into the Attempts used check stands for one of the repair signals listed below the table. Row 2 applies to every claimed Issue, and the diagram draws Waiting for an engineer only from Waiting for CI, Verifier working, and Waiting for the merge.
 
-For each Issue, oe ready reads this table from the top and outputs the action of the first row that matches. Rows 1 and 2 are gates on the default branch and apply to every Issue. Claim and attempt records come from the record store. An Issue whose PR moved during the read matches no row: it starts nothing, and the next read classifies it.
+For each Issue, oe ready reads this table from the top and outputs the action of the first row that matches. It never reads the default branch's checks, so a failure on the default branch holds no Issue, and a PR failure the base causes is a failed check like any other. Claim and attempt records come from the record store. An Issue whose PR moved during the read matches no row: it starts nothing, and the next read classifies it.
 
 | Row | Phase | State | Next action |
 |---|---|---|---|
-| 1 | Gate | The default branch's head SHA still has no checks after 10 minutes | Start nothing in this repository |
-| 2 | Gate | A check on the default branch's head SHA is pending or failed, or the SHA has had no checks for less than 10 minutes | Start nothing and wait |
-| 3 | Before claim | The Issue is closed | Mark it done |
-| 4 | Before claim | A PR merged after the latest claim record, or the branch exists and its PR was closed without merging | Wait for an engineer |
-| 5 | Before claim | No branch exists, and a dependency is not completed | Wait for the dependencies |
-| 6 | Before claim | No branch exists, and every dependency is completed | Claim and start an Owner |
-| 7 | Work | No trusted user has commented on the Issue since its latest question | Wait for the answer |
-| 8 | Work | Any repair signal below is present | Start an Owner, or park the Issue when it already has 3 attempts |
-| 9 | Verification | A check on the PR's head SHA is pending, or the SHA has had no checks for less than 10 minutes | Wait for CI |
-| 10 | Verification | The PR's head SHA still has no checks after 10 minutes | Park the Issue |
-| 11 | Verification | The PR's head SHA does not contain the commit that merged a sibling PR into the base branch | Wait for an engineer to update the branch with the base branch |
-| 12 | Verification | The PR's head SHA has neither a success nor a failure verdict | Start a Verifier, or park the Issue when the SHA already has 2 pending statuses |
-| 13 | Verification | The PR's head SHA has a success verdict | Wait for an engineer to merge |
+| 1 | Before claim | The Issue is closed | Mark it done |
+| 2 | Before claim | A PR merged after the latest claim record, or the branch exists and its PR was closed without merging | Wait for an engineer |
+| 3 | Before claim | No branch exists, and a dependency is not completed | Wait for the dependencies |
+| 4 | Before claim | No branch exists, and every dependency is completed | Claim and start an Owner |
+| 5 | Work | No answer has been given since the Issue's latest question | Wait for the answer |
+| 6 | Work | Any repair signal below is present | Park the Issue when it already has 3 attempts. Otherwise wait for a person when the latest 2 Owner starts on the PR's head, or with no PR, ended without a push and no question or input from a person came after them. Otherwise start an Owner |
+| 7 | Verification | A check on the PR's head SHA is pending, or the SHA has had no checks for less than 10 minutes | Wait for CI |
+| 8 | Verification | The PR's head SHA still has no checks after 10 minutes | Park the Issue |
+| 9 | Verification | The PR's head SHA does not contain the commit that merged a sibling PR into the base branch | Update the branch with the base branch through GitHub, starting no agent and spending no attempt |
+| 10 | Verification | The PR's head SHA has neither a success nor a failure verdict | Start a Verifier, or park the Issue when the SHA already has 2 pending statuses |
+| 11 | Verification | The PR's head SHA has a success verdict | Wait for an engineer to merge |
 
 - Repair signals
   - No PR exists yet
   - The PR conflicts with the base branch
   - A check on the PR's head SHA failed
   - The verdict on the PR's head SHA is a failure
-  - Since the latest attempt record, a trusted user wrote one of these
-    - An answer to the latest question
+  - Since the latest attempt record, one of these was given
+    - An answer to the latest question, by a trusted user's comment or recorded through oe
     - A Changes requested review
     - A review-thread comment
   - A bot finding written since the latest attempt record
@@ -174,7 +176,7 @@ For each Issue, oe ready reads this table from the top and outputs the action of
   - After its push, the Owner asks those bots to review again with oe rereview
     - oe ready waits for no re-review
   - A bot's findings after its round go to the engineer
-  - A bot repair counts toward the cap of 3 attempts
+  - A bot repair that ends in a push counts toward the cap of 3 attempts
 - Counting
   - Only records after the latest claim record count, and every record counts when there is no claim record
   - The PR means the latest PR opened from the branch after the latest claim record
@@ -278,14 +280,14 @@ sequenceDiagram
 
 | Case | What happens |
 |---|---|
-| Lost agent | The Owner ends without a PR, or the session dies. GitHub has no record of completion, so the next oe ready starts the next attempt on the same branch |
+| Lost agent | The Owner ends without a PR, or the session dies. GitHub has no record of completion, so the next oe ready starts an Owner again on the same branch. A start that pushed nothing is no attempt, and a second such start in a row makes the Issue wait for a person |
 | Failed verification | The Verifier writes a failure verdict and stores its findings. An Owner reads the findings, repairs, and pushes. The new SHA has no verdict, so CI and verification run again |
 | Manual checks | An Issue with only manual checks left gets a success verdict and waits for the merge |
 | Failed CI | An Owner fixes the failed check on the same branch and pushes |
-| Sibling merged | Issues A and B both wait for the merge, and the engineer merges A. At the next read, B's head lacks A's squash commit, so B waits for the engineer to update its branch. CI and a Verifier run again on the new head, and B waits for the merge again once that head has a success verdict |
+| Sibling merged | Issues A and B both wait for the merge, and the engineer merges A. At the next read, B's head lacks A's squash commit, so oe updates B's branch with the base branch through GitHub. CI and a Verifier run again on the new head, and B waits for the merge again once that head has a success verdict. When the update conflicts, an Owner resolves the conflict as a repair |
 | Bot finding | CodeRabbit reports a Major finding. An Owner checks it in the code, repairs, pushes, and asks CodeRabbit to review again. A Major finding in that re-review goes to the engineer. A Minor finding starts nothing |
 | Reached cap | When a repair signal remains after 3 attempts, the Issue is parked and the Issues that depend on it stop too. The engineer either finishes and merges it by hand, or deletes the branch so the AI starts over |
-| Red default branch | While a check on the default branch fails, no claim, Owner, or Verifier starts, so no attempt is spent. The reason names the child Issues' PRs merged since the last passing head, so the engineer sees when the Epic broke its own base. The next oe ready after the check passes resumes |
+| Owner question | An Owner writes a question and pushes nothing, so no attempt is spent. oe wait tells the person through the configured command. The person picks an option in the session's conversation, and the session records the answer through oe, which appends its decision to the Issue body's decisions section. The next Owner reads the answer, and the Verifier reads the decision with the body |
 
 ## Accepted Risks
 
@@ -304,8 +306,9 @@ sequenceDiagram
 - A first line whose title happens to hold a level word starts a repair
 - A finding in a bot's review body, outside any thread, starts nothing
 - A bot that refuses the re-review on a rate limit leaves the repair unreviewed
-- A bot finding the Owner cannot reproduce still spends an attempt
+- A bot finding the Owner cannot reproduce still uses the bot's round and one of the 2 starts without a push
 - The board is only as fresh as its latest refresh
+- An agent runs with the session's identity, so it could record an answer through oe, and with it a decision the Verifier follows over the criteria
 
 ## Decisions
 
@@ -322,14 +325,15 @@ sequenceDiagram
 | Other automations on its PRs | pr-owner writes the line `<!-- automation-owner: orchestrate-epic -->` near the end of each PR body, the owner line that babysit's `pr-state.sh` reads, so babysit neither pushes nor replies there. Its replies would otherwise read as engineer input. oe never reads the line, so deleting it while oe still works on the Issue lets two writers act |
 | Re-review request | One PR comment of `<!-- oe:rereview -->` and `@coderabbitai review` or `@codex review`. The marker keeps it from counting as engineer input |
 | Bot findings after approval | Start nothing, so the AI never pushes onto a head being merged |
-| Restarting an Owner after an answer | Counts toward the cap of 3 attempts |
+| Attempts | An attempt is an Owner start that ended in a push, read from GitHub and not from an agent's report. A start without a push spends none, so an outage, a start that finds nothing to change, or a question never parks an Issue |
+| Starts without a push | Two Owner starts in a row on the same head that ended without a push, while a repair signal is present, make the Issue wait for a person, with the reason shown. A start that ended in a question, or any input from the person after the latest start, ends that run of two |
+| Questions and answers in the cap | Neither reduces the cap. A start after an answer counts only when it ends in a push |
 | A Verifier ends without a verdict | It is restarted once on the same SHA, and the Issue is parked when the second start also gives no verdict |
-| A head that lacks a sibling PR | Waits for the engineer to update the branch, because its verdict describes a base that no longer exists. oe writes nothing to the branch, and no agent starts, so an Epic with many siblings does not spend its attempts and get parked. A head that conflicts with the base goes to an Owner as a repair at row 8 instead |
-| Reason for a red base | Names the Epic's PRs merged since the newest commit whose checks all passed, within the last 20 commits |
-| Waiting | The session waits in oe wait until oe ready's next actions change or an agent it started ends. It ends once no agent runs and the next actions have not changed for 4 hours |
-| Only a person can act | When no agent runs and every Issue is done, parked, or waits for a branch update, a merge, an answer, its dependencies, or an engineer, the session ends at once instead of waiting, because only a person moves those Issues and a rerun resumes from GitHub. An Issue that waits for CI or can be claimed, repaired, or verified keeps the session running |
+| A head that lacks a sibling PR | oe updates the branch with the base branch through GitHub, because its verdict describes a base that no longer exists. No agent starts and no attempt is spent, so an Epic with many siblings does not wait on a person after each merge. The new head is checked and verified like any new head. When the update fails on a conflict, an Owner resolves it as a repair at row 6 |
+| The default branch's checks | oe ready does not read them. A check run by changed paths shows only what the head commit triggered, so a gate on it missed a broken base and held Issues for checks no child PR runs |
+| Waiting | The session waits in oe wait until oe ready's next actions change or an agent it started ends. It ends only when the Epic is done or a person stops it, never after an idle time, failed reads, or every remaining Issue waiting on a person, so it goes on by itself after the person answers or merges |
 | Agents running at once | 3 Owners and Verifiers combined per session by default, set by the skill's `max-agents` argument |
-| Harnesses | The skill's Harnesses table maps the Executor contract of `development-pipeline.md` onto each harness. Agents start with no view of any other session |
+| Harnesses | The skill's Harnesses table maps the Executor contract of `development-pipeline.md` onto each harness. Agents start with no view of any other session. The target is a harness that runs oe wait in the background, so idle waiting spends no tokens; other harnesses are outside the target |
 | Agent mode | The agents declare `mode: subagent`, because OpenCode V2 refuses to start an agent without it as a subagent. APM drops the key for Codex |
 | Implicit invocation | Codex ignores `disable-model-invocation`, so pr-owner and pr-verify carry `agents/openai.yaml` with `allow_implicit_invocation: false`, because only the orchestrate-epic session may start them |
 | Counting Verifier starts | oe brief writes the pending verify status that oe ready counts, before it prints a Verifier's brief, so no Verifier starts uncounted |
@@ -341,9 +345,11 @@ sequenceDiagram
 | The board in Herdr | Opt-in with git config `skills.herdr`, read only inside Herdr, so no other run calls herdr and no Herdr user gets a pane unasked |
 | Board refresh | Every 3 minutes, each refresh reading GitHub through oe ready |
 | Board lifetime | The board stops once the session holding the Epic's lock ends, and leaves its last view. A `--watch` that never finds a session holding the lock refreshes until interrupted. A later start reuses its pane when the pane runs the board or sits at its shell's prompt, and never sends input to a pane that runs anything else |
-| Notifications | Each new Issue that needs the owner, such as a question or a park, raises one Herdr notification, inside Herdr with git config `skills.herdr` true |
+| Notifications | oe calls one command set in git config, with a one-line message and a link, for a question, a park, an Issue waiting for a person or a merge, failed reads of GitHub that keep repeating, and the session's end with its reason. It calls again while the person has not acted. Herdr is one example setting, and no path is Herdr-only. With no command set, oe calls nothing and reports no error |
+| Answers | The person answers in the session's conversation or with a comment on the Issue. The session shows each question without holding the other Issues, and records an answer from its conversation through oe, so the next Owner reads it on the Issue |
+| Decisions section | An answer recorded through oe appends its decision to a decisions section of the Issue body, which only oe writes. The Verifier reads it with the body, and it takes precedence over the criteria it contradicts, whose text stays unrewritten. An answer given as a comment on the Issue is not copied there |
 | Starting agents | Through oe start, which oe ready prints for each line that starts an agent, because a session that lost the skill to a compaction rebuilt the steps from memory and passed the Epic number as the Issue |
 | Waits per Epic | One on each host. A new oe wait stops the earlier one, which exits silently, because a session rebuilding its loop after a compaction started waits without stopping old ones, and each extra wait woke it again |
 | Polling | One light read every 2 minutes. Every child Issue is read only on a change to it, its PR, or its checks, on a merge of a sibling PR, or at a deadline such as a head with no checks for 10 minutes |
 | Open PRs | oe ready reads only the PRs of the child Issues' branches |
-| Rate limit | oe wait waits until the reset time. Any other failure still ends it |
+| Rate limit | oe wait waits until the reset time. Any other failed read is tried again at the next poll, and the wait goes on |

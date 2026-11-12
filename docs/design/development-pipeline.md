@@ -67,7 +67,7 @@ flowchart TB
 | Wait state | The action a person must take on a Ticket, one of the five below. Derived from the next action `oe ready` prints, and for `dependency` from the dependency's state |
 | Holder | Who or what has the Ticket now, derived from the claim and attempt records or from the Wait state. An Owner, a Verifier, or a person |
 | Board | The one view that shows every Ticket's Holder and Wait state, each repository whose default branch gate holds with its reason, whether a Coordinator holds the Epic's lock, and what happened to one Ticket. A healthy state takes no space |
-| Mergeable | A pull request whose head has a success verdict and no repair signal, as `orchestrate-epic.md` row 13 defines, with the Ticket's manual checks listed in its body for the merger |
+| Mergeable | A pull request whose head has a success verdict and no repair signal, as `orchestrate-epic.md` row 11 defines, with the Ticket's manual checks listed in its body for the merger |
 | Attention | The pipeline's measure. Messages and answers people wrote for a pull request, from Session logs and GitHub comments, per mergeable pull request. Read with the rate of reverts and of changes requested after review |
 
 | Wait state | `oe ready` action | Person's action |
