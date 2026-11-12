@@ -17,7 +17,8 @@
 # - OE_NOW sets the current time in epoch seconds, as in oe ready.
 # - OE_WAIT_INTERVAL sets the seconds between two polls, wait_interval by default.
 #
-# The first oe ready run is the baseline, and every later run is compared with it.
+# A failed oe ready run ends nothing: the next run comes one poll interval later.
+# The first oe ready run that succeeds is the baseline, and every later run is compared with it.
 # A baseline that already holds an Issue to start ends the wait at once while fewer than --max-agents agents run,
 # because no later run would show it as a change.
 # Only each line's Issue number and action are compared, because a reason carries the seconds since a push,
@@ -31,8 +32,8 @@
 #
 # | Code | Meaning | Output |
 # |---|---|---|
-# | 0 | An Issue's next action changed, an Issue appeared or left, or the first run holds an Issue to start | The new output |
-# | 1 | A GitHub read failed | Nothing |
+# | 0 | An Issue's next action changed, an Issue appeared or left, or the baseline holds an Issue to start | The new output |
+# | 1 | Every GitHub read failed until the timeout | Nothing |
 # | 2 | The arguments are invalid | Nothing |
 # | 5 | The timeout passed with every next action unchanged | The latest output |
 # | 137 | A later oe wait for the same Epic, or oe lock release, killed this one | Nothing |
@@ -113,10 +114,12 @@ emit() {
   [[ -z "${current}" ]] || printf '%s\n' "${current}"
 }
 
-# Runs oe ready into $current, and ends the wait when oe ready failed.
+# Runs oe ready into $current, and fails leaving $current as it was when oe ready failed.
 # oe ready's own stderr names the failed read.
 poll() {
-  current="$(bash "${dir}/oe-ready.sh" "${repo}" "${epic}" ${running[@]+"${running[@]}"})" || exit 1
+  local out
+  out="$(bash "${dir}/oe-ready.sh" "${repo}" "${epic}" ${running[@]+"${running[@]}"})" || return 1
+  current="${out}"
 }
 
 # Prints the Issue number and action of every line of $1, the part of oe ready's output a change is judged on.
@@ -130,17 +133,20 @@ startable() {
 }
 
 current=""
-poll
+deadline=$(($(date -u +%s) + timeout))
+until poll; do
+  (($(date -u +%s) < deadline)) || exit 1
+  sleep "${interval}"
+done
 baseline="$(actions "${current}")"
 if startable; then
   emit
   exit 0
 fi
 
-deadline=$(($(date -u +%s) + timeout))
 while (($(date -u +%s) < deadline)); do
   sleep "${interval}"
-  poll
+  poll || continue
   if [[ "$(actions "${current}")" != "${baseline}" ]]; then
     emit
     exit 0
