@@ -136,13 +136,16 @@ render() {
     done) done_n=$((done_n + 1)) ;;
     wait-answer | parked | wait-engineer | wait-update | wait-merge)
       owner_n=$((owner_n + 1))
+      # An Issue that waits after Owner starts without a push resumes only on a comment on the Issue.
       needs+="$(jq -r --arg repo "${repo}" '
-        {"wait-answer": "Answer the Owner'\''s question in the session'\''s conversation or with a comment on the Issue",
-          "parked": "Fix it by hand, or delete its branch so the AI starts over",
-          "wait-engineer": "Close the Issue, reopen the PR, or delete its branch so the AI starts over",
-          "wait-update": "Update the PR'\''s branch with its base branch",
-          "wait-merge": "Review the PR, run its manual checks, and merge it"}[.action] as $todo
-        | (if .action != "wait-answer" and .pr then "pull/\(.pr)" else "issues/\(.number)" end) as $path
+        (.action == "wait-engineer" and (.reason | test("ended without a push"))) as $stalled
+        | if $stalled then "Comment on the Issue to start another Owner, once whatever kept it from pushing is fixed"
+          else {"wait-answer": "Answer the Owner'\''s question in the session'\''s conversation or with a comment on the Issue",
+            "parked": "Fix it by hand, or delete its branch so the AI starts over",
+            "wait-engineer": "Close the Issue, reopen the PR, or delete its branch so the AI starts over",
+            "wait-update": "Update the PR'\''s branch with its base branch",
+            "wait-merge": "Review the PR, run its manual checks, and merge it"}[.action] end as $todo
+        | (if .action != "wait-answer" and ($stalled | not) and .pr then "pull/\(.pr)" else "issues/\(.number)" end) as $path
         | "- #\(.number) \($todo)\n  https://github.com/\($repo)/\($path)\n  why: \(.reason)"' \
         <<<"${line}")"$'\n' || return 1
       ;;
