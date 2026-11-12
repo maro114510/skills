@@ -55,6 +55,6 @@ else
 fi
 
 printf '%s\n%s\n' "${snap}" "${ledger}" |
-  jq -s --arg now "$(babysit_now)" --arg mode "${mode}" -f "${script_dir}/evaluate.jq" |
+  jq -s --arg now "$(babysit_now)" --arg mode "${mode}" --arg bot "$(babysit_bot)" -f "${script_dir}/evaluate.jq" |
   jq '{status, event, blockers, pending, report}' ||
   usage "Snapshot is not a normalized pr-state snapshot"
