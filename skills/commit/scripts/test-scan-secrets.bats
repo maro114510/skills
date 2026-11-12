@@ -100,3 +100,53 @@ has_line() {
     return 1
   fi
 }
+
+@test "a staged path holding a space is excluded with its whole path" {
+  fine_grained='A1b2C3d4E5f6G7h8I9j0Kl'
+  mkdir -p 'sub dir'
+  printf 'token: github_pat_%s\n' "${fine_grained}" >'sub dir/my config.yml'
+  git add 'sub dir/my config.yml'
+
+  scan
+
+  [ "${status}" -eq 10 ]
+  has_line "excluded: sub dir/my config.yml:1: token"
+}
+
+@test "a staged private key header is excluded" {
+  printf -- '-----BEGIN %s PRIVATE KEY-----\n' 'RSA' >key.txt
+  git add key.txt
+
+  scan
+
+  [ "${status}" -eq 10 ]
+  has_line "excluded: key.txt:1: private key"
+}
+
+@test "a run from a subdirectory screens an untracked file at the repository root" {
+  suffix="$(printf 'B%.0s' 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16)"
+  printf 'aws_access_key_id = AKIA%s\n' "${suffix}" >notes.txt
+  mkdir -p sub
+  cd sub || return 1
+
+  scan
+
+  [ "${status}" -eq 10 ]
+  has_line "excluded: notes.txt:1: token"
+}
+
+@test "a repository without a commit is screened" {
+  fresh="${BATS_TEST_TMPDIR}/fresh"
+  git init -q -b main "${fresh}"
+  cd "${fresh}" || return 1
+  git config user.name t
+  git config user.email t@t
+  fine_grained='A1b2C3d4E5f6G7h8I9j0Kl'
+  printf 'token: github_pat_%s\n' "${fine_grained}" >config.yml
+  git add config.yml
+
+  scan
+
+  [ "${status}" -eq 10 ]
+  has_line "excluded: config.yml:1: token"
+}

@@ -2,7 +2,7 @@
 # Screens pending changes for secrets before a commit, reading the same pattern list as babysit's gate.
 # Usage: scan-secrets.sh
 # Run from inside the repository. Covers staged, unstaged, and untracked changes, so a secret never ends up in
-# a commit however it got into the working tree.
+# a commit however it got into the working tree. Every reported path is relative to the repository root.
 #
 # Prints one `excluded: <path>: <why>` line per match, with a line number when the match is in content and
 # never the matched value. The matches are a best-effort heuristic; the caller decides what to do.
@@ -26,6 +26,10 @@ die() {
   printf 'scan-secrets: %s\n' "$1" >&2
   exit 2
 }
+
+# Report from the repository root, so a run from a subdirectory screens the whole tree.
+top="$(git rev-parse --show-toplevel 2>/dev/null)" || die "not inside a repository"
+cd "${top}" || die "could not enter ${top}"
 
 patterns_file="${script_dir}/secret-patterns.sh"
 
@@ -113,14 +117,44 @@ git -c core.quotePath=false diff --cached "${diff_flags[@]}" "${base_ref}" -- >"
 git -c core.quotePath=false diff "${diff_flags[@]}" -- >"${work}/unstaged" </dev/null ||
   die "could not read the unstaged change"
 
-# Prints `path<TAB>line<TAB>text` for every added line of the diff in $1.
+# Prints one path, one line number, and one line of content, each on its own line, for every added line of
+# the diff in $1. A quoted path is unquoted, because one holding a quote or a backslash is C-quoted; an
+# unquoted one drops the TAB git appends when the path holds a space.
 extract_added() {
-  awk -v out="$2" '
+  awk '
+    function unquote(s,    out, i, c, esc) {
+      sub(/^"/, "", s)
+      sub(/"$/, "", s)
+      out = ""
+      i = 1
+      while (i <= length(s)) {
+        c = substr(s, i, 1)
+        if (c != "\\") {
+          out = out c
+          i++
+          continue
+        }
+        esc = substr(s, i + 1, 1)
+        if (esc == "\"") out = out "\""
+        else if (esc == "\\") out = out "\\"
+        else if (esc == "t") out = out "\t"
+        else if (esc == "n") out = out "\n"
+        else if (esc == "r") out = out "\r"
+        else out = out esc
+        i += 2
+      }
+      return out
+    }
     /^diff --git / { path = ""; next }
     /^\+\+\+ / {
-      path = substr($0, 5)
-      sub(/^b\//, "", path)
-      if (path == "/dev/null") path = ""
+      new = substr($0, 5)
+      if (substr(new, 1, 1) == "\"") new = unquote(new)
+      else sub(/\t$/, "", new)
+      if (new == "/dev/null") path = ""
+      else {
+        sub(/^b\//, "", new)
+        path = new
+      }
       next
     }
     /^@@ / {
@@ -132,35 +166,43 @@ extract_added() {
       next
     }
     /^\+/ {
-      if (path != "") printf "%s\t%s\t%s\n", path, line, substr($0, 2) >> out
+      if (path != "") {
+        print path
+        print line
+        print substr($0, 2)
+      }
       line++
       next
     }
-  ' "$1" || die "could not read the added lines"
+  ' "$1" >>"$2" || die "could not read the added lines"
 }
 
 : >"${work}/added"
 extract_added "${work}/staged" "${work}/added"
 extract_added "${work}/unstaged" "${work}/added"
-while IFS=$'\t' read -r path lineno text; do
-  [[ -n "${path}" ]] || continue
+while IFS= read -r path; do
+  IFS= read -r lineno || break
+  IFS= read -r text || break
   is_patterns_file "${path}" && continue
   check_line "${path}" "${lineno}" "${text}"
 done <"${work}/added"
 
-# An untracked file holds only new lines, so its whole content is scanned.
-git ls-files --others --exclude-standard -z >"${work}/untracked-list" </dev/null ||
-  die "could not list the untracked files"
-# shellcheck disable=SC2094 # The pattern list is skipped above, so no read path can be the hits file.
-while IFS= read -r -d '' path; do
+# An untracked file holds only new lines, so its whole content is scanned. One grep pass first skips a clean
+# file quickly and a binary one entirely.
+# shellcheck disable=SC2094 # The pattern list and the hits file are never read here.
+while IFS= read -r path; do
   [[ -f "${path}" ]] || continue
   is_patterns_file "${path}" && continue
+  if ! grep -qIiE -e "${RE_KEYHDR}" -e "${RE_TOKEN}" -- "${path}" &&
+    ! grep -qiiE -e "${RE_ASSIGN}" -e "${RE_ASSIGN_BARE}" -- "${path}"; then
+    continue
+  fi
   lineno=0
   while IFS= read -r text || [[ -n "${text}" ]]; do
     lineno=$((lineno + 1))
     check_line "${path}" "${lineno}" "${text}"
   done <"${path}"
-done <"${work}/untracked-list"
+done <"${work}/untracked"
 
 if [[ -s "${work}/hits" ]]; then
   sort -u "${work}/hits"
