@@ -163,6 +163,23 @@ JSON
   [ "$(action_of 5)" = claim ]
 }
 
+@test "with as many agents running as --max-agents allows, an Issue to start at the first read keeps the wait running until the timeout" {
+  issue_5_ready_to_claim
+
+  run bash "${oe}" wait o/r 1 --running 6 --running 7 --max-agents 2 --timeout 1
+
+  [ "${status}" -eq 5 ]
+  [ "$(action_of 5)" = claim ]
+}
+
+@test "without --max-agents, three running agents keep an Issue to start from ending the wait, as the skill's default of three agents" {
+  issue_5_ready_to_claim
+
+  run bash "${oe}" wait o/r 1 --running 6 --running 7 --running 8 --timeout 1
+
+  [ "${status}" -eq 5 ]
+}
+
 @test "a failed GitHub read ends the wait with an error and no next actions" {
   pr_15_checks_running
 
