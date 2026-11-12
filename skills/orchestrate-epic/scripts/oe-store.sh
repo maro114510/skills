@@ -7,7 +7,7 @@
 # | locks.git | One ref per Epic that a session holds | oe lock; read by oe status through lock_held |
 # | records/<repo-key>/<issue>.jsonl | One Issue's records, oldest first, one JSON object per line | oe claim, oe attempt, oe start, oe verdict; dropped by oe forget |
 # | boards/<repo-key>/<epic> | The Herdr pane of the Epic's board and the server it is on, as JSON | oe board, which overwrites it |
-# | waits/<repo-key>/<epic> | The process ID and start time of the Epic's latest oe wait | oe wait, which stops that process first and drops the file when it ends on its own; oe lock release stops that process |
+# | waits/<repo-key>/<epic> | The process ID and start time of the Epic's running oe wait | oe wait, which writes it only while no other wait runs and drops it when it ends on its own; oe lock release stops that process |
 #
 # - The state directory is OE_STATE_DIR when set, and orchestrate-epic under XDG_STATE_HOME or ~/.local/state otherwise.
 #   Either default lies outside every checkout, so no agent's worktree ever holds the state.
@@ -181,17 +181,25 @@ process_tree() {
   done
 }
 
-# Stops the oe wait recorded for Epic $2 in repository $1, unless it is process $3.
-# - The record holds the process ID and its start time, so a reused process ID is never stopped.
-# - The wait is suspended while its tree is read, then killed before anything below it,
-#   so it never sees a failed poll and exits 1, and runs no exit trap that could drop a record a newer wait just wrote.
-# - It gets KILL, not TERM: bash 5 prints "Terminated" when it reaps a child that TERM killed, before any trap runs.
-stop_recorded_wait() {
-  local file pid lstart tree
+# Prints the process ID of the oe wait recorded for Epic $2 in repository $1 while it runs, unless it is process $3.
+# The record holds the process ID and its start time, so a reused process ID never counts.
+recorded_wait() {
+  local file pid lstart
   file="$(wait_record "$1" "$2")" || return 0
   read -r pid lstart 2>/dev/null <"${file}" || return 0
   [[ "${pid}" =~ ^[1-9][0-9]*$ && "${pid}" != "${3:-}" && -n "${lstart:-}" ]] || return 0
   [[ "$(process_start "${pid}")" == "${lstart}" ]] || return 0
+  printf '%s' "${pid}"
+}
+
+# Stops the oe wait recorded for Epic $2 in repository $1.
+# - The wait is suspended while its tree is read, then killed before anything below it,
+#   so it never sees a failed poll and exits 1, and runs no exit trap that could drop a record.
+# - It gets KILL, not TERM: bash 5 prints "Terminated" when it reaps a child that TERM killed, before any trap runs.
+stop_recorded_wait() {
+  local pid tree
+  pid="$(recorded_wait "$1" "$2")"
+  [[ -n "${pid}" ]] || return 0
   kill -STOP "${pid}" 2>/dev/null || true
   tree="$(process_tree "${pid}")"
   kill -KILL "${pid}" 2>/dev/null || true
