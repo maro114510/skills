@@ -9,7 +9,8 @@
 #   oe wait <owner/repo> <epic-number> [--running <issue-number>]... [--max-agents <n>] [--timeout <seconds>] [--idle-since <epoch>]
 #
 # - --running is passed to oe ready, and also means an agent is still running.
-# - --max-agents is how many agents the session runs at once, 3 by default as in the skill.
+# - --max-agents is how many agents the session can run at once, 3 by default as in the skill.
+#   The session passes its running count after a start failed, so the failed Issue does not end the wait at once.
 # - --timeout bounds this call, wait_timeout seconds by default.
 #   The deadline is checked before each poll, so the call can run up to one poll interval past it.
 # - Starting a wait stops an earlier oe wait for the same Epic on this host, so at most one runs.
@@ -71,7 +72,7 @@ while [[ $# -gt 0 ]]; do
     timeout="$2"
     ;;
   --max-agents)
-    [[ "${2:-}" =~ ^[1-9][0-9]*$ ]] || usage "Expected --max-agents <n>"
+    [[ "${2:-}" =~ ^[0-9]+$ ]] || usage "Expected --max-agents <n>"
     max_agents="$2"
     ;;
   --idle-since)
