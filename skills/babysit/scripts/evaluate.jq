@@ -1,5 +1,6 @@
 # Evaluates one normalized pr-state snapshot against the babysit ledger.
-# Input: [snapshot, ledger] from `jq -s`. Args: $now (epoch seconds) and $mode (watch or drive).
+# Input: [snapshot, ledger] from `jq -s`. Args: $now (epoch seconds), $mode (watch or drive), and optionally
+# $bot, the agents' own bot login from git config skills.bot, empty when unset.
 # Output: {ledger, status, event, blockers, pending, report}. ledger holds only the fields wait owns:
 # head and heads. pending and report.pending list each unresolved item with the key, event, and where to look.
 # report.reasons maps each parked key to the reason it was parked with.
@@ -16,6 +17,11 @@ def excerpt_chars: 200;
 # The review bots whose comments drive may act on, by GraphQL login. The same logins as
 # skills/orchestrate-epic/scripts/oe-bots.jq, which cannot be included here because it needs oe-records.jq.
 def review_bots: ["coderabbitai", "chatgpt-codex-connector"];
+
+# Succeeds for a comment from the agents' own bot, which GitHub gives no association. Its words are the agents',
+# so drive neither acts on them nor parks them, as with its own replies. A user who takes the bot's login is not a Bot.
+def agents_bot: ($ARGS.named.bot // "") as $b
+  | $b != "" and .authorType == "Bot" and ((.author // "") | ascii_downcase) == ($b | ascii_downcase);
 
 # Succeeds for a comment drive may act on: one from a repository owner, member, or collaborator, or from a
 # listed review bot, which has no association. A user who takes a bot's login is not a Bot.
@@ -64,12 +70,13 @@ def relevant($head; $gen): select(startswith("c:") or endswith("@\($head)#\($gen
       else {row: 9, event: "check_confirmed", key: $k, check: $c} end
   ] as $check_items
 
-# Row 10. A resolved thread and a minimized comment are closed conversations; the agent's own replies never count.
+# Row 10. A resolved thread and a minimized comment are closed conversations; the agent's own replies and the
+# agents' bot's comments never count.
 | [ ($s.comments[] | . + {kind: "issue_comment"}),
     ($s.reviews[] | select(.state != "PENDING" and ((.body // "") | test("\\S"))) | . + {kind: "review"}),
     ($s.threads[] | select(.isResolved | not) | . as $th
       | .comments[] | . + {kind: "thread_comment", thread: $th.id, path: $th.path, line: $th.line}) ]
-  | map(select((.isMinimized | not) and (own_reply(.) | not)))
+  | map(select((.isMinimized | not) and (own_reply(.) | not) and (agents_bot | not)))
   | sort_by(.createdAt // "")
   as $comments
 

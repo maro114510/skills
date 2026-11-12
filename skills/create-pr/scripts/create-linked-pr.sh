@@ -265,9 +265,12 @@ echo "${url}"
 
 # The pulls endpoint takes no assignees, so they go on the PR's issue; the PR exists by now, so a failure is only a warning.
 meta_args=()
+# A GitHub App can neither read its user nor be assigned, and only it can list its installation's repositories,
+# so that read tells a bot apart from a failed user read, and @me then assigns nothing without a warning.
 for a in ${assignees[@]+"${assignees[@]}"}; do
   if [[ "${a}" == "@me" ]] && ! a="$(gh api user --jq .login 2>"${err}")"; then
-    echo "WARN: could not resolve @me to assign ${url}: $(tr '\n' ' ' <"${err}" | sed 's/[[:space:]]*$//')" >&2
+    gh api "installation/repositories?per_page=1" --silent 2>/dev/null ||
+      echo "WARN: could not resolve @me to assign ${url}: $(tr '\n' ' ' <"${err}" | sed 's/[[:space:]]*$//')" >&2
     a=""
   fi
   [[ -n "${a}" ]] && meta_args+=(-f "assignees[]=${a}")

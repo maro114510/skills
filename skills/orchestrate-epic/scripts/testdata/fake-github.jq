@@ -9,7 +9,8 @@
 # | statuses | Commit SHA | The commit statuses on that commit, newest first |
 # | activity | Branch name | The pushes to that branch |
 # | repo | none | The repository, naming its default branch |
-# | user | none | The authenticated user, whose login is me |
+# | user | none | The authenticated user, whose login is me; a GitHub App identity is refused, as GitHub refuses it |
+# | installation | none | The repositories of the App installation, which only a GitHub App identity can read |
 # | ref | Branch name | The head of that branch |
 # | comments | Issue number | The comments on that Issue, oldest first |
 # | sub_issues | Epic number | The child Issues, each with its number and state |
@@ -26,6 +27,7 @@
 #
 # | Field | Holds | Default |
 # |---|---|---|
+# | identity | app when oe acts as a GitHub App installation, and anything else for a user | A user |
 # | default_branch.pushed | When the default branch head was pushed | 07:00 |
 # | default_branch.committed | The commit time of the default branch head | Same as pushed |
 # | default_branch.checks | Check name to result | No checks |
@@ -41,7 +43,7 @@
 # | branch | Whether the branch feat/issue-N exists | false |
 # | branch_sha | The head of the branch feat/issue-N | None |
 # | assignees | Logins oe assigned to the Issue | None |
-# | comments | Issue comments, oldest first, each with by, at, and body | None |
+# | comments | Issue comments, oldest first, each with by, at, body, and optionally login and type, as thread comments hold them | None |
 # | pull_requests | Pull requests opened from the branch; the Issue read returns only the newest, as its query asks | None |
 # | older_comments | How many older comments GitHub leaves out of the read | 0 |
 # | older_pull_requests | How many older pull requests GitHub leaves out of the read | 0 |
@@ -161,7 +163,8 @@ def issue_response($n):
           state: (if .state == "open" then "OPEN" else "CLOSED" end),
           stateReason: (if .state == "open" then null else (.state | ascii_upcase) end)}]},
         comments: {totalCount: (($i.comments // [] | length) + ($i.older_comments // 0)),
-          nodes: [$i.comments[]? | author + {createdAt: (.at | time)}]}},
+          nodes: [$i.comments[]? | author + {createdAt: (.at | time),
+            author: {login: (.login // ""), __typename: (.type // "User")}}]}},
       ref: (if $i.branch then {name: "feat/issue-\($n)"} else null end),
       pullRequests: {totalCount: (($i.pull_requests // [] | length) + ($i.older_pull_requests // 0)), nodes: [$i.pull_requests // [] | sort_by(.opened) | reverse | .[0:1][] | pull_request]}}}};
 
@@ -209,7 +212,11 @@ $state
   elif $call == "statuses" then statuses($arg)
   elif $call == "activity" then pushes($arg)
   elif $call == "repo" then {full_name: "o/r", default_branch: "main"}
-  elif $call == "user" then {login: "me"}
+  elif $call == "user" then
+    if .identity == "app" then error("HTTP 403: Resource not accessible by integration") else {login: "me"} end
+  elif $call == "installation" then
+    if .identity == "app" then {total_count: 1}
+    else error("HTTP 403: You must authenticate with an installation access token") end
   elif $call == "ref" then branch_head($arg)
   elif $call == "comments" then issue_comments($arg | tonumber)
   elif $call == "sub_issues" then sub_issues

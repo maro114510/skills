@@ -48,3 +48,10 @@ babysit_ledger_write() {
   fi
   mv -f "${tmp}" "$1"
 }
+
+# Prints the agents' own bot login from git config skills.bot, without the [bot] suffix REST shows, or nothing when unset.
+babysit_bot() {
+  local login
+  login="$(git config --get skills.bot)"
+  printf '%s\n' "${login%\[bot\]}"
+}
