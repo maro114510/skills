@@ -287,7 +287,6 @@ sequenceDiagram
 | Sibling merged | Issues A and B both wait for the merge, and the engineer merges A. At the next read, B's head lacks A's squash commit, so oe updates B's branch with the base branch through GitHub. CI and a Verifier run again on the new head, and B waits for the merge again once that head has a success verdict. When the update conflicts, an Owner resolves the conflict as a repair |
 | Bot finding | CodeRabbit reports a Major finding. An Owner checks it in the code, repairs, pushes, and asks CodeRabbit to review again. A Major finding in that re-review goes to the engineer. A Minor finding starts nothing |
 | Reached cap | When a repair signal remains after 3 attempts, the Issue is parked and the Issues that depend on it stop too. The engineer either finishes and merges it by hand, or deletes the branch so the AI starts over |
-| Owner question | An Owner writes a question and pushes nothing, so no attempt is spent. oe wait tells the person through the configured command. The person picks an option in the session's conversation, and the session records the answer through oe, which appends its decision to the Issue body's decisions section. The next Owner reads the answer, and the Verifier reads the decision with the body |
 
 ## Accepted Risks
 
@@ -345,9 +344,9 @@ sequenceDiagram
 | The board in Herdr | Opt-in with git config `skills.herdr`, read only inside Herdr, so no other run calls herdr and no Herdr user gets a pane unasked |
 | Board refresh | Every 3 minutes, each refresh reading GitHub through oe ready |
 | Board lifetime | The board stops once the session holding the Epic's lock ends, and leaves its last view. A `--watch` that never finds a session holding the lock refreshes until interrupted. A later start reuses its pane when the pane runs the board or sits at its shell's prompt, and never sends input to a pane that runs anything else |
-| Notifications | oe calls one command set in git config, with a one-line message and a link, for a question, a park, an Issue waiting for a person or a merge, failed reads of GitHub that keep repeating, and the session's end with its reason. It calls again while the person has not acted. Herdr is one example setting, and no path is Herdr-only. With no command set, oe calls nothing and reports no error |
-| Answers | The person answers in the session's conversation or with a comment on the Issue. The session shows each question without holding the other Issues, and records an answer from its conversation through oe, so the next Owner reads it on the Issue |
-| Decisions section | An answer recorded through oe appends its decision to a decisions section of the Issue body, which only oe writes. The Verifier reads it with the body, and it takes precedence over the criteria it contradicts, whose text stays unrewritten. An answer given as a comment on the Issue is not copied there |
+| Notifications | Each new Issue that needs the person, such as a question or a park, makes oe call one command set in git config. Herdr is one example setting, and no path is Herdr-only |
+| Answers | The person answers in the session's conversation or with a comment on the Issue. The session records an answer from its conversation through oe, so the next Owner reads it on the Issue |
+| Decisions section | An answer recorded through oe appends its decision to a decisions section of the Issue body. The Verifier reads it with the body, and it takes precedence over the criteria it contradicts |
 | Starting agents | Through oe start, which oe ready prints for each line that starts an agent, because a session that lost the skill to a compaction rebuilt the steps from memory and passed the Epic number as the Issue |
 | Waits per Epic | One on each host. A new oe wait stops the earlier one, which exits silently, because a session rebuilding its loop after a compaction started waits without stopping old ones, and each extra wait woke it again |
 | Polling | One light read every 2 minutes. Every child Issue is read only on a change to it, its PR, or its checks, on a merge of a sibling PR, or at a deadline such as a head with no checks for 10 minutes |
