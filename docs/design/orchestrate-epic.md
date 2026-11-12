@@ -45,7 +45,7 @@ oe starts no agent, edits no code, and never merges a PR. Its only writes to a P
 | oe brief | Builds the brief handed to an Owner or a Verifier, and records each Verifier start before its brief | A pending verify status on the SHA, for a Verifier |
 | oe claim | Creates the Issue's branch and writes a claim record | A branch on origin and the record store |
 | oe worktree | Creates an agent's worktree outside the shared checkout, on the Issue branch for an Owner and detached at its head for a Verifier, and removes it after the agent ends | A local worktree |
-| oe attempt | Writes an attempt record for each Owner start before it runs, with the bots whose rounds it uses, and refuses a start once 3 attempts are used, counting as Attempts under Decisions says | The record store |
+| oe attempt | Writes an attempt record for each Owner start before it runs, with the Issue branch's head and the bots whose rounds it uses, and refuses a start once 3 attempts are used or the latest 3 starts pushed nothing, counting as Attempts under Decisions says | The record store |
 | oe question | Writes an Owner's question in a fixed format, and records the answer the person gives in the session's conversation | An Issue comment for a question or an answer, and an answer's decision in the Issue body's decisions section |
 | oe rereview | Asks bots to review the PR again | A PR comment |
 | oe verdict | Writes a Verifier's verdict and findings | A commit status on the SHA, and the record store |
@@ -70,7 +70,6 @@ The record store lays out its state as `oe-store.sh` defines.
 - Answers an Owner's question in the session's conversation or with a comment on the Issue
 - Reviews the PR's code and submits Changes requested when something must change
 - Resolves a bot's review thread to dismiss its finding
-- Responds to an Issue that waits for a person after two Owner starts without a push, in the session's conversation or with a comment on the Issue
 - Stops the session
 - Runs the manual checks, which the PR leaves unchecked
 - Approves and merges the PR
@@ -88,7 +87,7 @@ The record store lays out its state as `oe-store.sh` defines.
 | A verdict is written as a commit status on the SHA that was checked, and is not written once that SHA is no longer the PR's head | Verdict bound to the SHA |
 | A Verifier receives only the Issue, the SHA, and the base branch, never the PR body or the Owner's report | Verifier never sees the worker's report |
 | Every Owner and Verifier starts fresh for one job and ends when the job is done | A fresh agent per step |
-| An attempt is an Owner start that ended in a push, counted from the record store's starts and the pushes GitHub shows, never from an agent's report. A start after 3 attempts is refused | Retry cap survives restarts on the same host |
+| An attempt is an Owner start after which the Issue branch's head differs from the one the start recorded, counted from the record store's starts and the branch head GitHub shows, never from an agent's report. A start after 3 attempts, or after 3 starts in a row that pushed nothing, is refused | Retry cap survives restarts on the same host |
 | Each agent works only in its own worktree and never touches the shared checkout | Never touch the shared checkout |
 | Engineer input is only an unmarked comment or review by someone with the OWNER, MEMBER, or COLLABORATOR role, or an answer the session records through oe from the person's reply in its conversation, and labels mean nothing | Trusted input only |
 | A record on GitHub counts when such a person or the agents' own bot, named by git config `skills.bot`, wrote it, and nothing that bot writes is ever engineer input | Trusted input only |
@@ -130,9 +129,7 @@ flowchart TB
   Merge -->|"Repair signal"| Repair
   Update -->|"Conflict"| Repair
   Repair -->|"Fewer than 3"| Owner
-  Repair -->|"3 used"| Parked["Parked"]
-  Repair -->|"The latest 2 starts on the head ended without a push"| Person["Waiting for a person"]
-  Person -->|"The person responds"| Repair
+  Repair -->|"3 used, or the latest 3 starts pushed nothing"| Parked["Parked"]
   CI -->|"No checks after 10 minutes"| Parked
   Verify -->|"No verdict twice"| Parked
   Parked -->|"Engineer deletes the branch"| Ready
@@ -153,7 +150,7 @@ For each Issue, oe ready reads this table from the top and outputs the action of
 | 3 | Before claim | No branch exists, and a dependency is not completed | Wait for the dependencies |
 | 4 | Before claim | No branch exists, and every dependency is completed | Claim and start an Owner |
 | 5 | Work | No answer has been given since the Issue's latest question | Wait for the answer |
-| 6 | Work | Any repair signal below is present | Park the Issue when it already has 3 attempts. Otherwise wait for a person when the latest 2 Owner starts on the PR's head, or with no PR, ended without a push and no question or input from a person came after them. Otherwise start an Owner |
+| 6 | Work | Any repair signal below is present | Park the Issue when it already has 3 attempts, or when its latest 3 Owner starts pushed nothing. Otherwise start an Owner |
 | 7 | Verification | A check on the PR's head SHA is pending, or the SHA has had no checks for less than 10 minutes | Wait for CI |
 | 8 | Verification | The PR's head SHA still has no checks after 10 minutes | Park the Issue |
 | 9 | Verification | The PR's head SHA does not contain the commit that merged a sibling PR into the base branch | Update the branch with the base branch through GitHub, starting no agent and spending no attempt |
@@ -282,7 +279,7 @@ sequenceDiagram
 
 | Case | What happens |
 |---|---|
-| Lost agent | The Owner ends without a PR, or the session dies. GitHub has no record of completion, so the next oe ready starts an Owner again on the same branch. A start that pushed nothing is no attempt, and a second such start in a row makes the Issue wait for a person |
+| Lost agent | The Owner ends without a PR, or the session dies. GitHub has no record of completion, so the next oe ready starts an Owner again on the same branch. A start that pushed nothing is no attempt, and 3 such starts in a row park the Issue |
 | Failed verification | The Verifier writes a failure verdict and stores its findings. An Owner reads the findings, repairs, and pushes. The new SHA has no verdict, so CI and verification run again |
 | Manual checks | An Issue with only manual checks left gets a success verdict and waits for the merge |
 | Failed CI | An Owner fixes the failed check on the same branch and pushes |
@@ -307,7 +304,7 @@ sequenceDiagram
 - A first line whose title happens to hold a level word starts a repair
 - A finding in a bot's review body, outside any thread, starts nothing
 - A bot that refuses the re-review on a rate limit leaves the repair unreviewed
-- A bot finding the Owner cannot reproduce still uses the bot's round and one of the 2 starts without a push
+- A bot finding the Owner cannot reproduce still uses the bot's round, and its start counts toward the 3 starts in a row that pushed nothing
 - The board is only as fresh as its latest refresh
 - An agent runs with the session's identity, so it could record an answer through oe, and with it a decision the Verifier follows over the criteria
 
@@ -326,9 +323,9 @@ sequenceDiagram
 | Other automations on its PRs | pr-owner writes the line `<!-- automation-owner: orchestrate-epic -->` near the end of each PR body, the owner line that babysit's `pr-state.sh` reads, so babysit neither pushes nor replies there. Its replies would otherwise read as engineer input. oe never reads the line, so deleting it while oe still works on the Issue lets two writers act |
 | Re-review request | One PR comment of `<!-- oe:rereview -->` and `@coderabbitai review` or `@codex review`. The marker keeps it from counting as engineer input |
 | Bot findings after approval | Start nothing, so the AI never pushes onto a head being merged |
-| Attempts | An attempt is an Owner start that ended in a push, read from GitHub and not from an agent's report. A start without a push spends none, so an outage, a start that finds nothing to change, or a question never parks an Issue |
-| Starts without a push | Two Owner starts in a row on the same head that ended without a push, while a repair signal is present, make the Issue wait for a person, with the reason shown. A start that ended in a question, or any input from the person after the latest start, ends that run of two |
-| Questions and answers in the cap | Neither reduces the cap. A start after an answer counts only when it ends in a push |
+| Attempts | An attempt is an Owner start that pushed: the branch head read later differs from the head the start recorded, and no agent's report decides it. A start without a push spends none, so an outage, a start that finds nothing to change, or a question never spends an attempt |
+| Starts without a push | 3 Owner starts in a row that pushed nothing, while a repair signal is present, park the Issue with a reason saying nothing was pushed |
+| Questions and answers in the cap | Neither reduces the cap. A start after an answer counts only when it pushes, and it joins the starts in a row that pushed nothing when it does not |
 | A Verifier ends without a verdict | It is restarted once on the same SHA, and the Issue is parked when the second start also gives no verdict |
 | A head that lacks a sibling PR | oe updates the branch with the base branch through GitHub, because its verdict describes a base that no longer exists. No agent starts and no attempt is spent, so an Epic with many siblings does not wait on a person after each merge. The new head is checked and verified like any new head. When the update fails on a conflict, an Owner resolves it as a repair at row 6 |
 | The default branch's checks | oe ready does not read them. A check run by changed paths shows only what the head commit triggered, so a gate on it missed a broken base and held Issues for checks no child PR runs |
