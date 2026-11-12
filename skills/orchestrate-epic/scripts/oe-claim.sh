@@ -5,6 +5,7 @@
 # GitHub's create-ref API refuses a ref that already exists, so two claims for one Issue never both succeed.
 # The claim record goes to the record store that oe-store.sh defines, never to GitHub.
 # It then assigns the Issue to the gh user running oe, so GitHub shows who took it; a failed assignment only warns on stderr.
+# An installation token acts as a bot, which cannot be assigned, so oe assigns nobody then.
 #
 # Usage
 #
@@ -77,7 +78,10 @@ records_add "${repo}" "${n}" '{"kind":"claim","at":"'"${at}"'"}' 2>"${err}" ||
   fail "created ${branch}, but recording the claim of Issue #${n} failed: $(head -n1 "${err}")"
 
 # The branch is the claim, so an assignee that fails to land is only a warning.
-if ! login="$(gh api user --jq .login 2>"${err}")" ||
+# An installation token acts as an App's bot, which GitHub never lets an Issue be assigned to and whose `gh api user` read fails, so nothing is assigned.
+if is_installation_token; then
+  :
+elif ! login="$(gh api user --jq .login 2>"${err}")" ||
   ! gh api -X POST "repos/${repo}/issues/${n}/assignees" -f "assignees[]=${login}" --silent 2>"${err}"; then
   echo "oe claim: WARN: could not assign Issue #${n}: $(head -n1 "${err}")" >&2
 fi

@@ -12,7 +12,7 @@ query($owner: String!, $repo: String!, $num: Int!, $branch: String!, $ref: Strin
       }
       comments(last: 100) {
         totalCount
-        nodes { authorAssociation body createdAt }
+        nodes { authorAssociation author { login __typename } body createdAt }
       }
     }
     ref(qualifiedName: $ref) { name }
@@ -31,11 +31,11 @@ query($owner: String!, $repo: String!, $num: Int!, $branch: String!, $ref: Strin
         headRefOid
         mergeable
         reviews(last: 100, states: [CHANGES_REQUESTED]) {
-          nodes { authorAssociation body submittedAt }
+          nodes { authorAssociation author { login __typename } body submittedAt }
         }
         # An approval of the head starts no repair, so its commit decides which head it covers.
         approvals: reviews(last: 100, states: [APPROVED]) {
-          nodes { authorAssociation commit { oid } }
+          nodes { authorAssociation author { login __typename } commit { oid } }
         }
         reviewThreads(last: 100) {
           totalCount
@@ -44,7 +44,7 @@ query($owner: String!, $repo: String!, $num: Int!, $branch: String!, $ref: Strin
             isOutdated
             # Only a thread's first comment says who opened it, and a reply never counts as a finding.
             root: comments(first: 1) { nodes { author { login __typename } body createdAt } }
-            comments(last: 20) { nodes { authorAssociation body createdAt } }
+            comments(last: 20) { nodes { authorAssociation author { login __typename } body createdAt } }
           }
         }
         headRef { target { ... on Commit { ...HeadChecks } } }

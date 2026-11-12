@@ -175,6 +175,38 @@ JSON
   [ "$(records_of 5)" = '{"kind":"claim","at":"2027-01-15T08:00:00Z"}' ]
 }
 
+@test "a claim assigns the Issue to the acting user" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{"number": 5}]
+}
+JSON
+  unset GH_TOKEN GITHUB_TOKEN
+
+  run bash "${oe}" claim o/r 5
+
+  [ "${status}" -eq 0 ]
+  [ "$(issue_field 5 assignees)" = '["me"]' ]
+}
+
+@test "a claim with an installation token assigns nobody and warns about nothing" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{"number": 5}]
+}
+JSON
+  unset GITHUB_TOKEN
+  export GH_TOKEN=ghs_installation
+
+  run --separate-stderr bash "${oe}" claim o/r 5
+
+  [ "${status}" -eq 0 ]
+  [ -z "${stderr}" ]
+  [ "$(issue_field 5 'assignees // []')" = '[]' ]
+}
+
 # oe attempt
 
 @test "an Issue with two attempts since its claim gets a third attempt record and no comment" {

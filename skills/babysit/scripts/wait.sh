@@ -100,7 +100,7 @@ idle() {
 # Evaluates the snapshot in snap against the ledger in ledger.
 evaluate() {
   printf '%s\n%s\n' "${snap}" "${ledger}" |
-    jq -sc --arg now "${now}" --arg mode "${mode}" -f "${script_dir}/evaluate.jq"
+    jq -sc --arg now "${now}" --arg mode "${mode}" --arg bot "$(git config --get skills.bot)" -f "${script_dir}/evaluate.jq"
 }
 
 now="$(babysit_now)"

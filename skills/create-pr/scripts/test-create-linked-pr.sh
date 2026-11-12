@@ -172,6 +172,9 @@ check() { # name, condition result (0 = ok)
 has_line() { grep -qx -- "$1" <<<"${out}"; }
 called() { grep -q -- "$1" "${STUB_DIR}/log" 2>/dev/null; }
 
+# The token decides whether the actor is a bot, so a runner's own token must not leak into the tests.
+unset GH_TOKEN GITHUB_TOKEN
+
 setup "Just a change."
 create
 r=0
@@ -504,6 +507,25 @@ has_line "https://github.com/o/r/pull/7" || r=1
 has_line "WARN: could not resolve @me to assign https://github.com/o/r/pull/7: gh: Resource not accessible by integration (HTTP 403)" || r=1
 called "api -X PATCH repos/{owner}/{repo}/issues/" && r=1
 check "an unresolvable @me warns, updates nothing on the PR, and exits 0" "${r}"
+
+setup $'Closes #12'
+touch "${STUB_DIR}/user_fail"
+GH_TOKEN=ghs_installation create --assignee @me
+r=0
+[[ "${rc}" == 0 ]] || r=1
+has_line "https://github.com/o/r/pull/7" || r=1
+grep -q "WARN" <<<"${out}" && r=1
+called "api user" && r=1
+called "api -X PATCH repos/{owner}/{repo}/issues/" && r=1
+check "an installation token is a bot: @me is skipped without a warning and without a user read" "${r}"
+
+setup $'Closes #12'
+touch "${STUB_DIR}/meta_fail"
+GH_TOKEN=ghs_installation create --assignee octocat
+r=0
+[[ "${rc}" == 0 ]] || r=1
+grep -q "^WARN: could not set assignees on https://github.com/o/r/pull/7" <<<"${out}" || r=1
+check "an installation token still warns when a named assignee fails" "${r}"
 
 setup $'Closes #12'
 echo "git@github.com:fork/r.git" >"${STUB_DIR}/origin_url"

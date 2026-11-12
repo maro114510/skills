@@ -34,6 +34,24 @@ record_marker() {
   printf '<!-- oe:%s -->' "$1"
 }
 
+# Prints the login of the agents' own bot from git config skills.bot, without the [bot] suffix REST shows, or nothing when unset.
+# Returns 1 with the reason on stderr when the value is not a login.
+bot_login() {
+  local login
+  login="$(git config --get skills.bot)" || return 0
+  if [[ -n "${login}" && ! "${login}" =~ ^[A-Za-z0-9][A-Za-z0-9-]*$ ]]; then
+    echo "git config skills.bot must be a GitHub login without [bot]" >&2
+    return 1
+  fi
+  printf '%s' "${login}"
+}
+
+# Succeeds when gh runs with a GitHub App installation token, whose ghs_ prefix says the actor is a bot.
+# create-linked-pr.sh in create-pr makes the same check.
+is_installation_token() {
+  [[ "${GH_TOKEN:-${GITHUB_TOKEN:-}}" == ghs_* ]]
+}
+
 # Prints the number and head SHA of the newest open PR from Issue branch $2 in repository $1, separated by a tab.
 # Prints nothing when the branch has no open PR in that repository; a fork's PR never counts.
 # Returns 1 with the reason on stderr when the read fails or is unreadable.

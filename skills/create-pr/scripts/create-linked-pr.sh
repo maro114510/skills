@@ -264,8 +264,13 @@ url="${out#*$'\t'}"
 echo "${url}"
 
 # The pulls endpoint takes no assignees, so they go on the PR's issue; the PR exists by now, so a failure is only a warning.
+# An installation token acts as an App's bot, which cannot be assigned and fails `gh api user`, so @me then assigns nobody and warns about nothing.
+# oe-config.sh in orchestrate-epic makes the same check.
+bot_actor=0
+[[ "${GH_TOKEN:-${GITHUB_TOKEN:-}}" == ghs_* ]] && bot_actor=1
 meta_args=()
 for a in ${assignees[@]+"${assignees[@]}"}; do
+  [[ "${a}" == "@me" && "${bot_actor}" == 1 ]] && continue
   if [[ "${a}" == "@me" ]] && ! a="$(gh api user --jq .login 2>"${err}")"; then
     echo "WARN: could not resolve @me to assign ${url}: $(tr '\n' ' ' <"${err}" | sed 's/[[:space:]]*$//')" >&2
     a=""

@@ -88,6 +88,7 @@ Skills read them with `git config --get <key>`, so git decides between local and
 | `skills.lang` | `ja`, `en` | `skills/create-pr/scripts/lang.sh` only; its header holds the precedence, and skills call it instead of restating it |
 | `skills.herdr` | `true`, `false`; unset means `false` | `skills/orchestrate-epic/scripts/oe-board.sh` only, and only inside Herdr; `true` opens the Epic's board pane |
 | `skills.babysit.agent` | An agent command, such as `claude -p`; unset makes `drive.sh` exit 2 | `skills/babysit/scripts/drive.sh` only; split on whitespace, with the prompt appended as the last argument |
+| `skills.bot` | The login of the GitHub App bot that agents act as, without `[bot]`; unset means no bot | `skills/orchestrate-epic/scripts/oe-config.sh` `bot_login` for oe, and `skills/babysit/scripts/check.sh` and `wait.sh` for babysit; a record or comment from that Bot author is trusted, and it never counts as a person's input, answer, or approval |
 
 ## Workflow
 

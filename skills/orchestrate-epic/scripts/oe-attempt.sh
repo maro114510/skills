@@ -94,11 +94,12 @@ spent="$(jq -c '(map(.kind == "claim") | rindex(true)) as $claim
 
 # The record values enter the jq program as JSON literals, so no record can change the program.
 quote() { jq -Rn --arg v "$1" '$v | tojson'; }
-values="$(printf 'def claimed_at: %s; def since_at: %s; def used_bots: %s;\n' \
-  "$(quote "${claimed_at}")" "$(quote "${since}")" "${spent}")" || fail "cannot build the read of Issue #${n}"
+own_bot="$(bot_login)" || usage "git config skills.bot is not a login"
+values="$(printf 'def claimed_at: %s; def since_at: %s; def used_bots: %s; def own_login: %s;\n' \
+  "$(quote "${claimed_at}")" "$(quote "${since}")" "${spent}" "$(quote "${own_bot}")")" || fail "cannot build the read of Issue #${n}"
 
 # shellcheck disable=SC2016 # The jq program names jq's own variables, not the shell's.
-program="$(printf '%s\n%s\n%s\n%s\n' "${trust}" "${bot_rules}" "${values}" '
+program="$(printf '%s\n%s\n%s\n%s\n' "${values}" "${trust}" "${bot_rules}" '
 .data.repository as $r
 | ([($r.pullRequests.nodes // [])[]
     | select(.isCrossRepository == false)

@@ -94,6 +94,8 @@ done
 now="${OE_NOW:-$(date -u +%s)}"
 [[ "${now}" =~ ^[0-9]+$ ]] || usage "OE_NOW must be epoch seconds"
 
+own_bot="$(bot_login)" || usage "git config skills.bot is not a login"
+
 epic_query="$(<"${dir}/oe-ready-epic.graphql")" || fail "cannot read oe-ready-epic.graphql"
 issue_query="$(<"${dir}/oe-ready-issue.graphql")" || fail "cannot read oe-ready-issue.graphql"
 checks_query="$(<"${dir}/oe-ready-checks.graphql")" || fail "cannot read oe-ready-checks.graphql"
@@ -105,8 +107,8 @@ rules="${trust}"$'\n'"${bots}"$'\n'"${rules}"
 # Prints the jq program that runs the entry point $1 of oe-ready.jq,
 # with pr_heads set to $2, records to the JSON array $3, and stale_heads to $4.
 program() {
-  printf 'def now_s: %s; def no_checks_grace: %s; def max_attempts: %s; def max_verifier_starts: %s;\n' \
-    "${now}" "${no_checks_grace}" "${max_attempts}" "${max_verifier_starts}"
+  printf 'def now_s: %s; def no_checks_grace: %s; def max_attempts: %s; def max_verifier_starts: %s; def own_login: "%s";\n' \
+    "${now}" "${no_checks_grace}" "${max_attempts}" "${max_verifier_starts}" "${own_bot}"
   printf 'def verify_context: "%s"; def pr_heads: {%s}; def records: %s; def stale_heads: {%s};\n%s\n%s\n' \
     "${verify_context}" "${2:-}" "${3:-[]}" "${4:-}" "${rules}" "$1"
 }

@@ -1,5 +1,5 @@
 # Evaluates one normalized pr-state snapshot against the babysit ledger.
-# Input: [snapshot, ledger] from `jq -s`. Args: $now (epoch seconds) and $mode (watch or drive).
+# Input: [snapshot, ledger] from `jq -s`. Args: $now (epoch seconds), $mode (watch or drive), and $bot (the own bot's login from git config skills.bot, or "").
 # Output: {ledger, status, event, blockers, pending, report}. ledger holds only the fields wait owns:
 # head and heads. pending and report.pending list each unresolved item with the key, event, and where to look.
 # report.reasons maps each parked key to the reason it was parked with.
@@ -18,9 +18,10 @@ def excerpt_chars: 200;
 def review_bots: ["coderabbitai", "chatgpt-codex-connector"];
 
 # Succeeds for a comment drive may act on: one from a repository owner, member, or collaborator, or from a
-# listed review bot, which has no association. A user who takes a bot's login is not a Bot.
+# listed review bot or the agents' own bot, which has no association. A user who takes a bot's login is not a Bot.
+# The same own bot rule as skills/orchestrate-epic/scripts/oe-records.jq; an approval by a Bot never counts below.
 def trusted: (.authorAssociation | IN("OWNER", "MEMBER", "COLLABORATOR"))
-  or (.authorType == "Bot" and (.author | IN(review_bots[])));
+  or (.authorType == "Bot" and (.author | IN(review_bots[]) or ($bot != "" and . == $bot)));
 
 # The item keys of the ledger that still describe this head; comment keys never carry a head.
 def relevant($head; $gen): select(startswith("c:") or endswith("@\($head)#\($gen)") or . == "x:\($head)#\($gen)");
