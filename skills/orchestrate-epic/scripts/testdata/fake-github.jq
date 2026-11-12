@@ -13,6 +13,7 @@
 # | installation | none | The repositories of the App installation, which only a GitHub App identity can read |
 # | ref | Branch name | The head of that branch |
 # | comments | Issue number | The comments on that Issue, oldest first |
+# | issue_rest | Issue number | The REST read of one Issue, with its number and body |
 # | sub_issues | Epic number | The child Issues, each with its number and state |
 # | checks | Commit SHA and cursor, as SHA:CURSOR | The page of checks on that commit after the cursor |
 # | compare | Two commits, as BASE...HEAD | Whether HEAD contains BASE: ahead when it does, and diverged when it does not |
@@ -39,6 +40,7 @@
 # |---|---|---|
 # | number | The Issue number | Required |
 # | closed | Whether the Issue is closed as completed | false |
+# | body | The Issue body | Empty |
 # | blocked_by | Dependencies, each with a number and a state of open, completed, or not_planned | None |
 # | branch | Whether the branch feat/issue-N exists | false |
 # | branch_sha | The head of the branch feat/issue-N | None |
@@ -194,6 +196,10 @@ def issue_comments($n):
       html_url: "https://github.com/o/r/issues/\($n)#issuecomment-\($i + 1)",
       user: {login: ((.login // "") + (if .type == "Bot" then "[bot]" else "" end)), type: (.type // "User")}}];
 
+def issue_rest($n):
+  [.issues[] | select(.number == $n)] | first // error("Issue #\($n) not found")
+  | {number, body: (.body // "")};
+
 def sub_issues:
   [.issues[] | {number, state: (if .closed then "closed" else "open" end)}];
 
@@ -223,6 +229,7 @@ $state
     else error("HTTP 403: You must authenticate with an installation access token") end
   elif $call == "ref" then branch_head($arg)
   elif $call == "comments" then issue_comments($arg | tonumber)
+  elif $call == "issue_rest" then issue_rest($arg | tonumber)
   elif $call == "sub_issues" then sub_issues
   elif $call == "checks" then ($arg | split(":")) as [$oid, $after] | checks_response($oid; $after | tonumber)
   elif $call == "compare" then ($arg | split("...")) as [$base, $head] | compare_response($base; $head)
