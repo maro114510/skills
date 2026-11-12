@@ -113,6 +113,17 @@ has_line() {
   has_line "excluded: sub dir/my config.yml:1: token"
 }
 
+@test "a staged path holding a quote is excluded with its real path" {
+  fine_grained='A1b2C3d4E5f6G7h8I9j0Kl'
+  printf 'token: github_pat_%s\n' "${fine_grained}" >'say "hi".txt'
+  git add 'say "hi".txt'
+
+  scan
+
+  [ "${status}" -eq 10 ]
+  has_line 'excluded: say "hi".txt:1: token'
+}
+
 @test "a staged private key header is excluded" {
   printf -- '-----BEGIN %s PRIVATE KEY-----\n' 'RSA' >key.txt
   git add key.txt

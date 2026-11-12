@@ -95,12 +95,12 @@ while IFS= read -r -d '' entry; do
   [[ "${entry}" =~ ^([ MADRCU?!])([ MADRCU?!])\ (.*)$ ]] || continue
   status="${BASH_REMATCH[1]}${BASH_REMATCH[2]}"
   path="${BASH_REMATCH[3]}"
-  printf '%s\n' "${path}" >>"${work}/paths"
-  [[ "${status}" == '??' ]] && printf '%s\n' "${path}" >>"${work}/untracked"
+  printf '%s\0' "${path}" >>"${work}/paths"
+  [[ "${status}" == '??' ]] && printf '%s\0' "${path}" >>"${work}/untracked"
   [[ "${status}" == R* || "${status}" == C* ]] && skip_next=1
 done <"${work}/status"
 
-while IFS= read -r path; do
+while IFS= read -r -d '' path; do
   [[ -n "${path}" ]] || continue
   exclude_by_name "${path}"
 done <"${work}/paths"
@@ -138,9 +138,7 @@ extract_added() {
         if (esc == "\"") out = out "\""
         else if (esc == "\\") out = out "\\"
         else if (esc == "t") out = out "\t"
-        else if (esc == "n") out = out "\n"
-        else if (esc == "r") out = out "\r"
-        else out = out esc
+        else out = out "\\" esc
         i += 2
       }
       return out
@@ -148,8 +146,8 @@ extract_added() {
     /^diff --git / { path = ""; next }
     /^\+\+\+ / {
       new = substr($0, 5)
+      sub(/\t$/, "", new)
       if (substr(new, 1, 1) == "\"") new = unquote(new)
-      else sub(/\t$/, "", new)
       if (new == "/dev/null") path = ""
       else {
         sub(/^b\//, "", new)
@@ -190,7 +188,7 @@ done <"${work}/added"
 # An untracked file holds only new lines, so its whole content is scanned. One grep pass first skips a clean
 # file quickly and a binary one entirely.
 # shellcheck disable=SC2094 # The pattern list and the hits file are never read here.
-while IFS= read -r path; do
+while IFS= read -r -d '' path; do
   [[ -f "${path}" ]] || continue
   is_patterns_file "${path}" && continue
   if ! grep -qIiE -e "${RE_KEYHDR}" -e "${RE_TOKEN}" -- "${path}" &&
