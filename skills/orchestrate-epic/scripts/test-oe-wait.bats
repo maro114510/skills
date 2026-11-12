@@ -119,19 +119,29 @@ JSON
   [ "$(action_of 5)" = wait-ci ]
 }
 
-@test "after the idle limit with no agent running, wait ends with the next actions, and a rerun lists the same ones" {
-  pr_15_checks_running
+# Saves a state where Issue 5, claimed and attempted once, waits for the answer to its question.
+issue_5_waits_for_an_answer() {
+  records 5 claim@07:00 attempt@07:01
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [{"by": "OWNER", "at": "07:10", "body": "<!-- oe:question -->\nWhich option?"}]
+  }]
+}
+JSON
+}
 
-  run bash "${oe}" wait o/r 1 --timeout 60 --idle-since "$((OE_NOW - four_hours))"
+@test "with every Issue waiting on a person and nothing changing for hours, wait runs until its timeout" {
+  issue_5_waits_for_an_answer
+  unchanged_since_four_hours_ago="$((OE_NOW - four_hours))"
 
-  [ "${status}" -eq 6 ]
-  [ "$(action_of 5)" = wait-ci ]
-  summary=("${lines[@]}")
+  run bash "${oe}" wait o/r 1 --timeout 1 --idle-since "${unchanged_since_four_hours_ago}"
 
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "${lines[*]}" = "${summary[*]}" ]
+  [ "${status}" -eq 5 ]
+  [ "$(action_of 5)" = wait-answer ]
 }
 
 @test "an output unchanged for less than the idle limit waits until the timeout" {
