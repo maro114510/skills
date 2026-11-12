@@ -31,7 +31,7 @@ Each part does one job and stores no state of its own. State lives on GitHub, ex
 
 ### oe
 
-oe starts no agent, edits no code, and never merges a PR. Its only writes to a PR's branch are creating it at a claim and updating it with the base branch through GitHub.
+oe starts no agent, edits no code, and never merges a PR. Its only writes to a PR's branch are creating it at a claim and updating it with the base branch through GitHub, which the session runs with the oe command that oe ready prints for that action.
 
 | Part | Job | Writes to |
 |---|---|---|
