@@ -7,7 +7,7 @@
 # | issue | Issue number | The read of one Issue |
 # | pulls | none | The open pull request list |
 # | statuses | Commit SHA | The commit statuses on that commit, newest first |
-# | activity | Branch name | The pushes to that branch |
+# | activity | Branch name | The pushes to that branch, and its creation at 07:00 when it exists |
 # | repo | none | The repository, naming its default branch |
 # | user | none | The authenticated user, whose login is me; a GitHub App identity is refused, as GitHub refuses it |
 # | installation | none | The repositories of the App installation, which only a GitHub App identity can read |
@@ -44,6 +44,7 @@
 # | blocked_by | Dependencies, each with a number and a state of open, completed, or not_planned | None |
 # | branch | Whether the branch feat/issue-N exists | false |
 # | branch_sha | The head of the branch feat/issue-N | None |
+# | pushes | Times of pushes to the branch feat/issue-N besides the push of each open pull request's head | None |
 # | assignees | Logins oe assigned to the Issue | None |
 # | comments | Issue comments, oldest first, each with by, at, body, and optionally login and type, as thread comments hold them | None |
 # | pull_requests | Pull requests opened from the branch; the Issue read returns only the newest, as its query asks | None |
@@ -180,9 +181,12 @@ def statuses($sha):
     (.issues[].pull_requests[]? | select(pr_sha == $sha) | .verdicts[]? | {context: "oe/verify", state: .})];
 
 def pushes($branch):
-  if $branch == "main" then [{after: default_sha, timestamp: (.default_branch.pushed // "07:00" | time)}]
-  else [.issues[] | select("feat/issue-\(.number)" == $branch) | .pull_requests[]?
-      | select((.state // "open") == "open") | {after: pr_sha, timestamp: (.pushed // .opened | time)}]
+  if $branch == "main" then [{activity_type: "push", after: default_sha, timestamp: (.default_branch.pushed // "07:00" | time)}]
+  else [.issues[] | select("feat/issue-\(.number)" == $branch)
+      | (.pull_requests[]? | select((.state // "open") == "open")
+          | {activity_type: "push", after: pr_sha, timestamp: (.pushed // .opened | time)}),
+        (.pushes[]? | {activity_type: "push", after: ("e" * 40), timestamp: time}),
+        (if .branch then {activity_type: "branch_creation", after: default_sha, timestamp: ("07:00" | time)} else empty end)]
   end;
 
 def branch_head($branch):
