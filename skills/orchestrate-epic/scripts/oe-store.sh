@@ -128,10 +128,38 @@ process_start_local() {
   ps -o lstart= -p "$1" 2>/dev/null | sed -e 's/^ *//' -e 's/ *$//'
 }
 
+# Prints the second since the epoch when process $1 started, read from the kernel, or nothing when it is not running.
+# - Linux: boot time plus the start in clock ticks, as procps computes it.
+# - macOS: the sysctl KERN_PROC_PID, whose struct kinfo_proc opens with p_starttime; 202 is SYS___sysctl.
+process_start_epoch() {
+  if [[ -r /proc/stat ]]; then
+    local stat fields btime
+    stat="$(cat "/proc/$1/stat" 2>/dev/null)" || return 0
+    read -ra fields <<<"${stat##*) }"
+    btime="$(sed -n 's/^btime //p' /proc/stat)"
+    printf '%s\n' "$((btime + fields[19] / $(getconf CLK_TCK)))"
+  else
+    perl -e '
+      my $buf = "\0" x 4096;
+      my $len = pack("Q", length $buf);
+      syscall(202, pack("i4", 1, 14, 1, $ARGV[0]), 4, $buf, $len, 0, 0) == 0 && unpack("Q", $len) or exit;
+      print unpack("q", $buf), "\n";
+    ' "$1" 2>/dev/null
+  fi
+}
+
 # Prints when process $1 started, or nothing when it is not running.
-# The text is fixed to UTC and the C locale, so every session reads the same text whatever TZ and locale it runs with.
+# - The text is fixed to UTC and the C locale, so every session reads the same text whatever TZ and locale it runs with.
+# - When ps prints nothing, the kernel's start is printed in the text ps uses, because a sandbox such as srt refuses to start the setuid ps.
 process_start() {
-  LC_ALL=C TZ=UTC0 process_start_local "$1"
+  local start
+  start="$(LC_ALL=C TZ=UTC0 process_start_local "$1")"
+  if [[ -z "${start}" ]]; then
+    start="$(process_start_epoch "$1")"
+    [[ "${start}" =~ ^[0-9]+$ ]] || return 0
+    start="$(LC_ALL=C perl -MPOSIX -e 'print strftime("%a %b %e %H:%M:%S %Y", gmtime($ARGV[0]))' "${start}")"
+  fi
+  printf '%s\n' "${start}"
 }
 
 # Succeeds when the holder recorded in blob $1 is still running: its process exists and started when it did.
