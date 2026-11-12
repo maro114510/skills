@@ -883,6 +883,80 @@ JSON
   [ "$(action_of 5)" = start-owner ]
 }
 
+@test "an answer recorded through oe under the configured bot is read as the engineer's answer" {
+  agent_bot agent-app
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "NONE", "login": "agent-app", "type": "Bot", "at": "07:10", "body": "<!-- oe:question -->\nWhich option?"},
+      {"by": "NONE", "login": "agent-app", "type": "Bot", "at": "07:20", "body": "<!-- oe:answer -->\nA. Use option A"}
+    ],
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"]}]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:01
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-owner ]
+}
+
+@test "an answer-shaped comment from another bot or an untrusted user does not answer the question" {
+  agent_bot agent-app
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "NONE", "login": "agent-app", "type": "Bot", "at": "07:10", "body": "<!-- oe:question -->\nWhich option?"},
+      {"by": "NONE", "login": "renovate", "type": "Bot", "at": "07:20", "body": "<!-- oe:answer -->\nA. Use option A"},
+      {"by": "NONE", "login": "agent-app", "type": "User", "at": "07:21", "body": "<!-- oe:answer -->\nA. Use option A"},
+      {"by": "CONTRIBUTOR", "at": "07:22", "body": "<!-- oe:answer -->\nA. Use option A"}
+    ]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:01
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-answer ]
+}
+
+@test "the line of an Issue with an open question holds the question and the command that records its answer" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "OWNER", "at": "07:10", "body": "<!-- oe:question -->\n### Question from the orchestrate-epic agent working on this Issue\n\nDecision: Which option?\n\nOptions:\n- A. Keep it\n  - No work.\n\n---\nAnswer in the session's conversation."}
+    ]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:01
+
+  run --separate-stderr bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  IFS=$'\t' read -r n action reason command <<<"${lines[0]}"
+  [ "${n}" = 5 ]
+  [ "${action}" = wait-answer ]
+  [ "${reason}" = 'question https://github.com/o/r/issues/5#issuecomment-1 has no answer yet:\nDecision: Which option?\n\nOptions:\n- A. Keep it\n  - No work.' ]
+  [ "${command}" = "bash '${oe}' question o/r 5 --answer <reply>" ]
+}
+
 @test "a question-shaped comment from another bot, or from a user with the configured bot's login, is ignored" {
   agent_bot agent-app
   github <<'JSON'
