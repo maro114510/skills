@@ -9,7 +9,8 @@
 # | statuses | Commit SHA | The commit statuses on that commit, newest first |
 # | activity | Branch name | The pushes to that branch |
 # | repo | none | The repository, naming its default branch |
-# | user | none | The authenticated user, whose login is me |
+# | user | none | The authenticated user, whose login is me; a GitHub App identity is refused, as GitHub refuses it |
+# | installation | none | The repositories of the App installation, which only a GitHub App identity can read |
 # | ref | Branch name | The head of that branch |
 # | comments | Issue number | The comments on that Issue, oldest first |
 # | sub_issues | Epic number | The child Issues, each with its number and state |
@@ -26,6 +27,7 @@
 #
 # | Field | Holds | Default |
 # |---|---|---|
+# | identity | app when oe acts as a GitHub App installation, and anything else for a user | A user |
 # | default_branch.pushed | When the default branch head was pushed | 07:00 |
 # | default_branch.committed | The commit time of the default branch head | Same as pushed |
 # | default_branch.checks | Check name to result | No checks |
@@ -210,7 +212,11 @@ $state
   elif $call == "statuses" then statuses($arg)
   elif $call == "activity" then pushes($arg)
   elif $call == "repo" then {full_name: "o/r", default_branch: "main"}
-  elif $call == "user" then {login: "me"}
+  elif $call == "user" then
+    if .identity == "app" then error("HTTP 403: Resource not accessible by integration") else {login: "me"} end
+  elif $call == "installation" then
+    if .identity == "app" then {total_count: 1}
+    else error("HTTP 403: You must authenticate with an installation access token") end
   elif $call == "ref" then branch_head($arg)
   elif $call == "comments" then issue_comments($arg | tonumber)
   elif $call == "sub_issues" then sub_issues
