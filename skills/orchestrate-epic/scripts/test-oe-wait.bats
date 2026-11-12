@@ -144,6 +144,28 @@ JSON
   [ "$(action_of 5)" = wait-answer ]
 }
 
+@test "an answer that arrives on an Issue waiting on a person returns the wait with the Issue's Owner to start" {
+  issue_5_waits_for_an_answer
+  github_at_second_poll <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "OWNER", "at": "07:10", "body": "<!-- oe:question -->\nWhich option?"},
+      {"by": "OWNER", "at": "07:20", "body": "Use option A"}
+    ]
+  }]
+}
+JSON
+
+  run bash "${oe}" wait o/r 1 --timeout 60
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-owner ]
+}
+
 # Saves a state where Issue 5 has no branch yet and nothing blocks its claim.
 issue_5_ready_to_claim() {
   github <<'JSON'
