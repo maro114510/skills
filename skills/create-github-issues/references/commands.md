@@ -15,16 +15,16 @@ The Epic is created first: `gh issue create --parent` needs the parent to exist,
 **Number tracking**
 
 - `gh issue create` prints the new Issue URL on success.
-- Record its trailing number against the id: `T1`, `T1.1`, `T2`, and so on; a grandchild is keyed by its full `Tn.m` id.
+- Record its trailing number against the id: `T1`, `T1.1`, `T2`, `P1`, and so on; a grandchild is keyed by its full `Tn.m` id.
 - A failed create prints an error, not a URL, so it gets no number; treat it as failed and continue. A server error such as `HTTP 502` may still have created the Issue, so run the title search below once, before the next create: when exactly one title matches, record that number as created instead.
 - To resume an interrupted run, recover a number with `gh issue list --repo <owner/repo> --state all --search 'in:title <Tn title>' --json number,title,url,state`, quoting the title as for `--title` below, continuing only when exactly one returned title matches `<Tn title>`; otherwise stop rather than attach an ambiguous Issue to the dependency graph.
 
 **Failures and the Step 6 report**
 
 - Neither a failed `Tn` nor a failed `Tn.m` aborts the rest of the run.
-- A failed `Tn`/`Tn.m` never gets a real number, so any not-yet-created sibling whose `depends_on` names it must drop that id from its own `--blocked-by` list — never pass a number that doesn't exist. Note the dropped edge in the Step 6 report so the user knows that dependency was never wired, rather than silently creating an Issue that was supposed to wait but isn't blocked on anything.
+- A failed `Tn`/`Tn.m` never gets a real number, so any not-yet-created sibling or person Issue whose `depends_on` names it must drop that id from its own `--blocked-by` list — never pass a number that doesn't exist. Note the dropped edge in the Step 6 report so the user knows that dependency was never wired, rather than silently creating an Issue that was supposed to wait but isn't blocked on anything.
 - Before each `gh issue edit` in 5.4 and 5.5, confirm no token remains in that body's scope; if one does and a failed create doesn't explain it, the substitution missed it — fix it before submitting.
-- Note in the Step 6 report that the Epic's number is lowest, `Tn` numbers come next in wave order, and every `Tn.m` number comes after all of them, since grandchildren are created last.
+- Note in the Step 6 report that the Epic's number is lowest, `Tn` numbers come next in wave order, every `Tn.m` number comes after all of them, since grandchildren are created next, and every person Issue number comes last.
 
 Every title goes in single quotes, so the shell expands nothing in it, such as a backtick-quoted name; write a `'` inside a title as `'\''`.
 
@@ -78,6 +78,22 @@ EOF
 ```
 
 On a failed `Tn.m`, continue with the rest; the container is still updated. Report it in Step 6 and drop it from later siblings' `--blocked-by`.
+
+### 5.3a Create each person Issue
+
+Only when Step 2 made one. Create each `Pn` after every `Tn` and `Tn.m`, so the numbers it waits for exist. `--blocked-by` lists the real numbers of the `Tn` it waits for and omits any that failed; omit the flag when none remains. Pass no `--parent`: a person Issue is not a sub-issue of the Epic or of any `Tn`. Its body holds no token, so no substitution follows.
+
+```bash
+gh issue create \
+  --repo <owner/repo> \
+  --title '<Pn title>' \
+  --blocked-by "<real numbers of every Tn it waits for, comma-separated>" \
+  --body-file - <<'EOF'
+<Pn body, person Issue shape>
+EOF
+```
+
+On a failure, continue and report it in Step 6 with the `Tn` it was to wait for.
 
 ### 5.4 Substitute placeholders into each container Tn body
 
@@ -156,10 +172,10 @@ mutation($epicId: ID!, $tnId: ID!) {
 }'
 ```
 
-Blocked-by sets: each dependent `Tn` or `Tn.m` must list exactly its successful `depends_on` numbers; failed IDs are intentionally omitted and reported in Step 6.
+Blocked-by sets: each dependent `Tn` or `Tn.m` must list exactly its successful `depends_on` numbers, and each person Issue exactly the numbers of the `Tn` it waits for; failed IDs are intentionally omitted and reported in Step 6. Also confirm no person Issue appears among the Epic's or any `Tn`'s sub-issues.
 
 ```bash
-gh api graphql -f owner="<owner>" -f name="<name>" -F number=<dependent Tn or Tn.m number> -f query='
+gh api graphql -f owner="<owner>" -f name="<name>" -F number=<dependent Tn, Tn.m, or Pn number> -f query='
 query($owner: String!, $name: String!, $number: Int!) {
   repository(owner: $owner, name: $name) {
     issue(number: $number) { blockedBy(first: 100) { nodes { number } } }
@@ -173,7 +189,7 @@ Run only when Step 1 recorded a project number; otherwise skip. `gh issue create
 
 `gh project` needs the `project` scope; add it with `gh auth refresh -s project`. That command fails while `GITHUB_TOKEN` is exported and needs `--hostname` when it cannot prompt, so ask the user to unset `GITHUB_TOKEN` in their shell and rerun. If the keyring already carries the scope, `gh project` works without that step.
 
-Add the Epic and every child by URL, one command per Issue:
+Add the Epic, every child, and every person Issue by URL, one command per Issue:
 
 ```bash
 gh project item-add <project number> --owner <owner> --url "<Issue URL>" --format json

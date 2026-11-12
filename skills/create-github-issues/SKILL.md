@@ -14,6 +14,7 @@ argument-hint: "[repo <owner/repo>] [lang <ja|en>] [project <n>]"
 Create a GitHub Epic and child Issues from conversation context, with length-capped bodies, explicit dependencies, native `gh` hierarchy and dependency links, and a dependency graph in the Epic.
 
 **Core rule for every step: an Issue body contains only source items and the additions the owner named in Step 3. Step 4 is formatting, not authoring — never introduce a new requirement, spec detail, or dependency while writing a body.** If a body needs something new, go back to Step 3 and get it approved there first.
+Moving a source item that needs a person into its own person Issue (Step 2) is not an addition, and its blocked-by edge is not an inferred dependency.
 Source is only the documents the owner named, the owner's own words, and Step 1.5 answers; your own analysis is not source unless the owner approved that item by name. Anything else, safety or correctness items included, is an addition, and an approval that names no addition includes none. An item the source defers or excludes appears only on the Epic's out-of-scope line, never in a Tn, not even as an exclusion.
 
 Paths below are relative to this skill's directory. Read each reference file when its step says so.
@@ -50,11 +51,11 @@ Anything still unresolved is never decided later: it gets the confirmation tag o
 ## Step 2: Structure Tasks and Dependencies
 
 Read `references/structure.md` in full first, and follow it.
-From the context, extract the Epic (title, purpose, scope) and child tasks `T1`, `T2`, ... with title, role, at most 5 requirement bullets and 5 spec bullets, and `depends_on` taken only from what the conversation stated or clearly implied. Compute waves by topological order. On a dependency cycle, ask with **AskUserQuestion** instead of breaking it.
+From the context, extract the Epic (title, purpose, scope) and child tasks `T1`, `T2`, ... with title, role, at most 5 requirement bullets and 5 spec bullets, and `depends_on` taken only from what the conversation stated or clearly implied. Move work that needs a person out of every task into its own person Issue `P1`, `P2`, ..., as `references/structure.md` says. Compute waves by topological order over the `Tn` only. On a dependency cycle, ask with **AskUserQuestion** instead of breaking it.
 
 ## Step 3: Show Summary and Get Approval
 
-Use the "Step 3: Summary Format" in `references/templates.<LANG>.md`. Per task, or once for tasks that differ only in one value as the template allows, show its `Tn` id, title, wave/dependency, one-line background, requirement bullets, spec bullets, one-line target state, the full verification list, and any point-option pointer; for the Epic, its background, scope, target state, and verification; and a dependency preview keyed by `Tn` — Mermaid for 12 or fewer tasks, the wave table for more, the same form Step 4 renders. When a doc-update `Tn` exists, state that the document is out of sync with the answers. Step 4.5 is skipped by default, so approving this summary must be equivalent to approving the final bodies.
+Use the "Step 3: Summary Format" in `references/templates.<LANG>.md`. Per task, or once for tasks that differ only in one value as the template allows, show its `Tn` id, title, wave/dependency, one-line background, requirement bullets, spec bullets, one-line target state, the full verification list, and any point-option pointer; for the Epic, its background, scope, target state, and verification; each person Issue `Pn` with the `Tn` it waits for, outside the Epic's tasks and dependency preview, and a dependency preview keyed by `Tn` — Mermaid for 12 or fewer tasks, the wave table for more, the same form Step 4 renders. When a doc-update `Tn` exists, state that the document is out of sync with the answers. Step 4.5 is skipped by default, so approving this summary must be equivalent to approving the final bodies.
 
 **End your response here and wait for the user's reply. Do not proceed to Step 4 until approval is received.**
 On requested changes, update the summary, including the graph and waves, and show it again.
@@ -76,11 +77,11 @@ Always run every check in `references/bodies.md` § Pre-Creation Checks. If any 
 
 Follow `references/commands.md`, including its failure rules. Every command starts with `gh`; read its "Tool permission contract" before adding or changing one.
 
-- Create the Epic first, then every `Tn` in wave order with `--parent <Epic>` and `--blocked-by` for created dependencies, then each container's `Tn.m` with `--parent <that Tn>` and `--blocked-by` limited to its siblings. Never pass a number that does not exist.
+- Create the Epic first, then every `Tn` in wave order with `--parent <Epic>` and `--blocked-by` for created dependencies, then each container's `Tn.m` with `--parent <that Tn>` and `--blocked-by` limited to its siblings, then each person Issue `Pn` with `--blocked-by` and without `--parent`. Never pass a number that does not exist.
 - Substitute bottom-up: each container's `{{Tn.m}}` first, then the Epic's `{{Tn}}`; a failed create becomes "creation failed", and a failed `Tn` gets no grandchildren.
-- Verify the sub-issue and blocked-by relations against GitHub before Step 6, and stop on a mismatch.
+- Verify the sub-issue and blocked-by relations, including each `Pn`'s, against GitHub before Step 6, and stop on a mismatch.
 - Only when `PROJECT_NUM` is set, run 5.7. Never map Wave numbers onto a `Stage` or `Wave` project field.
 
 ## Step 6: Report Completion
 
-Use the "Step 6: Completion Report" template in `references/templates.<LANG>.md`, including failed creates, dropped edges, and the numbering order. When the doc-update `Tn`'s dependency was wired transitively rather than directly, say so explicitly — a later reader may otherwise "fix" the ordering by adding or removing edges.
+Use the "Step 6: Completion Report" template in `references/templates.<LANG>.md`, including each person Issue with the Issues it waits for, failed creates, dropped edges, and the numbering order. When the doc-update `Tn`'s dependency was wired transitively rather than directly, say so explicitly — a later reader may otherwise "fix" the ordering by adding or removing edges.
