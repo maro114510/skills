@@ -27,7 +27,7 @@
 # |---|---|---|
 # | 0 | Every Issue was classified | One line per Issue |
 # | 1 | A GitHub read or the record store read failed | Nothing |
-# | 2 | The arguments are invalid | Nothing |
+# | 2 | The arguments, or git config skills.bot, are invalid | Nothing |
 #
 # Files
 #
@@ -101,6 +101,7 @@ trust="$(<"${dir}/oe-records.jq")" || fail "cannot read oe-records.jq"
 bots="$(<"${dir}/oe-bots.jq")" || fail "cannot read oe-bots.jq"
 rules="$(<"${dir}/oe-ready.jq")" || fail "cannot read oe-ready.jq"
 rules="${trust}"$'\n'"${bots}"$'\n'"${rules}"
+bot="$(bot_def)" || usage "Invalid git config skills.bot"
 
 # Prints the jq program that runs the entry point $1 of oe-ready.jq,
 # with pr_heads set to $2, records to the JSON array $3, and stale_heads to $4.
@@ -108,7 +109,7 @@ program() {
   printf 'def now_s: %s; def no_checks_grace: %s; def max_attempts: %s; def max_verifier_starts: %s;\n' \
     "${now}" "${no_checks_grace}" "${max_attempts}" "${max_verifier_starts}"
   printf 'def verify_context: "%s"; def pr_heads: {%s}; def records: %s; def stale_heads: {%s};\n%s\n%s\n' \
-    "${verify_context}" "${2:-}" "${3:-[]}" "${4:-}" "${rules}" "$1"
+    "${verify_context}" "${2:-}" "${3:-[]}" "${4:-}" "${bot}"$'\n'"${rules}" "$1"
 }
 
 err="$(mktemp)" || fail "mktemp failed"
