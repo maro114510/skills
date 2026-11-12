@@ -28,3 +28,13 @@ rev = "v1.7.12"
 
   [[repos.hooks]]
   id = "actionlint"
+
+[[repos]]
+repo = "local"
+
+  [[repos.hooks]]
+  id = "gitleaks"
+  name = "Gitleaks"
+  language = "system"
+  entry = "gitleaks protect --staged --redact --no-banner --verbose"
+  pass_filenames = false
