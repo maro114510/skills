@@ -30,6 +30,14 @@ end_session() {
   { kill "$1" && wait "$1"; } 2>/dev/null || true
 }
 
+# Puts a ps that fails to start ahead of the real one on PATH, as a sandbox that refuses setuid programs does.
+ps_cannot_run() {
+  mkdir -p "${BATS_TEST_TMPDIR}/no-ps"
+  printf '#!/bin/sh\necho "ps: Operation not permitted" >&2\nexit 126\n' >"${BATS_TEST_TMPDIR}/no-ps/ps"
+  chmod +x "${BATS_TEST_TMPDIR}/no-ps/ps"
+  export PATH="${BATS_TEST_TMPDIR}/no-ps:${PATH}"
+}
+
 # Prints the token from the output of a successful acquire.
 token_of() {
   printf '%s\n' "$1" | sed -n 's/^token=//p'
@@ -140,6 +148,53 @@ token_of() {
   start_session
 
   OE_SESSION_PID="${session_pid}" run env TZ=Asia/Tokyo LC_ALL=ja_JP.UTF-8 bash "${oe}" lock acquire o/r 1
+
+  [ "${status}" -eq 4 ]
+}
+
+@test "when ps cannot run, a session gets a free lock and a second session is refused while the first one runs" {
+  ps_cannot_run
+  start_session
+  first="${session_pid}"
+  OE_SESSION_PID="${first}" run bash "${oe}" lock acquire o/r 1
+  [ "${status}" -eq 0 ]
+  [ -n "$(token_of "${output}")" ]
+  start_session
+
+  OE_SESSION_PID="${session_pid}" run bash "${oe}" lock acquire o/r 1
+
+  [ "${status}" -eq 4 ]
+}
+
+@test "when ps cannot run, a session gets the lock once the holding session has ended" {
+  ps_cannot_run
+  start_session
+  first="${session_pid}"
+  OE_SESSION_PID="${first}" run bash "${oe}" lock acquire o/r 1
+  [ "${status}" -eq 0 ]
+  end_session "${first}"
+  start_session
+
+  OE_SESSION_PID="${session_pid}" run bash "${oe}" lock acquire o/r 1
+
+  [ "${status}" -eq 0 ]
+}
+
+@test "when ps cannot run, a lock whose holder start ps recorded in UTC and C still refuses a session while the holder runs" {
+  start_session
+  first="${session_pid}"
+  store="${OE_STATE_DIR}/locks.git"
+  mkdir -p "${OE_STATE_DIR}"
+  git init --quiet --bare "${store}"
+  ref="refs/oe-lock/$(printf 'o/r' | git hash-object --stdin)/1"
+  ps_start="$(LC_ALL=C TZ=UTC0 ps -o lstart= -p "${first}" | sed -e 's/^ *//' -e 's/ *$//')"
+  held="$(printf 'token=t\npid=%s\nlstart=%s\nrepo=o/r\nepic=1\nstarted=2026-01-01T00:00:00Z\n' "${first}" "${ps_start}" |
+    git --git-dir="${store}" hash-object -w --stdin)"
+  git --git-dir="${store}" update-ref "${ref}" "${held}"
+  ps_cannot_run
+  start_session
+
+  OE_SESSION_PID="${session_pid}" run bash "${oe}" lock acquire o/r 1
 
   [ "${status}" -eq 4 ]
 }
