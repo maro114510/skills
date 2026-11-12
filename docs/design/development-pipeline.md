@@ -62,7 +62,7 @@ flowchart TB
 | Coordinator | A Session running the orchestrate-epic skill on one Epic. Takes the Epic's lock, reads the next action of every Ticket from `oe ready`, starts an Owner or Verifier for each action that needs one, up to its limit of agents at once, waits with `oe wait` while nothing it can act on changes, and ends as `orchestrate-epic.md` defines |
 | Executor | A harness session the Coordinator starts for one agent step, with no person present |
 | Owner | The agent that implements or repairs one Ticket in its own worktree and pushes a branch, as `orchestrate-epic.md` defines |
-| Verifier | The agent that judges one pull request head against the Ticket's automated checks, as `orchestrate-epic.md` defines |
+| Verifier | The agent that judges one pull request head against the Ticket's acceptance criteria, as `orchestrate-epic.md` defines |
 | Question | An Owner's request for a decision no source settles, written on the Ticket in the shared question template. The Owner stops after writing it |
 | Wait state | The action a person must take on a Ticket, one of the six below. Derived from the next action `oe ready` prints, and for `dependency` from the dependency's state |
 | Holder | Who or what has the Ticket now, derived from the claim and attempt records or from the Wait state. An Owner, a Verifier, or a person |

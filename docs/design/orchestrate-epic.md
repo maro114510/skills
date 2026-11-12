@@ -262,7 +262,7 @@ sequenceDiagram
     Note over O,G: Verification
     O->>E: brief
     O->>+V: Start with only the Issue, the SHA, and the base branch
-    Note over V: Runs each automated check of the Issue
+    Note over V: Runs each acceptance criterion of the Issue
     V->>E: Write success with verdict
     E->>G: Put a success status on the SHA
     V-->>-O: End
