@@ -51,14 +51,14 @@
 # Reads, in order
 #
 # 1. The Epic read gives the default branch head, its checks, and the child Issues.
-# 2. The open pull request list gives the head of each Issue branch.
+# 2. One read per Issue, with its claim and attempt records from this host, gives everything else, including the head of its newest PR.
+#    No read lists the repository's open PRs, so the cost grows with the child Issues and not with the PRs of the repository.
 # 3. Commit statuses give the verdict on each head and the number of Verifier starts.
 # 4. Repository activity gives the push time of each head.
-# 5. One read per Issue, with its claim and attempt records from this host, gives everything else.
-# 6. One compare per listed head, when another Issue's pull request merged into the default branch,
+# 5. One compare per listed head, when another Issue's pull request merged into the default branch,
 #    gives whether the head contains that merge.
 #
-# Reads 1 and 5 hold 100 checks of a commit, and one more read per page gives the rest.
+# Reads 1 and 2 hold 100 checks of a commit, and one more read per page gives the rest.
 set -uo pipefail
 
 dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -286,12 +286,26 @@ if [[ -n "${gate_reason}" ]]; then
   exit 0
 fi
 
-# Read 2: the head of each open Issue branch in this repository.
-pulls="$(gh api "repos/${repo}/pulls?state=open&per_page=100" --paginate --jq '.[]
-  | select((.head.repo.full_name // "" | ascii_downcase) == ("'"${repo}"'" | ascii_downcase)
-    and (.head.ref | test("^'"${branch_prefix}"'[1-9][0-9]*$")))
-  | "\(.head.ref | ltrimstr("'"${branch_prefix}"'"))\t\(.head.sha)"' 2>"${err}")" ||
-  fail "pull request list read failed: $(head -n1 "${err}")"
+# Read 2: each Issue.
+responses=()
+for n in ${sorted[@]+"${sorted[@]}"}; do
+  response="$(gh api graphql -f query="${issue_query}" -F owner="${repo%/*}" -F repo="${repo#*/}" -F num="${n}" \
+    -f branch="${branch_prefix}${n}" -f ref="refs/heads/${branch_prefix}${n}" 2>"${err}")" ||
+    fail "Issue #${n} read failed: $(head -n1 "${err}")"
+  response="$(all_checks "${response}")" || exit 1
+  responses+=("${response}")
+done
+
+# The head of each Issue's newest pull request when it is open and from this repository, as the Issue number and the head, tab-separated.
+pulls=""
+for response in ${responses[@]+"${responses[@]}"}; do
+  pulls+="$(jq -r '.data.repository as $r
+    | ($r.pullRequests.nodes // [])[0]
+    | select(. != null and .state == "OPEN" and .isCrossRepository == false)
+    | "\($r.issue.number)\t\(.headRefOid)"' <<<"${response}" 2>"${err}")" ||
+    fail "pull request unreadable: $(head -n1 "${err}")"
+  pulls+=$'\n'
+done
 
 # Reads 3 and 4 for each head.
 #
@@ -301,7 +315,6 @@ pr_heads=""
 while IFS=$'\t' read -r n sha; do
   [[ -n "${n}" ]] || continue
   [[ "${n}" =~ ^[1-9][0-9]*$ && "${sha}" =~ ^[0-9a-f]{40}$ ]] || fail "pull request list unreadable"
-  [[ " ${sorted[*]-} " == *" ${n} "* ]] || continue
   states="$(gh api "repos/${repo}/commits/${sha}/statuses?per_page=100" --paginate \
     --jq '.[] | select(.context == "'"${verify_context}"'") | .state' 2>"${err}")" ||
     fail "status read for ${sha} failed: $(head -n1 "${err}")"
@@ -321,16 +334,6 @@ while IFS=$'\t' read -r n sha; do
   pr_heads+="\"${sha}\": {verdict: \"${verdict}\", starts: ${starts}, pushed: ${pushed:-null}},"
 done <<<"${pulls}"
 
-# Read 5: each Issue.
-responses=()
-for n in ${sorted[@]+"${sorted[@]}"}; do
-  response="$(gh api graphql -f query="${issue_query}" -F owner="${repo%/*}" -F repo="${repo#*/}" -F num="${n}" \
-    -f branch="${branch_prefix}${n}" -f ref="refs/heads/${branch_prefix}${n}" 2>"${err}")" ||
-    fail "Issue #${n} read failed: $(head -n1 "${err}")"
-  response="$(all_checks "${response}")" || exit 1
-  responses+=("${response}")
-done
-
 # Sibling pull requests: each Issue's newest pull request, when it merged into the default branch, oldest merge first.
 # Every merge commit lands on the default branch, so a head that contains the newest one contains every earlier one.
 siblings=""
@@ -344,7 +347,7 @@ for response in ${responses[@]+"${responses[@]}"}; do
 done
 siblings="$(sort <<<"${siblings}")"
 
-# Read 6: whether each listed head contains the newest merge commit of a sibling of its Issue.
+# Read 5: whether each listed head contains the newest merge commit of a sibling of its Issue.
 # compare reports ahead or identical when the head contains it, and behind or diverged when it does not.
 stale_heads=""
 while IFS=$'\t' read -r n sha; do

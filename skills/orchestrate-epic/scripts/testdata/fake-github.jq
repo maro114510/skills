@@ -15,8 +15,12 @@
 # | comments | Issue number | The comments on that Issue, oldest first |
 # | issue_rest | Issue number | The REST read of one Issue, with its number and body |
 # | sub_issues | Epic number | The child Issues, each with its number and state |
+# | light | none | The light read: the default branch head, each child Issue's state, each branch's head, checks, and newest pull request, and the dependencies |
 # | checks | Commit SHA and cursor, as SHA:CURSOR | The page of checks on that commit after the cursor |
 # | compare | Two commits, as BASE...HEAD | Whether HEAD contains BASE: ahead when it does, and diverged when it does not |
+#
+# The light read stands for GitHub's update times with the whole fixture of an Issue or a pull request in place of the time,
+# so any change a test makes to either changes what the light read returns, as any real change moves an update time.
 #
 # Checks come 100 to a page, in every read that holds them.
 #
@@ -63,7 +67,6 @@
 # | from_fork | Whether its branch lives in a fork | false |
 # | conflicting | Whether it conflicts with its base | false |
 # | pushed | When its head was pushed | Same as opened |
-# | pushed_during_read | Whether a new head arrived after the pull request list was read | false |
 # | committed | The commit time of its head | Same as opened |
 # | checks | Check name to result on its head | No checks |
 # | check_runs | Further check runs on its head, each with name, result, suite, started, and optionally the workflow that ran it, so one name can run in several check suites | None |
@@ -120,8 +123,27 @@ def epic_response:
         nodes: [.issues[] | {number, state: (if .closed then "CLOSED" else "OPEN" end),
           repository: {nameWithOwner: "o/r"}}]}}}}};
 
-# The head the Issue read sees, which differs from the listed head after a push during the read.
-def read_sha: if .pushed_during_read then "c" * 40 else pr_sha end;
+# The light read of oe-light.graphql, with a b<N> and a c<N> field for every Issue of the state.
+def light_state($commit):
+  ($commit | rollup_nodes) as $nodes
+  | if $nodes == null then null else {state: (if any($nodes[]; .status == "IN_PROGRESS" or .state == "PENDING") then "PENDING"
+      elif any($nodes[]; .conclusion == "FAILURE" or .state == "FAILURE") then "FAILURE" else "SUCCESS" end),
+      contexts: {totalCount: ($nodes | length)}} end;
+def light_response:
+  (.default_branch // {}) as $d
+  | {data: {rateLimit: {cost: 1}, repository: ({
+      defaultBranchRef: {name: "main", target: {oid: default_sha, statusCheckRollup: ($d | light_state(.) | if . then {state} else null end)}},
+      issue: {subIssues: {totalCount: (.issues | length),
+        nodes: [.issues[] | {number, state: (if .closed then "CLOSED" else "OPEN" end), updatedAt: (. | tojson)}]}}}
+      + ([.issues[] | {key: "b\(.number)", value: (if .branch then
+          {target: {oid: ((.pull_requests // [] | sort_by(.opened) | reverse | .[0] | select(. != null) | pr_sha) // default_sha),
+            statusCheckRollup: ((.pull_requests // [] | sort_by(.opened) | reverse | .[0] | select(. != null)) | if . then light_state(.) else null end)},
+            associatedPullRequests: {nodes: [.pull_requests // [] | sort_by(.opened) | reverse | .[0:1][] | {number, state: (.state // "open" | ascii_upcase), updatedAt: (. | tojson)}]}}
+        else null end)},
+        {key: "c\(.number)", value: {blockedBy: {nodes: [.blocked_by[]? | {number, state: (if .state == "open" then "OPEN" else "CLOSED" end)}]}}}] | from_entries))}};
+
+# The head the Issue read sees.
+def read_sha: pr_sha;
 
 # A review-thread comment as the Issue read returns it, with the Bot type a listed bot carries.
 def thread_comment:
@@ -217,6 +239,7 @@ def compare_response($base; $head):
 
 $state
 | if $call == "epic" then epic_response
+  elif $call == "light" then light_response
   elif $call == "issue" then issue_response($arg | tonumber)
   elif $call == "pulls" then open_pull_requests
   elif $call == "statuses" then statuses($arg)

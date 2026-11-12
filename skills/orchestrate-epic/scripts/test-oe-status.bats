@@ -408,11 +408,12 @@ JSON
   )"
   echo "${session}" >"${tmp}/detached-session"
   OE_SESSION_PID="${session}" bash "${oe}" lock acquire o/r 1 >/dev/null
-  # The session ends during the second refresh's Epic read.
+  # The session ends during the second refresh's light read, the fourth call that names the Epic:
+  # the light read that finds the children, the light and full reads of refresh 1, and then this one.
   cat >"${tmp}/bin/gh" <<EOF
 #!/usr/bin/env bash
 printf '%s\n' "\$*" >>"${calls}"
-[ "\$(grep -c 'epic=1' "${calls}")" -ne 2 ] || kill ${session}
+[ "\$(grep -c 'epic=1' "${calls}")" -ne 4 ] || kill ${session}
 exec bash "${BATS_TEST_DIRNAME}/testdata/fake-gh.sh" "\$@"
 EOF
   # Refresh 1 sees the session, refresh 2 reads while it ends, and refresh 3 finds it gone and is the last.
@@ -432,23 +433,24 @@ EOF
   )"
   echo "${session}" >"${tmp}/detached-session"
   OE_SESSION_PID="${session}" bash "${oe}" lock acquire o/r 1 >/dev/null
-  # The session ends during the second refresh's Epic read, and the third refresh's Epic read fails.
+  # The session ends during the second refresh's light read, and the first full read after that fails.
   cat >"${tmp}/bin/gh" <<EOF
 #!/usr/bin/env bash
 printf '%s\n' "\$*" >>"${calls}"
 reads="\$(grep -c 'epic=1' "${calls}")"
-[ "\${reads}" -ne 2 ] || kill ${session}
-[ "\${reads}" -ne 3 ] || exit 1
+[ "\${reads}" -ne 4 ] || kill ${session}
+case "\$*" in *OeLight*) ;; *) [ "\$((reads - \$(grep -c OeLight "${calls}")))" -ne 2 ] || exit 1 ;; esac
 exec bash "${BATS_TEST_DIRNAME}/testdata/fake-gh.sh" "\$@"
 EOF
-  # Refreshes 1 and 2 draw views, refresh 3 fails, and refresh 4 draws the last view.
-  views_until_end=3
+  # Refresh 1 draws a view. Refresh 2's light read sees the lock go and its full read fails.
+  # Refresh 3 finds the lock gone, and draws the last view.
+  views_until_end=2
 
   OE_WAIT_INTERVAL=0 OE_STATUS_REFRESHES=10 run --separate-stderr bash "${oe}" status o/r 1 --watch
 
   [ "${status}" -eq 0 ]
   [ "$(printf '%s\n' "${lines[@]}" | grep -c '^ISSUE ')" -eq "${views_until_end}" ]
-  [ "$(grep -c 'epic=1' "${calls}")" -eq 4 ]
+  [ "$(($(grep -c 'epic=1' "${calls}") - $(grep -c OeLight "${calls}")))" -eq 3 ]
 }
 
 @test "--watch without a session holding the Epic's lock keeps refreshing" {
@@ -515,11 +517,12 @@ EOF
   )"
   echo "${session}" >"${tmp}/detached-session"
   OE_SESSION_PID="${session}" env -u LC_ALL -u LC_TIME TZ=UTC LANG=C bash "${oe}" lock acquire o/r 1 >/dev/null
-  # The session ends during the second refresh's Epic read.
+  # The session ends during the second refresh's light read, the fourth call that names the Epic:
+  # the light read that finds the children, the light and full reads of refresh 1, and then this one.
   cat >"${tmp}/bin/gh" <<EOF
 #!/usr/bin/env bash
 printf '%s\n' "\$*" >>"${calls}"
-[ "\$(grep -c 'epic=1' "${calls}")" -ne 2 ] || kill ${session}
+[ "\$(grep -c 'epic=1' "${calls}")" -ne 4 ] || kill ${session}
 exec bash "${BATS_TEST_DIRNAME}/testdata/fake-gh.sh" "\$@"
 EOF
   # Refresh 1 sees the session, refresh 2 reads while it ends, and refresh 3 finds it gone and is the last.
@@ -536,7 +539,7 @@ EOF
 {
   "default_branch": {"checks": {"test": "failure"}},
   "issues": [{"number": 5, "branch": true,
-    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "pushed_during_read": true}]}]
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}}]}]
 }
 JSON
   records 5 claim@07:00 attempt@07:01

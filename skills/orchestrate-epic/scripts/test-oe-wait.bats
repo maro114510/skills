@@ -259,12 +259,12 @@ JSON
   [ "$(action_of 6)" = running ]
 }
 
-# Ends the agent on Issue $1 once oe wait has finished its first poll, within about thirty seconds.
-# The fake gh counts Epic reads only under GH_FAIL_EPIC_READ, so the test sets it to a read that never comes.
+# Ends the agent on Issue $1 once oe wait has made its first full read and a light read after it, within about thirty seconds.
+# The fake gh logs every call, and the light reads before the first full read are the one that finds the children and the one that fingerprints.
 ends_after_first_poll() {
   local _
   for _ in $(seq 300); do
-    if [ "$(cat "${OE_GITHUB}.epic-reads" 2>/dev/null || echo 0)" -ge 2 ]; then
+    if [ "$(grep -c '^light$' "${OE_GITHUB}.calls" 2>/dev/null || echo 0)" -ge 3 ]; then
       agent_ends "$1"
       return 0
     fi
@@ -688,4 +688,162 @@ JSON
 
   [ ! -e "${notified}" ]
   [ -z "$(find "${OE_STATE_DIR}" -path '*/notices/*' 2>/dev/null)" ]
+}
+
+# Reads while nothing changes
+
+# Prints how many calls of kind $1 the fake gh has logged.
+calls_of() {
+  grep -c "^$1\$" "${OE_GITHUB}.calls" 2>/dev/null || true
+}
+
+# Saves a state of $1 children, each claimed, attempted, and waiting on a PR whose checks are running.
+ten_children_waiting() {
+  local n issues="" sep=""
+  for ((n = 1; n <= $1; n++)); do
+    records "$((100 + n))" claim@07:00 attempt@07:01
+    issues+="${sep}{\"number\": $((100 + n)), \"branch\": true, \"pull_requests\": [{\"number\": $((200 + n)), \"opened\": \"07:55\", \"checks\": {\"test\": \"in_progress\"}}]}"
+    sep=","
+  done
+  github <<JSON
+{"default_branch": {"checks": {"test": "success"}}, "issues": [${issues}]}
+JSON
+}
+
+@test "a poll makes one light read and no full read while nothing changes" {
+  ten_children_waiting 10
+  OE_NOW=1800000000 bash "${oe}" wait o/r 1 --timeout 0 >/dev/null || true
+  : >"${OE_GITHUB}.calls"
+
+  # Interval 1 and timeout 3 give about three polls.
+  OE_WAIT_INTERVAL=1 OE_NOW=1800000010 run bash "${oe}" wait o/r 1 --timeout 3
+
+  [ "${status}" -eq 5 ]
+  [ "$(calls_of light)" -ge 2 ]
+  [ "$(calls_of epic)" -eq 0 ]
+  [ "$(calls_of issue)" -eq 0 ]
+  [ "$(calls_of pulls)" -eq 0 ]
+}
+
+@test "one simulated hour with nothing changing makes at most 100 GraphQL points and 100 REST calls" {
+  ten_children_waiting 10
+  OE_NOW=1800000000 bash "${oe}" wait o/r 1 --timeout 0 >/dev/null || true
+  : >"${OE_GITHUB}.calls"
+  # A poll every 2 minutes, as wait_interval sets it; each is a light read of 1 point, and a full read is due once an hour.
+  polls=30
+
+  for ((i = 1; i <= polls; i++)); do
+    OE_NOW="$((1800000000 + i * 120))" bash "${oe}" wait o/r 1 --timeout 0 >/dev/null || true
+  done
+
+  full=$(($(calls_of epic) + $(calls_of checks)))
+  graphql=$(($(calls_of light) + 21 * $(calls_of epic) + 0))
+  rest=$(($(calls_of statuses) + $(calls_of activity) + $(calls_of compare)))
+  [ "${graphql}" -le 100 ]
+  [ "${rest}" -le 100 ]
+  [ "${full}" -le 1 ]
+  [ "$(calls_of pulls)" -eq 0 ]
+}
+
+@test "the dry-run cost of the light read for a 10-child Epic is 2 or less" {
+  ten_children_waiting 10
+  # shellcheck disable=SC1091
+  source "${BATS_TEST_DIRNAME}/oe-config.sh"
+  # shellcheck disable=SC1091
+  source "${BATS_TEST_DIRNAME}/oe-store.sh"
+  # shellcheck disable=SC1091
+  source "${BATS_TEST_DIRNAME}/oe-light.sh"
+
+  OE_LIGHT_COST=1 run --separate-stderr light_read o/r 1 101 102 103 104 105 106 107 108 109 110
+
+  [ "${status}" -eq 0 ]
+  [ "${stderr}" = "cost 1" ]
+}
+
+@test "a new comment on a child Issue triggers the full read on the next poll" {
+  ten_children_waiting 1
+  OE_NOW=1800000000 bash "${oe}" wait o/r 1 --timeout 0 >/dev/null || true
+  github <<'JSON'
+{"default_branch": {"checks": {"test": "success"}}, "issues": [{"number": 101, "branch": true,
+  "comments": [{"by": "OWNER", "at": "07:57", "body": "go on"}],
+  "pull_requests": [{"number": 201, "opened": "07:55", "checks": {"test": "in_progress"}}]}]}
+JSON
+  : >"${OE_GITHUB}.calls"
+
+  OE_NOW=1800000010 run bash "${oe}" wait o/r 1 --timeout 0
+
+  [ "$(calls_of epic)" -eq 1 ]
+}
+
+@test "a push to a child Issue's branch triggers the full read on the next poll" {
+  ten_children_waiting 1
+  OE_NOW=1800000000 bash "${oe}" wait o/r 1 --timeout 0 >/dev/null || true
+  github <<'JSON'
+{"default_branch": {"checks": {"test": "success"}}, "issues": [{"number": 101, "branch": true,
+  "pull_requests": [{"number": 201, "head_sha": "e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5", "opened": "07:55", "checks": {"test": "in_progress"}}]}]}
+JSON
+  : >"${OE_GITHUB}.calls"
+
+  OE_NOW=1800000010 run bash "${oe}" wait o/r 1 --timeout 0
+
+  [ "$(calls_of epic)" -eq 1 ]
+}
+
+@test "a finished check triggers the full read on the next poll, and the wait returns the new action" {
+  ten_children_waiting 1
+  OE_NOW=1800000000 bash "${oe}" wait o/r 1 --timeout 0 >/dev/null || true
+  github <<'JSON'
+{"default_branch": {"checks": {"test": "success"}}, "issues": [{"number": 101, "branch": true,
+  "pull_requests": [{"number": 201, "opened": "07:55", "checks": {"test": "success"}}]}]}
+JSON
+
+  : >"${OE_GITHUB}.calls"
+
+  OE_NOW=1800000010 run bash "${oe}" wait o/r 1 --timeout 0
+
+  [ "${status}" -eq 0 ]
+  [ "$(calls_of epic)" -eq 1 ]
+  [ "$(action_of 101)" = start-verifier ]
+}
+
+@test "a head with no checks triggers the full read when the ten minutes pass, with nothing changing on GitHub" {
+  records 5 claim@07:00 attempt@07:01
+  github <<'JSON'
+{"default_branch": {"checks": {"test": "success"}}, "issues": [{"number": 5, "branch": true,
+  "pull_requests": [{"number": 15, "opened": "07:55"}]}]}
+JSON
+  # The push was 5 minutes before OE_NOW, so oe ready says wait-ci, and the grace ends in 5 more.
+  OE_NOW=1800000000 run bash "${oe}" wait o/r 1 --timeout 0
+  [ "$(action_of 5)" = wait-ci ]
+  : >"${OE_GITHUB}.calls"
+
+  OE_NOW=1800000200 run bash "${oe}" wait o/r 1 --timeout 0
+  [ "$(calls_of epic)" -eq 0 ]
+  [ "$(action_of 5)" = wait-ci ]
+
+  OE_NOW=1800000301 run bash "${oe}" wait o/r 1 --timeout 0
+
+  [ "$(calls_of epic)" -eq 1 ]
+  [ "$(action_of 5)" = parked ]
+}
+
+@test "a full read is made after full_read_every seconds even with nothing changing" {
+  ten_children_waiting 1
+  OE_NOW=1800000000 bash "${oe}" wait o/r 1 --timeout 0 >/dev/null || true
+  : >"${OE_GITHUB}.calls"
+
+  OE_NOW=1800003601 run bash "${oe}" wait o/r 1 --timeout 0
+
+  [ "$(calls_of epic)" -eq 1 ]
+}
+
+@test "oe ready makes no read of the repository's open pull requests" {
+  ten_children_waiting 3
+  : >"${OE_GITHUB}.calls"
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(calls_of pulls)" -eq 0 ]
+  [ "$(calls_of issue)" -eq 3 ]
 }

@@ -1,0 +1,22 @@
+# The light read of oe-light.sh: everything whose change can change oe ready's output, without the content oe ready reads.
+# oe-light.sh writes, at the two placeholders below, two aliased fields per child Issue and the dry-run cost when OE_LIGHT_COST is set:
+#   b<N>: the Issue branch's head, the state and number of its checks, and its newest pull request
+#   c<N>: the Issue's dependencies and their states
+# A child Issue's own state and update time come from the Epic's sub-issue list, so a comment, a label, or a close shows there.
+# Each connection costs one request, so a 10-child Epic costs 1 point.
+query OeLight($owner: String!, $repo: String!, $epic: Int!) {
+  repository(owner: $owner, name: $repo) {
+    defaultBranchRef {
+      name
+      target { ... on Commit { oid statusCheckRollup { state } } }
+    }
+    issue(number: $epic) {
+      subIssues(first: 100) {
+        totalCount
+        nodes { number state updatedAt }
+      }
+    }
+    __CHILDREN__
+  }
+  __COST__
+}

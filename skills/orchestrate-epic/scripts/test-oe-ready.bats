@@ -143,8 +143,8 @@ JSON
   [ "${status}" -eq 0 ]
   [ "$(action_of 5)" = start-verifier ]
 
-  # The Epic read, the Issue read, the pull request list, the commit statuses, and the push activity.
-  for read in subIssues "num=5" /pulls /statuses /activity; do
+  # The Epic read, the Issue read, the commit statuses, and the push activity.
+  for read in subIssues "num=5" /statuses /activity; do
     GH_FAIL="${read}" run --separate-stderr bash "${oe}" ready o/r 1
 
     [ "${status}" -eq 1 ]
@@ -1543,49 +1543,6 @@ JSON
 
   [ "${status}" -eq 0 ]
   [ "$(action_of 5)" = start-owner ]
-}
-
-# A push during the read
-
-@test "a push during the read does not hide a pending question" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "comments": [
-      {"by": "OWNER", "at": "07:30", "body": "<!-- oe:question -->\nWhich option?"}
-    ],
-    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "pushed_during_read": true}]
-  }]
-}
-JSON
-  records 5 claim@07:00 attempt@07:01
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = wait-answer ]
-}
-
-@test "a push during the read fails the read when the action depends on the head" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "pushed_during_read": true}]
-  }]
-}
-JSON
-  records 5 claim@07:00 attempt@07:01
-
-  run --separate-stderr bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 1 ]
-  [ -z "${output}" ]
 }
 
 # Reads that GitHub cuts short
