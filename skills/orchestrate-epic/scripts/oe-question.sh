@@ -29,7 +29,7 @@
 #
 # - Only the orchestrate-epic session runs --answer, with the reply the person gave in its conversation.
 #   An Owner or a Verifier never runs it, because the answer counts as the person's even when the agents' bot writes it.
-# - It answers the Issue's latest question record, as oe-records.jq reads records.
+# - It answers the Issue's latest question record, as oe-records.jq reads records, from the latest claim on, as oe ready reads it.
 # - A reply that is one option's letter, in either case, records that option with its label. Any other reply is recorded as written.
 #
 #   <!-- oe:answer -->
@@ -46,12 +46,14 @@
 # | 0 | The question or the answer was written, and its kind and URL printed, separated by a tab | The record |
 # | 1 | A GitHub read or write failed, or the reader's language could not be resolved | Nothing |
 # | 2 | The arguments are invalid, the question breaks the template, or the reply is empty or a letter no option has | Nothing |
-# | 3 | The Issue has no question to answer | Nothing |
+# | 3 | The Issue has no question to answer since its latest claim | Nothing |
 set -uo pipefail
 
 dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source-path=SCRIPTDIR
 source "${dir}/oe-config.sh"
+# shellcheck source-path=SCRIPTDIR
+source "${dir}/oe-store.sh"
 
 usage() {
   echo "$1" >&2
@@ -96,17 +98,20 @@ if [[ $# -eq 4 ]]; then
   [[ "${reply}" =~ [^[:space:]] ]] || usage "The reply is empty"
   trust="$(<"${dir}/oe-records.jq")" || fail "cannot read oe-records.jq"
   bot="$(bot_def)" || usage "Invalid git config skills.bot"
+  issue_records="$(records_read "${repo}" "${n}" 2>"${err}")" || fail "$(head -n1 "${err}")"
+  claimed_at="$(jq -r '[.[] | select(.kind == "claim") | .at] | last // ""' <<<"${issue_records}")" ||
+    fail "records of Issue #${n} unreadable"
   comments="$(gh api "repos/${repo}/issues/${n}/comments?per_page=100" --paginate --jq '.[]' 2>"${err}")" ||
     fail "reading the comments of Issue #${n} failed: $(head -n1 "${err}")"
   # REST names a bot login with a [bot] suffix and its type in user.type, where oe-records.jq reads GraphQL's shape.
-  question="$(jq -cs "${bot}"$'\n'"${trust}"$'\n'"${rules}"$'\n''
-    map({authorAssociation: .author_association, body, url: .html_url,
+  question="$(jq -cs --arg claimed_at "${claimed_at}" "${bot}"$'\n'"${trust}"$'\n'"${rules}"$'\n''
+    map({authorAssociation: .author_association, body, url: .html_url, createdAt: .created_at,
       author: {login: ((.user.login // "") | sub("\\[bot\\]$"; "")), __typename: (.user.type // "User")}})
-    | map(select(record("question"))) | last
+    | map(select(record("question") and .createdAt >= $claimed_at)) | last
     | if . == null then null else {url, options: (.body | options)} end' <<<"${comments}" 2>"${err}")" ||
     fail "the comments of Issue #${n} are unreadable: $(head -n1 "${err}")"
   if [[ "${question}" == null ]]; then
-    echo "oe question: Issue #${n} has no question to answer" >&2
+    echo "oe question: Issue #${n} has no question to answer since its latest claim" >&2
     exit 3
   fi
   trimmed="${reply#"${reply%%[![:space:]]*}"}"
