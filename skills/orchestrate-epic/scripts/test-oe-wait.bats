@@ -23,6 +23,23 @@ setup() {
   # 2027-01-15 08:00 UTC
   export OE_NOW=1800000000
   four_hours=14400
+  # An empty value overrides any notification command the user's own git config sets, so no test notifies the user.
+  export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=skills.notify GIT_CONFIG_VALUE_0=
+  notified="${BATS_TEST_TMPDIR}/notified"
+}
+
+# Sets the notification command, through the git config skills.notify that oe reads, to one that appends each call's message and link to $notified, separated by a tab.
+notification_command() {
+  export GIT_CONFIG_VALUE_0="printf '%s\\t%s\\n' \"\$1\" \"\$2\" >>'${notified}'"
+}
+
+# Prints the number of calls the notification command received.
+notification_count() {
+  if [ -e "${notified}" ]; then
+    wc -l <"${notified}" | tr -d ' '
+  else
+    echo 0
+  fi
 }
 
 # Saves the GitHub state from stdin.
@@ -394,4 +411,190 @@ recorded() {
   ended "${first}"
   [ ! -s "${BATS_TEST_TMPDIR}/wait-${first}.out" ]
   kill -0 "${other}"
+}
+
+# Notifications
+
+@test "a question waiting for an answer calls the notification command once, with a message and the Issue's link" {
+  notification_command
+  issue_5_waits_for_an_answer
+
+  run bash "${oe}" wait o/r 1 --timeout 1
+
+  [ "${status}" -eq 5 ]
+  [ "$(cat "${notified}")" = $'Issue #5 in o/r has a question for you\thttps://github.com/o/r/issues/5' ]
+}
+
+@test "a parked Issue calls the notification command once, with the park's reason and the Issue's link" {
+  notification_command
+  records 5 claim@07:00 attempt@07:01
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{"number": 50, "opened": "07:10", "pushed": "07:40"}]
+  }]
+}
+JSON
+
+  run bash "${oe}" wait o/r 1 --timeout 1
+
+  [ "${status}" -eq 5 ]
+  [ "$(notification_count)" -eq 1 ]
+  case "$(cat "${notified}")" in
+  "Issue #5 in o/r is parked: no checks on "*$'\thttps://github.com/o/r/issues/5') ;;
+  *) return 1 ;;
+  esac
+}
+
+@test "an Issue waiting for a person calls the notification command once, with the reason and the Issue's link" {
+  notification_command
+  records 5 claim@07:00
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "pull_requests": [{"number": 50, "state": "merged", "opened": "07:10", "merged": "07:40"}]
+  }]
+}
+JSON
+
+  run bash "${oe}" wait o/r 1 --timeout 1
+
+  [ "${status}" -eq 5 ]
+  [ "$(cat "${notified}")" = $'Issue #5 in o/r waits for you: PR #50 merged; the Issue is still open\thttps://github.com/o/r/issues/5' ]
+}
+
+@test "an Issue waiting for a merge calls the notification command once, with the Issue's link" {
+  notification_command
+  records 5 claim@07:00 attempt@07:01
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success", "pending"]}]
+  }]
+}
+JSON
+
+  run bash "${oe}" wait o/r 1 --timeout 1
+
+  [ "${status}" -eq 5 ]
+  [ "$(notification_count)" -eq 1 ]
+  case "$(cat "${notified}")" in
+  "Issue #5 in o/r waits for your merge: success verdict on "*$'\thttps://github.com/o/r/issues/5') ;;
+  *) return 1 ;;
+  esac
+}
+
+@test "reads that keep failing call the notification command once, with the Epic's link" {
+  notification_command
+  pr_15_checks_running
+
+  GH_FAIL=graphql run --separate-stderr bash "${oe}" wait o/r 1 --timeout 3
+
+  [ "${status}" -eq 1 ]
+  [ "$(cat "${notified}")" = $'oe cannot read GitHub for Epic #1 in o/r: 3 reads in a row failed\thttps://github.com/o/r/issues/1' ]
+}
+
+@test "a single failed read calls nothing" {
+  notification_command
+  pr_15_checks_running
+
+  GH_FAIL_EPIC_READ=2 run --separate-stderr bash "${oe}" wait o/r 1 --timeout 1
+
+  [ "${status}" -eq 5 ]
+  [ "$(notification_count)" -eq 0 ]
+}
+
+@test "an Epic whose every Issue is done calls the notification command once, saying the session ends because the Epic is done" {
+  notification_command
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{"number": 5, "closed": true}]
+}
+JSON
+
+  run bash "${oe}" wait o/r 1 --timeout 1
+
+  [ "${status}" -eq 5 ]
+  [ "$(cat "${notified}")" = $'Epic #1 in o/r is done; the session ends\thttps://github.com/o/r/issues/1' ]
+}
+
+@test "oe ready failing with an error that ends the session calls the notification command once, with the exit code" {
+  notification_command
+  export GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_1=skills.bot GIT_CONFIG_VALUE_1='not a login'
+  pr_15_checks_running
+
+  run --separate-stderr bash "${oe}" wait o/r 1 --timeout 1
+
+  [ "${status}" -eq 1 ]
+  [ "$(cat "${notified}")" = $'oe ready failed for Epic #1 in o/r with exit 2; the session ends\thttps://github.com/o/r/issues/1' ]
+}
+
+@test "an Issue still waiting at a later wait within the repeat interval calls nothing again" {
+  notification_command
+  issue_5_waits_for_an_answer
+  bash "${oe}" wait o/r 1 --timeout 0 >/dev/null || true
+  just_under_an_hour_later="$((OE_NOW + 3599))"
+
+  OE_NOW="${just_under_an_hour_later}" run bash "${oe}" wait o/r 1 --timeout 0
+
+  [ "${status}" -eq 5 ]
+  [ "$(notification_count)" -eq 1 ]
+}
+
+@test "an Issue still waiting once the repeat interval has passed calls the notification command again" {
+  notification_command
+  issue_5_waits_for_an_answer
+  bash "${oe}" wait o/r 1 --timeout 0 >/dev/null || true
+  an_hour_later="$((OE_NOW + 3600))"
+
+  OE_NOW="${an_hour_later}" run bash "${oe}" wait o/r 1 --timeout 0
+
+  [ "${status}" -eq 5 ]
+  [ "$(notification_count)" -eq 2 ]
+}
+
+@test "an Issue that stopped waiting and waits again calls the notification command again, within the repeat interval" {
+  notification_command
+  issue_5_waits_for_an_answer
+  bash "${oe}" wait o/r 1 --timeout 0 >/dev/null || true
+  pr_15_checks_running
+  bash "${oe}" wait o/r 1 --timeout 0 >/dev/null || true
+  issue_5_waits_for_an_answer
+
+  run bash "${oe}" wait o/r 1 --timeout 0
+
+  [ "${status}" -eq 5 ]
+  [ "$(notification_count)" -eq 2 ]
+}
+
+@test "with no notification command configured, every event calls nothing and the wait exits as it did" {
+  issue_5_waits_for_an_answer
+  run --separate-stderr bash "${oe}" wait o/r 1 --timeout 1
+  [ "${status}" -eq 5 ]
+  [ -z "${stderr}" ]
+
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{"number": 5, "closed": true}]
+}
+JSON
+  run --separate-stderr bash "${oe}" wait o/r 1 --timeout 1
+  [ "${status}" -eq 5 ]
+  [ -z "${stderr}" ]
+
+  GH_FAIL=graphql run --separate-stderr bash "${oe}" wait o/r 1 --timeout 3
+  [ "${status}" -eq 1 ]
+
+  [ ! -e "${notified}" ]
+  [ -z "$(find "${OE_STATE_DIR}" -path '*/notices/*' 2>/dev/null)" ]
 }
