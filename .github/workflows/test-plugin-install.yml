@@ -70,6 +70,7 @@ jobs:
         run: |
           install_path="$(jq -r '.plugins["skills@maro114510-agent-skills"][0].installPath' "${CLAUDE_CONFIG_DIR:-${HOME}/.claude}/plugins/installed_plugins.json")"
           echo "Installed at: ${install_path}"
+          test -d "${install_path}/skills"
           echo "::group::Installed files"
           find "${install_path}/skills" -type f | sort
           echo "::endgroup::"
