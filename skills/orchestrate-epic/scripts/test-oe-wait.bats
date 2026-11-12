@@ -194,6 +194,15 @@ JSON
   [ "$(action_of 5)" = claim ]
 }
 
+@test "with --max-agents 0, as after a start that failed with no agent running, an Issue to start at the first read keeps the wait running until the timeout" {
+  issue_5_ready_to_claim
+
+  run bash "${oe}" wait o/r 1 --max-agents 0 --timeout 1
+
+  [ "${status}" -eq 5 ]
+  [ "$(action_of 5)" = claim ]
+}
+
 @test "without --max-agents, three running agents keep an Issue to start from ending the wait, as the skill's default of three agents" {
   issue_5_ready_to_claim
 
