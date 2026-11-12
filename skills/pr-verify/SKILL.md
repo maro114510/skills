@@ -24,6 +24,7 @@ If any of the five is missing, end without a verdict and say which.
 - Read only the Issue's title and body. Never read the PR, its body, or its comments, the Issue's comments, or any report from the Owner, because the verdict must come from the Issue and the code alone.
 - Never change `<worktree>`: no edit, commit, push, stash, or checkout. Build and cache output from running a check is allowed, and so are the temporary directories outside it that evidence.md uses.
 - Record the verdict only through `oe verdict`, once, for `<sha>`.
+- Wait for every command and agent you started to finish before ending your turn. The session takes the end of your turn as the end of your work and removes `<worktree>`, so ending a turn to wait for a background command or agent loses the check it was running.
 
 ## Steps
 
