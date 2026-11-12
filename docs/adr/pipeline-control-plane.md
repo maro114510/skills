@@ -1,8 +1,8 @@
-# orchestrate-epic and oe are the only control plane in this repository
+# orchestrate-epic and oe are the only control plane for the implementation stage
 
 ## Context
 
-Two programs define what work is and when it may proceed. A pipeline with two such places reproduces the failure `goal-supervisor.md` names, where the holder of the work also holds its definition and the two disagree.
+Two programs define what work is and when it may proceed. A pipeline with two such places lets the holder of the work also hold its definition, and the two disagree.
 
 | Program | Model of work | State | Harness binding | Status |
 |---|---|---|---|---|
@@ -11,7 +11,7 @@ Two programs define what work is and when it may proceed. A pipeline with two su
 
 ## Decision
 
-orchestrate-epic and `oe` are the only control plane for delivery in this repository. Intentline is a separate project that no skill, agent, script, or Design Doc here references or depends on. An idea from it is adopted only when an observed failure here calls for it, as a change to `oe` or to a skill.
+orchestrate-epic and `oe` are the only control plane for the implementation stage in this repository. Intentline is a separate project that no skill, agent, script, or Design Doc here references or depends on. An idea from it is adopted only when an observed failure here calls for it, as a change to `oe` or to a skill.
 
 ## Rationale
 
@@ -29,6 +29,5 @@ orchestrate-epic and `oe` are the only control plane for delivery in this reposi
 ## Consequences
 
 - One definition of work, a Ticket under an approved Epic, read from GitHub by every stage.
-- The Runner of `development-pipeline.md` is an `oe` program and replaces the skill session that coordinated the loop. Wait states and the Board are `oe` records and views. A second program would be a second control plane.
 - Intentline's separation of run success, work acceptance, and outcome acceptance is unavailable until a failure shows it is needed. The Mergeable ceiling and a person's merge stand in for it.
 - The pipeline runs on the repository owner's token. A verdict can be forged, an Owner's unmarked comment reads as a person's and could answer its own Question, and a Ticket's Holder is a record rather than a separate identity. These remain the accepted risks of `orchestrate-epic.md`.
