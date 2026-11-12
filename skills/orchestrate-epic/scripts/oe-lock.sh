@@ -15,6 +15,8 @@
 # - The start time is recorded in UTC and the C locale, so whether the holder runs does not depend on the reader's TZ or locale.
 #   A lock taken before that holds its taker's TZ and locale, and is read correctly only under the same ones until its holder acquires again or ends.
 # - A lock whose holder is no longer running is taken over by the next acquire.
+# - The lock records when it was taken, at OE_NOW in epoch seconds when set, as a record's at.
+#   The same session acquiring again with its token keeps that time, so the agents it started still count as running.
 #
 # Storage
 #
@@ -25,7 +27,7 @@
 #
 # | Code | Meaning |
 # |---|---|
-# | 0 | acquire: this session holds the lock. release: the lock is free, and the Epic's oe wait, if one runs, is stopped |
+# | 0 | acquire: this session holds the lock, and the Epic's oe wait, if one runs, is stopped unless this session already held the lock. release: the lock is free, and the Epic's oe wait, if one runs, is stopped |
 # | 1 | The lock store failed |
 # | 2 | The arguments are invalid, or OE_SESSION_PID is not a running process |
 # | 4 | Another running session holds the lock |
@@ -116,13 +118,25 @@ if [[ -z "${token}" ]]; then
   fi
 fi
 
+started="$(record_now)" || usage "OE_NOW must be epoch seconds"
 blob="$(printf 'token=%s\npid=%s\nlstart=%s\nrepo=%s\nepic=%s\nstarted=%s\n' \
-  "${token}" "${pid}" "${lstart}" "${repo}" "${epic}" "$(date -u +%FT%TZ)" |
+  "${token}" "${pid}" "${lstart}" "${repo}" "${epic}" "${started}" |
   store_git hash-object -w --stdin)" || fail "cannot write to the lock store"
+
+# Succeeds when the holder blob $1 names this session: the same token, process, and process start.
+same_session() {
+  [[ "$(lock_field token "$1")" == "${token}" && "$(lock_field pid "$1")" == "${pid}" ]] &&
+    [[ "$(lock_field lstart "$1")" == "${lstart}" ]]
+}
 
 # A failed swap means another session changed the lock in between, so it is read again.
 for _ in 1 2 3; do
   current="$(holder)" || exit 1
+  # The same session acquiring again keeps its lock as it was, so oe ready still counts the agents it started since.
+  if [[ -n "${current}" ]] && same_session "${current}"; then
+    printf 'token=%s\n' "${token}"
+    exit 0
+  fi
   if [[ -n "${current}" ]]; then
     if [[ "$(lock_field token "${current}")" != "${token}" ]] && lock_holder_running "${current}"; then
       refuse "${current}"
@@ -132,6 +146,8 @@ for _ in 1 2 3; do
     expected="${zero}"
   fi
   if store_git update-ref "${ref}" "${blob}" "${expected}" 2>/dev/null; then
+    # A wait left by a session that ended would answer every new wait with exit 6 while its own completion reaches no one.
+    stop_recorded_wait "${repo}" "${epic}"
     printf 'token=%s\n' "${token}"
     exit 0
   fi

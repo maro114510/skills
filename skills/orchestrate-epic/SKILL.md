@@ -66,17 +66,17 @@ It opens a pane only inside Herdr with git config `skills.herdr` true, and never
 
 ## Step 3: Loop
 
-Keep in memory only the agents this session started, each with its Issue number and role.
+Take the running agents and each Issue's next command from the latest output of `oe ready` or `oe wait`, never from memory, so a session that lost its context goes on from that output alone.
 Take every "now" below from `date +%s`, never from memory.
 Everything else is read again from GitHub on every pass.
 
 ### 3.1 Read
 
 ```bash
-bash <skill-dir>/scripts/oe ready <repo> <epic> [--running <n>]...
+bash <skill-dir>/scripts/oe ready <repo> <epic>
 ```
 
-Pass `--running` for every Issue whose agent is running. Act on the exit code:
+oe finds the running agents in its own records. Act on the exit code:
 
 | Exit | Action |
 |---|---|
@@ -90,8 +90,9 @@ Any other output keeps the loop running, even when every remaining Issue waits o
 ### 3.2 Start agents
 
 Each line holds an Issue number, an action, a reason, and a start command, separated by tabs.
-Take the lines whose action is `start-verifier`, then `start-owner`, then `claim`, and start one agent per line while fewer than `max-agents` agents run.
+Take the lines whose action is `start-verifier`, then `start-owner`, then `claim`, and start one agent per line while fewer than `max-agents` agents run, counting each `running` line and each agent started in this pass.
 Every other action starts no agent: `done`, `parked`, and each `wait-*` wait for CI, an answer, a dependency, or an engineer.
+A `running` line names the agent that runs for the Issue, and its reason holds the command to run once that agent ends, never before.
 
 A `wait-answer` line holds an Owner's open question in its reason, with each line break written as `\n`, and an `oe question … --answer <reply>` command in place of a start command:
 
@@ -127,7 +128,7 @@ Pick the first row whose tools you have, by the tool names and parameters you se
 - The foreground `timeout` of 720000 ms outlasts `oe wait`'s 9-minute limit plus one poll and its reads, so the wait normally exits on its own.
 - A foreground wait blocks your turn. A background agent that ends meanwhile arrives as a message in the conversation once the wait returns, up to 9 minutes late, even when you have not ended your turn. Handle each such message as the "An agent ended" wake.
 - In batch, the calls return once every agent of the batch has ended, so the slowest agent delays every other Issue. Handle each returned agent as the "An agent ended" wake below, then go to 3.1 without a wait. Run 3.3 only on a pass that started no agent.
-- Codex wakes no idle session: neither an ended agent nor an exited command starts a turn. So in Codex never end your turn before Step 4 is done. An agent that ends arrives as a message after a poll returns: stop the wait by writing Ctrl-C, `\u0003`, to its session, then handle the agent as the "An agent ended" wake.
+- Codex wakes no idle session: neither an ended agent nor an exited command starts a turn. So in Codex never end your turn before Step 4 is done. An agent that ends arrives as a message after a poll returns: handle it as the "An agent ended" wake, and keep polling the wait, which returns with the Issue's new action.
 - Never fork your conversation into a Codex agent, because a Verifier must see only its brief. Codex reports an ended agent as a message from its `task_name`, which names the Issue.
 - Codex refuses a spawn once its thread limit is reached, by default 3 agents with `fork_turns` and 6 with `fork_context`, so keep `max-agents` at or below it and say so when you lower it. After a refused spawn, run `oe worktree remove <n>` and start no agent for that Issue this pass. With `fork_context`, an ended agent holds its slot until you call `close_agent` on it, so do that in the "An agent ended" wake.
 
@@ -136,25 +137,25 @@ Pick the first row whose tools you have, by the tool names and parameters you se
 Start one wait as the Harnesses table says. After starting a background wait, end your turn without polling, sleeping, or reading its output early:
 
 ```bash
-bash <skill-dir>/scripts/oe wait <repo> <epic> [--running <n>]... --max-agents <cap>
+bash <skill-dir>/scripts/oe wait <repo> <epic> --max-agents <cap>
 ```
 
 `<cap>` is `max-agents`, or the number of running agents when a start failed or was refused in this pass, so the wait does not return that Issue again at once.
 
-Keep at most one wait running: before starting a new one, stop the previous one if it is still running.
+Never stop a wait to start another. A running wait sees an agent end, once its worktree is removed, and returns with the Issue's new action.
 The harness wakes you when an agent ends or the wait returns, and whichever comes first is handled below.
 
 | Wake | Action |
 |---|---|
-| An agent ended | `oe worktree remove <n>` for its Issue, drop it from the running agents, and go to 3.1. Its final line goes into the summary only |
+| An agent ended | Run the command its Issue's `running` line names, `oe worktree remove <n>`, and go to 3.1. Its final line goes into the summary only |
 | The wait exited 0 or 5 | Go to 3.1 |
 | The wait exited 1 | Every read failed until its timeout: go to 3.1 |
+| The wait exited 6 | A wait for this Epic already runs and wakes you once the next actions change: end your turn, or in Codex go back to polling that wait |
 | The harness stopped the wait, as on a time limit | Go to 3.1 |
-| A wait you already replaced returns | Ignore it |
 
 ## Step 4: End the session
 
-1. Start nothing new, and stop the wait if one is still running, so it never wakes the session after the lock is released. Wait for each running agent to end, in Codex with `wait_agent`, then run `oe worktree remove <n>` for it.
+1. Start nothing new, and stop the wait if one is still running, so it never wakes the session after the lock is released. Wait for each agent the latest `running` lines name to end, in Codex with `wait_agent`, then run `oe worktree remove <n>` for it.
 2. When every Issue is `done`, run `oe forget <repo> <epic>`. Report a non-zero exit and go on.
 3. Release the lock: `oe lock release <repo> <epic> <token>`.
 4. Report to the user in Japanese with the format below, from the last `oe ready` output and the agents' final lines. Show first each open question that 3.2 has not shown yet, and record a reply to it as 3.2 says.

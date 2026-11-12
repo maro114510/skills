@@ -9,12 +9,14 @@
 #
 #   oe wait <owner/repo> <epic-number> [--running <issue-number>]... [--max-agents <n>] [--timeout <seconds>] [--idle-since <epoch>]
 #
-# - --running is passed to oe ready, and also means an agent is still running.
+# - --running is accepted and ignored, so a caller written for it still runs: the agents running are oe ready's running lines,
+#   so an agent that ends during a wait changes its Issue's line and returns that wait.
 # - --max-agents is how many agents the session can run at once, 3 by default as in the skill.
 #   The session passes its running count after a start failed, so the failed Issue does not end the wait at once.
 # - --timeout bounds this call, wait_timeout seconds by default.
 #   The deadline is checked before each poll, so the call can run up to one poll interval past it.
-# - Starting a wait stops an earlier oe wait for the same Epic on this host, so at most one runs.
+# - A wait never stops another. While an earlier oe wait for the same Epic runs on this host, a new one runs oe ready once,
+#   prints its output, and exits 6, because the earlier wait still returns once the next actions change.
 # - --idle-since is accepted and ignored, so a caller written for the idle limit still runs; the wait never ends the session for idling.
 # - OE_NOW sets the current time in epoch seconds, as in oe ready.
 # - OE_WAIT_INTERVAL sets the seconds between two polls, wait_interval by default.
@@ -59,7 +61,8 @@
 # | 1 | Every GitHub read failed until the timeout | Nothing |
 # | 2 | The arguments are invalid | Nothing |
 # | 5 | The timeout passed with every next action unchanged | The latest output |
-# | 137 | A later oe wait for the same Epic, or oe lock release, killed this one | Nothing |
+# | 6 | Another oe wait for the same Epic runs on this host | oe ready's output, or nothing when that read failed |
+# | 137 | oe lock release killed this one | Nothing |
 set -uo pipefail
 
 dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -78,16 +81,12 @@ usage() {
 repo="$1"
 epic="$2"
 shift 2
-running=()
-agents=0
 max_agents=3
 timeout="${wait_timeout}"
 while [[ $# -gt 0 ]]; do
   case "$1" in
   --running)
     [[ "${2:-}" =~ ^[1-9][0-9]*$ ]] || usage "Expected --running <issue-number>"
-    running+=(--running "$2")
-    agents=$((agents + 1))
     ;;
   --timeout)
     [[ "${2:-}" =~ ^[0-9]+$ ]] || usage "Expected --timeout <seconds>"
@@ -112,16 +111,19 @@ interval="${OE_WAIT_INTERVAL:-${wait_interval}}"
 # shellcheck source-path=SCRIPTDIR
 source "${dir}/oe-store.sh"
 
-# Stops an earlier wait for this Epic on this host, then records this one, so at most one runs.
+# Records this wait for this Epic on this host, or fails when an earlier one still runs.
 wait_file=""
 single_wait() {
   wait_file="$(wait_record "${repo}" "${epic}")" || return 0
-  stop_recorded_wait "${repo}" "${epic}" "$$"
+  if [[ -n "$(recorded_wait "${repo}" "${epic}" "$$")" ]]; then
+    wait_file=""
+    return 1
+  fi
   mkdir -p "${wait_file%/*}" 2>/dev/null &&
     printf '%s %s\n' "$$" "$(process_start "$$")" >"${wait_file}" 2>/dev/null || true
 }
 
-# Drops this wait's record when it ends on its own, unless a later wait already replaced it.
+# Drops this wait's record when it ends on its own, unless another wait recorded itself since.
 # shellcheck disable=SC2329 # invoked by the EXIT trap below
 drop_wait_record() {
   local pid _
@@ -130,7 +132,6 @@ drop_wait_record() {
 }
 trap drop_wait_record EXIT
 trap 'trap - EXIT; exit 143' TERM
-single_wait
 
 # Prints the latest oe ready output, which is empty for an Epic without child Issues.
 emit() {
@@ -205,7 +206,7 @@ waiting_items() {
 # oe ready's own stderr names the failed read.
 poll() {
   local out rc
-  out="$(bash "${dir}/oe-ready.sh" "${repo}" "${epic}" ${running[@]+"${running[@]}"})" && rc=0 || rc=$?
+  out="$(bash "${dir}/oe-ready.sh" "${repo}" "${epic}")" && rc=0 || rc=$?
   if ((rc == 1)); then
     failed_reads=$((failed_reads + 1))
     ((failed_reads < notify_failed_reads)) || [[ -z "${notice_file}" ]] ||
@@ -234,10 +235,18 @@ actions() {
 # Succeeds when a line of $current has an action that starts an agent and fewer than max_agents agents run, so the session can start it now.
 # The action decides, not a non-empty fourth field, because a wait-answer line carries an answer command there and starts nothing.
 startable() {
+  local agents
+  agents="$(cut -f2 <<<"${current}" | grep -cx running)"
   ((agents < max_agents)) && cut -f2 <<<"${current}" | grep -qxE 'claim|start-owner|start-verifier'
 }
 
 current=""
+if ! single_wait; then
+  echo "oe wait: another oe wait runs for ${repo}#${epic}, and returns once the next actions change" >&2
+  poll || true
+  emit
+  exit 6
+fi
 deadline=$(($(date -u +%s) + timeout))
 until poll; do
   (($(date -u +%s) < deadline)) || exit 1

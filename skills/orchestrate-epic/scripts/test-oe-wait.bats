@@ -12,6 +12,7 @@
 setup() {
   bats_require_minimum_version 1.5.0
   load testdata/records
+  load testdata/agents
   export OE_STATE_DIR="${BATS_TEST_TMPDIR}/state"
   oe="${BATS_TEST_DIRNAME}/oe"
   mkdir -p "${BATS_TEST_TMPDIR}/bin"
@@ -20,6 +21,7 @@ setup() {
   export PATH="${BATS_TEST_TMPDIR}/bin:${PATH}"
   export OE_GITHUB="${BATS_TEST_TMPDIR}/github.json"
   export OE_WAIT_INTERVAL=0
+  unset OE_WORKTREE_ROOT
   # 2027-01-15 08:00 UTC
   export OE_NOW=1800000000
   four_hours=14400
@@ -202,10 +204,23 @@ JSON
   [ "$(action_of 5)" = claim ]
 }
 
-@test "with as many agents running as --max-agents allows, an Issue to start at the first read keeps the wait running until the timeout" {
-  issue_5_ready_to_claim
+# Saves a state where Issue 5 has no branch yet and nothing blocks its claim, and Issues 6 to 8 have no branch either.
+issues_5_to_8_ready_to_claim() {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{"number": 5}, {"number": 6}, {"number": 7}, {"number": 8}]
+}
+JSON
+}
 
-  run bash "${oe}" wait o/r 1 --running 6 --running 7 --max-agents 2 --timeout 1
+@test "with as many agents running as --max-agents allows, an Issue to start at the first read keeps the wait running until the timeout" {
+  issues_5_to_8_ready_to_claim
+  session_holds_lock
+  agent_runs 6 owner
+  agent_runs 7 verifier
+
+  run bash "${oe}" wait o/r 1 --max-agents 2 --timeout 1
 
   [ "${status}" -eq 5 ]
   [ "$(action_of 5)" = claim ]
@@ -221,11 +236,52 @@ JSON
 }
 
 @test "without --max-agents, three running agents keep an Issue to start from ending the wait, as the skill's default of three agents" {
-  issue_5_ready_to_claim
+  issues_5_to_8_ready_to_claim
+  session_holds_lock
+  agent_runs 6 owner
+  agent_runs 7 owner
+  agent_runs 8 verifier
 
-  run bash "${oe}" wait o/r 1 --running 6 --running 7 --running 8 --timeout 1
+  run bash "${oe}" wait o/r 1 --timeout 1
 
   [ "${status}" -eq 5 ]
+}
+
+@test "running agents counted from oe's own records, below --max-agents, let an Issue to start at the first read return the wait at once" {
+  issues_5_to_8_ready_to_claim
+  session_holds_lock
+  agent_runs 6 owner
+
+  run bash "${oe}" wait o/r 1 --max-agents 2 --timeout 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = claim ]
+  [ "$(action_of 6)" = running ]
+}
+
+# Ends the agent on Issue $1 once oe wait has finished its first poll, within about thirty seconds.
+# The fake gh counts Epic reads only under GH_FAIL_EPIC_READ, so the test sets it to a read that never comes.
+ends_after_first_poll() {
+  local _
+  for _ in $(seq 300); do
+    if [ "$(cat "${OE_GITHUB}.epic-reads" 2>/dev/null || echo 0)" -ge 2 ]; then
+      agent_ends "$1"
+      return 0
+    fi
+    sleep 0.1
+  done
+}
+
+@test "an agent that ends during a wait makes that wait return with the Issue's new action" {
+  pr_15_checks_running
+  session_holds_lock
+  agent_runs 5 owner
+  ends_after_first_poll 5 3>&- &
+
+  GH_FAIL_EPIC_READ=1000 OE_WAIT_INTERVAL=1 run --separate-stderr bash "${oe}" wait o/r 1 --timeout 30
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-ci ]
 }
 
 @test "a failed first read keeps the wait running, and the next read comes no sooner than the poll interval" {
@@ -305,6 +361,7 @@ background_wait() {
 
 # Stops every wait a test started, with its process tree, so a failed test leaves none running.
 teardown() {
+  stop_sessions
   [ -e "${BATS_TEST_TMPDIR}/waits" ] || return 0
   while read -r pid; do
     pkill -P "${pid}" 2>/dev/null || true
@@ -332,16 +389,16 @@ recorded() {
   return 1
 }
 
-@test "a second wait for the same Epic stops the first quietly, so at most one runs" {
+@test "starting a wait while one runs for the same Epic stops no process, and returns at once with the latest next actions" {
   pr_15_checks_running
   first="$(background_wait 1)"
   recorded "${first}"
 
-  second="$(background_wait 1)"
+  run --separate-stderr bash "${oe}" wait o/r 1 --timeout 1
 
-  ended "${first}"
-  [ ! -s "${BATS_TEST_TMPDIR}/wait-${first}.out" ]
-  kill -0 "${second}"
+  [ "${status}" -eq 6 ]
+  [ "$(action_of 5)" = wait-ci ]
+  kill -0 "${first}"
 }
 
 @test "a wait for another Epic leaves the first running" {
@@ -411,6 +468,40 @@ recorded() {
   ended "${first}"
   [ ! -s "${BATS_TEST_TMPDIR}/wait-${first}.out" ]
   kill -0 "${other}"
+}
+
+@test "a session that takes over the Epic's lock from an ended session stops the wait that session left" {
+  pr_15_checks_running
+  sleep 600 >/dev/null 2>&1 3>&- &
+  ended_session=$!
+  echo "${ended_session}" >>"${BATS_TEST_TMPDIR}/waits"
+  OE_SESSION_PID="${ended_session}" bash "${oe}" lock acquire o/r 1 >/dev/null
+  left="$(background_wait 1)"
+  recorded "${left}"
+  { kill "${ended_session}" && wait "${ended_session}"; } 2>/dev/null || true
+  sleep 600 >/dev/null 2>&1 3>&- &
+  new_session=$!
+  echo "${new_session}" >>"${BATS_TEST_TMPDIR}/waits"
+
+  OE_SESSION_PID="${new_session}" run bash "${oe}" lock acquire o/r 1
+
+  [ "${status}" -eq 0 ]
+  ended "${left}"
+}
+
+@test "a session acquiring its own lock again leaves its wait running" {
+  pr_15_checks_running
+  sleep 600 >/dev/null 2>&1 3>&- &
+  session=$!
+  echo "${session}" >>"${BATS_TEST_TMPDIR}/waits"
+  token="$(OE_SESSION_PID="${session}" bash "${oe}" lock acquire o/r 1 | sed -n 's/^token=//p')"
+  first="$(background_wait 1)"
+  recorded "${first}"
+
+  OE_SESSION_PID="${session}" run bash "${oe}" lock acquire o/r 1 "${token}"
+
+  [ "${status}" -eq 0 ]
+  kill -0 "${first}"
 }
 
 # Notifications

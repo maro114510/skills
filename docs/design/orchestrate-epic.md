@@ -35,10 +35,10 @@ oe starts no agent, edits no code, and never merges a PR. Its only writes to a P
 
 | Part | Job | Writes to |
 |---|---|---|
-| Host-local record store | Keeps each Issue's claim, attempt, and verdict records until oe forget drops them, and each Epic's lock, board pane, and running oe wait, as the layout below says | `$OE_STATE_DIR`, or else `$XDG_STATE_HOME/orchestrate-epic` or `~/.local/state/orchestrate-epic` |
+| Host-local record store | Keeps each Issue's claim, attempt, run, and verdict records until oe forget drops them, and each Epic's lock, board pane, and running oe wait, as the layout below says | `$OE_STATE_DIR`, or else `$XDG_STATE_HOME/orchestrate-epic` or `~/.local/state/orchestrate-epic` |
 | oe lock | Refuses a second session for the same Epic on the same host while the first one's process runs | The Epic's ref in the lock store |
-| oe ready | Reads GitHub and the record store and prints each Issue's next action, with the oe start command for an action that starts an agent | nothing |
-| oe start | Runs every step that starts an Owner or a Verifier for one Issue, from oe claim to oe brief, and prints the agent's prompt | What those steps write |
+| oe ready | Reads GitHub and the record store and prints each Issue's next action, with the oe start command for an action that starts an agent, and names each running agent | nothing |
+| oe start | Runs every step that starts an Owner or a Verifier for one Issue, from oe claim to oe brief, records the agent as running, and prints the agent's prompt | What those steps write, and a run record |
 | oe wait | Blocks until oe ready's next actions change, reading GitHub as Polling and Rate limit under Decisions say, and tells the person as Notifications under Decisions says | The record store, and the configured notification command |
 | oe status | Shows each Issue's step, PR, CI result, verdict and failure reason, attempts, running agent, Wait state, and time in step. `--watch` refreshes it until the session holding the Epic's lock ends | nothing |
 | oe board | Inside Herdr with git config `skills.herdr` true, opens a pane that runs `oe status --watch`, or reuses the Epic's pane from an earlier start | A Herdr pane, and the pane's record on this host |
@@ -57,9 +57,9 @@ The record store lays out its state as `oe-store.sh` defines.
 | Path under the state directory | Holds |
 |---|---|
 | `locks.git` | A bare Git repository with one ref per Epic, naming the session that holds the Epic's lock |
-| `records/<repo-key>/<issue>.jsonl` | One Issue's claim, attempt, and verdict records, oldest first, one JSON object per line. A verdict record holds its findings |
+| `records/<repo-key>/<issue>.jsonl` | One Issue's claim, attempt, run, and verdict records, oldest first, one JSON object per line. A verdict record holds its findings |
 | `boards/<repo-key>/<epic>` | The Herdr pane of the Epic's board |
-| `waits/<repo-key>/<epic>` | The process of the Epic's latest oe wait |
+| `waits/<repo-key>/<epic>` | The process of the Epic's running oe wait |
 | `notices/<repo-key>/<epic>` | Each item that needed the person at oe wait's latest read, with when the person was last told about it |
 
 `<repo-key>` is a hash of the lowercased repository name.
@@ -350,7 +350,8 @@ sequenceDiagram
 | Answers | The person answers in the session's conversation or with a comment on the Issue. The session records an answer from its conversation through oe, so the next Owner reads it on the Issue |
 | Decisions section | An answer recorded through oe appends its decision to a decisions section of the Issue body. The Verifier reads it with the body, and it takes precedence over the criteria it contradicts |
 | Starting agents | Through oe start, which oe ready prints for each line that starts an agent, because a session that lost the skill to a compaction rebuilt the steps from memory and passed the Epic number as the Issue |
-| Waits per Epic | One on each host. A new oe wait stops the earlier one, which exits silently, because a session rebuilding its loop after a compaction started waits without stopping old ones, and each extra wait woke it again |
+| Waits per Epic | One on each host. A new oe wait stops no other: while one runs, the new one prints oe ready's output and exits at once, because a stopped wait reached the session as a stray completion, and the running wait already returns once an agent ends or the next actions change. Only oe lock release, or another session taking the lock, stops a wait |
+| Running agents | oe ready finds them in its own records, never from the session, because a session that lost its context forgot the agents it started. An agent runs while the run record oe start wrote is no older than the lock of the running session holding the Epic, and its worktree exists. An earlier session's leftover worktree therefore holds no Issue, and the same session acquiring its lock again keeps its agents |
 | Polling | One light read every 2 minutes. Every child Issue is read only on a change to it, its PR, or its checks, on a merge of a sibling PR, or at a deadline such as a head with no checks for 10 minutes |
 | Open PRs | oe ready reads only the PRs of the child Issues' branches |
 | Rate limit | oe wait waits until the reset time. Any other failed read is tried again at the next poll, and the wait goes on |

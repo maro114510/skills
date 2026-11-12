@@ -9,7 +9,7 @@
 #
 #   oe ready <owner/repo> <epic-number> [--running <issue-number>]... [--facts]
 #
-# - --running leaves out an Issue whose agent already runs in this session.
+# - --running is accepted and ignored, so a caller written for it still runs: oe finds the running agents in its own records.
 # - --facts, for oe status, prints each line as the JSON object that facts in oe-ready.jq describes.
 #   It changes only the format: the same reads run, and the same action is decided.
 # - OE_NOW sets the current time in epoch seconds.
@@ -20,6 +20,10 @@
 #   The command is empty for an action that starts no agent.
 # - A wait-answer line is the exception: its reason holds the open question, with each line break written as \n,
 #   and its command is the oe question --answer call that records the person's reply, ending in <reply>.
+# - An Issue whose agent runs gets the action running, which no row of the next-action table decides:
+#   its reason names the agent and the oe worktree remove command to run once the agent ends, and its command is empty.
+#   An agent runs while the run record oe start wrote is no older than the lock of the running session holding the Epic,
+#   and the agent's worktree under worktree_root exists. --facts leaves this out, because oe status finds the agents itself.
 # - Lines are sorted by Issue number.
 # - oe-ready.jq lists every action and the row it comes from.
 #
@@ -80,7 +84,6 @@ fail() {
 repo="$1"
 epic="$2"
 shift 2
-running=" "
 entry=classify
 while [[ $# -gt 0 ]]; do
   if [[ "$1" == --facts ]]; then
@@ -89,7 +92,6 @@ while [[ $# -gt 0 ]]; do
     continue
   fi
   [[ "$1" == --running && "${2:-}" =~ ^[1-9][0-9]*$ ]] || usage "Expected --running <issue-number>, got: $*"
-  running+="$2 "
   shift 2
 done
 
@@ -218,12 +220,47 @@ with_start() {
   printf '%s' "${lines}"
 }
 
+# The running agents, found as the header says, only when a running session holds the Epic's lock.
+held_since=""
+agent_root=""
+if [[ "${entry}" == classify ]] && held_since="$(lock_started "${repo}" "${epic}")" && agent_root="$(worktree_root)"; then
+  agent_root="$(cd "${agent_root}" 2>/dev/null && pwd -P)" || agent_root=""
+fi
+
+# Prints the agent type that runs for Issue $1, pr-owner or pr-verify, or nothing when none runs.
+agent_of() {
+  local wt="${agent_root}/issue-$1" issue_records role
+  [[ -n "${held_since}" && -n "${agent_root}" ]] || return 0
+  [[ "$(git -C "${wt}" rev-parse --show-toplevel 2>/dev/null)" == "${wt}" ]] || return 0
+  issue_records="$(records_read "${repo}" "$1" 2>"${err}")" || fail "$(head -n1 "${err}")"
+  role="$(jq -r --arg since "${held_since}" \
+    '[.[] | select(.kind == "run")] | last | select(. != null and .at >= $since) | .role' <<<"${issue_records}")" ||
+    fail "records of Issue #$1 unreadable"
+  case "${role}" in
+  "") ;;
+  owner) printf pr-owner ;;
+  verifier) printf pr-verify ;;
+  *) fail "unknown agent role in the records of Issue #$1: ${role}" ;;
+  esac
+}
+
 sorted=()
+running_lines=""
 if [[ ${#issues[@]} -gt 0 ]]; then
   while read -r n; do
-    [[ "${running}" == *" ${n} "* ]] || sorted+=("${n}")
+    agent="$(agent_of "${n}")" || exit 1
+    if [[ -n "${agent}" ]]; then
+      running_lines+="${n}"$'\t'running$'\t'"${agent} runs; once it ends, run: bash $(shell_quote "${dir}/oe") worktree remove ${n}"$'\n'
+    else
+      sorted+=("${n}")
+    fi
   done < <(printf '%s\n' "${issues[@]}" | sort -n -u)
 fi
+
+# Prints the classified lines $1 with the running agents' lines, sorted by Issue number, each with its command.
+print_lines() {
+  with_start "$(printf '%s%s' "$1" "${running_lines}" | sort -t $'\t' -k1,1n)"
+}
 
 out=""
 if [[ -n "${gate_reason}" ]]; then
@@ -242,7 +279,7 @@ if [[ -n "${gate_reason}" ]]; then
     fi
   done
   if [[ "${entry}" == classify ]]; then
-    with_start "${out}"
+    print_lines "${out}"
   else
     printf '%s' "${out}"
   fi
@@ -341,7 +378,7 @@ for n in ${sorted[@]+"${sorted[@]}"}; do
   i=$((i + 1))
 done
 if [[ "${entry}" == classify ]]; then
-  with_start "${out}"
+  print_lines "${out}"
 else
   printf '%s' "${out}"
 fi

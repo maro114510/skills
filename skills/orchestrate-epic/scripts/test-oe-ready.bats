@@ -11,6 +11,7 @@
 setup() {
   bats_require_minimum_version 1.5.0
   load testdata/records
+  load testdata/agents
   export OE_STATE_DIR="${BATS_TEST_TMPDIR}/state"
   oe="${BATS_TEST_DIRNAME}/oe"
   mkdir -p "${BATS_TEST_TMPDIR}/bin"
@@ -18,8 +19,13 @@ setup() {
   chmod +x "${BATS_TEST_TMPDIR}/bin/gh"
   export PATH="${BATS_TEST_TMPDIR}/bin:${PATH}"
   export OE_GITHUB="${BATS_TEST_TMPDIR}/github.json"
+  unset OE_WORKTREE_ROOT
   # 2027-01-15 08:00 UTC
   export OE_NOW=1800000000
+}
+
+teardown() {
+  stop_sessions
 }
 
 # Saves the GitHub state from stdin.
@@ -39,6 +45,11 @@ action_of() {
       echo "${action}"
     fi
   done
+}
+
+# Prints the field $2 of the line for the Issue numbered $1, counting the Issue number as field 1.
+field_of() {
+  printf '%s\n' "${lines[@]}" | awk -F '\t' -v n="$1" -v f="$2" '$1 == n { print $f }'
 }
 
 # Default branch gate
@@ -312,7 +323,7 @@ JSON
   [ "$(action_of 5)" = claim ]
 }
 
-@test "an Issue whose agent runs in this session is left out, and the rest come in number order" {
+@test "Issues come in number order" {
   github <<'JSON'
 {
   "default_branch": {"checks": {"test": "success"}},
@@ -320,12 +331,127 @@ JSON
 }
 JSON
 
-  run bash "${oe}" ready o/r 1 --running 6
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "${#lines[@]}" -eq 3 ]
+  [ "${lines[0]%%$'\t'*}" = 5 ]
+  [ "${lines[1]%%$'\t'*}" = 6 ]
+  [ "${lines[2]%%$'\t'*}" = 7 ]
+}
+
+# Running agents
+
+# Saves a state where Issues 5 and 6 have no branch yet and nothing blocks their claim.
+issues_5_and_6_ready_to_claim() {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{"number": 5}, {"number": 6}]
+}
+JSON
+}
+
+@test "an Issue whose agent oe start left running is named as running, with the command to run once it ends, without --running" {
+  issues_5_and_6_ready_to_claim
+  session_holds_lock
+  agent_runs 6 owner
+
+  run bash "${oe}" ready o/r 1
 
   [ "${status}" -eq 0 ]
   [ "${#lines[@]}" -eq 2 ]
-  [ "${lines[0]%%$'\t'*}" = 5 ]
-  [ "${lines[1]%%$'\t'*}" = 7 ]
+  [ "$(action_of 5)" = claim ]
+  [ "$(action_of 6)" = running ]
+  [ "$(field_of 6 3)" = "pr-owner runs; once it ends, run: bash '${BATS_TEST_DIRNAME}/oe' worktree remove 6" ]
+  [ -z "$(field_of 6 4)" ]
+}
+
+@test "a running Verifier is named as pr-verify" {
+  issues_5_and_6_ready_to_claim
+  session_holds_lock
+  agent_runs 6 verifier
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 6)" = running ]
+  case "$(field_of 6 3)" in
+  "pr-verify runs;"*) ;;
+  *) return 1 ;;
+  esac
+}
+
+@test "an Issue whose agent ended and had its worktree removed gets its own next action again" {
+  issues_5_and_6_ready_to_claim
+  session_holds_lock
+  agent_runs 6 owner
+  agent_ends 6
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 6)" = claim ]
+}
+
+@test "an agent started before the session took the lock, as by a session that ended, does not count as running" {
+  issues_5_and_6_ready_to_claim
+  agent_runs 6 owner 07:30
+  session_holds_lock
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 6)" = claim ]
+}
+
+@test "an agent still counts as running after its session acquires the lock again with its token" {
+  issues_5_and_6_ready_to_claim
+  session_holds_lock
+  agent_runs 6 owner
+  later=$((OE_NOW + 60))
+  OE_NOW="${later}" session_acquires_again
+
+  OE_NOW="${later}" run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 6)" = running ]
+}
+
+@test "without a running session holding the Epic's lock, no agent counts as running" {
+  issues_5_and_6_ready_to_claim
+  agent_runs 6 owner
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 6)" = claim ]
+}
+
+@test "a running agent is named even while a failed check on the default branch head holds every other Issue" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "failure"}},
+  "issues": [{"number": 5}, {"number": 6}]
+}
+JSON
+  session_holds_lock
+  agent_runs 6 owner
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-base ]
+  [ "$(action_of 6)" = running ]
+}
+
+@test "--running is accepted and changes nothing, so a caller written for it still runs" {
+  issues_5_and_6_ready_to_claim
+
+  run bash "${oe}" ready o/r 1 --running 6
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 6)" = claim ]
 }
 
 # Verification
