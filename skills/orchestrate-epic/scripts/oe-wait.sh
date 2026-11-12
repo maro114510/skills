@@ -128,9 +128,10 @@ actions() {
   cut -f1,2 <<<"$1"
 }
 
-# Succeeds when a line of $current has a start command and fewer than max_agents agents run, so the session can start it now.
+# Succeeds when a line of $current has an action that starts an agent and fewer than max_agents agents run, so the session can start it now.
+# The action decides, not a non-empty fourth field, because a wait-answer line carries an answer command there and starts nothing.
 startable() {
-  ((agents < max_agents)) && cut -f4 <<<"${current}" | grep -q .
+  ((agents < max_agents)) && cut -f2 <<<"${current}" | grep -qxE 'claim|start-owner|start-verifier'
 }
 
 current=""
