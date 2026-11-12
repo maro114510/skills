@@ -108,7 +108,6 @@ Step 1.5 で統合済み文書が変更され、この Tn の内容が変わっ�
 #### P1: <タイトル>（待つ対象: T1, T2）
 - 背景: <作業が必要な理由を1行で>
 - やること: <ソースの文言による、人の手順を1行ずつ>
-- 切り出し元: <元のソース項目またはタスク>
 
 ソースにない追加案がある場合のみ、次の節と、末尾の「追加案は」で始まる行を書く。追加案がなければ、どちらも書かない。
 
@@ -260,10 +259,6 @@ flowchart LR
 ## やること
 
 - {人の手順。ソースの文言で1行}
-
-## 依存関係
-
-{待つタスクごとに "<タイトル> の完了後に着手可能。"}
 ```
 
 **Banned in every section above:** lettered step sequences (`a→b→c→d`), pseudocode, function signatures, multi-level nested bullets. If a task genuinely needs that much detail to specify, split it into more child Issues, or add a single line linking to an existing design doc — never restate the doc inline.

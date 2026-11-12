@@ -19,12 +19,11 @@ Every non-container `Tn`, and every `Tn.m`:
 
 ## Person Issue
 
-Only when Step 2 made one. It is not a `Tn`: no Requirements, Specs, Acceptance Criteria, or Verification section, no token, and no `Tn.m` children.
+Only when Step 2 made one. It is not a `Tn`: no Requirements, Specs, Acceptance Criteria, or Verification section, and no token.
 
 - Background section: why the work exists and which `Tn` it waits for, named by title, never by `Tn` id.
 - What to do section: the source's steps for the person, one line each, from the source's own wording.
-- Dependencies section: "Can start after <title> is done." for each `Tn` it waits for, named by title.
-- Its blocked-by relation is set at creation by `--blocked-by`, and the Epic's diagram and table do not show it.
+- Its blocked-by relation is set at creation by `--blocked-by`.
 
 ## Container `Tn` body
 
@@ -51,7 +50,7 @@ Check the generated bodies mechanically, by re-reading each one against every ch
 
 - Every leaf Issue's (non-container `Tn`, or any `Tn.m`) Requirements / Specs / Verification bullet lists stay within the 5-item cap. The three Step 2 options — split (default), compress (rejected), point (doc-owned) — agree here: an Issue using point still passes this check, because the pointer is a prose line after the bullets, not a bullet, so the Verification list stays at 5 items.
 - Every leaf Issue's Verification is one list with no subheading, and no item of it needs a person, another machine, a real device, or an environment.
-- Every person Issue has the template's Background, What to do, and Dependencies sections only, no `{{...}}` token, and names each `Tn` it waits for by title.
+- Every person Issue has a Background and a What to do section, no `{{...}}` token, and names each `Tn` it waits for by title.
 - No Mermaid node label (Step 3 preview, Epic body, or a container `Tn` body) contains a raw `"` — a title with a quote must use `#quot;` instead.
 - Leaf bodies and person Issue bodies never contain a `{{Tn}}` or `{{Tn.m}}` token — that substitution syntax is container-body-only (the Epic for its `Tn` tokens, a container `Tn` for its own `Tn.m` tokens).
 - Collect every `{{Tn}}` token appearing anywhere in the Epic body (diagram/table node labels, dependency-column references, prose) and confirm that set of ids exactly matches the set of `Tn` (leaf and container alike) about to be created — none missing, none referring to a `Tn` that doesn't exist. Separately, for each container `Tn`, collect every `{{Tn.m}}` token in its own body and confirm that set exactly matches the set of its own `Tn.m` grandchildren — none missing, none referring to a different container's child. A given id may legitimately appear more than once within its own scope (e.g. once as its own row, again in another row's dependency column), so check set membership, not occurrence count.

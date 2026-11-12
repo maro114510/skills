@@ -108,7 +108,6 @@ Only when Step 2 moved work that needs a person out of a task, show each person 
 #### P1: <title> (waits for: T1, T2)
 - Background: <why the work exists, in one line>
 - What to do: <the source's steps for the person, one line each>
-- Moved from: <the source item or task it came from>
 
 Only when you have additions beyond the source, write the next section and the closing line that starts with "Additions are included". With no additions, write neither.
 
@@ -260,10 +259,6 @@ For work that needs a person, another machine, a real device, or an environment.
 ## What to do
 
 - {A step for the person, from the source's wording, one line}
-
-## Dependencies
-
-{"Can start after <title> is done." for each task it waits for, named by title.}
 ```
 
 **Banned in every section above:** lettered step sequences (`a→b→c→d`), pseudocode, function signatures, multi-level nested bullets. If a task genuinely needs that much detail to specify, split it into more child Issues, or add a single line linking to an existing design doc — never restate the doc inline.
