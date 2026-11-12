@@ -13,6 +13,8 @@
 # | wait_interval | 60 | Seconds between two oe ready runs inside oe wait |
 # | board_interval | 180 | Seconds between two refreshes of the board that oe board opens, longer than wait_interval because each refresh reads GitHub as oe ready does |
 # | board_start_timeout | 30 | Seconds oe board waits for the board to start in its pane, enough for a slow shell startup; a normal start takes a second |
+# | notify_repeat | 3600 | Seconds after which oe wait notifies the person again about an item they have not acted on |
+# | notify_failed_reads | 3 | Failed oe ready runs in a row inside one oe wait before it notifies the person, so one transient failure tells nobody |
 #
 # oe-records.jq defines which comments count as records when oe reads them, and oe-store.sh where the host-local records live.
 # shellcheck disable=SC2034 # The sourcing subcommand reads these.
@@ -25,6 +27,8 @@ wait_timeout=540
 wait_interval=60
 board_interval=180
 board_start_timeout=30
+notify_repeat=3600
+notify_failed_reads=3
 
 # Prints the marker that starts the body of a record of kind $1, such as claim.
 # It must equal marker($kind) in oe-records.jq, which reads what this writes.

@@ -940,6 +940,32 @@ JSON
   [ "$(action_of 5)" = start-owner ]
 }
 
+@test "an answer given as a comment gets an Owner and leaves the Issue body unchanged" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "body": "## Acceptance Criteria\n\n- The export retries once.",
+    "comments": [
+      {"by": "OWNER", "at": "07:10", "body": "<!-- oe:question -->\nDecision: Which option?"},
+      {"by": "MEMBER", "at": "07:20", "body": "Use option A"}
+    ]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:01
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-owner ]
+  [ "$(jq -r '.issues[0].body' "${OE_GITHUB}")" = "## Acceptance Criteria
+
+- The export retries once." ]
+}
+
 @test "a question record from the configured bot, which GitHub gives no association, waits for the answer" {
   agent_bot agent-app
   github <<'JSON'

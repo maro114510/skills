@@ -60,6 +60,7 @@ The record store lays out its state as `oe-store.sh` defines.
 | `records/<repo-key>/<issue>.jsonl` | One Issue's claim, attempt, run, and verdict records, oldest first, one JSON object per line. A verdict record holds its findings |
 | `boards/<repo-key>/<epic>` | The Herdr pane of the Epic's board |
 | `waits/<repo-key>/<epic>` | The process of the Epic's running oe wait |
+| `notices/<repo-key>/<epic>` | Each item that needed the person at oe wait's latest read, with when the person was last told about it |
 
 `<repo-key>` is a hash of the lowercased repository name.
 
@@ -345,7 +346,7 @@ sequenceDiagram
 | The board in Herdr | Opt-in with git config `skills.herdr`, read only inside Herdr, so no other run calls herdr and no Herdr user gets a pane unasked |
 | Board refresh | Every 3 minutes, each refresh reading GitHub through oe ready |
 | Board lifetime | The board stops once the session holding the Epic's lock ends, and leaves its last view. A `--watch` that never finds a session holding the lock refreshes until interrupted. A later start reuses its pane when the pane runs the board or sits at its shell's prompt, and never sends input to a pane that runs anything else |
-| Notifications | Each new Issue that needs the person, such as a question or a park, makes oe call one command set in git config. Herdr is one example setting, and no path is Herdr-only |
+| Notifications | oe wait calls the command in git config `skills.notify` with a one-line message and a link for each new item that needs the person: a question, a park, an Issue waiting for a person or for the merge, 3 failed reads in a row, and the session's end with its reason. It calls again every hour while the person has not acted. Herdr is one example setting, and no path is Herdr-only. With no command set, oe notifies nobody |
 | Answers | The person answers in the session's conversation or with a comment on the Issue. The session records an answer from its conversation through oe, so the next Owner reads it on the Issue |
 | Decisions section | An answer recorded through oe appends its decision to a decisions section of the Issue body. The Verifier reads it with the body, and it takes precedence over the criteria it contradicts |
 | Starting agents | Through oe start, which oe ready prints for each line that starts an agent, because a session that lost the skill to a compaction rebuilt the steps from memory and passed the Epic number as the Issue |
