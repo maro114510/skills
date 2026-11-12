@@ -513,22 +513,22 @@ before_start='.comments = [($comment | .id = "IC_old" | .author = "bot" | .bodyH
   done
 }
 
-@test "drive hands the configured own bot's comment over as a comment event although the bot has no association" {
+@test "drive neither acts on nor parks the configured own bot's comment" {
   git config skills.bot agent-app
   set_snap "${waiting} | .comments = [\$comment | .author = \"agent-app\" | .authorType = \"Bot\" | .authorAssociation = \"NONE\"]"
   poll --mode drive
-  expect "$(event)" comment
-  expect "$(field .comment.author)" agent-app
+  expect "$(event)" idle
+  expect "$(ledger '.items["c:IC1"].disposition // "none"')" none
 }
 
-@test "drive parks the own bot's login on a user, and every bot when none is configured, as untrusted authors" {
+@test "drive parks a user with the own bot's login, and the bot itself once none is configured, as untrusted authors" {
   set_snap "${waiting} | .comments = [
     (\$comment | .id = \"IC_user\" | .author = \"agent-app\" | .authorType = \"User\" | .authorAssociation = \"NONE\"),
     (\$comment | .id = \"IC_bot\" | .author = \"agent-app\" | .authorType = \"Bot\" | .authorAssociation = \"NONE\")]"
   git config skills.bot agent-app
   poll --mode drive
   expect "$(ledger '.items["c:IC_user"].reason')" "untrusted author"
-  expect "$(ledger '.items["c:IC_bot"].reason')" null
+  expect "$(ledger '.items["c:IC_bot"].disposition // "none"')" none
   git config --unset skills.bot
   poll --mode drive
   expect "$(ledger '.items["c:IC_bot"].reason')" "untrusted author"

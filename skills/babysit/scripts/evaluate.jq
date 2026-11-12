@@ -18,10 +18,13 @@ def excerpt_chars: 200;
 def review_bots: ["coderabbitai", "chatgpt-codex-connector"];
 
 # Succeeds for a comment drive may act on: one from a repository owner, member, or collaborator, or from a
-# listed review bot or the agents' own bot, which has no association. A user who takes a bot's login is not a Bot.
-# The same own bot rule as skills/orchestrate-epic/scripts/oe-records.jq; an approval by a Bot never counts below.
+# listed review bot, which has no association. A user who takes a bot's login is not a Bot.
 def trusted: (.authorAssociation | IN("OWNER", "MEMBER", "COLLABORATOR"))
-  or (.authorType == "Bot" and (.author | IN(review_bots[]) or ($bot != "" and . == $bot)));
+  or (.authorType == "Bot" and (.author | IN(review_bots[])));
+
+# Succeeds for a comment by the agents' own bot, as skills/orchestrate-epic/scripts/oe-records.jq defines it.
+# It is neither a person's input to act on nor an untrusted author to park, so drive skips it like its own replies.
+def own_bot: $bot != "" and .authorType == "Bot" and .author == $bot;
 
 # The item keys of the ledger that still describe this head; comment keys never carry a head.
 def relevant($head; $gen): select(startswith("c:") or endswith("@\($head)#\($gen)") or . == "x:\($head)#\($gen)");
@@ -70,7 +73,7 @@ def relevant($head; $gen): select(startswith("c:") or endswith("@\($head)#\($gen
     ($s.reviews[] | select(.state != "PENDING" and ((.body // "") | test("\\S"))) | . + {kind: "review"}),
     ($s.threads[] | select(.isResolved | not) | . as $th
       | .comments[] | . + {kind: "thread_comment", thread: $th.id, path: $th.path, line: $th.line}) ]
-  | map(select((.isMinimized | not) and (own_reply(.) | not)))
+  | map(select((.isMinimized | not) and (own_reply(.) | not) and (own_bot | not)))
   | sort_by(.createdAt // "")
   as $comments
 
