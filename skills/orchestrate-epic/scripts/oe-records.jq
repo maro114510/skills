@@ -8,10 +8,12 @@
 # | Agents' bot | A Bot author whose login is oe_bot, the login git config skills.bot names |
 # | Record | A comment by a trusted author or the agents' bot whose body starts with the record's marker |
 # | Engineer input | A comment or review by a trusted author, never the agents' bot, whose body does not start with the oe marker prefix |
+# | Answer | Engineer input, or an answer record, which the session writes from the person's reply even under the agents' bot |
 #
 # | Record on GitHub | Marker | Written by |
 # |---|---|---|
 # | Question | `<!-- oe:question -->` | oe question |
+# | Answer | `<!-- oe:answer -->` | oe question --answer, run only by the session |
 #
 # Claim, attempt, and verdict records stay on this host, as oe-store.sh describes.
 # A marked comment from an older oe is no record, and its marker still keeps it from counting as engineer input.
@@ -22,3 +24,4 @@ def agents_bot: oe_bot != "" and (.author.__typename // "") == "Bot"
 def marker($kind): "<!-- oe:\($kind) -->";
 def record($kind): (trusted or agents_bot) and ((.body // "") | startswith(marker($kind)));
 def engineer_input: trusted and (agents_bot | not) and ((.body // "") | startswith("<!-- oe:") | not);
+def answer: engineer_input or record("answer");

@@ -12,7 +12,7 @@ query($owner: String!, $repo: String!, $num: Int!, $branch: String!, $ref: Strin
       }
       comments(last: 100) {
         totalCount
-        nodes { authorAssociation author { login __typename } body createdAt }
+        nodes { authorAssociation author { login __typename } body createdAt url }
       }
     }
     ref(qualifiedName: $ref) { name }

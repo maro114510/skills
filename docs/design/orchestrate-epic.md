@@ -338,7 +338,7 @@ sequenceDiagram
 | Implicit invocation | Codex ignores `disable-model-invocation`, so pr-owner and pr-verify carry `agents/openai.yaml` with `allow_implicit_invocation: false`, because only the orchestrate-epic session may start them |
 | Counting Verifier starts | oe brief writes the pending verify status that oe ready counts, before it prints a Verifier's brief, so no Verifier starts uncounted |
 | Worktrees | An agent's worktree is removed when the agent ends, and unpushed work is discarded |
-| Where records go | The record store, because comments under the user's account cluttered timelines. Only questions and re-review requests stay on GitHub, in a fixed format that says an agent wrote them |
+| Where records go | The record store, because comments under the user's account cluttered timelines. Only questions, answers, and re-review requests stay on GitHub, in a fixed format that says an agent or the session wrote them |
 | Record key | Repository and Issue: an Issue has one parent Epic, and no writer is given the Epic |
 | Dropping records | oe forget, which the session runs when it ends with every Issue of its Epic done. It refuses while an Issue is open, and oe ready stays read-only |
 | Acceptance checks | Verification splits automated checks from manual ones, and no agent checks a box that needs a human, template boxes included |
