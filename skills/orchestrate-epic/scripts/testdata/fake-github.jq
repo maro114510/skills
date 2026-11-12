@@ -163,7 +163,8 @@ def issue_response($n):
           state: (if .state == "open" then "OPEN" else "CLOSED" end),
           stateReason: (if .state == "open" then null else (.state | ascii_upcase) end)}]},
         comments: {totalCount: (($i.comments // [] | length) + ($i.older_comments // 0)),
-          nodes: [$i.comments[]? | author + {createdAt: (.at | time),
+          nodes: [$i.comments // [] | to_entries[] | .key as $c | .value | author + {createdAt: (.at | time),
+            url: "https://github.com/o/r/issues/\($n)#issuecomment-\($c + 1)",
             author: {login: (.login // ""), __typename: (.type // "User")}}]}},
       ref: (if $i.branch then {name: "feat/issue-\($n)"} else null end),
       pullRequests: {totalCount: (($i.pull_requests // [] | length) + ($i.older_pull_requests // 0)), nodes: [$i.pull_requests // [] | sort_by(.opened) | reverse | .[0:1][] | pull_request]}}}};
@@ -188,7 +189,10 @@ def branch_head($branch):
 
 def issue_comments($n):
   [.issues[] | select(.number == $n)] | first // error("Issue #\($n) not found")
-  | [.comments[]? | {author_association: .by, body, created_at: (.at | time)}];
+  | [.comments // [] | to_entries[] | .key as $i | .value
+    | {author_association: .by, body, created_at: (.at | time),
+      html_url: "https://github.com/o/r/issues/\($n)#issuecomment-\($i + 1)",
+      user: {login: ((.login // "") + (if .type == "Bot" then "[bot]" else "" end)), type: (.type // "User")}}];
 
 def sub_issues:
   [.issues[] | {number, state: (if .closed then "closed" else "open" end)}];

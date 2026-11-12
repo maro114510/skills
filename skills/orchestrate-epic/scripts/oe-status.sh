@@ -137,7 +137,7 @@ render() {
     wait-answer | parked | wait-engineer | wait-update | wait-merge)
       owner_n=$((owner_n + 1))
       needs+="$(jq -r --arg repo "${repo}" '
-        {"wait-answer": "Answer the Owner'\''s question with a comment on the Issue",
+        {"wait-answer": "Answer the Owner'\''s question in the session'\''s conversation or with a comment on the Issue",
           "parked": "Fix it by hand, or delete its branch so the AI starts over",
           "wait-engineer": "Close the Issue, reopen the PR, or delete its branch so the AI starts over",
           "wait-update": "Update the PR'\''s branch with its base branch",

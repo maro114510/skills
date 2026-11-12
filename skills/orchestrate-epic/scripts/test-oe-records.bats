@@ -484,15 +484,36 @@ JSON
 JSON
   records 5 claim@07:00 attempt@07:01
 
-  run bash "${oe}" question o/r 5 <<<"Should the cache key include the locale?"
+  export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=skills.lang GIT_CONFIG_VALUE_0=en
+  question='Decision: The cache key omits the locale: should it hold it?
+
+Context:
+- Goal: each reader sees pages in their own language.
+- Stage: the cache serves pages, keyed by path alone.
+- Why now: a French page was served to an English reader.
+
+Criteria:
+- No reader sees another language.
+
+Options:
+- A. Add the locale to the key
+  - Every reader gets their language; more cache entries.
+- B. Keep the key as it is
+  - No work; readers keep seeing wrong languages.
+
+Recommendation: A, add the locale; it meets the criterion.
+
+Agreement: Shall I add the locale to the key? If not, which option?'
+
+  run bash "${oe}" question o/r 5 <<<"${question}"
   [ "${status}" -eq 0 ]
-  expected_body='<!-- oe:question -->
+  expected_body="<!-- oe:question -->
 ### Question from the orchestrate-epic agent working on this Issue
 
-Should the cache key include the locale?
+${question}
 
 ---
-Answer with a comment on this Issue. The next agent reads it and resumes the work.'
+Answer in the orchestrate-epic session's conversation, or with a comment on this Issue, by an option's letter or in your own words. The next agent reads it and resumes the work."
   [ "$(last_comment 5)" = "${expected_body}" ]
   [ "$(comment_count 5)" -eq 1 ]
 

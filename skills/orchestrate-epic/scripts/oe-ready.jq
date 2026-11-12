@@ -101,6 +101,15 @@ def epic_lines:
         then error("child Issue #\(.number) is in \(.repository.nameWithOwner), not \($r.nameWithOwner)")
         else "issue\t\(.number)\t\(.state)" end);
 
+# The question a question record's body asks, without the marker, the heading, and the closing part after the last `---` line, that oe question wraps it in.
+def question_text:
+  gsub("\r"; "") | split("\n")
+  | (indexes(. == "---") | last) as $end
+  | (if $end == null then . else .[:$end] end)
+  | (indexes(test("^(<!-- oe:|### |\\s*$)") | not) | first) as $start
+  | (indexes(test("^\\s*$") | not) | last) as $last
+  | if $start == null then "" else .[$start:$last + 1] | join("\n") end;
+
 # Reading one Issue
 #
 # issue_state reduces one Issue response to the facts that next_action decides on.
@@ -136,8 +145,8 @@ def issue_state:
     else . end
   | ($comments | indexes(record("question") and ($claimed_at == null or .createdAt >= $claimed_at)) | last) as $question
   | ($attempts | last // $claimed_at) as $since
-  | ($comments | indexes(engineer_input) | map(select(. > ($question // infinite)))) as $answers
-  | (if any($answers[]; $comments[.].createdAt > ($since // "")) then ["a trusted answer to the question"] else [] end) as $answered
+  | ($comments | indexes(answer) | map(select(. > ($question // infinite)))) as $answers
+  | (if any($answers[]; $comments[.].createdAt > ($since // "")) then ["an answer to the question"] else [] end) as $answered
   | ([$prs[] | select($claimed_at == null or .createdAt >= $claimed_at)] | first) as $pr
   | ([$prs[] | select(.mergedAt != null and ($claimed_at == null or .mergedAt >= $claimed_at))] | first) as $merged
   | (if $branch and $pr.state == "OPEN" then try (
@@ -169,6 +178,7 @@ def issue_state:
             | "#\(.number) " + (if .state == "OPEN" then "open" else "closed as \(.stateReason // "unknown")" end))
       end),
       question_open: ($question != null and ($answers | length) == 0),
+      question: (if $question == null then null else $comments[$question] | {url, text: (.body | question_text)} end),
       attempts: ($attempts | length),
       since: $since,
       question_at: (if $question == null then null else $comments[$question].createdAt end),
@@ -201,7 +211,7 @@ def issue_state:
 # | 4 | The branch exists and its pull request closed without merging | wait-engineer |
 # | 5 | No branch, and a dependency is not closed as completed | wait-dependencies |
 # | 6 | No branch, and every dependency is closed as completed | claim |
-# | 7 | The latest question has no engineer input after it | wait-answer |
+# | 7 | The latest question has no answer after it | wait-answer |
 # | 8 | A repair signal is present, and fewer than max_attempts attempts were used | start-owner |
 # | 8 | A repair signal is present, and max_attempts attempts were used | parked |
 # | 9 | A check on the head is pending | wait-ci |
@@ -232,7 +242,8 @@ def next_action:
   elif .branch | not then
     if (.waiting_on | length) > 0 then act("wait-dependencies"; .waiting_on | join(", "))
     else act("claim"; "every dependency completed") end
-  elif .question_open then act("wait-answer"; "the question has no unmarked comment from a trusted role yet")
+  elif .question_open then
+    act("wait-answer"; "question \(.question.url) has no answer yet:\n\(.question.text)" | gsub("\r?\n"; "\\n"))
   elif .head.unreadable != null then error(.head.unreadable)
   elif (.repairs | length) > 0 then
     (.repairs | join("; ")) as $why
