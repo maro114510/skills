@@ -5,7 +5,8 @@
 # | Name | Value | Meaning |
 # |---|---|---|
 # | no_checks_grace | 600 | Seconds a commit may go without checks before its CI counts as missing |
-# | max_attempts | 3 | Owner attempts after the latest claim before the Issue parks |
+# | max_attempts | 3 | Owner starts after the latest claim that ended in a push before the Issue parks |
+# | max_starts_without_push | 2 | Owner starts in a row that ended without a push before the Issue waits for a person |
 # | max_verifier_starts | 2 | Verifier starts on one commit before the Issue parks |
 # | verify_context | oe/verify | The commit status context that holds the verdict |
 # | branch_prefix | feat/issue- | The prefix of an Issue branch, followed by the Issue number |
@@ -20,6 +21,7 @@
 # shellcheck disable=SC2034 # The sourcing subcommand reads these.
 no_checks_grace=600
 max_attempts=3
+max_starts_without_push=2
 max_verifier_starts=2
 verify_context=oe/verify
 branch_prefix=feat/issue-
@@ -77,6 +79,29 @@ open_pr_head() {
     printf '%s\t%s\n' "${number}" "${number_sha}"
     return 0
   done <<<"${prs}"
+}
+
+# Prints the epoch seconds of every push to Issue branch $2 in repository $1 as a JSON array, from repository activity.
+# Creating or deleting the branch is no push. oe-attempts.jq reads the array.
+# Returns 1 with the reason on stderr when the read fails.
+branch_pushes() {
+  local repo="$1" branch="$2" out ghe
+  ghe="$(mktemp)" || {
+    echo "mktemp failed" >&2
+    return 1
+  }
+  out="$(gh api "repos/${repo}/activity?ref=refs/heads/${branch}&per_page=100" --paginate \
+    --jq '.[] | select(.activity_type == "push" or .activity_type == "force_push")
+      | .timestamp | sub("\\.[0-9]+"; "") | fromdateiso8601' 2>"${ghe}")" || {
+    echo "activity read for ${branch} failed: $(head -n1 "${ghe}")" >&2
+    rm -f "${ghe}"
+    return 1
+  }
+  rm -f "${ghe}"
+  jq -cs . <<<"${out}" || {
+    echo "activity read for ${branch} unreadable" >&2
+    return 1
+  }
 }
 
 # Prints the directory that holds the agents' worktrees: OE_WORKTREE_ROOT when set,
