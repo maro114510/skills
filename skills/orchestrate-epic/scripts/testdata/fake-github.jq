@@ -41,7 +41,7 @@
 # | branch | Whether the branch feat/issue-N exists | false |
 # | branch_sha | The head of the branch feat/issue-N | None |
 # | assignees | Logins oe assigned to the Issue | None |
-# | comments | Issue comments, oldest first, each with by, at, and body | None |
+# | comments | Issue comments, oldest first, each with by, at, body, and optionally login and type, as thread comments hold them | None |
 # | pull_requests | Pull requests opened from the branch; the Issue read returns only the newest, as its query asks | None |
 # | older_comments | How many older comments GitHub leaves out of the read | 0 |
 # | older_pull_requests | How many older pull requests GitHub leaves out of the read | 0 |
@@ -161,7 +161,8 @@ def issue_response($n):
           state: (if .state == "open" then "OPEN" else "CLOSED" end),
           stateReason: (if .state == "open" then null else (.state | ascii_upcase) end)}]},
         comments: {totalCount: (($i.comments // [] | length) + ($i.older_comments // 0)),
-          nodes: [$i.comments[]? | author + {createdAt: (.at | time)}]}},
+          nodes: [$i.comments[]? | author + {createdAt: (.at | time),
+            author: {login: (.login // ""), __typename: (.type // "User")}}]}},
       ref: (if $i.branch then {name: "feat/issue-\($n)"} else null end),
       pullRequests: {totalCount: (($i.pull_requests // [] | length) + ($i.older_pull_requests // 0)), nodes: [$i.pull_requests // [] | sort_by(.opened) | reverse | .[0:1][] | pull_request]}}}};
 

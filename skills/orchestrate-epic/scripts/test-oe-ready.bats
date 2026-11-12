@@ -27,6 +27,11 @@ github() {
   cat >"${OE_GITHUB}"
 }
 
+# Configures $1 as the agents' bot, through the git config skills.bot that oe reads.
+agent_bot() {
+  export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=skills.bot GIT_CONFIG_VALUE_0="$1"
+}
+
 # Prints the action that oe ready gave the Issue numbered $1.
 action_of() {
   printf '%s\n' "${lines[@]}" | while IFS=$'\t' read -r n action _; do
@@ -807,6 +812,136 @@ JSON
 
   [ "${status}" -eq 0 ]
   [ "$(action_of 5)" = start-owner ]
+}
+
+@test "a question record from the configured bot, which GitHub gives no association, waits for the answer" {
+  agent_bot agent-app
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "NONE", "login": "agent-app", "type": "Bot", "at": "07:10", "body": "<!-- oe:question -->\nWhich option?"}
+    ]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:01
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-answer ]
+}
+
+@test "a comment from the configured bot that is no record does not answer its question" {
+  agent_bot agent-app
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "NONE", "login": "agent-app", "type": "Bot", "at": "07:10", "body": "<!-- oe:question -->\nWhich option?"},
+      {"by": "NONE", "login": "agent-app", "type": "Bot", "at": "07:20", "body": "Use option A"}
+    ]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:01
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-answer ]
+}
+
+@test "a trusted person's comment answers a question from the configured bot" {
+  agent_bot agent-app
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "NONE", "login": "agent-app", "type": "Bot", "at": "07:10", "body": "<!-- oe:question -->\nWhich option?"},
+      {"by": "OWNER", "login": "owner", "at": "07:20", "body": "Use option A"}
+    ],
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"]}]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:01
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-owner ]
+}
+
+@test "a question-shaped comment from another bot, or from a user with the configured bot's login, is ignored" {
+  agent_bot agent-app
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [
+    {
+      "number": 5,
+      "branch": true,
+      "comments": [
+        {"by": "NONE", "login": "renovate", "type": "Bot", "at": "07:10", "body": "<!-- oe:question -->\nWhich option?"},
+        {"by": "NONE", "login": "agent-app", "type": "User", "at": "07:11", "body": "<!-- oe:question -->\nWhich option?"}
+      ],
+      "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"]}]
+    }
+  ]
+}
+JSON
+  records 5 claim@07:00 attempt@07:01
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-merge ]
+}
+
+@test "with no bot configured, a question-shaped comment from a bot is ignored" {
+  export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "NONE", "login": "agent-app", "type": "Bot", "at": "07:10", "body": "<!-- oe:question -->\nWhich option?"}
+    ],
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"]}]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:01
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-merge ]
+}
+
+@test "an invalid configured bot login fails the read" {
+  agent_bot 'bad"login'
+  github <<'JSON'
+{"default_branch": {"checks": {"test": "success"}}, "issues": [{"number": 5}]}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 2 ]
+  [ "${output}" != "${output#*skills.bot}" ]
 }
 
 @test "an answer that an earlier attempt already took does not start another Owner" {
