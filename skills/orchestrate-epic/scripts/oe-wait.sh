@@ -6,7 +6,7 @@
 #
 # Usage
 #
-#   oe wait <owner/repo> <epic-number> [--running <issue-number>]... [--timeout <seconds>] [--idle-since <epoch>]
+#   oe wait <owner/repo> <epic-number> [--running <issue-number>]... [--max-agents <n>] [--timeout <seconds>] [--idle-since <epoch>]
 #
 # - --running is passed to oe ready, and also means an agent is still running.
 # - --timeout bounds this call, wait_timeout seconds by default.
@@ -42,7 +42,7 @@ source "${dir}/oe-config.sh"
 
 usage() {
   echo "$1" >&2
-  echo "Usage: oe wait <owner/repo> <epic-number> [--running <issue-number>]... [--timeout <seconds>] [--idle-since <epoch>]" >&2
+  echo "Usage: oe wait <owner/repo> <epic-number> [--running <issue-number>]... [--max-agents <n>] [--timeout <seconds>] [--idle-since <epoch>]" >&2
   exit 2
 }
 
@@ -63,6 +63,9 @@ while [[ $# -gt 0 ]]; do
   --timeout)
     [[ "${2:-}" =~ ^[0-9]+$ ]] || usage "Expected --timeout <seconds>"
     timeout="$2"
+    ;;
+  --max-agents)
+    [[ "${2:-}" =~ ^[1-9][0-9]*$ ]] || usage "Expected --max-agents <n>"
     ;;
   --idle-since)
     [[ "${2:-}" =~ ^[0-9]+$ ]] || usage "Expected --idle-since <epoch>"
