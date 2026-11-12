@@ -130,8 +130,10 @@ Pick the first row whose tools you have, by the tool names and parameters you se
 Start one wait as the Harnesses table says. After starting a background wait, end your turn without polling, sleeping, or reading its output early:
 
 ```bash
-bash <skill-dir>/scripts/oe wait <repo> <epic> [--running <n>]... --max-agents <max-agents>
+bash <skill-dir>/scripts/oe wait <repo> <epic> [--running <n>]... --max-agents <cap>
 ```
+
+`<cap>` is `max-agents`, or the number of running agents when a start failed or was refused in this pass, so the wait does not return that Issue again at once.
 
 Keep at most one wait running: before starting a new one, stop the previous one if it is still running.
 The harness wakes you when an agent ends or the wait returns, and whichever comes first is handled below.
