@@ -9,6 +9,7 @@
 # - OE_GITHUB_NEXT, when set, names a state file that replaces the state at the second Epic read.
 #   It models GitHub changing between two oe ready runs, at a point the test controls.
 # - GH_FAIL_EPIC_READ=N fails only the Nth Epic read, as if GitHub were down for one oe ready run.
+#   It also appends each Epic read's epoch second to $OE_GITHUB.epic-read-times, one line per read.
 #
 # | gh call | Answered as |
 # |---|---|
@@ -96,6 +97,7 @@ graphql)
     if [[ -n "${GH_FAIL_EPIC_READ:-}" ]]; then
       epic_reads=$(($(cat "${OE_GITHUB}.epic-reads" 2>/dev/null || echo 0) + 1))
       echo "${epic_reads}" >"${OE_GITHUB}.epic-reads"
+      date +%s >>"${OE_GITHUB}.epic-read-times"
       if [[ "${epic_reads}" -eq "${GH_FAIL_EPIC_READ}" ]]; then
         echo "gh: HTTP 502" >&2
         exit 1

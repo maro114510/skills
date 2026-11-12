@@ -214,13 +214,14 @@ JSON
 @test "a failed first read keeps the wait running, and the next read comes no sooner than the poll interval" {
   issue_5_ready_to_claim
   interval=2
-  started="$(date +%s)"
 
   GH_FAIL_EPIC_READ=1 OE_WAIT_INTERVAL="${interval}" run --separate-stderr bash "${oe}" wait o/r 1 --timeout 60
 
   [ "${status}" -eq 0 ]
   [ "$(action_of 5)" = claim ]
-  [ "$(($(date +%s) - started))" -ge "${interval}" ]
+  failed_read="$(sed -n 1p "${OE_GITHUB}.epic-read-times")"
+  next_read="$(sed -n 2p "${OE_GITHUB}.epic-read-times")"
+  [ "$((next_read - failed_read))" -ge "${interval}" ]
 }
 
 @test "a read that fails after the first keeps the wait running until the timeout, with the latest next actions" {
