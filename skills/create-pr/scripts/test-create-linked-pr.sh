@@ -18,6 +18,7 @@ fail=0
 # - create_fail, pr_view_fail, link_noop, web_fail, meta_fail, user_fail: force that failure
 # - refs: linked issue numbers. lag: reads that still return the old list
 # - gql_exhausted: every GraphQL call fails on the rate limit
+# - app: gh acts as a GitHub App installation, which cannot read its user but can list its installation's repositories
 # The script must use REST wherever REST can do the job, so a GraphQL-only subcommand that has a REST equivalent always fails here.
 bin="${work}/bin"
 mkdir -p "${bin}"
@@ -61,8 +62,15 @@ case "${args}" in
   cat "${d}/refs" 2>/dev/null
   ;;
 *" pr create "* | *" pr edit "* | *" pr view "* | *" issue view "* | *" repo view "*) limited ;;
+*" api installation/repositories"*)
+  [[ -f "${d}/app" ]] || {
+    echo "gh: You must authenticate with an installation access token in order to list repositories. (HTTP 403)" >&2
+    exit 1
+  }
+  echo '{"total_count":1}'
+  ;;
 *" api user "*)
-  [[ -f "${d}/user_fail" ]] && {
+  [[ -f "${d}/user_fail" || -f "${d}/app" ]] && {
     echo "gh: Resource not accessible by integration (HTTP 403)" >&2
     exit 1
   }
@@ -504,6 +512,16 @@ has_line "https://github.com/o/r/pull/7" || r=1
 has_line "WARN: could not resolve @me to assign https://github.com/o/r/pull/7: gh: Resource not accessible by integration (HTTP 403)" || r=1
 called "api -X PATCH repos/{owner}/{repo}/issues/" && r=1
 check "an unresolvable @me warns, updates nothing on the PR, and exits 0" "${r}"
+
+setup $'Closes #12'
+touch "${STUB_DIR}/app"
+create --assignee @me
+r=0
+[[ "${rc}" == 0 ]] || r=1
+has_line "https://github.com/o/r/pull/7" || r=1
+grep -q "WARN" <<<"${out}" && r=1
+called "api -X PATCH repos/{owner}/{repo}/issues/" && r=1
+check "@me under a GitHub App assigns nothing and warns nothing" "${r}"
 
 setup $'Closes #12'
 echo "git@github.com:fork/r.git" >"${STUB_DIR}/origin_url"
