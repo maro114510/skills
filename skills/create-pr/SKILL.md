@@ -114,7 +114,7 @@ Write the title by description.md § Title.
 
 Choose metadata from Step 1's output, without running any other command or asking the user.
 
-**5.1 Assignee**: Step 1's create flags already carry `--assignee @me`.
+**5.1 Assignee**: Step 1's create flags already carry `--assignee @me`. Under a GitHub App, which GitHub cannot assign, `create-linked-pr.sh` assigns nobody and warns nothing.
 
 ## Step 6. Check, Push, and Create the PR
 
