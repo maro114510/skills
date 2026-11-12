@@ -180,9 +180,10 @@ JSON
 @test "an Issue with two attempts since its claim gets a third attempt record and no comment" {
   github <<'JSON'
 {
-  "issues": [{"number": 5, "branch": true}]
+  "issues": [{"number": 5, "branch": true, "pushes": ["07:10", "07:40"]}]
 }
 JSON
+  # Each of the two Owner starts ended in a push.
   records 5 claim@07:00 attempt@07:01 attempt@07:30
 
   run bash "${oe}" attempt o/r 5
@@ -196,15 +197,46 @@ JSON
 @test "the fourth attempt since the claim is refused and nothing is recorded" {
   github <<'JSON'
 {
-  "issues": [{"number": 5, "branch": true}]
+  "issues": [{"number": 5, "branch": true, "pushes": ["07:10", "07:30", "07:50"]}]
 }
 JSON
+  # Each of the three Owner starts ended in a push.
   records 5 claim@07:00 attempt@07:01 attempt@07:20 attempt@07:40
 
   run bash "${oe}" attempt o/r 5
 
   [ "${status}" -eq 4 ]
   [ "$(records_of 5 | wc -l)" -eq 4 ]
+}
+
+@test "Owner starts that ended without a push spend no attempt, so a fourth start is recorded" {
+  github <<'JSON'
+{
+  "issues": [{"number": 5, "branch": true, "pushes": ["07:10"]}]
+}
+JSON
+  # Only the first of the three Owner starts ended in a push.
+  records 5 claim@07:00 attempt@07:01 attempt@07:20 attempt@07:40
+
+  run bash "${oe}" attempt o/r 5
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = $'attempt\t2\t3' ]
+  [ "$(records_of 5 | tail -n1)" = '{"kind":"attempt","at":"2027-01-15T08:00:00Z"}' ]
+}
+
+@test "a failed read of the pushes to the branch records no attempt" {
+  github <<'JSON'
+{
+  "issues": [{"number": 5, "branch": true}]
+}
+JSON
+  records 5 claim@07:00 attempt@07:01
+
+  GH_FAIL=/activity run --separate-stderr bash "${oe}" attempt o/r 5
+
+  [ "${status}" -eq 1 ]
+  [ "$(records_of 5 | wc -l)" -eq 2 ]
 }
 
 @test "attempts before the latest claim do not count toward the cap" {
