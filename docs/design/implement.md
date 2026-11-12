@@ -10,7 +10,7 @@ implement turns one Request into one Change Unit, committed and verified on its 
 | Contract | Observes the Baseline, and writes what the sources lack beside them | Request, repository, linked sources | Implementation Contract, or Questions |
 | Playbook | Builds the unit test first through the procedure for its task type, and runs the checks the diff can affect | Implementation Contract, worktree | Commits, green, or Questions |
 | Self-Review | Reviews a Range in a fresh session: first its scope against the Request alone, then its correctness | Range, Request | Findings, or not run |
-| Reconciliation | Re-fetches the source, and settles with Evidence each Acceptance Criterion it now states and each derived one | Range, source, Acceptance Criteria | Outcome per criterion |
+| Reconciliation | Re-fetches the source, and settles with Evidence each Acceptance Criterion it now states and each derived one | Range, source, Acceptance Criteria | Outcome and Evidence per criterion, or Questions |
 
 | Left to others | Who |
 |---|---|
@@ -116,7 +116,7 @@ sequenceDiagram
         SR-->>I: Findings, or not run
     end
     I->>RC: Range, source, Acceptance Criteria
-    RC-->>I: Outcome per criterion
+    RC-->>I: Outcome and Evidence per criterion, or Questions
     I-->>K: Built, or Questions
 ```
 
@@ -124,7 +124,7 @@ sequenceDiagram
 
 - A run behaves the same whoever calls it. Only its inputs decide what it does.
 - A run handed a worktree works there and takes no Lock. Otherwise a run for an Issue takes the Lock, and returns Busy when the Lock exists. A run without an Issue starts a new branch from the fetched base.
-- A run resumes earlier work only in a worktree handed to it. When the Lock exists because its branch is merged and the Issue is still open, the run ends with Questions instead of Busy.
+- A run resumes earlier work only in a worktree handed to it. When the Issue is still open and a pull request from its branch is merged, the run ends with Questions instead of Busy.
 - A run works only in its worktree, and never switches, pulls, or stashes the shared checkout.
 - Until the Implementation Contract exists with no Question open, a run creates nothing but the Lock and its worktree, and commits nothing.
 - With a person present, a run shows the Baseline, the Acceptance Criteria, and the Decisions, and goes on without waiting for approval.
@@ -139,7 +139,7 @@ sequenceDiagram
 - A test is never weakened or deleted to reach green. A deleted test names where its coverage now lives.
 - Self-Review is started on every run that returns Built. It never changes the worktree, and one that did not complete is reported as not run, never as clean.
 - Self-Review reads only the Range and the Request, and Reconciliation only the Range, the source, and the Acceptance Criteria as written text, never the Decisions, so each can run apart from implement.
-- A final observation is taken on the final HEAD, with the worktree, untracked files included, the same before and after it. A failing observation is taken on the test-only commit. A break observation records the commit it starts from and the break.
+- A final observation is taken on the final HEAD, with `git status` empty before and after it. A failing observation is taken on the test-only commit. A break observation records the commit it starts from and the break.
 - An observation through a fake or a stub settles only the code between the interface it drives and the fake.
 - A green check run is never Evidence for a criterion that does not name that check.
 - An Acceptance Criterion without Evidence is unsatisfied.
