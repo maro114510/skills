@@ -5,7 +5,7 @@
 # | Path under the state directory | Holds | Written by |
 # |---|---|---|
 # | locks.git | One ref per Epic that a session holds | oe lock; read by oe status through lock_held |
-# | records/<repo-key>/<issue>.jsonl | One Issue's records, oldest first, one JSON object per line | oe claim, oe attempt, oe verdict; dropped by oe forget |
+# | records/<repo-key>/<issue>.jsonl | One Issue's records, oldest first, one JSON object per line | oe claim, oe attempt, oe start, oe verdict; dropped by oe forget |
 # | boards/<repo-key>/<epic> | The Herdr pane of the Epic's board and the server it is on, as JSON | oe board, which overwrites it |
 # | waits/<repo-key>/<epic> | The process ID and start time of the Epic's latest oe wait | oe wait, which stops that process first and drops the file when it ends on its own; oe lock release stops that process |
 #
@@ -17,7 +17,11 @@
 # |---|---|
 # | claim | kind, at |
 # | attempt | kind, at |
+# | run | kind, at, role: owner or verifier |
 # | verdict | kind, at, sha, state, findings |
+#
+# - A run record marks an agent oe start started. oe ready counts the agent as running while the record is no older than
+#   the lock of the session holding the Epic, and the agent's worktree, which the session removes once the agent ends, exists.
 #
 # - at is this host's UTC time in ISO 8601 without fractions, the form GitHub uses, so a record and a GitHub event compare as strings.
 #   The comparison assumes a synced clock; the Design Doc accepts the risk of skew.
@@ -149,6 +153,16 @@ lock_held() {
   [[ -d "$(lock_store)" ]] || return 1
   blob="$(git --git-dir="$(lock_store)" rev-parse --quiet --verify "$(lock_ref "$1" "$2")")" || return 1
   lock_holder_running "${blob}"
+}
+
+# Prints when the running session that holds the lock of Epic $2 in repository $1 took it, in a record's at form.
+# Fails when no running session holds it. Creates nothing.
+lock_started() {
+  local blob
+  [[ -d "$(lock_store)" ]] || return 1
+  blob="$(git --git-dir="$(lock_store)" rev-parse --quiet --verify "$(lock_ref "$1" "$2")")" || return 1
+  lock_holder_running "${blob}" || return 1
+  lock_field started "${blob}"
 }
 
 # Prints the record file of the oe wait for Epic $2 in repository $1.
