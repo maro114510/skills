@@ -66,6 +66,7 @@ assert_origin_lacks_tag() {
   ahead="$(git -C "${origin}" rev-parse main)"
   run release
   [ "${status}" -ne 0 ]
+  [[ "${output}" == *"[rejected]"* ]]
   assert_origin_lacks_tag
   [ "$(git -C "${origin}" rev-parse main)" = "${ahead}" ]
 }
