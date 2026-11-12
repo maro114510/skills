@@ -10,9 +10,9 @@ Model-written Japanese fails in two ways. It is hard to read, with meaning tucke
 
 The skill holds three things and nothing else:
 
-- The goal: a reader without the writer's context reads the text once and understands exactly what the source means.
+- The goal: a reader without the writer's context reads the text once and takes from the source exactly what they need, in no more words than that takes. Without the second half, outputs repeated every qualifier and grew past what the reader needed.
 - A picture of the Japanese that serves that reader, which says in passing where meaning must not go.
-- One check before finishing: read the text against the source claim by claim, and fix any claim whose strength, attribution, or conditions changed.
+- One check before finishing: read the text against the source claim by claim, fix any claim whose strength, attribution, or conditions changed, and cut any the source and the request do not call for.
 
 When the skill fails, revise the picture or the check first. A rule for one form is added only when rewording the picture cannot stop a failure that recurs.
 
