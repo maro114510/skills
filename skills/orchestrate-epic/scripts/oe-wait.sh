@@ -17,6 +17,7 @@
 # - OE_WAIT_INTERVAL sets the seconds between two polls, wait_interval by default.
 #
 # The first oe ready run is the baseline, and every later run is compared with it.
+# A baseline that already holds an Issue to start ends the wait at once, because no later run would show it as a change.
 # Only each line's Issue number and action are compared, because a reason carries the seconds since a push,
 # which differ on every run while nothing the session can act on has changed.
 #
@@ -28,7 +29,7 @@
 #
 # | Code | Meaning | Output |
 # |---|---|---|
-# | 0 | An Issue's next action changed, or an Issue appeared or left | The new output |
+# | 0 | An Issue's next action changed, an Issue appeared or left, or the first run holds an Issue to start | The new output |
 # | 1 | A GitHub read failed | Nothing |
 # | 2 | The arguments are invalid | Nothing |
 # | 5 | The timeout passed with every next action unchanged | The latest output |
@@ -114,9 +115,18 @@ actions() {
   cut -f1,2 <<<"$1"
 }
 
+# Succeeds when a line of $current has a start command, an Issue the session can start now.
+startable() {
+  cut -f4 <<<"${current}" | grep -q .
+}
+
 current=""
 poll
 baseline="$(actions "${current}")"
+if startable; then
+  emit
+  exit 0
+fi
 
 deadline=$(($(date -u +%s) + timeout))
 while (($(date -u +%s) < deadline)); do

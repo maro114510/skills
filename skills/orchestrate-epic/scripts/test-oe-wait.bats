@@ -176,7 +176,7 @@ JSON
   esac
 }
 
-@test "a default branch head without checks past the grace keeps the wait running until the timeout" {
+@test "a default branch head without checks past the grace holds nothing, so the wait returns the Issue to claim" {
   github <<'JSON'
 {
   "default_branch": {"pushed": "07:00"},
@@ -186,7 +186,7 @@ JSON
 
   run bash "${oe}" wait o/r 1 --timeout 1
 
-  [ "${status}" -eq 5 ]
+  [ "${status}" -eq 0 ]
   [ "$(action_of 5)" = claim ]
 }
 
