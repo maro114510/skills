@@ -76,7 +76,29 @@ JSON
   [ "${lines[1]}" = "repo o/r issue 5 base main worktree ${wt} reason no PR yet" ]
   [ "${#lines[@]}" -eq 2 ]
   [ "$(git -C "${wt}" branch --show-current)" = feat/issue-5 ]
-  [ "$(records_of 5 | tail -n1)" = '{"kind":"attempt","at":"2027-01-15T08:00:00Z"}' ]
+  [ "$(records_of 5 | jq -c 'select(.kind == "attempt")')" = '{"kind":"attempt","at":"2027-01-15T08:00:00Z"}' ]
+}
+
+@test "a started Owner leaves a run record naming its role" {
+  github <<'JSON'
+{"issues": [{"number": 5, "branch": true}]}
+JSON
+  records 5 claim@07:00
+
+  run --separate-stderr bash "${oe}" start owner o/r 5 "no PR yet"
+
+  [ "${status}" -eq 0 ]
+  [ "$(records_of 5 | tail -n1)" = '{"kind":"run","at":"2027-01-15T08:00:00Z","role":"owner"}' ]
+}
+
+@test "a started Verifier leaves a run record naming its role" {
+  records 5 claim@07:00 attempt@07:01
+  pr_15_passed_checks
+
+  run --separate-stderr bash "${oe}" start verifier o/r 5
+
+  [ "${status}" -eq 0 ]
+  [ "$(records_of 5 | tail -n1)" = '{"kind":"run","at":"2027-01-15T08:00:00Z","role":"verifier"}' ]
 }
 
 @test "starting an Owner with --claim claims the Issue first" {
@@ -88,7 +110,7 @@ JSON
 
   [ "${status}" -eq 0 ]
   [ "${lines[0]}" = "${skills}/pr-owner/SKILL.md" ]
-  [ "$(records_of 5 | jq -r .kind | paste -sd, -)" = claim,attempt ]
+  [ "$(records_of 5 | jq -r .kind | paste -sd, -)" = claim,attempt,run ]
 }
 
 @test "claiming an Issue assigns it to the gh user running oe" {
@@ -111,7 +133,7 @@ JSON
 
   [ "${status}" -eq 0 ]
   [ "${lines[0]}" = "${skills}/pr-owner/SKILL.md" ]
-  [ "$(records_of 5 | jq -r .kind | paste -sd, -)" = claim,attempt ]
+  [ "$(records_of 5 | jq -r .kind | paste -sd, -)" = claim,attempt,run ]
 }
 
 @test "a claim made as a GitHub App skips the assignment without a warning" {
