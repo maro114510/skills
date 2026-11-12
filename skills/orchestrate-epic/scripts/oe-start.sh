@@ -14,10 +14,11 @@
 #
 # | Role | Steps, in order | Agent type |
 # |---|---|---|
-# | owner --claim | oe claim, oe attempt, oe worktree add, oe brief owner | pr-owner |
-# | owner | oe attempt, oe worktree add, oe brief owner | pr-owner |
-# | verifier | oe worktree add --detach, oe brief verifier | pr-verify |
+# | owner --claim | oe claim, oe attempt, oe worktree add, oe brief owner, run record | pr-owner |
+# | owner | oe attempt, oe worktree add, oe brief owner, run record | pr-owner |
+# | verifier | oe worktree add --detach, oe brief verifier, run record | pr-verify |
 #
+# - The run record, in the store oe-store.sh lays out, is how oe ready finds the agent running until its worktree is removed.
 # - The first step that fails ends the run with its exit code.
 # - A worktree this run created is removed when a later step fails, so a failed start leaves no worktree.
 #
@@ -37,6 +38,8 @@
 set -uo pipefail
 
 dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source-path=SCRIPTDIR
+source "${dir}/oe-store.sh"
 
 usage() {
   echo "$1" >&2
@@ -100,6 +103,14 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# Records the agent of this role as running, after every other step, so a failed start leaves no running agent.
+record_run() {
+  local at
+  at="$(record_now)" &&
+    records_add "${repo}" "${n}" "$(jq -cn --arg at "${at}" --arg role "${role}" '{kind: "run", at: $at, role: $role}')" ||
+    exit 1
+}
+
 if [[ "${role}" == owner ]]; then
   if [[ "${claim}" == true ]]; then
     step claim "${repo}" "${n}"
@@ -107,9 +118,11 @@ if [[ "${role}" == owner ]]; then
   step attempt "${repo}" "${n}"
   worktree="$(bash "${dir}/oe" worktree add "${n}")" || exit $?
   brief="$(bash "${dir}/oe" brief owner "${repo}" "${n}" "${worktree}" ${reason:+"${reason}"})" || exit $?
+  record_run
   printf '%s\n%s\n' "${skill}" "${brief}"
 else
   worktree="$(bash "${dir}/oe" worktree add "${n}" --detach)" || exit $?
   brief="$(bash "${dir}/oe" brief verifier "${repo}" "${n}" "${worktree}")" || exit $?
+  record_run
   printf '%s\n%s\n' "${skill}" "${brief}"
 fi
