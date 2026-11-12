@@ -22,6 +22,9 @@
 # - OE_WAIT_INTERVAL sets the seconds between two polls, wait_interval by default.
 #
 # A failed oe ready run ends nothing: the next run comes one poll interval later.
+# The exception is a failure with the GraphQL rate limit exhausted, which another job on the same account can cause at any time:
+# oe wait then shows the reset time on stderr and polls again at that time, or at the deadline when that comes first.
+# It decides this from GitHub's rate_limit read, which costs no rate-limit points, and not from the failed read's message.
 # The first oe ready run that succeeds is the baseline, and every later run is compared with it.
 # A baseline that already holds an Issue to start ends the wait at once while fewer than --max-agents agents run,
 # because no later run would show it as a change.
@@ -58,7 +61,7 @@
 # | Code | Meaning | Output |
 # |---|---|---|
 # | 0 | An Issue's next action changed, an Issue appeared or left, or the baseline holds an Issue to start | The new output |
-# | 1 | Every GitHub read failed until the timeout | Nothing |
+# | 1 | Every GitHub read failed until the timeout, including while a rate limit had not reset | Nothing |
 # | 2 | The arguments are invalid | Nothing |
 # | 5 | The timeout passed with every next action unchanged | The latest output |
 # | 6 | Another oe wait for the same Epic runs on this host | oe ready's output, or nothing when that read failed |
@@ -202,12 +205,44 @@ waiting_items() {
   fi
 }
 
+# Prints $1 epoch seconds as a UTC time, with date -d on GNU and date -r on BSD.
+utc_time() {
+  date -u -d "@$1" '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || date -u -r "$1" '+%Y-%m-%dT%H:%M:%SZ'
+}
+
+rate_reset=0
+
+# Sets rate_reset to the epoch second at which the exhausted GraphQL bucket refills, and shows it, or to 0 when the bucket is not exhausted.
+# A failed rate_limit read leaves it 0, so the failure is treated like any other.
+check_rate_limit() {
+  local reset
+  rate_reset=0
+  reset="$(gh api rate_limit --jq '.resources.graphql | select(.remaining == 0) | .reset' 2>/dev/null)" || return 0
+  [[ "${reset}" =~ ^[0-9]+$ ]] || return 0
+  rate_reset="${reset}"
+  echo "oe wait: the GitHub GraphQL rate limit is exhausted; waiting until it resets at $(utc_time "${reset}")" >&2
+}
+
+# Sleeps one poll interval, or until the rate limit resets or the deadline when that is later than now and comes first.
+pause() {
+  local now seconds="${interval}"
+  now="$(date -u +%s)"
+  if ((rate_reset > now)); then
+    seconds=$((rate_reset - now))
+    ((seconds <= deadline - now)) || seconds=$((deadline - now))
+    ((seconds >= 0)) || seconds=0
+  fi
+  sleep "${seconds}"
+}
+
 # Runs oe ready into $current, and fails leaving $current as it was when oe ready failed.
 # oe ready's own stderr names the failed read.
 poll() {
   local out rc
   out="$(bash "${dir}/oe-ready.sh" "${repo}" "${epic}")" && rc=0 || rc=$?
+  rate_reset=0
   if ((rc == 1)); then
+    check_rate_limit
     failed_reads=$((failed_reads + 1))
     ((failed_reads < notify_failed_reads)) || [[ -z "${notice_file}" ]] ||
       printf 'reads\toe cannot read GitHub for Epic #%s in %s: %s reads in a row failed\t%s\n' \
@@ -250,7 +285,7 @@ fi
 deadline=$(($(date -u +%s) + timeout))
 until poll; do
   (($(date -u +%s) < deadline)) || exit 1
-  sleep "${interval}"
+  pause
 done
 baseline="$(actions "${current}")"
 if startable; then
@@ -259,7 +294,7 @@ if startable; then
 fi
 
 while (($(date -u +%s) < deadline)); do
-  sleep "${interval}"
+  pause
   poll || continue
   if [[ "$(actions "${current}")" != "${baseline}" ]]; then
     emit
