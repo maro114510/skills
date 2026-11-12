@@ -180,10 +180,31 @@ JSON
   [ "${status}" -eq 5 ]
 }
 
-@test "a failed GitHub read ends the wait with an error and no next actions" {
+@test "a failed first read keeps the wait running, and the next read comes no sooner than the poll interval" {
+  issue_5_ready_to_claim
+  interval=2
+  started="$(date +%s)"
+
+  GH_FAIL_EPIC_READ=1 OE_WAIT_INTERVAL="${interval}" run --separate-stderr bash "${oe}" wait o/r 1 --timeout 60
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = claim ]
+  [ "$(($(date +%s) - started))" -ge "${interval}" ]
+}
+
+@test "a read that fails after the first keeps the wait running until the timeout, with the latest next actions" {
   pr_15_checks_running
 
-  GH_FAIL=graphql run --separate-stderr bash "${oe}" wait o/r 1 --timeout 60
+  GH_FAIL_EPIC_READ=2 run --separate-stderr bash "${oe}" wait o/r 1 --timeout 1
+
+  [ "${status}" -eq 5 ]
+  [ "$(action_of 5)" = wait-ci ]
+}
+
+@test "reads failing until the timeout end the wait with an error and no next actions" {
+  pr_15_checks_running
+
+  GH_FAIL=graphql run --separate-stderr bash "${oe}" wait o/r 1 --timeout 1
 
   [ "${status}" -eq 1 ]
   [ -z "${output}" ]
