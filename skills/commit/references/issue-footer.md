@@ -1,6 +1,6 @@
 # Issue Footer
 
-SKILL.md Step 4 reads this file whenever an issue number is inferable from the branch name, `$ARGUMENTS`, or the conversation.
+SKILL.md Step 3 reads this file whenever an issue number is inferable from the branch name, `$ARGUMENTS`, or the conversation.
 Judge whether merging the whole branch, not this commit alone, resolves the issue:
 
 - `Closes #NNN` by default, unless `gh issue view NNN --json subIssuesSummary` shows open sub-issues, `completed` below `total`: a partial branch must not close a parent, and a squash merge keeps commit footers. If the command fails, keep `Closes`.
