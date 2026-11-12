@@ -3,19 +3,18 @@ name: implement
 description: >
   A skill for executing implementation tasks with quality as the top priority. Grounds the request
   in the codebase, resolves requirements and acceptance criteria, decides autonomously from the Issue and
-  repository, and asks only when acceptance, a premise, or the sources are in doubt, or a critical decision
-  is unsettled. Writes tests through one playbook per task type, commits each TDD cycle, and proves every
+  repository, and returns Questions only when acceptance, a premise, or the sources are in doubt, or a critical
+  decision is unsettled. Writes tests through one playbook per task type, commits each TDD cycle, and proves every
   fix that goes through the bug-fix playbook with a reproduction test that fails on the pre-fix code.
   Trigger on requests like
   「これを実装して」「機能を追加して」「バグを修正して」「変更して」「これを作って」
   「リファクタリングして」「対応して」 and similar implementation requests.
-  In normal mode implements only the first planned change unit per run, listing the rest as deferred.
-  Works in a worktree, commits as it goes, and before push has a fresh context check that the branch adds nothing the request did not ask for and lacks nothing it asks for,
-  then self-reviews the whole branch range on the first pass and only the fix delta on a second,
-  then asks for user approval via difit over that range when the commit skill's classifier requires it.
-  Claims an Issue locally first, so a second session handed the same Issue stops and asks instead of duplicating the work.
-  Does not create a PR until the user explicitly requests it.
-  Also runs without a human when a caller such as pr-owner says so, writing its questions where the caller names and stopping.
+  Implements only the first planned change unit per run, listing the rest as deferred.
+  Works in a worktree, commits as it goes, and before it returns has a fresh context check that the branch adds nothing the request did not ask for and lacks nothing it asks for,
+  then self-reviews the whole branch range on the first pass and only the fix delta on a second.
+  Claims an Issue locally first, so a second session handed the same Issue returns Busy instead of duplicating the work.
+  Behaves the same whoever calls it: it never asks and never waits, and ends by returning Busy, Questions, or Built.
+  Never pushes and does not create a PR; both are the caller's.
 argument-hint: "[description of what to implement]"
 ---
 
@@ -23,18 +22,35 @@ argument-hint: "[description of what to implement]"
 
 Prioritize implementation quality. Scale the flow to the task: skip steps that add nothing and go deep only where it matters.
 
-Read `references/interactive.md` in full before Phase 1, unless the caller says no human is reachable. Then follow Without a Human instead, and never read that file.
+Read `references/worktree.md` in full before Phase 1, unless the caller names the worktree to work in.
 
 Relative paths and `<skill-dir>` name this skill's directory, the one containing this SKILL.md.
 
-## Without a Human
+## Result
 
-When the caller says no human is reachable, as pr-owner does, the phases below run with these differences:
+A run behaves the same whoever calls it, a person's session or another skill. It never asks and never waits for an answer: it ends by returning one Result as its final message and stopping.
 
-- Work in the worktree the caller names. Take no Issue Claim, and skip Phase 4.
-- Wherever this skill would ask, write every open question with its options where the caller says, and stop.
-- Implement every planned unit in order, in one run. Run One Unit does not apply.
-- Skip Phase 7's approval, because a human approves the pushed range as a PR. Commit with the `commit` skill, and never push.
+| Result | When | The message holds |
+|---|---|---|
+| Busy | Another session holds the Issue Claim | The owner lines the script printed |
+| Questions | A Phase 2 trigger fired, or another stop below says to return Questions | Each open question, written as Questions says |
+| Built | Phase 6.9 finished | Phase 7's report |
+
+Start the message with one line, `IMPLEMENT: busy`, `IMPLEMENT: questions`, or `IMPLEMENT: built`, so a caller reads the Result without parsing the rest.
+Release the Issue Claim before returning Questions or Built, as `references/worktree.md` § Issue Claim says.
+
+The Request is `$ARGUMENTS` with every answer the caller relays from an earlier Questions. It may also name the worktree to work in and the base branch. Work in the named worktree, take no Issue Claim, and skip Phase 4.
+
+### Questions
+
+A caller that can reach a person shows the Questions to them, and one that cannot writes them where it has to. Either way it runs this skill again with the answers in the Request.
+
+- Read `references/question.md` in full, and write each question as it says.
+- Raise every open triggered item before any repository mutation, the one blocking the work first.
+- Offer concrete, mutually exclusive options, put the recommended one first, and state the consequence of each.
+- Never choose the answer for the person.
+
+An operational stop elsewhere in this skill, such as a failed fetch, ends the run with a message stating the state and no Result. Release the Issue Claim first.
 
 ---
 
@@ -44,7 +60,7 @@ Determine the task type from `$ARGUMENTS` and the conversation.
 
 - Record what the user already decided so they never have to repeat it.
 - Defer the playbook choice until the repository is inspected and acceptance criteria exist.
-- Do not mutate repository state in Phases 0 to 3. The exception is the Issue Claim.
+- Do not mutate repository state in Phases 0 to 3. The exception is the Issue Claim, which `references/worktree.md` § Issue Claim takes when the Request names an Issue and no worktree.
 
 ---
 
@@ -87,9 +103,9 @@ For each applicable area, define the required behavior from the sources and repo
 - Validation, partial failure, rollback, cancellation, timeout, and recovery behavior
 - Resource limits, performance regressions, observability, rollout, and operational ownership
 
-### Decide by Default and Ask Only on a Trigger
+### Decide by Default and Return Questions Only on a Trigger
 
-An item is open only if it survives the Phase 1 lookup and its remaining readings lead to materially different results. Ask only when an open item meets one of these triggers.
+An item is open only if it survives the Phase 1 lookup and its remaining readings lead to materially different results. Return Questions only when an open item meets one of these triggers.
 
 | # | Trigger | Fires when |
 |---|---|---|
@@ -102,17 +118,14 @@ A manual check, as references/evidence.md section 4 defines, never fires trigger
 
 Decide everything else yourself. Follow repository conventions, prefer the smallest reversible option within scope, and record the choice in the decision log.
 
-These triggers govern clarification only. Every operational stop elsewhere in this skill stays unchanged and returns the status its own section names. These stops include:
+These triggers govern clarification only. Every operational stop elsewhere in this skill stays unchanged and ends the run as its own section says. These stops include:
 
-- The stops that `references/interactive.md` lists
+- An unresolvable base branch or a failed fetch in Phase 4
+- Exit 3 in Phase 6.5
 - The `commit` skill's own checks
 
-When a trigger fires, raise every open triggered item before any repository mutation:
-
-- Ask the user, as `references/interactive.md` § Asking describes. Without a human, write the questions as Without a Human says.
-- Without a human, offer concrete, mutually exclusive options, put the recommended one first, and state the consequence of each.
-- Ask again only when an answer raises a new trigger.
-- If the requested change looks unnecessary or its premise wrong, say so candidly and let the user decide.
+When a trigger fires, raise every open triggered item before any repository mutation, and return them as Questions says. A later run returns Questions again only when an answer raises a new trigger.
+If the requested change looks unnecessary or its premise wrong, say so candidly in the Questions and let the person decide.
 
 ---
 
@@ -128,12 +141,11 @@ Before any repository mutation, present a decision-complete implementation plan 
 - A test strategy mapped to the acceptance criteria
 - Explicit non-goals, risks, and the decision log
 
-Then proceed without waiting for approval, because approval gates the pushed range, not the plan.
+Then proceed without waiting for approval, because the caller checks the pushed range, not the plan.
 
-If new information, repository drift, or a scope change raises a Phase 2 trigger later, stop, raise it as Phase 2 describes, and update the plan before continuing.
+If new information, repository drift, or a scope change raises a Phase 2 trigger later, stop and return Questions, leaving the partial work in the worktree.
 
-- Without a human, write the questions and stop, leaving the partial work in the worktree.
-- Once the answer arrives, inspect the branch's commits and the uncommitted changes including untracked files. Undo only the work that implements an option the answer rejected, reverting a commit with `git revert`, and keep everything else.
+- A run that receives the answer inspects the branch's commits and the uncommitted changes including untracked files. Undo only the work that implements an option the answer rejected, reverting a commit with `git revert`, and keep everything else.
 
 ### Run One Unit
 
@@ -143,13 +155,13 @@ Implement only the first unit of the plan, the first one listed with `depends on
 - Every other unit is deferred. Make no edit for it in this run, and report it as Phase 6.9 describes.
 - A deferred unit counts as deferred from the first commit, because the plan already knows it. A non-empty deferred list makes the `commit` skill write `Related #<N>` and not `Closes #<N>`.
 - Start the next unit only after the earlier unit is merged and visible in the base, dependent or not. A run picks its unit from the base alone, so a second run begun earlier would pick the same unit again. Use no stack and no `gh-stack`.
-- A run that follows a merged unit starts on a new branch from the fetched base, never on the merged unit's branch, so its PR carries only its own unit. Phase 4 in `references/interactive.md` sets this up.
+- A run that follows a merged unit starts on a new branch from the fetched base, never on the merged unit's branch, so its PR carries only its own unit. Phase 4 sets this up.
 
 ---
 
 ## Phase 4: Set Up the Worktree
 
-Follow `references/interactive.md` § Phase 4. Without a human, skip this phase, as Without a Human says.
+Skip this phase when the Request names the worktree. Otherwise follow `references/worktree.md` § Phase 4.
 
 ---
 
@@ -218,7 +230,7 @@ This phase always runs. Phase 2's criteria live in context, and context drifts t
 1. Re-fetch the source: the Issue body, linked spec, and caller's prompt. If it changed since Phase 2, say so first.
 2. Quote each acceptance criterion verbatim, because paraphrasing is where a criterion gets softened. A criterion derived from the request's intent has no source text, so prefix it with `(derived)` and never present it as a quote.
 3. Read `references/evidence.md`, relative to this skill's directory. Classify each criterion, attach evidence tagged `[behavior]` or `[static]` as it defines, and classify the outcome. A behavior criterion needs `[behavior]` evidence. A green CI run is never behavior evidence for a criterion that does not name that check.
-4. Treat a `No evidence` criterion as unsatisfied. Deferring a criterion is the user's call, and surfacing it is yours. A manual check is never deferred.
+4. Treat a `No evidence` criterion as unsatisfied. Deferring a criterion is the person's call, and surfacing it is yours. A manual check is never deferred.
 
 ```
 | Criterion (verbatim, or `(derived)`) | Evidence |
@@ -232,7 +244,7 @@ Deferred, not satisfied: <criterion> -> <what was done instead, and why>
 No evidence: <criterion>
 ```
 
-Each unit Run One Unit deferred is one more `Deferred, not satisfied` entry of 5 to 10 lines: the first line names the unit, and its acceptance criteria that no earlier unit satisfies, and the lines under it give the goal, the dependency, the expected files, and the constraints. It uses no new field, and a run without a human never writes it, because it defers no unit.
+Each unit Run One Unit deferred is one more `Deferred, not satisfied` entry of 5 to 10 lines: the first line names the unit, and its acceptance criteria that no earlier unit satisfies, and the lines under it give the goal, the dependency, the expected files, and the constraints. It uses no new field.
 
 ```
 Deferred, not satisfied: unit <n>, <its one sentence> -> not done in this run: <why it is separate>
@@ -248,6 +260,9 @@ Lead with the last two lines whenever either has content.
 
 ## Phase 7: Finish
 
-Follow `references/interactive.md` § Phase 7. Without a human, do only what Without a Human says for Phase 7.
+1. Commit any uncommitted work with the `commit` skill, so the range holds the whole change. Give it the Issue number and whether anything is deferred, as Phase 5 says. If a commit hook rewrote any file, rerun Phase 6.9 on the committed state.
+2. If Phase 6.9 left anything deferred and a branch commit carries `Closes #<N>`, say so in the report, because create-pr copies that keyword into the PR.
+3. Release the Issue Claim if this run took one.
+4. Return Built: the Phase 6.9 table, the Phase 6.5 outcome with its reviewed HEAD, every commit in `<reviewed-head>..HEAD` as unreviewed, or all of the range when the outcome is `not-run` or `git merge-base --is-ancestor <reviewed-head> HEAD` fails, the deferred units, and every file the `commit` skill left uncommitted with every `reason:` line it listed.
 
-Never push. Do not create a PR until the user explicitly says "create a PR."
+Never push, and never create a PR. The caller checks the range before it publishes anything.

@@ -78,7 +78,7 @@ Then run the classifier; its header lists the conditions. Pass each critical dec
 bash <skill-dir>/scripts/classify-approval.sh --staged [--require "critical decision: <decision>"]...
 ```
 
-Whatever it exits, go to Step 6, and list every printed `reason:` line in Step 7. Approval belongs to the push, through implement's range review or the PR review, and a local commit can still be undone before then.
+Whatever it exits, go to Step 6, and list every printed `reason:` line in Step 7. Approval belongs to the push, through create-pr's range check or the PR review, and a local commit can still be undone before then.
 A failing-test-only change is committed as `test:`.
 
 ## Step 6. Commit
