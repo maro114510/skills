@@ -98,7 +98,6 @@ A `wait-answer` line holds an Owner's open question in its reason, with each lin
 
 - Show each question you have not shown in this conversation, as text with its line breaks restored, the Issue named in words, and a note that the person can answer by an option's letter or in their own words. Then go on with the other lines, never waiting for the reply.
 - When the person replies to a shown question, run its command as printed, with `<reply>` replaced by their reply, shell-quoted. Record only the person's own reply, never one you inferred, and go to 3.1.
-- A reply that hands the decision back, as `<skills-root>/implement/references/question.md` § Delegated Replies says, is recorded as the recommended option's letter.
 - The person may answer with a comment on the Issue instead; the next `oe ready` reads it the same way.
 
 For each line to start, run its start command exactly as printed, an `oe start` call that runs every step the start needs.
@@ -158,7 +157,7 @@ The harness wakes you when an agent ends or the wait returns, and whichever come
 1. Start nothing new, and stop the wait if one is still running, so it never wakes the session after the lock is released. Wait for each running agent to end, in Codex with `wait_agent`, then run `oe worktree remove <n>` for it.
 2. When every Issue is `done`, run `oe forget <repo> <epic>`. Report a non-zero exit and go on.
 3. Release the lock: `oe lock release <repo> <epic> <token>`.
-4. Report to the user in Japanese with the format below, from the last `oe ready` output and the agents' final lines. Show first each open question that 3.2 has not shown yet. When the person then replies to a shown question, record it as 3.2 says and start again from Step 2.
+4. Report to the user in Japanese with the format below, from the last `oe ready` output and the agents' final lines. Show first each open question that 3.2 has not shown yet, and record a reply to it as 3.2 says.
 
 ```markdown
 ## orchestrate-epic: Epic #<epic> を終了しました
