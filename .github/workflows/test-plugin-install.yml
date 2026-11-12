@@ -53,8 +53,6 @@ jobs:
         run: |
           jq '.plugins |= map(.source = "./")' .claude-plugin/marketplace.json > "${RUNNER_TEMP}/marketplace.json"
           mv "${RUNNER_TEMP}/marketplace.json" .claude-plugin/marketplace.json
-          jq -e '.plugins | all(.source == "./")' .claude-plugin/marketplace.json
-          echo "Installing the checkout of ${GITHUB_SHA}"
 
       - name: Add marketplace
         run: claude plugin marketplace add ./
@@ -68,22 +66,16 @@ jobs:
       - name: Verify installation
         run: claude plugin list | grep skills
 
-      - name: Show the installed source and contents
+      - name: Verify the installed plugin is this checkout and loads
         run: |
           install_path="$(jq -r '.plugins["skills@maro114510-agent-skills"][0].installPath' "${CLAUDE_CONFIG_DIR:-${HOME}/.claude}/plugins/installed_plugins.json")"
           echo "Installed at: ${install_path}"
-          echo "Source commit: ${GITHUB_SHA}"
-          claude plugin list
-          echo "::group::Installed skills"
+          echo "::group::Installed files"
           find "${install_path}/skills" -type f | sort
           echo "::endgroup::"
-          # The install must equal this checkout, so a PR's own changes are what loads.
+          # A PR's own changes must be what installs, so a difference fails the job.
           diff -r --exclude=.git . "${install_path}"
           echo "The installed plugin is identical to this checkout"
-          echo "INSTALL_PATH=${install_path}" >> "${GITHUB_ENV}"
-
-      # The installed copy is what loads, so a broken SKILL.md or agent fails here.
-      - name: Validate the installed skills and agents
-        run: |
-          claude plugin validate --strict "${INSTALL_PATH}/skills"
-          claude plugin validate --strict "${INSTALL_PATH}/agents"
+          # The installed copy is what loads, so broken frontmatter fails here.
+          claude plugin validate --strict "${install_path}/skills"
+          claude plugin validate --strict "${install_path}/agents"
