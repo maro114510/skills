@@ -9,7 +9,7 @@
 # | ready | Prints the next action of every child Issue of an Epic |
 # | status | Shows each child Issue's step, PR, CI result, verdict, attempts, running agent, and time in step |
 # | board | Opens a Herdr pane that runs status --watch, inside Herdr with git config skills.herdr true |
-# | wait | Blocks until oe ready's output changes, a timeout passes, or the session has idled too long |
+# | wait | Blocks until oe ready's output changes or a timeout passes |
 # | claim | Creates an Issue's branch on origin and records the claim on this host, and assigns the Issue to the gh user |
 # | attempt | Records an Owner attempt on this host before the Owner starts, and refuses one past the cap |
 # | question | Writes an Owner's question on the Issue, or records the person's answer to it |
@@ -37,7 +37,7 @@ ready | status | board | wait | start | claim | attempt | question | rereview | 
 Usage: oe ready <owner/repo> <epic-number> [--running <issue-number>]... [--facts]
        oe status <owner/repo> <epic-number> [--watch]
        oe board <owner/repo> <epic-number>
-       oe wait <owner/repo> <epic-number> [--running <issue-number>]... [--timeout <seconds>] [--idle-since <epoch>]
+       oe wait <owner/repo> <epic-number> [--running <issue-number>]... [--max-agents <n>] [--timeout <seconds>] [--idle-since <epoch>]
        oe start owner <owner/repo> <issue-number> [--claim] [<reason>]
        oe start verifier <owner/repo> <issue-number>
        oe claim <owner/repo> <issue-number>
