@@ -8,6 +8,7 @@
 # | records/<repo-key>/<issue>.jsonl | One Issue's records, oldest first, one JSON object per line | oe claim, oe attempt, oe verdict; dropped by oe forget |
 # | boards/<repo-key>/<epic> | The Herdr pane of the Epic's board and the server it is on, as JSON | oe board, which overwrites it |
 # | waits/<repo-key>/<epic> | The process ID and start time of the Epic's latest oe wait | oe wait, which stops that process first and drops the file when it ends on its own; oe lock release stops that process |
+# | notices/<repo-key>/<epic> | Each item that needed the person at the latest read, with when the person was last notified about it, as tab-separated lines | oe wait, only with git config skills.notify set, which overwrites it |
 #
 # - The state directory is OE_STATE_DIR when set, and orchestrate-epic under XDG_STATE_HOME or ~/.local/state otherwise.
 #   Either default lies outside every checkout, so no agent's worktree ever holds the state.
@@ -156,6 +157,13 @@ wait_record() {
   local key
   key="$(repo_key "$1")" || return 1
   printf '%s/waits/%s/%s' "$(state_dir)" "${key}" "$2"
+}
+
+# Prints the record file of the notifications oe wait sent for Epic $2 in repository $1.
+notice_record() {
+  local key
+  key="$(repo_key "$1")" || return 1
+  printf '%s/notices/%s/%s' "$(state_dir)" "${key}" "$2"
 }
 
 # Prints process $1 and every process below it.
