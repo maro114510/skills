@@ -64,15 +64,16 @@ flowchart TB
 | Owner | The agent that implements or repairs one Ticket in its own worktree and pushes a branch, as `orchestrate-epic.md` defines |
 | Verifier | The agent that judges one pull request head against the Ticket's automated checks, as `orchestrate-epic.md` defines |
 | Question | An Owner's request for a decision no source settles, written on the Ticket in the shared question template. The Owner stops after writing it |
-| Wait state | The action a person must take on a Ticket, one of the five below. Derived from the next action `oe ready` prints, and for `dependency` from the dependency's state |
+| Wait state | The action a person must take on a Ticket, one of the six below. Derived from the next action `oe ready` prints, and for `dependency` from the dependency's state |
 | Holder | Who or what has the Ticket now, derived from the claim and attempt records or from the Wait state. An Owner, a Verifier, or a person |
-| Board | The one view that shows every Ticket's Holder and Wait state, each repository whose default branch gate holds with its reason, whether a Coordinator holds the Epic's lock, and what happened to one Ticket. A healthy state takes no space |
-| Mergeable | A pull request whose head has a success verdict and no repair signal, as `orchestrate-epic.md` row 13 defines, with the Ticket's manual checks listed in its body for the merger |
+| Board | The one view that shows every Ticket's Holder and Wait state, whether a Coordinator holds the Epic's lock, and what happened to one Ticket. A healthy state takes no space |
+| Mergeable | A pull request whose head has a success verdict and no repair signal, as `orchestrate-epic.md` row 11 defines, with the Ticket's manual checks listed in its body for the merger |
 | Attention | The pipeline's measure. Messages and answers people wrote for a pull request, from Session logs and GitHub comments, per mergeable pull request. Read with the rate of reverts and of changes requested after review |
 
 | Wait state | `oe ready` action | Person's action |
 |---|---|---|
-| `answer` | Wait for the answer | Reply to the Question on the Ticket |
+| `answer` | Wait for the answer | Reply to the Question in the Coordinator's conversation or on the Ticket |
+| `respond` | Wait for a person, after 2 Owner starts without a push | Respond in the Coordinator's conversation or on the Ticket |
 | `merge` | Wait for an engineer to merge | Review and merge, or let repository automation merge |
 | `restart` | Park the Issue | Delete the branch so the Coordinator starts over, or finish and merge by hand |
 | `dependency` | Wait for the dependencies, with a dependency closed as not planned or duplicate | Replace or remove the dependency |
