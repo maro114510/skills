@@ -12,8 +12,7 @@
 # - --timeout bounds this call, wait_timeout seconds by default.
 #   The deadline is checked before each poll, so the call can run up to one poll interval past it.
 # - Starting a wait stops an earlier oe wait for the same Epic on this host, so at most one runs.
-# - --idle-since is when the caller last saw a next action change, or when the session started, in epoch seconds.
-#   With no --running, the session is idle once idle_limit seconds have passed since then.
+# - --idle-since is accepted and ignored, so a caller written for the idle limit still runs; the wait never ends the session for idling.
 # - OE_NOW sets the current time in epoch seconds, as in oe ready.
 # - OE_WAIT_INTERVAL sets the seconds between two polls, wait_interval by default.
 #
@@ -33,10 +32,7 @@
 # | 1 | A GitHub read failed | Nothing |
 # | 2 | The arguments are invalid | Nothing |
 # | 5 | The timeout passed with every next action unchanged | The latest output |
-# | 6 | The session is idle: no agent runs and idle_limit has passed since --idle-since | The latest output, as the session's summary |
 # | 137 | A later oe wait for the same Epic, or oe lock release, killed this one | Nothing |
-#
-# After exit 6 the session ends, and a rerun of orchestrate-epic resumes from GitHub, where every state lives.
 set -uo pipefail
 
 dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -57,7 +53,6 @@ epic="$2"
 shift 2
 running=()
 timeout="${wait_timeout}"
-idle_since=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
   --running)
@@ -70,7 +65,6 @@ while [[ $# -gt 0 ]]; do
     ;;
   --idle-since)
     [[ "${2:-}" =~ ^[0-9]+$ ]] || usage "Expected --idle-since <epoch>"
-    idle_since="$2"
     ;;
   *) usage "Unknown argument: $1" ;;
   esac
@@ -104,10 +98,6 @@ trap drop_wait_record EXIT
 trap 'trap - EXIT; exit 143' TERM
 single_wait
 
-now() {
-  printf '%s' "${OE_NOW:-$(date -u +%s)}"
-}
-
 # Prints the latest oe ready output, which is empty for an Epic without child Issues.
 emit() {
   [[ -z "${current}" ]] || printf '%s\n' "${current}"
@@ -124,18 +114,9 @@ actions() {
   cut -f1,2 <<<"$1"
 }
 
-# Ends the wait with the current output when the session is idle.
-end_if_idle() {
-  if [[ -n "${idle_since}" && ${#running[@]} -eq 0 ]] && (($(now) - idle_since >= idle_limit)); then
-    emit
-    exit 6
-  fi
-}
-
 current=""
 poll
 baseline="$(actions "${current}")"
-end_if_idle
 
 deadline=$(($(date -u +%s) + timeout))
 while (($(date -u +%s) < deadline)); do
@@ -145,7 +126,6 @@ while (($(date -u +%s) < deadline)); do
     emit
     exit 0
   fi
-  end_if_idle
 done
 emit
 exit 5

@@ -144,22 +144,6 @@ JSON
   [ "$(action_of 5)" = wait-answer ]
 }
 
-@test "an output unchanged for less than the idle limit waits until the timeout" {
-  pr_15_checks_running
-
-  run bash "${oe}" wait o/r 1 --timeout 1 --idle-since "$((OE_NOW - four_hours + 1))"
-
-  [ "${status}" -eq 5 ]
-}
-
-@test "a running agent keeps the idle limit from ending the session" {
-  pr_15_checks_running
-
-  run bash "${oe}" wait o/r 1 --running 6 --timeout 1 --idle-since "$((OE_NOW - four_hours))"
-
-  [ "${status}" -eq 5 ]
-}
-
 @test "a failed GitHub read ends the wait with an error and no next actions" {
   pr_15_checks_running
 
