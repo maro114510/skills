@@ -101,6 +101,15 @@ def epic_lines:
         then error("child Issue #\(.number) is in \(.repository.nameWithOwner), not \($r.nameWithOwner)")
         else "issue\t\(.number)\t\(.state)" end);
 
+# The question a question record's body asks, without the marker, the heading, and the closing part after the last `---` line, that oe question wraps it in.
+def question_text:
+  gsub("\r"; "") | split("\n")
+  | (indexes(. == "---") | last) as $end
+  | (if $end == null then . else .[:$end] end)
+  | (indexes(test("^(<!-- oe:|### |\\s*$)") | not) | first) as $start
+  | (indexes(test("^\\s*$") | not) | last) as $last
+  | if $start == null then "" else .[$start:$last + 1] | join("\n") end;
+
 # Reading one Issue
 #
 # issue_state reduces one Issue response to the facts that next_action decides on.
@@ -169,6 +178,7 @@ def issue_state:
             | "#\(.number) " + (if .state == "OPEN" then "open" else "closed as \(.stateReason // "unknown")" end))
       end),
       question_open: ($question != null and ($answers | length) == 0),
+      question: (if $question == null then null else $comments[$question] | {url, text: (.body | question_text)} end),
       attempts: ($attempts | length),
       since: $since,
       question_at: (if $question == null then null else $comments[$question].createdAt end),
@@ -232,7 +242,8 @@ def next_action:
   elif .branch | not then
     if (.waiting_on | length) > 0 then act("wait-dependencies"; .waiting_on | join(", "))
     else act("claim"; "every dependency completed") end
-  elif .question_open then act("wait-answer"; "the question has no unmarked comment from a trusted role yet")
+  elif .question_open then
+    act("wait-answer"; "question \(.question.url) has no answer yet:\n\(.question.text)" | gsub("\r?\n"; "\\n"))
   elif .head.unreadable != null then error(.head.unreadable)
   elif (.repairs | length) > 0 then
     (.repairs | join("; ")) as $why

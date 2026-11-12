@@ -158,9 +158,9 @@ JSON
 
   [ "${status}" -eq 0 ]
   [ "${lines[0]}" = "Epic #1: 0 done, 0 in progress, 0 waiting, 1 waiting on you" ]
-  [ "${lines[1]}" = "- #5 Answer the Owner's question with a comment on the Issue" ]
+  [ "${lines[1]}" = "- #5 Answer the Owner's question in the session's conversation or with a comment on the Issue" ]
   [ "${lines[2]}" = "  https://github.com/o/r/issues/5" ]
-  [ "${lines[3]}" = "  why: the question has no unmarked comment from a trusted role yet" ]
+  [ "${lines[3]}" = '  why: question https://github.com/o/r/issues/5#issuecomment-1 has no answer yet:\nWhich option?' ]
   printf '%s\n' "${lines[4]}" | grep -q '^ISSUE  *STEP '
 }
 

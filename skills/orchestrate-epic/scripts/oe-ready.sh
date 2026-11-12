@@ -18,6 +18,8 @@
 #
 # - Each line holds an Issue number, an action, a reason, and the oe start command that the action runs, separated by tabs.
 #   The command is empty for an action that starts no agent.
+# - A wait-answer line is the exception: its reason holds the open question, with each line break written as \n,
+#   and its command is the oe question --answer call that records the person's reply, ending in <reply>.
 # - Lines are sorted by Issue number.
 # - oe-ready.jq lists every action and the row it comes from.
 #
@@ -192,10 +194,12 @@ shell_quote() {
   printf "'%s'" "${1//\'/${q}}"
 }
 
-# Prints out's lines with a fourth field: the oe start command for an action that starts an agent, and nothing otherwise.
-# The command is complete and quoted, so a session that lost SKILL.md can run it as printed.
+# Prints out's lines with a fourth field: the oe start command for an action that starts an agent,
+# the oe question command that records the person's answer for wait-answer, and nothing otherwise.
+# A start command is complete and quoted, so a session that lost SKILL.md can run it as printed.
+# The answer command ends in <reply>, which the session replaces with the person's reply, quoted.
 with_start() {
-  local n action reason start lines=""
+  local n action reason start command lines=""
   while IFS=$'\t' read -r n action reason; do
     [[ -n "${n}" ]] || continue
     # A start command runs as printed, so a line that is not exactly what classify writes fails the read instead.
@@ -207,7 +211,9 @@ with_start() {
     start-verifier) start="verifier ${repo} ${n}" ;;
     *) start="" ;;
     esac
-    lines+="$(printf '%s\t%s\t%s\t%s' "${n}" "${action}" "${reason}" "${start:+bash $(shell_quote "${dir}/oe") start ${start}}")"$'\n'
+    command="${start:+bash $(shell_quote "${dir}/oe") start ${start}}"
+    [[ "${action}" != wait-answer ]] || command="bash $(shell_quote "${dir}/oe") question ${repo} ${n} --answer <reply>"
+    lines+="$(printf '%s\t%s\t%s\t%s' "${n}" "${action}" "${reason}" "${command}")"$'\n'
   done <<<"$1"
   printf '%s' "${lines}"
 }
