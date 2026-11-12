@@ -832,7 +832,7 @@ sibling_merged() {
 
 # Attempts
 
-@test "three attempts after the latest claim park an Issue that still needs repair" {
+@test "three Owner starts that each moved the branch head park an Issue that still needs repair" {
   github <<'JSON'
 {
   "default_branch": {"checks": {"test": "success"}},
@@ -843,12 +843,95 @@ sibling_merged() {
   }]
 }
 JSON
-  records 5 claim@07:00 attempt@07:01 attempt@07:20 attempt@07:40
+  # Each start recorded a head the next start, or the branch now, no longer has.
+  records 5 claim@07:00 attempt@07:01#h1 attempt@07:20#h2 attempt@07:40#h3
 
   run bash "${oe}" ready o/r 1
 
   [ "${status}" -eq 0 ]
   [ "$(action_of 5)" = parked ]
+  [ "$(field_of 5 3)" = "3 attempts used; still: failure verdict on bbbbbbb" ]
+}
+
+@test "one Owner start that left the branch head unchanged leaves the attempt count unchanged" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["failure"]}]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:01#bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb50
+
+  run bash "${oe}" ready o/r 1 --facts
+
+  [ "${status}" -eq 0 ]
+  [ "$(jq -r .attempts <<<"${output}")" = 0 ]
+  [ "$(jq -r .action <<<"${output}")" = start-owner ]
+}
+
+@test "a start that moved the head counts, whichever start comes after it" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["failure"]}]
+  }]
+}
+JSON
+  # The first start pushed, the second left the head at what the third recorded, and the third left the branch as it is now.
+  records 5 claim@07:00 attempt@07:01#h1 attempt@07:20#h2 attempt@07:40#h2
+
+  run bash "${oe}" ready o/r 1 --facts
+
+  [ "${status}" -eq 0 ]
+  [ "$(jq -r .attempts <<<"${output}")" = 2 ]
+}
+
+@test "three Owner starts in a row that left the branch head unchanged park the Issue, with a reason saying nothing was pushed" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["failure"]}]
+  }]
+}
+JSON
+  # Each start recorded the head the branch still has.
+  records 5 claim@07:00 attempt@07:01#bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb50 attempt@07:20#bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb50 attempt@07:40#bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb50
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = parked ]
+  [ "$(field_of 5 3)" = "3 Owner starts in a row pushed nothing; still: failure verdict on bbbbbbb" ]
+}
+
+@test "two Owner starts in a row that left the branch head unchanged still start another Owner" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["failure"]}]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:01#bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb50 attempt@07:20#bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb50
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-owner ]
+  [ "$(field_of 5 3)" = "attempt 1 of 3: failure verdict on bbbbbbb" ]
 }
 
 @test "attempts before the latest claim do not count toward the cap" {

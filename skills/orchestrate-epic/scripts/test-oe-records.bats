@@ -10,6 +10,8 @@
 # shellcheck disable=SC2292 # bats fails a test on a mid-test `[[ ]]` only under bash 4.1+; `[ ]` works on every bash.
 
 setup() {
+  # The head of pull request 50 in the fake GitHub, which is also its Issue branch head.
+  PR50=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb50
   bats_require_minimum_version 1.5.0
   load testdata/records
   export OE_STATE_DIR="${BATS_TEST_TMPDIR}/state"
@@ -177,34 +179,80 @@ JSON
 
 # oe attempt
 
-@test "an Issue with two attempts since its claim gets a third attempt record and no comment" {
+@test "an Issue with two pushed starts since its claim gets a third attempt record with the branch head, and no comment" {
   github <<'JSON'
 {
-  "issues": [{"number": 5, "branch": true}]
+  "issues": [{"number": 5, "branch": true, "branch_sha": "cccccccccccccccccccccccccccccccccccccccc"}]
 }
 JSON
-  records 5 claim@07:00 attempt@07:01 attempt@07:30
+  records 5 claim@07:00 attempt@07:01#h1 attempt@07:30#h2
 
   run bash "${oe}" attempt o/r 5
 
   [ "${status}" -eq 0 ]
   [ "${output}" = $'attempt\t3\t3' ]
   [ "$(comment_count 5)" -eq 0 ]
-  [ "$(records_of 5 | tail -n1)" = '{"kind":"attempt","at":"2027-01-15T08:00:00Z"}' ]
+  [ "$(records_of 5 | tail -n1)" = '{"kind":"attempt","at":"2027-01-15T08:00:00Z","head":"cccccccccccccccccccccccccccccccccccccccc"}' ]
 }
 
-@test "the fourth attempt since the claim is refused and nothing is recorded" {
+@test "a fourth start after three pushed starts is refused and nothing is recorded" {
   github <<'JSON'
 {
-  "issues": [{"number": 5, "branch": true}]
+  "issues": [{"number": 5, "branch": true, "branch_sha": "cccccccccccccccccccccccccccccccccccccccc"}]
 }
 JSON
-  records 5 claim@07:00 attempt@07:01 attempt@07:20 attempt@07:40
+  records 5 claim@07:00 attempt@07:01#h1 attempt@07:20#h2 attempt@07:40#h3
 
   run bash "${oe}" attempt o/r 5
 
   [ "${status}" -eq 4 ]
   [ "$(records_of 5 | wc -l)" -eq 4 ]
+}
+
+@test "starts that left the branch head unchanged spend no attempt, so a start after two is recorded" {
+  github <<'JSON'
+{
+  "issues": [{"number": 5, "branch": true, "branch_sha": "cccccccccccccccccccccccccccccccccccccccc"}]
+}
+JSON
+  records 5 claim@07:00 attempt@07:01#cccccccccccccccccccccccccccccccccccccccc attempt@07:20#cccccccccccccccccccccccccccccccccccccccc
+
+  run bash "${oe}" attempt o/r 5
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = $'attempt\t1\t3' ]
+}
+
+@test "the fourth start after three that left the branch head unchanged is refused and nothing is recorded" {
+  github <<'JSON'
+{
+  "issues": [{"number": 5, "branch": true, "branch_sha": "cccccccccccccccccccccccccccccccccccccccc"}]
+}
+JSON
+  records 5 claim@07:00 attempt@07:01#cccccccccccccccccccccccccccccccccccccccc attempt@07:20#cccccccccccccccccccccccccccccccccccccccc attempt@07:40#cccccccccccccccccccccccccccccccccccccccc
+
+  run --separate-stderr bash "${oe}" attempt o/r 5
+
+  [ "${status}" -eq 4 ]
+  [ "$(records_of 5 | wc -l)" -eq 4 ]
+  case "${stderr}" in
+  *"pushed nothing"*) ;;
+  *) return 1 ;;
+  esac
+}
+
+@test "a start without a branch records no head" {
+  github <<'JSON'
+{
+  "issues": [{"number": 5}]
+}
+JSON
+  records 5 claim@07:00
+
+  run bash "${oe}" attempt o/r 5
+
+  [ "${status}" -eq 0 ]
+  [ "$(records_of 5 | tail -n1)" = '{"kind":"attempt","at":"2027-01-15T08:00:00Z"}' ]
 }
 
 @test "attempts before the latest claim do not count toward the cap" {
@@ -262,7 +310,7 @@ JSON
 
   [ "${status}" -eq 0 ]
   [ "${output}" = $'attempt\t2\t3' ]
-  [ "$(records_of 5 | tail -n1)" = '{"kind":"attempt","at":"2027-01-15T08:00:00Z","bots":["coderabbitai"]}' ]
+  [ "$(records_of 5 | tail -n1)" = '{"kind":"attempt","at":"2027-01-15T08:00:00Z","head":"'"${PR50}"'","bots":["coderabbitai"]}' ]
 }
 
 @test "an attempt records each listed bot whose finding counts" {
@@ -286,7 +334,7 @@ JSON
   run bash "${oe}" attempt o/r 5
 
   [ "${status}" -eq 0 ]
-  [ "$(records_of 5 | tail -n1)" = '{"kind":"attempt","at":"2027-01-15T08:00:00Z","bots":["chatgpt-codex-connector","coderabbitai"]}' ]
+  [ "$(records_of 5 | tail -n1)" = '{"kind":"attempt","at":"2027-01-15T08:00:00Z","head":"'"${PR50}"'","bots":["chatgpt-codex-connector","coderabbitai"]}' ]
 }
 
 @test "an attempt records no round for a bot whose round is used" {
@@ -309,7 +357,7 @@ JSON
   run bash "${oe}" attempt o/r 5
 
   [ "${status}" -eq 0 ]
-  [ "$(records_of 5 | tail -n1)" = '{"kind":"attempt","at":"2027-01-15T08:00:00Z"}' ]
+  [ "$(records_of 5 | tail -n1)" = '{"kind":"attempt","at":"2027-01-15T08:00:00Z","head":"'"${PR50}"'"}' ]
 }
 
 @test "an attempt records no round for a Minor finding" {
@@ -331,7 +379,7 @@ JSON
   run bash "${oe}" attempt o/r 5
 
   [ "${status}" -eq 0 ]
-  [ "$(records_of 5 | tail -n1)" = '{"kind":"attempt","at":"2027-01-15T08:00:00Z"}' ]
+  [ "$(records_of 5 | tail -n1)" = '{"kind":"attempt","at":"2027-01-15T08:00:00Z","head":"'"${PR50}"'"}' ]
 }
 
 @test "an attempt records no round for a Major finding on an approved head" {
@@ -354,7 +402,7 @@ JSON
   run bash "${oe}" attempt o/r 5
 
   [ "${status}" -eq 0 ]
-  [ "$(records_of 5 | tail -n1)" = '{"kind":"attempt","at":"2027-01-15T08:00:00Z"}' ]
+  [ "$(records_of 5 | tail -n1)" = '{"kind":"attempt","at":"2027-01-15T08:00:00Z","head":"'"${PR50}"'"}' ]
 }
 
 @test "a failed GitHub read starts no attempt and records nothing" {

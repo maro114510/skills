@@ -45,6 +45,7 @@
 # | oe-ready.jq | Every rule that turns a response into an action |
 # | oe-bots.jq | The review bots whose findings start a repair, and how a finding is read |
 # | oe-records.jq | Which comments count as questions and as engineer input |
+# | oe-starts.jq | Which Owner starts pushed and count as attempts |
 # | oe-config.sh | The limits and names shared with oe's writers |
 # | oe-store.sh | Where each Issue's claim and attempt records live on this host |
 #
@@ -103,8 +104,9 @@ issue_query="$(<"${dir}/oe-ready-issue.graphql")" || fail "cannot read oe-ready-
 checks_query="$(<"${dir}/oe-ready-checks.graphql")" || fail "cannot read oe-ready-checks.graphql"
 trust="$(<"${dir}/oe-records.jq")" || fail "cannot read oe-records.jq"
 bots="$(<"${dir}/oe-bots.jq")" || fail "cannot read oe-bots.jq"
+starts="$(<"${dir}/oe-starts.jq")" || fail "cannot read oe-starts.jq"
 rules="$(<"${dir}/oe-ready.jq")" || fail "cannot read oe-ready.jq"
-rules="${trust}"$'\n'"${bots}"$'\n'"${rules}"
+rules="${trust}"$'\n'"${bots}"$'\n'"${starts}"$'\n'"${rules}"
 bot="$(bot_def)" || usage "Invalid git config skills.bot"
 
 # Prints the jq program that runs the entry point $1 of oe-ready.jq,
@@ -366,11 +368,11 @@ while IFS=$'\t' read -r n sha; do
 done <<<"${pulls}"
 
 # Each Issue, classified by rows 3 to 13 in oe-ready.jq.
-# Only the kind, time, and bots of claim and attempt records decide an action, so verdict findings stay out of the program.
+# Only the kind, time, bots, and branch head of claim and attempt records decide an action, so verdict findings stay out of the program.
 i=0
 for n in ${sorted[@]+"${sorted[@]}"}; do
   issue_records="$(records_read "${repo}" "${n}" 2>"${err}")" || fail "$(head -n1 "${err}")"
-  issue_records="$(jq -c 'map(select(.kind == "claim" or .kind == "attempt") | {kind, at, bots})' <<<"${issue_records}")" ||
+  issue_records="$(jq -c 'map(select(.kind == "claim" or .kind == "attempt") | {kind, at, bots, head})' <<<"${issue_records}")" ||
     fail "records of Issue #${n} unreadable"
   line="$(jq -r "$(program "${entry}" "${pr_heads%,}" "${issue_records}" "${stale_heads%,}")" <<<"${responses[i]}" 2>"${err}")" ||
     fail "Issue #${n} read failed: $(head -n1 "${err}")"

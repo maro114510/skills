@@ -43,7 +43,7 @@
 # | body | The Issue body | Empty |
 # | blocked_by | Dependencies, each with a number and a state of open, completed, or not_planned | None |
 # | branch | Whether the branch feat/issue-N exists | false |
-# | branch_sha | The head of the branch feat/issue-N | None |
+# | branch_sha | The head of the branch feat/issue-N | The head of the newest pull request, or else the default branch head |
 # | assignees | Logins oe assigned to the Issue | None |
 # | comments | Issue comments, oldest first, each with by, at, body, and optionally login and type, as thread comments hold them | None |
 # | pull_requests | Pull requests opened from the branch; the Issue read returns only the newest, as its query asks | None |
@@ -168,7 +168,7 @@ def issue_response($n):
           nodes: [$i.comments // [] | to_entries[] | .key as $c | .value | author + {createdAt: (.at | time),
             url: "https://github.com/o/r/issues/\($n)#issuecomment-\($c + 1)",
             author: {login: (.login // ""), __typename: (.type // "User")}}]}},
-      ref: (if $i.branch then {name: "feat/issue-\($n)"} else null end),
+      ref: (if $i.branch then {name: "feat/issue-\($n)", target: {oid: ($i.branch_sha // ([$i.pull_requests // [] | sort_by(.opened) | reverse | .[0] | select(. != null) | read_sha] | first) // default_sha)}} else null end),
       pullRequests: {totalCount: (($i.pull_requests // [] | length) + ($i.older_pull_requests // 0)), nodes: [$i.pull_requests // [] | sort_by(.opened) | reverse | .[0:1][] | pull_request]}}}};
 
 def open_pull_requests:

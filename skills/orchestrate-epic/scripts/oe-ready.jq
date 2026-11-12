@@ -1,12 +1,12 @@
 # The decision logic of oe ready.
 # oe-ready.sh passes every GitHub response through these definitions with gh --jq.
-# oe-ready.sh puts oe-records.jq and these values in front of this file.
+# oe-ready.sh puts oe-records.jq, oe-bots.jq, oe-starts.jq, and these values in front of this file.
 #
 # | Name | Value |
 # |---|---|
 # | now_s | The current time in epoch seconds |
 # | no_checks_grace | Seconds a commit may go without checks before its CI counts as missing |
-# | max_attempts | Owner attempts after the latest claim before the Issue parks |
+# | max_attempts | Owner starts after the latest claim that pushed, or that pushed nothing in a row, before the Issue parks |
 # | max_verifier_starts | Verifier starts on one commit before the Issue parks |
 # | verify_context | The commit status context that holds the verdict |
 # | pr_heads | The verdict, the Verifier starts, and the push time of each open pull request head |
@@ -128,6 +128,7 @@ def question_text:
 #   - A push between the reads is the usual cause.
 #   - next_action raises it right before row 8, the first row that needs the head.
 # - A bot finding is a repair signal only while its bot's round is unused, and only when a trusted user has not approved the head.
+# - An attempt is an Owner start that pushed, as oe-starts.jq says, judged by the head the Issue read returns for the branch.
 def issue_state:
   .data.repository as $r
   | ($r.issue // error("Issue not found")) as $issue
@@ -138,6 +139,7 @@ def issue_state:
   | (if $claim == null then null else records[$claim].at end) as $claimed_at
   | [records | .[($claim // -1) + 1:][] | select(.kind == "attempt") | .at] as $attempts
   | ([records | .[($claim // -1) + 1:][] | select(.kind == "attempt") | (.bots // [])[]]) as $used_bots
+  | ($r.ref.target.oid // null) as $branch_head
   | ($comments | first | .createdAt) as $oldest
   | if $issue.comments.totalCount > ($comments | length) and ($branch or ($prs | length) > 0)
       and ($claimed_at == null or $oldest == null or $oldest >= $claimed_at)
@@ -179,7 +181,8 @@ def issue_state:
       end),
       question_open: ($question != null and ($answers | length) == 0),
       question: (if $question == null then null else $comments[$question] | {url, text: (.body | question_text)} end),
-      attempts: ($attempts | length),
+      attempts: (records | attempts_used($branch_head)),
+      idle_starts: (records | starts_without_push($branch_head)),
       since: $since,
       question_at: (if $question == null then null else $comments[$question].createdAt end),
       pr: $pr.number,
@@ -212,8 +215,9 @@ def issue_state:
 # | 5 | No branch, and a dependency is not closed as completed | wait-dependencies |
 # | 6 | No branch, and every dependency is closed as completed | claim |
 # | 7 | The latest question has no answer after it | wait-answer |
-# | 8 | A repair signal is present, and fewer than max_attempts attempts were used | start-owner |
+# | 8 | A repair signal is present, and fewer than max_attempts attempts were used, and the latest starts did not all push nothing | start-owner |
 # | 8 | A repair signal is present, and max_attempts attempts were used | parked |
+# | 8 | A repair signal is present, and the latest max_attempts Owner starts pushed nothing | parked |
 # | 9 | A check on the head is pending | wait-ci |
 # | 9 | The head has no checks, and no_checks_grace has not passed since its push | wait-ci |
 # | 10 | The head has no checks, and no_checks_grace has passed since its push | parked |
@@ -248,6 +252,7 @@ def next_action:
   elif (.repairs | length) > 0 then
     (.repairs | join("; ")) as $why
     | if .attempts >= max_attempts then act("parked"; "\(.attempts) attempts used; still: \($why)")
+      elif .idle_starts >= max_attempts then act("parked"; "\(.idle_starts) Owner starts in a row pushed nothing; still: \($why)")
       else act("start-owner"; "attempt \(.attempts + 1) of \(max_attempts): \($why)") end
   elif .head.ci == "pending" then act("wait-ci"; "checks pending on \(.head.sha): \(.head.ci_detail)")
   elif .head.ci == "none" and .head.age < no_checks_grace then
@@ -275,7 +280,7 @@ def classify:
 # | head | The full SHA of that pull request's open head, or null |
 # | ci, verdict | The CI state and the oe/verify state of that head, or null |
 # | starts | Verifier starts on that head, or null |
-# | attempts | Owner attempts after the latest claim, or null for a closed Issue |
+# | attempts | Owner starts after the latest claim that pushed, or null for a closed Issue |
 # | started | Epoch seconds when the Issue entered its step, or null when no read shows it |
 #
 # | Action | Started at |
