@@ -27,7 +27,7 @@
 #
 # | Code | Meaning |
 # |---|---|
-# | 0 | acquire: this session holds the lock. release: the lock is free, and the Epic's oe wait, if one runs, is stopped |
+# | 0 | acquire: this session holds the lock, and the Epic's oe wait, if one runs, is stopped unless this session already held the lock. release: the lock is free, and the Epic's oe wait, if one runs, is stopped |
 # | 1 | The lock store failed |
 # | 2 | The arguments are invalid, or OE_SESSION_PID is not a running process |
 # | 4 | Another running session holds the lock |
@@ -146,6 +146,8 @@ for _ in 1 2 3; do
     expected="${zero}"
   fi
   if store_git update-ref "${ref}" "${blob}" "${expected}" 2>/dev/null; then
+    # A wait left by a session that ended would answer every new wait with exit 6 while its own completion reaches no one.
+    stop_recorded_wait "${repo}" "${epic}"
     printf 'token=%s\n' "${token}"
     exit 0
   fi
