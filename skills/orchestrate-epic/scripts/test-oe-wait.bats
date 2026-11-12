@@ -452,3 +452,37 @@ recorded() {
   [ ! -s "${BATS_TEST_TMPDIR}/wait-${first}.out" ]
   kill -0 "${other}"
 }
+
+@test "a session that takes over the Epic's lock from an ended session stops the wait that session left" {
+  pr_15_checks_running
+  sleep 600 >/dev/null 2>&1 3>&- &
+  ended_session=$!
+  echo "${ended_session}" >>"${BATS_TEST_TMPDIR}/waits"
+  OE_SESSION_PID="${ended_session}" bash "${oe}" lock acquire o/r 1 >/dev/null
+  left="$(background_wait 1)"
+  recorded "${left}"
+  { kill "${ended_session}" && wait "${ended_session}"; } 2>/dev/null || true
+  sleep 600 >/dev/null 2>&1 3>&- &
+  new_session=$!
+  echo "${new_session}" >>"${BATS_TEST_TMPDIR}/waits"
+
+  OE_SESSION_PID="${new_session}" run bash "${oe}" lock acquire o/r 1
+
+  [ "${status}" -eq 0 ]
+  ended "${left}"
+}
+
+@test "a session acquiring its own lock again leaves its wait running" {
+  pr_15_checks_running
+  sleep 600 >/dev/null 2>&1 3>&- &
+  session=$!
+  echo "${session}" >>"${BATS_TEST_TMPDIR}/waits"
+  token="$(OE_SESSION_PID="${session}" bash "${oe}" lock acquire o/r 1 | sed -n 's/^token=//p')"
+  first="$(background_wait 1)"
+  recorded "${first}"
+
+  OE_SESSION_PID="${session}" run bash "${oe}" lock acquire o/r 1 "${token}"
+
+  [ "${status}" -eq 0 ]
+  kill -0 "${first}"
+}
