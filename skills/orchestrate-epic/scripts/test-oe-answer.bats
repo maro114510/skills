@@ -114,6 +114,16 @@ action_of_5() {
   [ "$(comment_count)" -eq 1 ]
 }
 
+@test "a question from before the latest claim gets no answer" {
+  ask
+  records 5 claim@08:30
+
+  run bash "${oe}" question o/r 5 --answer A
+
+  [ "${status}" -eq 3 ]
+  [ "$(comment_count)" -eq 1 ]
+}
+
 @test "an Issue without a question gets no answer" {
   run bash "${oe}" question o/r 5 --answer A
 
