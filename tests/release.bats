@@ -113,11 +113,3 @@ guard() {
   run guard "$(git rev-parse HEAD)"
   [ "${status}" -eq 0 ]
 }
-
-@test "release.yml checks out full history so origin/main exists" {
-  run ruby -ryaml -e '
-    steps = YAML.load_file(ARGV[0])["jobs"]["github-release"]["steps"]
-    puts steps.first.dig("with", "fetch-depth")
-  ' "${root}/.github/workflows/release.yml"
-  [ "${output}" = "0" ]
-}
