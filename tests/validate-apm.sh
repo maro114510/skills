@@ -8,7 +8,7 @@ OPENCODE_AGENT_MODE='subagent'
 OPENCODE_REJECT_MARKER='OpenCode will reject this agent'
 OPENCODE_CLI='opencode'
 # Skills that must run only when a user names them.
-CODEX_EXPLICIT_SKILLS=(orchestrate-epic pr-owner pr-verify steering-audit)
+CODEX_EXPLICIT_SKILLS=(babysit orchestrate-epic pr-owner pr-verify steering-audit write-researched-document)
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "${script_dir}/.." && pwd)"
