@@ -319,6 +319,54 @@ ends_after_first_poll() {
   esac
 }
 
+# Prints the UTC time of epoch second $1 as oe wait shows a reset time, YYYY-MM-DDTHH:MM:SSZ.
+utc_time() {
+  date -u -d "@$1" '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || date -u -r "$1" '+%Y-%m-%dT%H:%M:%SZ'
+}
+
+@test "an exhausted GraphQL bucket does not end the wait: it shows the reset time, waits for it, and then returns the next actions" {
+  issue_5_ready_to_claim
+  reset_in_two_seconds="$(($(date +%s) + 2))"
+
+  GH_RATE_LIMIT_UNTIL="${reset_in_two_seconds}" run --separate-stderr bash "${oe}" wait o/r 1 --timeout 60
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = claim ]
+  [ "$(date +%s)" -ge "${reset_in_two_seconds}" ]
+  case "${stderr}" in
+  *"$(utc_time "${reset_in_two_seconds}")"*) ;;
+  *) return 1 ;;
+  esac
+}
+
+@test "an exhausted GraphQL bucket that resets after the timeout ends the wait at the timeout with an error and no next actions, after showing the reset time" {
+  issue_5_ready_to_claim
+  reset_in_an_hour="$(($(date +%s) + 3600))"
+  started="$(date +%s)"
+
+  GH_RATE_LIMIT_UNTIL="${reset_in_an_hour}" run --separate-stderr bash "${oe}" wait o/r 1 --timeout 1
+
+  [ "${status}" -eq 1 ]
+  [ -z "${output}" ]
+  [ "$(($(date +%s) - started))" -lt 30 ]
+  case "${stderr}" in
+  *"$(utc_time "${reset_in_an_hour}")"*) ;;
+  *) return 1 ;;
+  esac
+}
+
+@test "reads failing while the GraphQL bucket has calls left still end the wait, as before" {
+  issue_5_ready_to_claim
+
+  GH_FAIL=graphql run --separate-stderr bash "${oe}" wait o/r 1 --timeout 1
+
+  [ "${status}" -eq 1 ]
+  case "${stderr}" in
+  *"reset"*) return 1 ;;
+  *) ;;
+  esac
+}
+
 @test "a default branch head without checks past the grace holds nothing, so the wait returns the Issue to claim" {
   github <<'JSON'
 {
