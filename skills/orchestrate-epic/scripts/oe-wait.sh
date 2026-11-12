@@ -72,7 +72,7 @@ while [[ $# -gt 0 ]]; do
     timeout="$2"
     ;;
   --max-agents)
-    [[ "${2:-}" =~ ^[0-9]+$ ]] || usage "Expected --max-agents <n>"
+    [[ "${2:-}" =~ ^(0|[1-9][0-9]*)$ ]] || usage "Expected --max-agents <n>"
     max_agents="$2"
     ;;
   --idle-since)
