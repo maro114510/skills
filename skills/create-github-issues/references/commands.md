@@ -81,7 +81,7 @@ On a failed `Tn.m`, continue with the rest; the container is still updated. Repo
 
 ### 5.3a Create each person Issue
 
-Only when Step 2 made one. Create each `Pn` after every `Tn` and `Tn.m`, so the numbers it waits for exist. `--blocked-by` lists the real numbers of the `Tn` it waits for and omits any that failed; omit the flag when none remains. Pass no `--parent`: a person Issue is not a sub-issue of the Epic or of any `Tn`. Its body holds no token, so no substitution follows.
+Only when Step 2 made one. Create each `Pn` after every `Tn` and `Tn.m`, so the numbers it waits for exist. `--blocked-by` lists the real numbers of the `Tn` it waits for and omits any that failed; when none remains, skip the create and report the person Issue and the `Tn` it was to wait for in Step 6, since it would start unblocked. Pass no `--parent`: a person Issue is not a sub-issue of the Epic or of any `Tn`. Its body holds no token, so no substitution follows.
 
 ```bash
 gh issue create \
@@ -172,7 +172,7 @@ mutation($epicId: ID!, $tnId: ID!) {
 }'
 ```
 
-Blocked-by sets: each dependent `Tn` or `Tn.m` must list exactly its successful `depends_on` numbers, and each person Issue exactly the numbers of the `Tn` it waits for; failed IDs are intentionally omitted and reported in Step 6. Also confirm no person Issue appears among the Epic's or any `Tn`'s sub-issues.
+Blocked-by sets: each dependent `Tn` or `Tn.m` must list exactly its successful `depends_on` numbers, and each person Issue exactly the numbers of the `Tn` it waits for; failed IDs are intentionally omitted and reported in Step 6. The sub-issue queries above list the Epic's and each container's sub-issues; none of them may be a person Issue.
 
 ```bash
 gh api graphql -f owner="<owner>" -f name="<name>" -F number=<dependent Tn, Tn.m, or Pn number> -f query='
