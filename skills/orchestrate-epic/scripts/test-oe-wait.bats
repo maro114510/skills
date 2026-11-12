@@ -259,6 +259,14 @@ JSON
   [ "$(action_of 5)" = claim ]
 }
 
+@test "an agent cap written with a leading zero is refused" {
+  pr_15_checks_running
+
+  run --separate-stderr bash "${oe}" wait o/r 1 --max-agents 08 --timeout 0
+
+  [ "${status}" -eq 2 ]
+}
+
 @test "a timeout that is not a whole number of seconds is refused" {
   pr_15_checks_running
 
