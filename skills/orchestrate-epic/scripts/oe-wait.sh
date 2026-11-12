@@ -6,18 +6,22 @@
 #
 # Usage
 #
-#   oe wait <owner/repo> <epic-number> [--running <issue-number>]... [--timeout <seconds>] [--idle-since <epoch>]
+#   oe wait <owner/repo> <epic-number> [--running <issue-number>]... [--max-agents <n>] [--timeout <seconds>] [--idle-since <epoch>]
 #
 # - --running is passed to oe ready, and also means an agent is still running.
+# - --max-agents is how many agents the session can run at once, 3 by default as in the skill.
+#   The session passes its running count after a start failed, so the failed Issue does not end the wait at once.
 # - --timeout bounds this call, wait_timeout seconds by default.
 #   The deadline is checked before each poll, so the call can run up to one poll interval past it.
 # - Starting a wait stops an earlier oe wait for the same Epic on this host, so at most one runs.
-# - --idle-since is when the caller last saw a next action change, or when the session started, in epoch seconds.
-#   With no --running, the session is idle once idle_limit seconds have passed since then.
+# - --idle-since is accepted and ignored, so a caller written for the idle limit still runs; the wait never ends the session for idling.
 # - OE_NOW sets the current time in epoch seconds, as in oe ready.
 # - OE_WAIT_INTERVAL sets the seconds between two polls, wait_interval by default.
 #
-# The first oe ready run is the baseline, and every later run is compared with it.
+# A failed oe ready run ends nothing: the next run comes one poll interval later.
+# The first oe ready run that succeeds is the baseline, and every later run is compared with it.
+# A baseline that already holds an Issue to start ends the wait at once while fewer than --max-agents agents run,
+# because no later run would show it as a change.
 # Only each line's Issue number and action are compared, because a reason carries the seconds since a push,
 # which differ on every run while nothing the session can act on has changed.
 #
@@ -29,14 +33,11 @@
 #
 # | Code | Meaning | Output |
 # |---|---|---|
-# | 0 | An Issue's next action changed, or an Issue appeared or left | The new output |
-# | 1 | A GitHub read failed | Nothing |
+# | 0 | An Issue's next action changed, an Issue appeared or left, or the baseline holds an Issue to start | The new output |
+# | 1 | Every GitHub read failed until the timeout | Nothing |
 # | 2 | The arguments are invalid | Nothing |
 # | 5 | The timeout passed with every next action unchanged | The latest output |
-# | 6 | The session is idle: no agent runs and idle_limit has passed since --idle-since | The latest output, as the session's summary |
 # | 137 | A later oe wait for the same Epic, or oe lock release, killed this one | Nothing |
-#
-# After exit 6 the session ends, and a rerun of orchestrate-epic resumes from GitHub, where every state lives.
 set -uo pipefail
 
 dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -45,7 +46,7 @@ source "${dir}/oe-config.sh"
 
 usage() {
   echo "$1" >&2
-  echo "Usage: oe wait <owner/repo> <epic-number> [--running <issue-number>]... [--timeout <seconds>] [--idle-since <epoch>]" >&2
+  echo "Usage: oe wait <owner/repo> <epic-number> [--running <issue-number>]... [--max-agents <n>] [--timeout <seconds>] [--idle-since <epoch>]" >&2
   exit 2
 }
 
@@ -56,21 +57,26 @@ repo="$1"
 epic="$2"
 shift 2
 running=()
+agents=0
+max_agents=3
 timeout="${wait_timeout}"
-idle_since=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
   --running)
     [[ "${2:-}" =~ ^[1-9][0-9]*$ ]] || usage "Expected --running <issue-number>"
     running+=(--running "$2")
+    agents=$((agents + 1))
     ;;
   --timeout)
     [[ "${2:-}" =~ ^[0-9]+$ ]] || usage "Expected --timeout <seconds>"
     timeout="$2"
     ;;
+  --max-agents)
+    [[ "${2:-}" =~ ^(0|[1-9][0-9]*)$ ]] || usage "Expected --max-agents <n>"
+    max_agents="$2"
+    ;;
   --idle-since)
     [[ "${2:-}" =~ ^[0-9]+$ ]] || usage "Expected --idle-since <epoch>"
-    idle_since="$2"
     ;;
   *) usage "Unknown argument: $1" ;;
   esac
@@ -104,19 +110,17 @@ trap drop_wait_record EXIT
 trap 'trap - EXIT; exit 143' TERM
 single_wait
 
-now() {
-  printf '%s' "${OE_NOW:-$(date -u +%s)}"
-}
-
 # Prints the latest oe ready output, which is empty for an Epic without child Issues.
 emit() {
   [[ -z "${current}" ]] || printf '%s\n' "${current}"
 }
 
-# Runs oe ready into $current, and ends the wait when oe ready failed.
+# Runs oe ready into $current, and fails leaving $current as it was when oe ready failed.
 # oe ready's own stderr names the failed read.
 poll() {
-  current="$(bash "${dir}/oe-ready.sh" "${repo}" "${epic}" ${running[@]+"${running[@]}"})" || exit 1
+  local out
+  out="$(bash "${dir}/oe-ready.sh" "${repo}" "${epic}" ${running[@]+"${running[@]}"})" || return 1
+  current="${out}"
 }
 
 # Prints the Issue number and action of every line of $1, the part of oe ready's output a change is judged on.
@@ -124,28 +128,31 @@ actions() {
   cut -f1,2 <<<"$1"
 }
 
-# Ends the wait with the current output when the session is idle.
-end_if_idle() {
-  if [[ -n "${idle_since}" && ${#running[@]} -eq 0 ]] && (($(now) - idle_since >= idle_limit)); then
-    emit
-    exit 6
-  fi
+# Succeeds when a line of $current has an action that starts an agent and fewer than max_agents agents run, so the session can start it now.
+# The action decides, not a non-empty fourth field, because a wait-answer line carries an answer command there and starts nothing.
+startable() {
+  ((agents < max_agents)) && cut -f2 <<<"${current}" | grep -qxE 'claim|start-owner|start-verifier'
 }
 
 current=""
-poll
-baseline="$(actions "${current}")"
-end_if_idle
-
 deadline=$(($(date -u +%s) + timeout))
+until poll; do
+  (($(date -u +%s) < deadline)) || exit 1
+  sleep "${interval}"
+done
+baseline="$(actions "${current}")"
+if startable; then
+  emit
+  exit 0
+fi
+
 while (($(date -u +%s) < deadline)); do
   sleep "${interval}"
-  poll
+  poll || continue
   if [[ "$(actions "${current}")" != "${baseline}" ]]; then
     emit
     exit 0
   fi
-  end_if_idle
 done
 emit
 exit 5

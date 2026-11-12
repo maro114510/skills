@@ -66,7 +66,7 @@ It opens a pane only inside Herdr with git config `skills.herdr` true, and never
 
 ## Step 3: Loop
 
-Keep in memory only the agents this session started, each with its Issue number and role, and `<idle-since>`, the epoch seconds when the session started.
+Keep in memory only the agents this session started, each with its Issue number and role.
 Take every "now" below from `date +%s`, never from memory.
 Everything else is read again from GitHub on every pass.
 
@@ -85,8 +85,7 @@ Pass `--running` for every Issue whose agent is running. Act on the exit code:
 | 2 or other | End the session as in Step 4 and show the error |
 
 When every line's action is `done`, end the session as in Step 4.
-When no agent runs and every line's action is `done`, `parked`, `wait-update`, `wait-merge`, `wait-answer`, `wait-dependencies`, or `wait-engineer`, end the session as in Step 4 without starting a wait, because only a person moves those Issues and a rerun resumes from GitHub. Any other action, such as `wait-ci` or `wait-base`, keeps the loop running.
-When the Issue numbers and actions differ from the previous pass, set `<idle-since>` to now.
+Any other output keeps the loop running, even when every remaining Issue waits on a person, because the wait returns once the person answers or merges.
 
 ### 3.2 Start agents
 
@@ -137,19 +136,20 @@ Pick the first row whose tools you have, by the tool names and parameters you se
 Start one wait as the Harnesses table says. After starting a background wait, end your turn without polling, sleeping, or reading its output early:
 
 ```bash
-bash <skill-dir>/scripts/oe wait <repo> <epic> [--running <n>]... --idle-since <idle-since>
+bash <skill-dir>/scripts/oe wait <repo> <epic> [--running <n>]... --max-agents <cap>
 ```
+
+`<cap>` is `max-agents`, or the number of running agents when a start failed or was refused in this pass, so the wait does not return that Issue again at once.
 
 Keep at most one wait running: before starting a new one, stop the previous one if it is still running.
 The harness wakes you when an agent ends or the wait returns, and whichever comes first is handled below.
 
 | Wake | Action |
 |---|---|
-| An agent ended | `oe worktree remove <n>` for its Issue, drop it from the running agents, set `<idle-since>` to now, and go to 3.1. Its final line goes into the summary only |
+| An agent ended | `oe worktree remove <n>` for its Issue, drop it from the running agents, and go to 3.1. Its final line goes into the summary only |
 | The wait exited 0 or 5 | Go to 3.1 |
-| The wait exited 1 | Go to 3.1, and end the session as in Step 4 after three exit-1 wakes in a row |
+| The wait exited 1 | Every read failed until its timeout: go to 3.1 |
 | The harness stopped the wait, as on a time limit | Go to 3.1 |
-| The wait exited 6 | No agent runs and nothing changed for the idle limit: end the session as in Step 4 |
 | A wait you already replaced returns | Ignore it |
 
 ## Step 4: End the session
@@ -162,7 +162,7 @@ The harness wakes you when an agent ends or the wait returns, and whichever come
 ```markdown
 ## orchestrate-epic: Epic #<epic> を終了しました
 
-終了理由: <すべて完了 | 人の対応待ちのみ | 変化がないまま待機上限に到達 | GitHub の読み取りが続けて失敗>
+終了理由: <すべて完了 | oe のエラー>
 
 | Issue | 状態 | 次に必要なこと |
 |---|---|---|

@@ -119,41 +119,124 @@ JSON
   [ "$(action_of 5)" = wait-ci ]
 }
 
-@test "after the idle limit with no agent running, wait ends with the next actions, and a rerun lists the same ones" {
-  pr_15_checks_running
+# Saves a state where Issue 5, claimed and attempted once, waits for the answer to its question.
+issue_5_waits_for_an_answer() {
+  records 5 claim@07:00 attempt@07:01
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [{"by": "OWNER", "at": "07:10", "body": "<!-- oe:question -->\nWhich option?"}]
+  }]
+}
+JSON
+}
 
-  run bash "${oe}" wait o/r 1 --timeout 60 --idle-since "$((OE_NOW - four_hours))"
+@test "with every Issue waiting on a person and nothing changing for hours, wait runs until its timeout" {
+  issue_5_waits_for_an_answer
+  unchanged_since_four_hours_ago="$((OE_NOW - four_hours))"
 
-  [ "${status}" -eq 6 ]
-  [ "$(action_of 5)" = wait-ci ]
-  summary=("${lines[@]}")
+  run bash "${oe}" wait o/r 1 --timeout 1 --idle-since "${unchanged_since_four_hours_ago}"
 
-  run bash "${oe}" ready o/r 1
+  [ "${status}" -eq 5 ]
+  [ "$(action_of 5)" = wait-answer ]
+}
+
+@test "an answer that arrives on an Issue waiting on a person returns the wait with the Issue's Owner to start" {
+  issue_5_waits_for_an_answer
+  github_at_second_poll <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "OWNER", "at": "07:10", "body": "<!-- oe:question -->\nWhich option?"},
+      {"by": "OWNER", "at": "07:20", "body": "Use option A"}
+    ]
+  }]
+}
+JSON
+
+  run bash "${oe}" wait o/r 1 --timeout 60
 
   [ "${status}" -eq 0 ]
-  [ "${lines[*]}" = "${summary[*]}" ]
+  [ "$(action_of 5)" = start-owner ]
 }
 
-@test "an output unchanged for less than the idle limit waits until the timeout" {
-  pr_15_checks_running
+# Saves a state where Issue 5 has no branch yet and nothing blocks its claim.
+issue_5_ready_to_claim() {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{"number": 5}]
+}
+JSON
+}
 
-  run bash "${oe}" wait o/r 1 --timeout 1 --idle-since "$((OE_NOW - four_hours + 1))"
+@test "a first read that holds an Issue to start returns it at once, before any change" {
+  issue_5_ready_to_claim
+
+  run bash "${oe}" wait o/r 1 --timeout 2
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = claim ]
+}
+
+@test "with as many agents running as --max-agents allows, an Issue to start at the first read keeps the wait running until the timeout" {
+  issue_5_ready_to_claim
+
+  run bash "${oe}" wait o/r 1 --running 6 --running 7 --max-agents 2 --timeout 1
+
+  [ "${status}" -eq 5 ]
+  [ "$(action_of 5)" = claim ]
+}
+
+@test "with --max-agents 0, as after a start that failed with no agent running, an Issue to start at the first read keeps the wait running until the timeout" {
+  issue_5_ready_to_claim
+
+  run bash "${oe}" wait o/r 1 --max-agents 0 --timeout 1
+
+  [ "${status}" -eq 5 ]
+  [ "$(action_of 5)" = claim ]
+}
+
+@test "without --max-agents, three running agents keep an Issue to start from ending the wait, as the skill's default of three agents" {
+  issue_5_ready_to_claim
+
+  run bash "${oe}" wait o/r 1 --running 6 --running 7 --running 8 --timeout 1
 
   [ "${status}" -eq 5 ]
 }
 
-@test "a running agent keeps the idle limit from ending the session" {
-  pr_15_checks_running
+@test "a failed first read keeps the wait running, and the next read comes no sooner than the poll interval" {
+  issue_5_ready_to_claim
+  interval=2
 
-  run bash "${oe}" wait o/r 1 --running 6 --timeout 1 --idle-since "$((OE_NOW - four_hours))"
+  GH_FAIL_EPIC_READ=1 OE_WAIT_INTERVAL="${interval}" run --separate-stderr bash "${oe}" wait o/r 1 --timeout 60
 
-  [ "${status}" -eq 5 ]
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = claim ]
+  failed_read="$(sed -n 1p "${OE_GITHUB}.epic-read-times")"
+  next_read="$(sed -n 2p "${OE_GITHUB}.epic-read-times")"
+  [ "$((next_read - failed_read))" -ge "${interval}" ]
 }
 
-@test "a failed GitHub read ends the wait with an error and no next actions" {
+@test "a read that fails after the first keeps the wait running until the timeout, with the latest next actions" {
   pr_15_checks_running
 
-  GH_FAIL=graphql run --separate-stderr bash "${oe}" wait o/r 1 --timeout 60
+  GH_FAIL_EPIC_READ=2 run --separate-stderr bash "${oe}" wait o/r 1 --timeout 1
+
+  [ "${status}" -eq 5 ]
+  [ "$(action_of 5)" = wait-ci ]
+}
+
+@test "reads failing until the timeout end the wait with an error and no next actions" {
+  pr_15_checks_running
+
+  GH_FAIL=graphql run --separate-stderr bash "${oe}" wait o/r 1 --timeout 1
 
   [ "${status}" -eq 1 ]
   [ -z "${output}" ]
@@ -163,7 +246,7 @@ JSON
   esac
 }
 
-@test "a default branch head without checks past the grace keeps the wait running until the timeout" {
+@test "a default branch head without checks past the grace holds nothing, so the wait returns the Issue to claim" {
   github <<'JSON'
 {
   "default_branch": {"pushed": "07:00"},
@@ -173,8 +256,16 @@ JSON
 
   run bash "${oe}" wait o/r 1 --timeout 1
 
-  [ "${status}" -eq 5 ]
+  [ "${status}" -eq 0 ]
   [ "$(action_of 5)" = claim ]
+}
+
+@test "an agent cap written with a leading zero is refused" {
+  pr_15_checks_running
+
+  run --separate-stderr bash "${oe}" wait o/r 1 --max-agents 08 --timeout 0
+
+  [ "${status}" -eq 2 ]
 }
 
 @test "a timeout that is not a whole number of seconds is refused" {
