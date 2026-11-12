@@ -45,7 +45,6 @@
 # | oe-ready.jq | Every rule that turns a response into an action |
 # | oe-bots.jq | The review bots whose findings start a repair, and how a finding is read |
 # | oe-records.jq | Which comments count as questions and as engineer input |
-# | oe-attempts.jq | Which Owner starts ended in a push and count as attempts |
 # | oe-config.sh | The limits and names shared with oe's writers |
 # | oe-store.sh | Where each Issue's claim and attempt records live on this host |
 #
@@ -58,8 +57,6 @@
 # 5. One read per Issue, with its claim and attempt records from this host, gives everything else.
 # 6. One compare per listed head, when another Issue's pull request merged into the default branch,
 #    gives whether the head contains that merge.
-# 7. Repository activity, for each Issue whose branch exists and that has an Owner start since its latest claim,
-#    gives the pushes to its branch, which decide which starts count as attempts.
 #
 # Reads 1 and 5 hold 100 checks of a commit, and one more read per page gives the rest.
 set -uo pipefail
@@ -106,17 +103,15 @@ issue_query="$(<"${dir}/oe-ready-issue.graphql")" || fail "cannot read oe-ready-
 checks_query="$(<"${dir}/oe-ready-checks.graphql")" || fail "cannot read oe-ready-checks.graphql"
 trust="$(<"${dir}/oe-records.jq")" || fail "cannot read oe-records.jq"
 bots="$(<"${dir}/oe-bots.jq")" || fail "cannot read oe-bots.jq"
-attempts="$(<"${dir}/oe-attempts.jq")" || fail "cannot read oe-attempts.jq"
 rules="$(<"${dir}/oe-ready.jq")" || fail "cannot read oe-ready.jq"
-rules="${trust}"$'\n'"${bots}"$'\n'"${attempts}"$'\n'"${rules}"
+rules="${trust}"$'\n'"${bots}"$'\n'"${rules}"
 bot="$(bot_def)" || usage "Invalid git config skills.bot"
 
 # Prints the jq program that runs the entry point $1 of oe-ready.jq,
-# with pr_heads set to $2, records to the JSON array $3, stale_heads to $4, and pushes to the JSON array $5.
+# with pr_heads set to $2, records to the JSON array $3, and stale_heads to $4.
 program() {
   printf 'def now_s: %s; def no_checks_grace: %s; def max_attempts: %s; def max_verifier_starts: %s;\n' \
     "${now}" "${no_checks_grace}" "${max_attempts}" "${max_verifier_starts}"
-  printf 'def max_starts_without_push: %s; def pushes: %s;\n' "${max_starts_without_push}" "${5:-[]}"
   printf 'def verify_context: "%s"; def pr_heads: {%s}; def records: %s; def stale_heads: {%s};\n%s\n%s\n' \
     "${verify_context}" "${2:-}" "${3:-[]}" "${4:-}" "${bot}"$'\n'"${rules}" "$1"
 }
@@ -377,13 +372,7 @@ for n in ${sorted[@]+"${sorted[@]}"}; do
   issue_records="$(records_read "${repo}" "${n}" 2>"${err}")" || fail "$(head -n1 "${err}")"
   issue_records="$(jq -c 'map(select(.kind == "claim" or .kind == "attempt") | {kind, at, bots})' <<<"${issue_records}")" ||
     fail "records of Issue #${n} unreadable"
-  # Read 7, only where a start can have ended in a push.
-  pushes="[]"
-  starts="$(jq -r "${attempts}"$'\n''owner_starts | length' <<<"${issue_records}")" || fail "records of Issue #${n} unreadable"
-  if ((starts > 0)) && [[ "$(jq -r '.data.repository.ref != null' <<<"${responses[i]}")" == true ]]; then
-    pushes="$(branch_pushes "${repo}" "${branch_prefix}${n}" 2>"${err}")" || fail "$(head -n1 "${err}")"
-  fi
-  line="$(jq -r "$(program "${entry}" "${pr_heads%,}" "${issue_records}" "${stale_heads%,}" "${pushes}")" <<<"${responses[i]}" 2>"${err}")" ||
+  line="$(jq -r "$(program "${entry}" "${pr_heads%,}" "${issue_records}" "${stale_heads%,}")" <<<"${responses[i]}" 2>"${err}")" ||
     fail "Issue #${n} read failed: $(head -n1 "${err}")"
   out+="${line}"$'\n'
   i=$((i + 1))

@@ -210,7 +210,7 @@ JSON
 
 @test "an Owner refused at the attempt cap exits 4 and creates no worktree" {
   github <<'JSON'
-{"issues": [{"number": 5, "branch": true, "pushes": ["07:10", "07:30", "07:50"]}]}
+{"issues": [{"number": 5, "branch": true}]}
 JSON
   records 5 claim@07:00 attempt@07:01 attempt@07:20 attempt@07:40
 

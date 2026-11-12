@@ -13,8 +13,6 @@
 # - Records come from the record store that oe-store.sh defines.
 # - Only attempt records after the latest claim record count.
 # - Every attempt record counts when there is no claim record.
-# - An attempt is an Owner start that ended in a push, as oe-attempts.jq says, read from the branch's activity on GitHub.
-#   A start that pushed nothing spends no attempt, but its record still holds the bot rounds it used.
 #
 # Bot rounds
 #
@@ -69,14 +67,8 @@ trap 'rm -f "${err}"' EXIT
 
 at="$(record_now 2>"${err}")" || usage "$(head -n1 "${err}")"
 records="$(records_read "${repo}" "${n}" 2>"${err}")" || fail "$(head -n1 "${err}")"
-attempts="$(<"${dir}/oe-attempts.jq")" || fail "cannot read oe-attempts.jq"
-starts="$(jq -r "${attempts}"$'\n''owner_starts | length' <<<"${records}")" ||
-  fail "cannot count the starts of Issue #${n}"
-pushes="[]"
-if ((starts > 0)); then
-  pushes="$(branch_pushes "${repo}" "${branch_prefix}${n}" 2>"${err}")" || fail "$(head -n1 "${err}")"
-fi
-used="$(jq -r --argjson pushes "${pushes}" "${attempts}"$'\n''attempts_used($pushes)' <<<"${records}")" ||
+used="$(jq -r '(map(.kind == "claim") | rindex(true)) as $claim
+  | [.[($claim // -1) + 1:][] | select(.kind == "attempt")] | length' <<<"${records}")" ||
   fail "cannot count the attempts of Issue #${n}"
 
 if ((used >= max_attempts)); then

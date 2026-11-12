@@ -1,19 +1,17 @@
 # The decision logic of oe ready.
 # oe-ready.sh passes every GitHub response through these definitions with gh --jq.
-# oe-ready.sh puts oe-records.jq, oe-bots.jq, oe-attempts.jq, and these values in front of this file.
+# oe-ready.sh puts oe-records.jq and these values in front of this file.
 #
 # | Name | Value |
 # |---|---|
 # | now_s | The current time in epoch seconds |
 # | no_checks_grace | Seconds a commit may go without checks before its CI counts as missing |
-# | max_attempts | Owner starts after the latest claim that ended in a push before the Issue parks |
-# | max_starts_without_push | Owner starts in a row that ended without a push before the Issue waits for a person |
+# | max_attempts | Owner attempts after the latest claim before the Issue parks |
 # | max_verifier_starts | Verifier starts on one commit before the Issue parks |
 # | verify_context | The commit status context that holds the verdict |
 # | pr_heads | The verdict, the Verifier starts, and the push time of each open pull request head |
 # | records | The Issue's claim and attempt records from this host, oldest first, each with kind and at |
 # | stale_heads | Each open pull request head that lacks the merge commit of a sibling pull request, with that pull request's number |
-# | pushes | The epoch seconds of each push to the Issue's branch, or an empty array when the Issue has no Owner start |
 
 def epoch: sub("\\.[0-9]+"; "") | fromdateiso8601;
 
@@ -130,9 +128,6 @@ def question_text:
 #   - A push between the reads is the usual cause.
 #   - next_action raises it right before row 8, the first row that needs the head.
 # - A bot finding is a repair signal only while its bot's round is unused, and only when a trusted user has not approved the head.
-# - Attempts count only the Owner starts that ended in a push, as oe-attempts.jq says.
-# - The latest starts are stalled when max_starts_without_push of them in a row ended without a push,
-#   and none of them saw a question, an answer, or engineer input from its time until the next start or until now.
 def issue_state:
   .data.repository as $r
   | ($r.issue // error("Issue not found")) as $issue
@@ -169,13 +164,6 @@ def issue_state:
   | (if $head == null or $head.unreadable != null then []
      else [$pr.reviewThreads.nodes[] | bot_finding($since; $used_bots; bot_approved(($pr.approvals.nodes // []); $head.oid))]
      end) as $bot_findings
-  | ([($comments[] | select(record("question") or answer) | .createdAt),
-      ($pr.reviews.nodes[]? | select(engineer_input) | .submittedAt),
-      ($pr.reviewThreads.nodes[]?.comments.nodes[]? | select(engineer_input) | .createdAt)]
-     | map(epoch)) as $replies
-  | (records | owner_starts | .[length - max_starts_without_push:]) as $latest
-  | (($latest | length) == max_starts_without_push
-      and all($latest[]; . as $s | (pushed(pushes) | not) and (any($replies[]; in_start($s)) | not))) as $stalled
   | {
       number: $issue.number,
       closed: ($issue.state == "CLOSED"),
@@ -191,8 +179,7 @@ def issue_state:
       end),
       question_open: ($question != null and ($answers | length) == 0),
       question: (if $question == null then null else $comments[$question] | {url, text: (.body | question_text)} end),
-      attempts: (records | attempts_used(pushes)),
-      stalled: $stalled,
+      attempts: ($attempts | length),
       since: $since,
       question_at: (if $question == null then null else $comments[$question].createdAt end),
       pr: $pr.number,
@@ -227,7 +214,6 @@ def issue_state:
 # | 7 | The latest question has no answer after it | wait-answer |
 # | 8 | A repair signal is present, and fewer than max_attempts attempts were used | start-owner |
 # | 8 | A repair signal is present, and max_attempts attempts were used | parked |
-# | 8 | A repair signal is present, and the latest Owner starts are stalled | wait-engineer |
 # | 9 | A check on the head is pending | wait-ci |
 # | 9 | The head has no checks, and no_checks_grace has not passed since its push | wait-ci |
 # | 10 | The head has no checks, and no_checks_grace has passed since its push | parked |
@@ -262,8 +248,6 @@ def next_action:
   elif (.repairs | length) > 0 then
     (.repairs | join("; ")) as $why
     | if .attempts >= max_attempts then act("parked"; "\(.attempts) attempts used; still: \($why)")
-      elif .stalled then act("wait-engineer";
-        "\(max_starts_without_push) Owner starts on \(.head.sha // "the branch") ended without a push; still: \($why); comment on the Issue to start another Owner")
       else act("start-owner"; "attempt \(.attempts + 1) of \(max_attempts): \($why)") end
   elif .head.ci == "pending" then act("wait-ci"; "checks pending on \(.head.sha): \(.head.ci_detail)")
   elif .head.ci == "none" and .head.age < no_checks_grace then
@@ -291,7 +275,7 @@ def classify:
 # | head | The full SHA of that pull request's open head, or null |
 # | ci, verdict | The CI state and the oe/verify state of that head, or null |
 # | starts | Verifier starts on that head, or null |
-# | attempts | Owner starts after the latest claim that ended in a push, or null for a closed Issue |
+# | attempts | Owner attempts after the latest claim, or null for a closed Issue |
 # | started | Epoch seconds when the Issue entered its step, or null when no read shows it |
 #
 # | Action | Started at |

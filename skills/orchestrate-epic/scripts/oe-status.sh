@@ -38,14 +38,14 @@
 # | Column | Holds |
 # |---|---|
 # | ISSUE | The Issue number |
-# | STEP | running while an agent runs, so that agent shows instead of the next action; else the next action oe ready gives the Issue, which names the step it is in |
+# | STEP | running while an agent runs, so that agent's own attempt shows instead of the next one; else the next action oe ready gives the Issue, which names the step it is in |
 # | PR | The pull request opened from its branch after the latest claim |
 # | CI | The CI state of that pull request's open head |
 # | VERDICT | The oe/verify state on that head |
-# | ATTEMPTS | Owner starts since the latest claim that ended in a push, out of max_attempts |
+# | ATTEMPTS | Owner attempts since the latest claim, out of max_attempts |
 # | AGENT | owner or verifier while a running session holds the Epic's lock and that agent's worktree exists |
 # | SINCE | Time since the Issue entered its step, as facts in oe-ready.jq defines it |
-# | REASON | For a running Owner, the attempts used; for a running Verifier, its start out of the cap; else oe ready's reason for the step |
+# | REASON | For a running agent, its attempt or start out of the cap; else oe ready's reason for the step |
 #
 # - Under the table, each Issue whose head has a failure verdict shows that verdict's findings, one line each.
 #
@@ -124,11 +124,11 @@ render() {
     [[ -n "${line}" ]] || continue
     n="$(jq -r .number <<<"${line}")" || return 1
     agent="$(agent_of "${n}")"
-    # A running agent's own start is already recorded, so oe ready's next action would describe the start after it.
+    # A running agent's own attempt already counts, so oe ready's next action would describe the attempt after it.
     if [[ "${agent}" != - && "$(jq -r .action <<<"${line}")" != "done" ]]; then
       line="$(jq -c --arg agent "${agent}" --argjson max "${max_attempts}" --argjson vmax "${max_verifier_starts}" '
         .action = "running"
-        | .reason = (if $agent == "owner" then "Owner runs; \(.attempts // 0) of \($max) attempts used"
+        | .reason = (if $agent == "owner" then "Owner attempt \(.attempts // 0) of \($max)"
             else "Verifier start \(.starts // 0) of \($vmax) on \((.head // "")[0:7])" end)' <<<"${line}")" || return 1
     fi
     action="$(jq -r .action <<<"${line}")" || return 1
@@ -136,16 +136,13 @@ render() {
     done) done_n=$((done_n + 1)) ;;
     wait-answer | parked | wait-engineer | wait-update | wait-merge)
       owner_n=$((owner_n + 1))
-      # An Issue that waits after Owner starts without a push resumes only on a comment on the Issue.
       needs+="$(jq -r --arg repo "${repo}" '
-        (.action == "wait-engineer" and (.reason | test("ended without a push"))) as $stalled
-        | if $stalled then "Comment on the Issue to start another Owner, once whatever kept it from pushing is fixed"
-          else {"wait-answer": "Answer the Owner'\''s question in the session'\''s conversation or with a comment on the Issue",
-            "parked": "Fix it by hand, or delete its branch so the AI starts over",
-            "wait-engineer": "Close the Issue, reopen the PR, or delete its branch so the AI starts over",
-            "wait-update": "Update the PR'\''s branch with its base branch",
-            "wait-merge": "Review the PR, run its manual checks, and merge it"}[.action] end as $todo
-        | (if .action != "wait-answer" and ($stalled | not) and .pr then "pull/\(.pr)" else "issues/\(.number)" end) as $path
+        {"wait-answer": "Answer the Owner'\''s question in the session'\''s conversation or with a comment on the Issue",
+          "parked": "Fix it by hand, or delete its branch so the AI starts over",
+          "wait-engineer": "Close the Issue, reopen the PR, or delete its branch so the AI starts over",
+          "wait-update": "Update the PR'\''s branch with its base branch",
+          "wait-merge": "Review the PR, run its manual checks, and merge it"}[.action] as $todo
+        | (if .action != "wait-answer" and .pr then "pull/\(.pr)" else "issues/\(.number)" end) as $path
         | "- #\(.number) \($todo)\n  https://github.com/\($repo)/\($path)\n  why: \(.reason)"' \
         <<<"${line}")"$'\n' || return 1
       ;;
