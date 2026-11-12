@@ -23,6 +23,7 @@
 # | api repos/o/r | repo |
 # | api repos/o/r/git/ref/heads/BRANCH | ref BRANCH |
 # | api repos/o/r/issues/N/comments | comments N |
+# | api repos/o/r/issues/N | issue_rest N |
 # | api repos/o/r/issues/N/sub_issues | sub_issues N |
 # | api user | user |
 # | api installation/repositories | installation |
@@ -30,6 +31,7 @@
 # | api -X POST repos/o/r/issues/N/assignees | the write assign N |
 # | api -X POST repos/o/r/issues/N/comments | the write comment N, where N is an Issue or a pull request |
 # | api -X POST repos/o/r/statuses/SHA | the write status SHA |
+# | api -X PATCH repos/o/r/issues/N | the write edit_issue N |
 set -uo pipefail
 
 args="$*"
@@ -64,8 +66,10 @@ unexpected() {
   exit 99
 }
 
-if [[ "${method}" == POST ]]; then
-  case "${path}" in
+if [[ "${method}" == POST || "${method}" == PATCH ]]; then
+  case "${method} ${path}" in
+  PATCH\ */issues/*) call=edit_issue arg="${path#*/issues/}" ;;
+  PATCH\ *) unexpected ;;
   */git/refs) call=create_ref arg="" ;;
   */issues/*/assignees)
     n="${path#*/issues/}"
@@ -132,6 +136,7 @@ graphql)
   n="${path#*/issues/}"
   call=sub_issues arg="${n%%/*}"
   ;;
+*/issues/*) call=issue_rest arg="${path#*/issues/}" ;;
 */compare/*)
   ref="${path#*/compare/}"
   call=compare arg="${ref%%\?*}"

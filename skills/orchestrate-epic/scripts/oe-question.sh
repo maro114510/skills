@@ -39,12 +39,22 @@
 #
 #   <the chosen option, or the reply>
 #
+# - Before the answer record, it appends the decision to the decisions section of the Issue body, the only part of the Issue the Verifier reads.
+#   The section is headed `## Decisions`, or `## 決定事項` in ja, and is added at the body's end with a note saying that
+#   each decision takes precedence over the criteria it contradicts, and a later one over an earlier one.
+#   Every other line of the body stays as it was, and a decision already in the section is not appended again.
+#   An answer given as a comment on the Issue never reaches the section.
+#
+#   - <the question's Decision line>
+#     - <the chosen option, or the reply>
+#     - <question URL>
+#
 # Exit codes
 #
 # | Code | Meaning | Changed on GitHub |
 # |---|---|---|
-# | 0 | The question or the answer was written, and its kind and URL printed, separated by a tab | The record |
-# | 1 | A GitHub read or write failed, or the reader's language could not be resolved | Nothing |
+# | 0 | The question or the answer was written, and its kind and URL printed, separated by a tab | The record, and for an answer its decision in the Issue body |
+# | 1 | A GitHub read or write failed, or the reader's language could not be resolved | Nothing, or only the decision when the answer record failed after it; a rerun then writes the record alone |
 # | 2 | The arguments are invalid, the question breaks the template, or the reply is empty or a letter no option has | Nothing |
 # | 3 | The Issue has no question to answer since its latest claim | Nothing |
 set -uo pipefail
@@ -108,7 +118,7 @@ if [[ $# -eq 4 ]]; then
     map({authorAssociation: .author_association, body, url: .html_url, createdAt: .created_at,
       author: {login: ((.user.login // "") | sub("\\[bot\\]$"; "")), __typename: (.user.type // "User")}})
     | map(select(record("question") and .createdAt >= $claimed_at)) | last
-    | if . == null then null else {url, options: (.body | options)} end' <<<"${comments}" 2>"${err}")" ||
+    | if . == null then null else {url, options: (.body | options), decision: (.body | decision_line)} end' <<<"${comments}" 2>"${err}")" ||
     fail "the comments of Issue #${n} are unreadable: $(head -n1 "${err}")"
   if [[ "${question}" == null ]]; then
     echo "oe question: Issue #${n} has no question to answer since its latest claim" >&2
@@ -117,18 +127,36 @@ if [[ $# -eq 4 ]]; then
   trimmed="${reply#"${reply%%[![:space:]]*}"}"
   trimmed="${trimmed%"${trimmed##*[![:space:]]}"}"
   answer="${reply}"
+  decided="${trimmed}"
   if [[ "${trimmed}" =~ ^[A-Da-d]$ ]]; then
     letter="$(tr '[:lower:]' '[:upper:]' <<<"${trimmed}")"
     answer="$(jq -r --arg letter "${letter}" '.options[] | select(.letter == $letter) | "\(.letter). \(.label)"' <<<"${question}")"
     [[ -n "${answer}" ]] || usage "The question has no option ${letter}"
+    decided="${answer}"
   fi
   url="$(jq -r .url <<<"${question}")"
   if [[ "${lang}" == ja ]]; then
     heading="### orchestrate-epicのセッションが記録した質問への回答"
     closing="この回答はセッションの会話で人が出したものです。次のエージェントが読んで作業を再開します。"
+    section="決定事項"
+    note="このIssueの質問にエンジニアが出した決定です。各決定は矛盾する基準より優先し、後の決定は先の決定より優先します。"
   else
     heading="### Answer to the question, recorded by the orchestrate-epic session"
     closing="The person gave this answer in the session's conversation. The next agent reads it and resumes the work."
+    section="Decisions"
+    note="Decisions the engineer made on this Issue's questions. Each takes precedence over the criteria it contradicts, and a later one over an earlier one."
+  fi
+  # The decision goes into the body before the answer record, so the Verifier sees it whenever the next Owner starts.
+  # A rerun after the answer write failed finds its decision already there and appends nothing.
+  body="$(gh api "repos/${repo}/issues/${n}" --jq '.body // ""' 2>"${err}")" ||
+    fail "reading the body of Issue #${n} failed: $(head -n1 "${err}")"
+  updated="$(jq -r --arg body "${body}" --arg answer "${decided}" --arg heading "${section}" --arg note "${note}" \
+    "${rules}"$'\n''decision_entry(.decision; $answer; .url) as $entry
+    | if ($body | gsub("\r"; "") + "\n" | contains($entry + "\n")) then empty else $body | add_decision($heading; $note; $entry) end' \
+    <<<"${question}" 2>"${err}")" || fail "composing the decision for Issue #${n} failed: $(head -n1 "${err}")"
+  if [[ -n "${updated}" ]]; then
+    gh api -X PATCH "repos/${repo}/issues/${n}" -f body="${updated}" >/dev/null 2>"${err}" ||
+      fail "writing the decision in the body of Issue #${n} failed: $(head -n1 "${err}")"
   fi
   post "$(record_marker answer)
 ${heading}
