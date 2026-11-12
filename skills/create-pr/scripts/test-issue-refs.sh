@@ -6,6 +6,10 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 target="${script_dir}/issue-refs.sh"
 work="$(mktemp -d)"
 trap 'rm -rf "${work}"' EXIT
+# The developer's own git config and hooks must not reach the repositories built here.
+export GIT_CONFIG_GLOBAL="${work}/gitconfig" GIT_CONFIG_NOSYSTEM=1
+unset GIT_CONFIG GIT_CONFIG_COUNT GIT_CONFIG_PARAMETERS
+: >"${GIT_CONFIG_GLOBAL}"
 fail=0
 
 # Repo with one base commit plus one commit per argument as its message.

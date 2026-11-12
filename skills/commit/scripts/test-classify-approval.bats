@@ -3,6 +3,10 @@
 # shellcheck disable=SC2292 # bats fails a test on a mid-test `[[ ]]` only under bash 4.1+; `[ ]` works on every bash.
 
 setup() {
+  # The developer's own git config and hooks must not reach the repositories built here.
+  export GIT_CONFIG_GLOBAL="${BATS_TEST_TMPDIR}/gitconfig" GIT_CONFIG_NOSYSTEM=1
+  unset GIT_CONFIG GIT_CONFIG_COUNT GIT_CONFIG_PARAMETERS
+  : >"${GIT_CONFIG_GLOBAL}"
   target="${BATS_TEST_DIRNAME}/classify-approval.sh"
   repo="${BATS_TEST_TMPDIR}/repo"
   git init -q -b main "${repo}"
