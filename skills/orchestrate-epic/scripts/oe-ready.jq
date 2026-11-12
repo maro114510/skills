@@ -136,8 +136,8 @@ def issue_state:
     else . end
   | ($comments | indexes(record("question") and ($claimed_at == null or .createdAt >= $claimed_at)) | last) as $question
   | ($attempts | last // $claimed_at) as $since
-  | ($comments | indexes(engineer_input) | map(select(. > ($question // infinite)))) as $answers
-  | (if any($answers[]; $comments[.].createdAt > ($since // "")) then ["a trusted answer to the question"] else [] end) as $answered
+  | ($comments | indexes(answer) | map(select(. > ($question // infinite)))) as $answers
+  | (if any($answers[]; $comments[.].createdAt > ($since // "")) then ["an answer to the question"] else [] end) as $answered
   | ([$prs[] | select($claimed_at == null or .createdAt >= $claimed_at)] | first) as $pr
   | ([$prs[] | select(.mergedAt != null and ($claimed_at == null or .mergedAt >= $claimed_at))] | first) as $merged
   | (if $branch and $pr.state == "OPEN" then try (
@@ -201,7 +201,7 @@ def issue_state:
 # | 4 | The branch exists and its pull request closed without merging | wait-engineer |
 # | 5 | No branch, and a dependency is not closed as completed | wait-dependencies |
 # | 6 | No branch, and every dependency is closed as completed | claim |
-# | 7 | The latest question has no engineer input after it | wait-answer |
+# | 7 | The latest question has no answer after it | wait-answer |
 # | 8 | A repair signal is present, and fewer than max_attempts attempts were used | start-owner |
 # | 8 | A repair signal is present, and max_attempts attempts were used | parked |
 # | 9 | A check on the head is pending | wait-ci |

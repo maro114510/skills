@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # oe question
 #
-# Writes an Owner's question on its Issue as a question record.
-# oe ready then waits on the Issue until an engineer answers with an unmarked comment.
+# Writes an Owner's question on its Issue as a question record, or records the person's answer to it as an answer record.
+# oe ready then waits on the Issue until the person answers, through this command or with an unmarked comment.
 #
 # Usage
 #
 #   oe question <owner/repo> <issue-number> < question
+#   oe question <owner/repo> <issue-number> --answer <reply>
 #
 # Asking
 #
@@ -24,13 +25,28 @@
 #   ---
 #   Answer in the orchestrate-epic session's conversation, or with a comment on this Issue, ...
 #
+# Answering
+#
+# - Only the orchestrate-epic session runs --answer, with the reply the person gave in its conversation.
+#   An Owner or a Verifier never runs it, because the answer counts as the person's even when the agents' bot writes it.
+# - It answers the Issue's latest question record, as oe-records.jq reads records.
+# - A reply that is one option's letter, in either case, records that option with its label. Any other reply is recorded as written.
+#
+#   <!-- oe:answer -->
+#   ### Answer to the question, recorded by the orchestrate-epic session
+#
+#   <question URL>
+#
+#   <the chosen option, or the reply>
+#
 # Exit codes
 #
 # | Code | Meaning | Changed on GitHub |
 # |---|---|---|
-# | 0 | The question was written, and its kind and URL printed, separated by a tab | The question record |
-# | 1 | The GitHub write failed, or the reader's language could not be resolved | Nothing |
-# | 2 | The arguments are invalid, or the question is empty or breaks the template | Nothing |
+# | 0 | The question or the answer was written, and its kind and URL printed, separated by a tab | The record |
+# | 1 | A GitHub read or write failed, or the reader's language could not be resolved | Nothing |
+# | 2 | The arguments are invalid, the question breaks the template, or the reply is empty or a letter no option has | Nothing |
+# | 3 | The Issue has no question to answer | Nothing |
 set -uo pipefail
 
 dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -40,6 +56,7 @@ source "${dir}/oe-config.sh"
 usage() {
   echo "$1" >&2
   echo "Usage: oe question <owner/repo> <issue-number> < question" >&2
+  echo "       oe question <owner/repo> <issue-number> --answer <reply>" >&2
   exit 2
 }
 
@@ -48,7 +65,7 @@ fail() {
   exit 1
 }
 
-[[ $# -eq 2 ]] || usage "Expected <owner/repo> <issue-number>"
+[[ $# -eq 2 || ($# -eq 4 && "$3" == --answer) ]] || usage "Expected <owner/repo> <issue-number> [--answer <reply>]"
 [[ "$1" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || usage "Invalid repository: $1"
 [[ "$2" =~ ^[1-9][0-9]*$ ]] || usage "Invalid Issue number: $2"
 repo="$1"
@@ -73,6 +90,52 @@ post() {
     fail "writing the $2 on Issue #${n} failed: $(head -n1 "${err}")"
   printf '%s\t%s\n' "$2" "${url}"
 }
+
+if [[ $# -eq 4 ]]; then
+  reply="$4"
+  [[ "${reply}" =~ [^[:space:]] ]] || usage "The reply is empty"
+  trust="$(<"${dir}/oe-records.jq")" || fail "cannot read oe-records.jq"
+  bot="$(bot_def)" || usage "Invalid git config skills.bot"
+  comments="$(gh api "repos/${repo}/issues/${n}/comments?per_page=100" --paginate --jq '.[]' 2>"${err}")" ||
+    fail "reading the comments of Issue #${n} failed: $(head -n1 "${err}")"
+  # REST names a bot login with a [bot] suffix and its type in user.type, where oe-records.jq reads GraphQL's shape.
+  question="$(jq -cs "${bot}"$'\n'"${trust}"$'\n'"${rules}"$'\n''
+    map({authorAssociation: .author_association, body, url: .html_url,
+      author: {login: ((.user.login // "") | sub("\\[bot\\]$"; "")), __typename: (.user.type // "User")}})
+    | map(select(record("question"))) | last
+    | if . == null then null else {url, options: (.body | options)} end' <<<"${comments}" 2>"${err}")" ||
+    fail "the comments of Issue #${n} are unreadable: $(head -n1 "${err}")"
+  if [[ "${question}" == null ]]; then
+    echo "oe question: Issue #${n} has no question to answer" >&2
+    exit 3
+  fi
+  trimmed="${reply#"${reply%%[![:space:]]*}"}"
+  trimmed="${trimmed%"${trimmed##*[![:space:]]}"}"
+  answer="${reply}"
+  if [[ "${trimmed}" =~ ^[A-Da-d]$ ]]; then
+    letter="$(tr '[:lower:]' '[:upper:]' <<<"${trimmed}")"
+    answer="$(jq -r --arg letter "${letter}" '.options[] | select(.letter == $letter) | "\(.letter). \(.label)"' <<<"${question}")"
+    [[ -n "${answer}" ]] || usage "The question has no option ${letter}"
+  fi
+  url="$(jq -r .url <<<"${question}")"
+  if [[ "${lang}" == ja ]]; then
+    heading="### orchestrate-epicのセッションが記録した質問への回答"
+    closing="この回答はセッションの会話で人が出したものです。次のエージェントが読んで作業を再開します。"
+  else
+    heading="### Answer to the question, recorded by the orchestrate-epic session"
+    closing="The person gave this answer in the session's conversation. The next agent reads it and resumes the work."
+  fi
+  post "$(record_marker answer)
+${heading}
+
+${url}
+
+${answer}
+
+---
+${closing}" answer
+  exit 0
+fi
 
 question="$(cat)" || usage "Cannot read the question from stdin"
 [[ "${question}" =~ [^[:space:]] ]] || usage "The question on stdin is empty"
