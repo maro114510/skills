@@ -1,6 +1,6 @@
 # Commit Body Examples
 
-Examples for SKILL.md Step 4's body rules and Step 5's Compact Pass.
+Examples for SKILL.md Step 3's body rules and Step 4's Compact Pass.
 
 Good (why facts, one per bullet):
 ```
@@ -21,6 +21,6 @@ Bad (verification narration — belongs in the PR's Test Plan, not here):
 
 Bad (file enumeration — "what" wearing structure, not why):
 ```
-- commit/SKILL.md: Step 4 body rules rewritten as bullets.
+- commit/SKILL.md: Step 3 body rules rewritten as bullets.
 - create-pr/SKILL.md: cross-reference updated to match.
 ```

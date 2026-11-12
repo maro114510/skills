@@ -26,7 +26,7 @@ Each part does one job and stores no state of its own. State lives on GitHub, ex
 | Part | Job | Uses |
 |---|---|---|
 | implement | Writes code and tests and commits them, without pushing | commit |
-| commit | Screens for secrets, then commits | none |
+| commit | Commits | none |
 | create-pr | Writes the PR body and opens the PR | none |
 
 ### oe
@@ -296,7 +296,7 @@ sequenceDiagram
 - When a commit other than a sibling PR lands on the base branch after verification, nothing is verified again
 - A PR the engineer merges before its branch is updated and verified again lands without being verified against a sibling PR merged before it, as when two sibling PRs merge between two reads
 - Workflows the AI changed run with the repository's secrets
-- oe does not scan for secrets, and the commit skill screens each commit instead
+- oe does not scan for secrets
 - A comment the AI forgot to mark is read as engineer input
 - oe lock works only within one host, so a session for the same Epic on another host lets two agents touch the same branch
 - Resuming an Epic on another host, or after losing the record store, resets attempt counts, bot rounds, and findings, and earlier engineer input and bot findings count as repair signals again

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Decides whether a change needs human approval before it is committed or pushed. The only approval rules:
-# commit's Step 6 runs --staged, and the range mode classifies base..HEAD before push. implement keeps no rules
+# commit's Step 5 runs --staged, and the range mode classifies base..HEAD before push. implement keeps no rules
 # of its own.
 # Usage: classify-approval.sh --staged [--require <reason>]...
 #        classify-approval.sh [<base>] [--require <reason>]...
