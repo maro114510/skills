@@ -55,6 +55,7 @@ gh skill install maro114510/skills --agent claude-code --scope user
 | `extreme-compact` | Compact writing down to its essential point without changing its meaning. |
 | `frame-problem` | Frame a vague problem before implementation and converge on a direction. |
 | `implement` | Implement a change with quality first: ground it in the repository, test it, and self-review it before push. |
+| `japanese-writing` | Write or revise Japanese so a reader without context understands its exact meaning in one read. |
 | `locate` | Find the local worktree, branch, and current state for a pull request or Issue URL before working on it. |
 | `manage-design-documents` | Decide whether a change needs a Design Doc, an ADR, both, or neither, and keep them small and free of metadata Git already holds. |
 | `orchestrate-epic` | Turn an Epic's child Issues into verified PRs in dependency order, leaving every merge to a human. |
