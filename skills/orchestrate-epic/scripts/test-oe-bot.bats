@@ -23,12 +23,20 @@ setup() {
   mkdir -p "${tmp}/bin"
   cat >"${tmp}/bin/gh" <<EOF
 #!/usr/bin/env bash
-if [ "\${1:-}" = api ] && [ "\${2:-}" = "/users/maronium%5Bbot%5D" ]; then
-  printf '%s\n' "\${GH_BOT_ID:-123}"
-  exit 0
-fi
-echo "unexpected gh: \$*" >&2
-exit 1
+[ "\${1:-}" = api ] || { echo "unexpected gh: \$*" >&2; exit 1; }
+case "\${2:-}" in
+  /user)
+    # What GET /user answers for a token: the id and the login that token acts as.
+    printf '%s\n%s\n' "\${GH_BOT_ID:-123}" "\${GH_BOT_LOGIN:-maronium[bot]}"
+    ;;
+  /users/maronium%5Bbot%5D)
+    printf '%s\n' "\${GH_BOT_ID:-123}"
+    ;;
+  *)
+    echo "unexpected gh: \$*" >&2
+    exit 1
+    ;;
+esac
 EOF
   cat >"${tmp}/bin/bot-helper" <<EOF
 #!/usr/bin/env bash
@@ -260,6 +268,16 @@ EOF
   GH_BOT_ID=nope run bash "${start}" owner maro/x 5
   [ "${status}" -eq 1 ]
   [[ "${output}" == *"GitHub user id"* ]]
+  [ "$(git worktree list --porcelain | grep -c '^worktree ')" -eq 2 ]
+}
+
+@test "oe start refuses a helper whose token acts as another account" {
+  opt_in
+  git config --global skills.bot.helper bot-helper
+
+  GH_BOT_LOGIN=someone run bash "${start}" owner maro/x 5
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"not maronium[bot]"* ]]
   [ "$(git worktree list --porcelain | grep -c '^worktree ')" -eq 2 ]
 }
 
