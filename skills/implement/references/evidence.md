@@ -31,7 +31,7 @@ A criterion that reads both ways, for any kind of file, is a behavior criterion.
 | Untouched worktree | No run or observation changes the worktree's source. Never stash, reset, check out, or edit it to make one. Build and cache output that running a check writes is allowed |
 | No outside effects | No run pushes, publishes, or changes state outside the worktree, such as a GitHub Issue or comment, a shared database, or a deployed service. Show such an outcome against a fake, a local sandbox, or a dry run whose output names the effect it would have. A criterion that only the real effect can show is `No evidence` |
 | Named check | When the criterion itself is that a named check passes, such as "`claude plugin validate .` passes", a fresh run of that check is its `[behavior]` evidence, and section 2.2 does not apply |
-| CI run | A CI run on the same SHA as the final state is a fresh run on it, so it can take the place of a local run that cannot finish on this host. It counts when it succeeded and its log shows the named check, or the test, passing; a test still needs every other condition of section 2.2. Record the run's URL and the log line |
+| CI run | A CI run of the final state's SHA is a fresh run on it, so it can take the place of a local run that cannot finish on this host. It counts when it succeeded, its checkout step shows it ran that SHA or a merge of that SHA into the base, as a `pull_request` run does, and its log shows the named check, or the test, passing; a test still needs every other condition of section 2.2. Record the run's URL, the checkout line, and the log line |
 
 ### 2.2 Tests
 
@@ -43,7 +43,7 @@ A direct run of a command or procedure needs none of them.
 - The observation is of the test exactly as it is on the final state. An edit to the test, or to the fixtures and helpers it uses, made after the observation voids it. An edit to the code under test does not, since that is the change itself.
 
 The observation can come from a Phase 5 run, or from a script that runs the test against the code without the change, when its recorded output shows the test failing at its assertion.
-A reviewer who did not write the change, such as pr-verify, can read it from history instead: the test as it is on the final state was committed in a commit that changes only tests, fixtures, and helpers, and a later commit changes the code under test. Cite both commits. This replaces the seen-to-fail condition, for new and preserved behavior alike, and rests on the author's TDD for the failure or the deliberate break itself. The test must still assert the outcome the criterion names, not a different outcome, under the first condition above.
+A reviewer who did not write the change, such as pr-verify, can read it from history instead: the test, its fixtures, and its helpers as they are on the final state were committed in a commit that changes only tests, fixtures, and helpers, no later commit changes them, and a later commit changes the code under test. Cite both commits. This replaces the seen-to-fail condition, for new and preserved behavior alike, and rests on the author's TDD for the failure or the deliberate break itself. The test must still assert the outcome the criterion names, not a different outcome, under the first condition above.
 Otherwise make the observation yourself, outside the worktree:
 
 | Observation | How |

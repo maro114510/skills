@@ -342,7 +342,6 @@ sequenceDiagram
 | Dropping records | oe forget, which the session runs when it ends with every Issue of its Epic done. It refuses while an Issue is open, and oe ready stays read-only |
 | Acceptance checks | Verification splits automated checks from manual ones, and no agent checks a box that needs a human, template boxes included |
 | Where a check runs | Anywhere: a successful CI run on the head SHA whose log shows the check passing is evidence, as evidence.md says, so a check that hangs or cannot run on the Verifier's host never fails a verdict that CI settles |
-| Failure findings | A failure verdict's findings start with one line per unsatisfied criterion, saying what was run and what was observed, so oe status and a person read the cause first |
 | The board in Herdr | Opt-in with git config `skills.herdr`, read only inside Herdr, so no other run calls herdr and no Herdr user gets a pane unasked |
 | Board start | oe board types the board command into the pane, and the pane's shell runs it only after its startup files finish, so output they print, such as direnv's "is taking a while" warning, comes before the board. The board clears the screen and shows one line before its first read. When the shell has not finished within `board_start_timeout`, oe board exits 1 saying so and records when it sent the command, and a rerun within 10 minutes waits for that start and types nothing again |
 | Board refresh | Every 3 minutes, each refresh reading GitHub through oe ready |
