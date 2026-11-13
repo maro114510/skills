@@ -21,6 +21,15 @@ setup() {
   unset OE_WORKTREE_ROOT
 
   mkdir -p "${tmp}/bin"
+  cat >"${tmp}/bin/gh" <<EOF
+#!/usr/bin/env bash
+if [ "\${1:-}" = api ] && [ "\${2:-}" = "/users/maronium%5Bbot%5D" ]; then
+  printf '%s\n' "\${GH_BOT_ID:-123}"
+  exit 0
+fi
+echo "unexpected gh: \$*" >&2
+exit 1
+EOF
   cat >"${tmp}/bin/bot-helper" <<EOF
 #!/usr/bin/env bash
 printf '%s\n' "\$*" >>"${tmp}/helper-calls"
@@ -41,7 +50,7 @@ printf '%s\n' "\$*" >>"${tmp}/owner-calls"
 cat >/dev/null
 printf 'username=owner\npassword=ghs_owner\n'
 EOF
-  chmod +x "${tmp}/bin/bot-helper" "${tmp}/bin/owner-helper"
+  chmod +x "${tmp}/bin/gh" "${tmp}/bin/bot-helper" "${tmp}/bin/owner-helper"
   export PATH="${tmp}/bin:${PATH}"
 
   git init -q --bare "${tmp}/origin.git"
@@ -59,7 +68,6 @@ EOF
 
 opt_in() {
   git config skills.bot 'maronium[bot]'
-  git config skills.bot.email '123+maronium[bot]@users.noreply.github.com'
 }
 
 bot_login_in() {
@@ -217,7 +225,6 @@ EOF
   [ "${status}" -eq 0 ]
 
   git config --unset skills.bot
-  git config --unset skills.bot.email
   run apply_in "${clone}" "${wt}"
   [ "${status}" -eq 0 ]
   [ "$(git -C "${wt}" config user.name)" = "owner" ]
@@ -246,13 +253,13 @@ EOF
   [ ! -e "${tmp}/leaked" ]
 }
 
-@test "oe start refuses when the Bot address is unset" {
-  git config skills.bot 'maronium[bot]'
+@test "oe start reads the Bot id before any step and starts nothing when it fails" {
+  opt_in
   git config --global skills.bot.helper bot-helper
 
-  run bash "${start}" owner maro/x 5
+  GH_BOT_ID=nope run bash "${start}" owner maro/x 5
   [ "${status}" -eq 1 ]
-  [[ "${output}" == *"skills.bot.email"* ]]
+  [[ "${output}" == *"GitHub user id"* ]]
   [ "$(git worktree list --porcelain | grep -c '^worktree ')" -eq 2 ]
 }
 

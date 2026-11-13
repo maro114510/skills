@@ -13,12 +13,18 @@ setup() {
   git config --global user.email owner@example.com
   git config --global init.defaultBranch main
   mkdir -p "${tmp}/bin"
+  cat >"${tmp}/bin/gh" <<'EOF'
+#!/usr/bin/env bash
+[ "${1:-}" = api ] || exit 1
+printf '123
+'
+EOF
   cat >"${tmp}/bin/bot-helper" <<'EOF'
 #!/usr/bin/env bash
 [ "${1:-}" = token ] || exit 1
 printf 'ghs_test_token\n'
 EOF
-  chmod +x "${tmp}/bin/bot-helper"
+  chmod +x "${tmp}/bin/gh" "${tmp}/bin/bot-helper"
   export PATH="${tmp}/bin:${PATH}"
 
   git init -q --bare "${tmp}/origin.git"
@@ -41,7 +47,6 @@ EOF
 
 opt_in() {
   git config skills.bot 'maronium[bot]'
-  git config skills.bot.email '123+maronium[bot]@users.noreply.github.com'
 }
 
 @test "worktree.sh prepare gives the drive worktree the Bot identity" {
@@ -72,7 +77,6 @@ opt_in() {
   [ "$(git -C "${wt}" config user.name)" = "maronium[bot]" ]
 
   git config --unset skills.bot
-  git config --unset skills.bot.email
   run bash "${script_dir}/worktree.sh" prepare maro/x 7 --session token-1 --branch feat/x --head "${head}"
   [ "${status}" -eq 0 ]
   [ "$(git -C "${wt}" config user.name)" = "owner" ]

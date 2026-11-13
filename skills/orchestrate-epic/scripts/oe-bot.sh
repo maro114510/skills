@@ -69,22 +69,17 @@ bot_env() {
 }
 
 # Checks, without a network read, that a worktree of this clone could act as the Bot: the helper
-# is named globally, the commit address is set, the remote is an HTTPS GitHub one, and no
-# submodule keeps its own settings, where the person's credentials would answer instead.
+# is named globally, the remote is an HTTPS GitHub one, and no submodule keeps its own settings,
+# where the person's credentials would answer instead.
 # It runs before a fetch or a start, so a refused one changes nothing on GitHub.
 bot_config_ready() {
-  local login email origin top
+  local login origin top
   login="$(bot_login)"
   [[ -n "${login}" ]] || return 0
   bot_helper >/dev/null || {
     echo "git config --global skills.bot.helper is unset, so nothing can act as the Bot" >&2
     return 1
   }
-  email="$(git config --get skills.bot.email 2>/dev/null)" || email=""
-  if [[ -z "${email}" ]]; then
-    echo "git config skills.bot.email is unset, so a commit could not carry the Bot" >&2
-    return 1
-  fi
   origin="$(git config --get remote.origin.url 2>/dev/null)" || origin=""
   if [[ "${origin}" != https://github.com/* ]]; then
     echo "remote.origin.url is not an HTTPS GitHub URL, so a push would not answer with the Bot helper" >&2
@@ -97,19 +92,34 @@ bot_config_ready() {
   fi
 }
 
+# Prints the numeric id GitHub assigns the Bot, which makes its noreply commit address.
+bot_user_id() {
+  local login="$1" id
+  id="$(gh api "/users/${login}%5Bbot%5D" --jq .id 2>/dev/null)" || id=""
+  if [[ ! "${id}" =~ ^[0-9]+$ ]]; then
+    echo "cannot read the GitHub user id of ${login}[bot]" >&2
+    return 1
+  fi
+  printf '%s\n' "${id}"
+}
+
 # Refuses with a reason unless a start from this clone can act as the Bot: its settings are
-# ready and the helper can mint a token.
+# ready, the helper can mint a token, and GitHub gives the Bot an id. The id is passed to the
+# worktree step, which runs in a child process.
 # It runs before any step, so a refused start spends no attempt and creates no branch.
 bot_require_ready() {
+  local id
   bot_config_ready || return 1
   [[ -n "$(bot_login)" ]] || return 0
   bot_token "$1" >/dev/null || return 1
+  id="$(bot_user_id "$(bot_login)")" || return 1
+  export OE_BOT_ID="${id}"
 }
 
 # Gives worktree $1 the identity its clone opted into, or clears the identity a reused worktree
 # may still carry when it opts out. The address is a setting, so neither needs a network read.
 bot_identity_apply() {
-  local wt="$1" login helper email
+  local wt="$1" login helper id email
   login="$(bot_login)"
   if [[ -z "${login}" ]]; then
     bot_identity_clear "${wt}"
@@ -117,7 +127,9 @@ bot_identity_apply() {
   fi
   bot_config_ready || return 1
   helper="$(bot_helper)"
-  email="$(git config --get skills.bot.email)"
+  id="${OE_BOT_ID:-}"
+  [[ -n "${id}" ]] || id="$(bot_user_id "${login}")" || return 1
+  email="${id}+${login}[bot]@users.noreply.github.com"
   git -C "${wt}" config extensions.worktreeConfig true || return 1
   git -C "${wt}" config --worktree user.name "${login}[bot]" || return 1
   git -C "${wt}" config --worktree user.email "${email}" || return 1
