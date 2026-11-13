@@ -54,9 +54,11 @@ STUB
   [ "${status}" -eq 0 ]
 }
 
-@test "the ruleset requires a pull request with a code owner's review" {
-  run jq -e 'any(.rules[]; .type == "pull_request" and .parameters.required_approving_review_count >= 1
-    and .parameters.require_code_owner_review == true)' "${ruleset}"
+@test "the ruleset requires a pull request but no approval" {
+  # One person owns this repository and cannot approve their own pull request, so an approval
+  # requirement would only turn every merge into a bypass.
+  run jq -e 'any(.rules[]; .type == "pull_request" and .parameters.required_approving_review_count == 0
+    and .parameters.require_code_owner_review == false)' "${ruleset}"
   [ "${status}" -eq 0 ]
 }
 
@@ -86,7 +88,7 @@ STUB
 }
 
 @test "CODEOWNERS names the repository owner for workflows on a line of its own" {
-  # The ruleset's code-owner review makes this line the second layer over a workflow change.
+  # The ruleset gates nothing on this line, but it still asks the owner to review a workflow change.
   run grep -E '^/\.github/workflows/ +@maro114510$' "${root}/.github/CODEOWNERS"
   [ "${status}" -eq 0 ]
 }
