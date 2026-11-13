@@ -95,8 +95,6 @@ bot_config_ready() {
 }
 
 # Prints the numeric id GitHub assigns the Bot, which makes its noreply commit address.
-# Only the worktree step that runs without the preflight's OE_BOT_ID reads it, with the caller's own
-# gh auth; a start reads the id from the token itself, in bot_require_ready.
 bot_user_id() {
   local login="$1" id
   id="$(gh api "/users/${login}%5Bbot%5D" --jq .id 2>/dev/null)" || id=""
@@ -107,29 +105,16 @@ bot_user_id() {
   printf '%s\n' "${id}"
 }
 
-# Refuses with a reason unless a start from this clone can act as the Bot: its settings are ready,
-# and the token the helper mints for repository $1 acts as the Bot, whose id that same read then
-# gives. A helper pointed at another App, or answering with a person's token, stops here instead of
-# writing as somebody else, so nothing falls back to the person. The id is passed to the worktree
-# step, which runs in a child process.
+# Refuses with a reason unless a start from this clone can act as the Bot: its settings are
+# ready, the helper can mint a token, and GitHub gives the Bot an id. The id is passed to the
+# worktree step, which runs in a child process.
 # It runs before any step, so a refused start spends no attempt and creates no branch.
 bot_require_ready() {
-  local login token who id actor
+  local id
   bot_config_ready || return 1
-  login="$(bot_login)"
-  [[ -n "${login}" ]] || return 0
-  token="$(bot_token "$1")" || return 1
-  who="$(GH_TOKEN="${token}" gh api /user --jq '.id, .login' 2>/dev/null)" || who=""
-  id="$(printf '%s\n' "${who}" | sed -n 1p)"
-  actor="$(printf '%s\n' "${who}" | sed -n 2p)"
-  if [[ "${actor}" != "${login}[bot]" ]]; then
-    echo "the token the helper minted acts as ${actor:-nobody}, not ${login}[bot], so nothing would act as the Bot" >&2
-    return 1
-  fi
-  if [[ ! "${id}" =~ ^[0-9]+$ ]]; then
-    echo "cannot read the GitHub user id of ${actor}" >&2
-    return 1
-  fi
+  [[ -n "$(bot_login)" ]] || return 0
+  bot_token "$1" >/dev/null || return 1
+  id="$(bot_user_id "$(bot_login)")" || return 1
   export OE_BOT_ID="${id}"
 }
 
