@@ -292,7 +292,7 @@ sequenceDiagram
 - The token is shared, so a verdict status can be forged
 - When a commit other than a sibling PR lands on the base branch after verification, nothing is verified again
 - A PR the engineer merges before its branch is updated and verified again lands without being verified against a sibling PR merged before it, as when two sibling PRs merge between two reads
-- Workflows the AI changed run with the repository's secrets
+- Workflows the AI changed run with the repository's secrets on the PR branch before the engineer reviews them; the main ruleset's code owner review gates only the merge, because GitHub offers a push ruleset's path restriction only for private and internal repositories
 - oe does not scan for secrets
 - A comment the AI forgot to mark is read as engineer input
 - oe lock works only within one host, so a session for the same Epic on another host lets two agents touch the same branch

@@ -24,6 +24,7 @@ Repository instructions for coding agents.
 | `skills/orchestrate-epic/scripts/oe` | Shell helpers that read and write orchestrate-epic's state on GitHub and in host-local records, laid out in `oe-store.sh`; each `oe-<subcommand>.sh` header documents one subcommand |
 | `skills/**/*.bats` | Script tests that `.github/workflows/lint-shell.yml` runs |
 | `docs/design/orchestrate-epic.md` | The orchestrate-epic Design Doc that oe and the agents implement |
+| `.github/rulesets/main.json` | The main-branch ruleset; the admin applies it with `.github/rulesets/apply.sh`, as its README describes |
 | `.github/workflows/test-plugin-install.yml` | CI: `validate` then `test-install`, on push to `main` and every PR |
 | `.github/workflows/secret-scan.yml` | CI: gitleaks on push to `main` and every PR |
 | `.github/workflows/release.yml` | Creates a GitHub Release on a `v*` tag push after checking the tag matches both manifests and its commit is reachable from main |
