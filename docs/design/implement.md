@@ -19,7 +19,7 @@ implement turns one Request into one Change Unit, committed and verified on its 
 | Scope, priority, and design direction no source settles | Whoever answers the Questions |
 | Keeping the Deferred Units for later runs | The caller |
 | Checks the source lists as manual | The engineer |
-| Checking the Range before anything is published, pushing, and opening and merging a pull request | The caller |
+| Pushing, and opening and merging a pull request | The caller |
 
 ## Domain Model
 
