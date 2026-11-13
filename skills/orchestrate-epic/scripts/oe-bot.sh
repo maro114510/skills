@@ -86,7 +86,7 @@ bot_env_start() {
 # that worktree and can hold a different .gitmodules or remote URL.
 # It runs before a fetch or a start, so a refused one changes nothing on GitHub.
 bot_config_ready() {
-  local login top at="${1:-.}" fetch_url push_urls url
+  local login top at="${1:-.}" fetch_url effective_fetch push_urls url
   login="$(bot_login)"
   [[ -n "${login}" ]] || return 0
   bot_helper >/dev/null || {
@@ -98,6 +98,13 @@ bot_config_ready() {
   fetch_url="$(git -C "${at}" config --get remote.origin.url 2>/dev/null)" || fetch_url=""
   if [[ "${fetch_url}" != https://github.com/* ]]; then
     echo "${fetch_url:-remote.origin.url} is not an HTTPS GitHub URL, so a fetch would not answer with the Bot helper" >&2
+    return 1
+  fi
+  # A url.<base>.insteadOf rule can rewrite the fetch after that, so read the URL git would use too.
+  # A file:// transport sends no credential and stands in for the network in the tests.
+  effective_fetch="$(git -C "${at}" remote get-url origin 2>/dev/null)" || effective_fetch=""
+  if [[ "${effective_fetch}" != https://github.com/* && "${effective_fetch}" != file://* ]]; then
+    echo "${effective_fetch:-remote.origin.url} is not an HTTPS GitHub URL, so a fetch would not answer with the Bot helper" >&2
     return 1
   fi
   # git pushes to pushurl when one is set, and its url.<base>.insteadOf and pushInsteadOf rules can
@@ -149,7 +156,7 @@ bot_require_ready() {
 # Gives worktree $1 the identity its clone opted into, or clears the identity a reused worktree
 # may still carry when it opts out. The address is a setting, so neither needs a network read.
 bot_identity_apply() {
-  local wt="$1" login helper id email
+  local wt="$1" login helper id email url header
   login="$(bot_login)"
   if [[ -z "${login}" ]]; then
     bot_identity_clear "${wt}"
@@ -174,6 +181,14 @@ bot_identity_apply() {
   # An inherited http.<url>.extraheader adds an Authorization header of its own, which no credential
   # helper can replace, so the worktree resets the list instead of letting it answer as the person.
   git -C "${wt}" config --worktree http.https://github.com/.extraheader "" || return 1
+  # A key with a longer path is more specific than the reset above and would still answer for the
+  # push URL, so refuse rather than let an Authorization header outrank the Bot helper.
+  url="$(git -C "${wt}" remote get-url --push origin 2>/dev/null)" || url="https://github.com/"
+  header="$(git -C "${wt}" config --get-urlmatch http.extraheader "${url}" 2>/dev/null)" || header=""
+  if [[ -n "${header}" ]]; then
+    echo "a http authorization header is configured for ${url}, which no credential helper can replace" >&2
+    return 1
+  fi
   git -C "${wt}" config --worktree skills.bot.identity "${login}" || return 1
 }
 

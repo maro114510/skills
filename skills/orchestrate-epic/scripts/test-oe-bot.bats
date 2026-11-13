@@ -146,6 +146,17 @@ require_in() {
   [ -z "$(git -C "${wt}" config --get http.https://github.com/.extraheader)" ]
 }
 
+@test "apply refuses a path-scoped http header the host reset cannot clear" {
+  opt_in
+  git config --global skills.bot.helper bot-helper
+  git config --global "http.https://github.com/maro/x.git.extraheader" "Authorization: Basic OWNER"
+
+  run apply_in "${clone}" "${wt}"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"authorization header"* ]]
+  [ -z "$(git -C "${wt}" config --get skills.bot.identity)" ]
+}
+
 @test "clearing the identity gives the inherited http header back" {
   opt_in
   git config --global skills.bot.helper bot-helper
@@ -324,6 +335,18 @@ EOF
   git config --global skills.bot.helper bot-helper
   git remote set-url origin "ssh://git@github.com:443/maro/x.git"
   git remote set-url --push origin "https://github.com/maro/x-push.git"
+
+  run apply_in "${clone}" "${wt}"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"not an HTTPS GitHub URL"* ]]
+}
+
+@test "apply refuses a fetch URL that insteadOf rewrites to SSH" {
+  opt_in
+  git config --global skills.bot.helper bot-helper
+  # The push URL stays the HTTPS one, and only the fetch is rewritten to SSH.
+  git remote set-url --push origin "https://github.com/maro/other.git"
+  git config "url.ssh://git@github.com/.insteadOf" "https://github.com/maro/x.git"
 
   run apply_in "${clone}" "${wt}"
   [ "${status}" -eq 1 ]
