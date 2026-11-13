@@ -157,6 +157,19 @@ require_in() {
   [ -z "$(git -C "${wt}" config --get skills.bot.identity)" ]
 }
 
+@test "apply refuses a path-scoped header on any push URL, not only the first" {
+  opt_in
+  git config --global skills.bot.helper bot-helper
+  git remote set-url --add --push origin "https://github.com/maro/first.git"
+  git remote set-url --add --push origin "https://github.com/maro/second.git"
+  git config --global "http.https://github.com/maro/second.git.extraheader" "Authorization: Basic OWNER"
+
+  run apply_in "${clone}" "${wt}"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"authorization header"* ]]
+  [ -z "$(git -C "${wt}" config --get skills.bot.identity)" ]
+}
+
 @test "clearing the identity gives the inherited http header back" {
   opt_in
   git config --global skills.bot.helper bot-helper

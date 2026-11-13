@@ -156,7 +156,7 @@ bot_require_ready() {
 # Gives worktree $1 the identity its clone opted into, or clears the identity a reused worktree
 # may still carry when it opts out. The address is a setting, so neither needs a network read.
 bot_identity_apply() {
-  local wt="$1" login helper id email url header
+  local wt="$1" login helper id email url header push_urls
   login="$(bot_login)"
   if [[ -z "${login}" ]]; then
     bot_identity_clear "${wt}"
@@ -181,14 +181,18 @@ bot_identity_apply() {
   # An inherited http.<url>.extraheader adds an Authorization header of its own, which no credential
   # helper can replace, so the worktree resets the list instead of letting it answer as the person.
   git -C "${wt}" config --worktree http.https://github.com/.extraheader "" || return 1
-  # A key with a longer path is more specific than the reset above and would still answer for the
-  # push URL, so refuse rather than let an Authorization header outrank the Bot helper.
-  url="$(git -C "${wt}" remote get-url --push origin 2>/dev/null)" || url="https://github.com/"
-  header="$(git -C "${wt}" config --get-urlmatch http.extraheader "${url}" 2>/dev/null)" || header=""
-  if [[ -n "${header}" ]]; then
-    echo "a http authorization header is configured for ${url}, which no credential helper can replace" >&2
-    return 1
-  fi
+  # A key with a longer path is more specific than the reset above and would still answer, so refuse
+  # rather than let an Authorization header outrank the Bot helper. Every configured push URL
+  # receives the push, so check each one and not only the first.
+  push_urls="$(git -C "${wt}" remote get-url --push --all origin 2>/dev/null)" || push_urls=""
+  while IFS= read -r url; do
+    [[ -n "${url}" ]] || continue
+    header="$(git -C "${wt}" config --get-urlmatch http.extraheader "${url}" 2>/dev/null)" || header=""
+    if [[ -n "${header}" ]]; then
+      echo "a http authorization header is configured for ${url}, which no credential helper can replace" >&2
+      return 1
+    fi
+  done <<<"${push_urls}"
   git -C "${wt}" config --worktree skills.bot.identity "${login}" || return 1
 }
 
