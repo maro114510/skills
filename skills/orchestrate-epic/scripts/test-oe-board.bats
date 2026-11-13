@@ -306,3 +306,105 @@ board_command() {
   [ "${status}" -eq 1 ]
   [ -z "${output}" ]
 }
+
+@test "a pane whose shell starts slower than the start timeout exits 1 naming the slow shell, and a rerun sends nothing again and waits for the queued start" {
+  inside_herdr
+  git config skills.herdr true
+  board_starts_on_run
+  echo 2 >"${FAKE_HERDR_DIR}/slow-shell"
+
+  run --separate-stderr bash "${oe}" board o/r 1
+
+  [ "${status}" -eq 1 ]
+  [ -z "${output}" ]
+  case "${stderr}" in
+  *w1:p9*"has not finished starting"*) ;;
+  *) return 1 ;;
+  esac
+  [ "$(calls_starting 'pane run')" -eq 1 ]
+
+  OE_BOARD_START_TIMEOUT=10 run --separate-stderr bash "${oe}" board o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = $'board\trestarted\tw1:p9' ]
+  [ "$(calls_starting 'pane run')" -eq 1 ]
+  [ "$(calls_starting 'pane split')" -eq 1 ]
+}
+
+@test "a start sent over 10 minutes ago and never seen running is sent again" {
+  inside_herdr
+  git config skills.herdr true
+  board_starts_on_run
+  echo 99 >"${FAKE_HERDR_DIR}/slow-shell"
+  run bash "${oe}" board o/r 1
+  [ "${status}" -eq 1 ]
+  record="$(echo "${OE_STATE_DIR}"/boards/*/1)"
+  jq -c '.sent = 1' "${record}" >"${record}.new" && mv "${record}.new" "${record}"
+  rm -f "${FAKE_HERDR_DIR}/slow-shell" "${FAKE_HERDR_DIR}"/pending-*
+
+  run --separate-stderr bash "${oe}" board o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = $'board\trestarted\tw1:p9' ]
+  [ "$(calls_starting 'pane run')" -eq 2 ]
+}
+
+@test "a start that times out in a pane that is not at its prompt gives the plain error, not the slow shell one" {
+  inside_herdr
+  git config skills.herdr true
+  # The pane is taken over right after the run, so it never shows the board or its prompt again.
+  board_starts_on_run
+  jq -c '.result.process_info.foreground_process_group_id = 200 | .result.process_info.foreground_processes = [{argv: ["vim"], pid: 200}]' \
+    "${FAKE_HERDR_DIR}/board.json" >"${FAKE_HERDR_DIR}/board.new" && mv "${FAKE_HERDR_DIR}/board.new" "${FAKE_HERDR_DIR}/board.json"
+
+  run --separate-stderr bash "${oe}" board o/r 1
+
+  [ "${status}" -eq 1 ]
+  case "${stderr}" in
+  *"has not finished starting"*) return 1 ;;
+  *) ;;
+  esac
+}
+
+@test "oe status --watch clears a terminal that holds the pane's startup output and shows a line at once, while the first read runs" {
+  command -v python3 >/dev/null || skip "python3 is needed for a terminal"
+  # A shell whose .envrc is slow prints this before it runs the board's command.
+  printf '#!/usr/bin/env bash\nsleep 1\nexit 1\n' >"${tmp}/bin/gh"
+  chmod +x "${tmp}/bin/gh"
+
+  run python3 - "${oe}" <<'PY'
+import os, pty, select, sys, time
+oe = sys.argv[1]
+noise = "direnv: ([direnv export zsh]) is taking a while to execute. Use CTRL-C to give up."
+pid, fd = pty.fork()
+if pid == 0:
+    os.environ.update(OE_WAIT_INTERVAL="0", OE_STATUS_REFRESHES="1")
+    os.execvp("bash", ["bash", "-c", 'echo "$1"; exec bash "$2" status o/r 1 --watch', "bash", noise, oe])
+out = b""
+start = time.time()
+first_line_at = None
+while time.time() - start < 20:
+    r, _, _ = select.select([fd], [], [], 0.2)
+    if r:
+        try:
+            chunk = os.read(fd, 4096)
+        except OSError:
+            break
+        if not chunk:
+            break
+        out += chunk
+        if first_line_at is None and b"reading Epic #1 of o/r" in out:
+            first_line_at = time.time() - start
+os.waitpid(pid, 0)
+text = out.decode(errors="replace")
+clear = "\x1b[H\x1b[2J"
+assert clear in text, "the screen was never cleared"
+before, after = text.split(clear, 1)
+assert noise in before and noise not in after, "startup output remains after the clear"
+assert first_line_at is not None and first_line_at < 0.9, "no line before the first read ended: %r" % first_line_at
+print("ok")
+PY
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = ok ]
+}
