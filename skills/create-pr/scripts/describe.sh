@@ -3,9 +3,8 @@
 # Usage: describe.sh <claude|codex|opencode> <note-file> [<argument tokens>]
 # Run it in the worktree. It reruns pr-context.sh with the argument tokens, and hands the session that
 # output, the note, and the writing rules: SKILL.md Steps 2, 3.1, 3.2, and 4, and references/description.md.
-# Exit: 0 written, 1 failed, including pr-context.sh, 2 usage error or a missing or empty note,
-# 3 session changed the worktree or HEAD, 4 session returned no output, 5 reply lacks a title or body.
-# 3 wins over 1, 4, and 5.
+# Exit: 0 written, 1 failed, including pr-context.sh and a reply without a title and body,
+# 2 usage error or a missing or empty note, 3 session changed the worktree or HEAD, which wins over 1.
 # Output on exit 0:
 #   PR_TITLE: <title>
 #   PR_BODY_BEGIN
@@ -13,7 +12,7 @@
 #   PR_BODY_END
 #   DESCRIBE status=written head=<sha>
 # Every other run that reached the session ends with:
-#   DESCRIBE status=<failed|empty|changed|malformed> head=<sha>
+#   DESCRIBE status=<failed|changed> head=<sha>
 set -uo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -137,34 +136,26 @@ if [[ "${session_rc}" -ne 0 ]]; then
   result failed
   exit 1
 fi
-if [[ -z "$(tr -d '[:space:]' <"${out}")" ]]; then
-  # The log is deleted on exit, so this is the only chance to see why nothing came back.
-  tail -n 20 "${log}"
-  result empty
-  exit 4
-fi
-
-# Text the session wrote around the markers is dropped. The last end marker closes the body, so a body
-# that quotes the marker still ends where the session ended it.
+# Text the session wrote around the markers is dropped.
 reply="$(awk '
-  !title && /^PR_TITLE: / { title = 1; t = $0; next }
-  title && !body && /^PR_BODY_BEGIN$/ { body = 1; next }
-  body { lines[++n] = $0; if ($0 == "PR_BODY_END") end = n }
+  !t && /^PR_TITLE: / { t = $0; next }
+  t && !on && !done && /^PR_BODY_BEGIN$/ { on = 1; next }
+  on && /^PR_BODY_END$/ { on = 0; done = 1; next }
+  on { body = body $0 "\n" }
   END {
-    text = ""
-    for (i = 1; i < end; i++) text = text lines[i]
-    gsub(/[[:space:]]/, "", text)
-    if (t ~ /^PR_TITLE: *$/ || text == "") exit 1
+    if (!done || t ~ /^PR_TITLE: *$/ || body !~ /[^[:space:]]/) exit 1
     print t
     print "PR_BODY_BEGIN"
-    for (i = 1; i < end; i++) print lines[i]
+    printf "%s", body
     print "PR_BODY_END"
   }
 ' "${out}")" || {
+  # The log is deleted on exit, so this is the only chance to see why no reply came back.
   cat "${out}"
-  echo
-  result malformed
-  exit 5
+  tail -n 20 "${log}"
+  echo "SESSION_NO_REPLY"
+  result failed
+  exit 1
 }
 printf '%s\n' "${reply}"
 result written
