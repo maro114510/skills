@@ -86,14 +86,13 @@ def ci:
 #
 # | First field | Other fields |
 # |---|---|
-# | default | Branch name, head SHA, CI state, failing or pending check names |
+# | default | Branch name |
 # | issue | Child Issue number, and its state: OPEN or CLOSED |
 def epic_lines:
   .data.repository as $r
   | if ($r | type) != "object" then error("repository not found") else . end
-  | ($r.defaultBranchRef.target // error("default branch head unreadable")) as $head
-  | ($head | ci) as $ci
-  | "default\t\($r.defaultBranchRef.name)\t\($head.oid)\t\($ci.state)\t\($ci.detail)",
+  | ($r.defaultBranchRef.name // error("default branch unreadable")) as $default
+  | "default\t\($default)",
     (($r.issue // error("Epic not found")).subIssues
       | if .totalCount > (.nodes | length) then error("more than \(.nodes | length) child Issues") else . end
       | .nodes[]
@@ -126,7 +125,7 @@ def question_text:
 #   - Input before the latest attempt was already handed to that attempt's Owner.
 # - A head that moved between the reads leaves only its Issue unreadable, and the read goes on with every other Issue.
 #   - A push or a newly opened pull request between the reads is the cause.
-#   - next_action gives that Issue read-again right before row 8, the first row that needs the head.
+#   - next_action gives that Issue read-again right before row 6, the first row that needs the head.
 #   - A head unreadable for any other reason still fails the read when the action depends on it.
 # - A bot finding is a repair signal only while its bot's round is unused, and only when a trusted user has not approved the head.
 # - An attempt is an Owner start that pushed, as oe-starts.jq says, judged by the head the Issue read returns for the branch.
@@ -205,28 +204,27 @@ def issue_state:
 
 # Deciding
 #
-# next_action walks rows 3 to 13 of the next-action table in docs/design/orchestrate-epic.md from the top.
-# oe-ready.sh applies rows 1 and 2 before any Issue is read.
+# next_action walks the next-action table in docs/design/orchestrate-epic.md from the top.
 #
 # | Row | When | Action |
 # |---|---|---|
-# | 3 | The Issue is closed | done |
-# | 4 | A pull request merged after the latest claim | wait-engineer |
-# | 4 | The branch exists and its pull request closed without merging | wait-engineer |
-# | 5 | No branch, and a dependency is not closed as completed | wait-dependencies |
-# | 6 | No branch, and every dependency is closed as completed | claim |
-# | 7 | The latest question has no answer after it | wait-answer |
-# | 8 | The head moved during the read | read-again |
-# | 8 | A repair signal is present, and fewer than max_attempts attempts were used, and the latest starts did not all push nothing | start-owner |
-# | 8 | A repair signal is present, and max_attempts attempts were used | parked |
-# | 8 | A repair signal is present, and the latest max_attempts Owner starts pushed nothing | parked |
-# | 9 | A check on the head is pending | wait-ci |
-# | 9 | The head has no checks, and no_checks_grace has not passed since its push | wait-ci |
-# | 10 | The head has no checks, and no_checks_grace has passed since its push | parked |
-# | 11 | The head lacks a sibling's merge commit | wait-update |
-# | 12 | The head has no verdict, and the Verifier started max_verifier_starts times | parked |
-# | 12 | The head has no verdict, and the Verifier started fewer times | start-verifier |
-# | 13 | The head has a success verdict | wait-merge |
+# | 1 | The Issue is closed | done |
+# | 2 | A pull request merged after the latest claim | wait-engineer |
+# | 2 | The branch exists and its pull request closed without merging | wait-engineer |
+# | 3 | No branch, and a dependency is not closed as completed | wait-dependencies |
+# | 4 | No branch, and every dependency is closed as completed | claim |
+# | 5 | The latest question has no answer after it | wait-answer |
+# | 6 | The head moved during the read | read-again |
+# | 6 | A repair signal is present, and fewer than max_attempts attempts were used, and the latest starts did not all push nothing | start-owner |
+# | 6 | A repair signal is present, and max_attempts attempts were used | parked |
+# | 6 | A repair signal is present, and the latest max_attempts Owner starts pushed nothing | parked |
+# | 7 | A check on the head is pending | wait-ci |
+# | 7 | The head has no checks, and no_checks_grace has not passed since its push | wait-ci |
+# | 8 | The head has no checks, and no_checks_grace has passed since its push | parked |
+# | 9 | The head lacks a sibling's merge commit | wait-update |
+# | 10 | The head has no verdict, and the Verifier started max_verifier_starts times | parked |
+# | 10 | The head has no verdict, and the Verifier started fewer times | start-verifier |
+# | 11 | The head has a success verdict | wait-merge |
 #
 # Repair signals
 #

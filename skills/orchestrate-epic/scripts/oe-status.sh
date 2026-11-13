@@ -25,7 +25,7 @@
 # |---|---|
 # | done | done |
 # | waiting on you | wait-answer, parked, wait-engineer, wait-update, wait-merge |
-# | waiting | wait-dependencies, wait-base |
+# | waiting | wait-dependencies |
 # | in progress | Any other, running included |
 #
 # Under it, each Issue waiting on the owner shows three lines, sorted by Issue number, or one line says nothing waits:
@@ -147,7 +147,7 @@ render() {
         | "- #\(.number) \($todo)\n  https://github.com/\($repo)/\($path)\n  why: \(.reason)"' \
         <<<"${line}")"$'\n' || return 1
       ;;
-    wait-dependencies | wait-base) waiting_n=$((waiting_n + 1)) ;;
+    wait-dependencies) waiting_n=$((waiting_n + 1)) ;;
     *) progress_n=$((progress_n + 1)) ;;
     esac
     started="$(jq -r '.started // empty' <<<"${line}")" || return 1
