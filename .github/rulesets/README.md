@@ -14,7 +14,7 @@ The script creates the ruleset, or updates the one named "Protect main" so that 
 
 | Rule | Effect |
 |---|---|
-| `pull_request` | A change reaches `main` only through a pull request with 1 approval, and a code owner's approval when `.github/CODEOWNERS` names one |
+| `pull_request` | A change reaches `main` only through a pull request. No approval is required: one person owns this repository and cannot approve their own pull request, so an approval would only turn every merge into a bypass |
 | `required_status_checks` | The checks below must pass before merge |
 | `deletion`, `non_fast_forward` | `main` cannot be deleted or force-pushed |
 | Bypass | The Repository admin role bypasses every rule, so `make release` can push its release commit |
@@ -24,7 +24,7 @@ Required checks are only jobs of workflows that run on every pull request. A job
 ## Limits
 
 - The admin bypass also lets the admin merge a pull request whose checks failed, through GitHub's explicit bypass prompt. Nobody else can.
-- A push ruleset's "Restrict file paths" rule would block pushes that change `.github/workflows/**`, but GitHub offers push rulesets only for private and internal repositories. This repository is public, so `.github/CODEOWNERS` is the only layer over workflow changes, and it acts at merge: a workflow changed on a pull request branch still runs there before the owner reviews it.
+- A push ruleset's "Restrict file paths" rule would block pushes that change `.github/workflows/**`, but GitHub offers push rulesets only for private and internal repositories. This repository is public, so `.github/CODEOWNERS` is the only remaining layer over workflow changes, and it only asks the owner for a review: nothing gates the merge on it.
 
 ## Verify
 
