@@ -98,6 +98,104 @@ has_line() {
   if grep -qF "git push" "${stdin_file}"; then return 1; fi
 }
 
+@test "a session that edits a tracked file exits 3" {
+  harness claude "echo b >> tracked.txt; ${reply}"
+  describe claude "${note}"
+  [ "${status}" -eq 3 ]
+  has_line "SESSION_CHANGED_WORKTREE"
+  has_line "DESCRIBE status=changed head=${head_sha}"
+  if has_line "PR_BODY_BEGIN"; then return 1; fi
+}
+
+@test "a session that adds an untracked file exits 3" {
+  harness claude "touch pwned.txt; ${reply}"
+  describe claude "${note}"
+  [ "${status}" -eq 3 ]
+}
+
+@test "a session that commits exits 3" {
+  harness claude "git -c user.name=t -c user.email=t@t commit -q --allow-empty -m moved; ${reply}"
+  describe claude "${note}"
+  [ "${status}" -eq 3 ]
+}
+
+@test "a worktree change wins over a session failure" {
+  harness claude 'echo b >> tracked.txt; exit 1'
+  describe claude "${note}"
+  [ "${status}" -eq 3 ]
+}
+
+@test "a session that exits non-zero exits 1 and reports its code" {
+  harness claude 'echo boom >&2; exit 7'
+  describe claude "${note}"
+  [ "${status}" -eq 1 ]
+  has_line "boom"
+  has_line "SESSION_EXIT=7"
+  has_line "DESCRIBE status=failed head=${head_sha}"
+}
+
+@test "a session with no output exits 4" {
+  harness claude 'printf "  \n"'
+  describe claude "${note}"
+  [ "${status}" -eq 4 ]
+  has_line "DESCRIBE status=empty head=${head_sha}"
+}
+
+@test "a reply without a title line exits 5 and shows the reply" {
+  harness claude 'echo PR_BODY_BEGIN; echo body; echo PR_BODY_END'
+  describe claude "${note}"
+  [ "${status}" -eq 5 ]
+  has_line "body"
+  has_line "DESCRIBE status=malformed head=${head_sha}"
+}
+
+@test "a reply whose body never ends exits 5" {
+  harness claude 'echo "PR_TITLE: fix: x"; echo PR_BODY_BEGIN; echo body'
+  describe claude "${note}"
+  [ "${status}" -eq 5 ]
+}
+
+@test "a reply with an empty body exits 5" {
+  harness claude 'echo "PR_TITLE: fix: x"; echo PR_BODY_BEGIN; echo " "; echo PR_BODY_END'
+  describe claude "${note}"
+  [ "${status}" -eq 5 ]
+}
+
+@test "a reply with an empty title exits 5" {
+  harness claude 'echo "PR_TITLE: "; echo PR_BODY_BEGIN; echo body; echo PR_BODY_END'
+  describe claude "${note}"
+  [ "${status}" -eq 5 ]
+}
+
+@test "a failing pr-context.sh exits 1 with its output, and the session never runs" {
+  context 4 "ON_BASE_BRANCH main"
+  harness claude "${reply}"
+  describe claude "${note}"
+  [ "${status}" -eq 1 ]
+  has_line "ON_BASE_BRANCH main"
+  has_line "CONTEXT_EXIT=4"
+  [ ! -e "${args_file}" ]
+}
+
+@test "an unsupported harness exits 2" {
+  describe pi "${note}"
+  [ "${status}" -eq 2 ]
+}
+
+@test "a missing note exits 2" {
+  harness claude "${reply}"
+  describe claude "${BATS_TEST_TMPDIR}/absent.md"
+  [ "${status}" -eq 2 ]
+  [ ! -e "${args_file}" ]
+}
+
+@test "an empty note exits 2" {
+  harness claude "${reply}"
+  printf ' \n' >"${note}"
+  describe claude "${note}"
+  [ "${status}" -eq 2 ]
+}
+
 @test "claude runs in plan mode without saving the session" {
   harness claude "${reply}"
   describe claude "${note}"
