@@ -134,37 +134,37 @@ has_line() {
   has_line "DESCRIBE status=failed head=${head_sha}"
 }
 
-@test "a session with no output exits 4" {
+@test "a session with no output exits 1" {
   harness claude 'printf "  \n"'
   describe claude "${note}"
-  [ "${status}" -eq 4 ]
-  has_line "DESCRIBE status=empty head=${head_sha}"
+  [ "${status}" -eq 1 ]
+  has_line "DESCRIBE status=failed head=${head_sha}"
 }
 
-@test "a reply without a title line exits 5 and shows the reply" {
+@test "a reply without a title line exits 1 and shows the reply" {
   harness claude 'echo PR_BODY_BEGIN; echo body; echo PR_BODY_END'
   describe claude "${note}"
-  [ "${status}" -eq 5 ]
+  [ "${status}" -eq 1 ]
   has_line "body"
-  has_line "DESCRIBE status=malformed head=${head_sha}"
+  has_line "DESCRIBE status=failed head=${head_sha}"
 }
 
-@test "a reply whose body never ends exits 5" {
+@test "a reply whose body never ends exits 1" {
   harness claude 'echo "PR_TITLE: fix: x"; echo PR_BODY_BEGIN; echo body'
   describe claude "${note}"
-  [ "${status}" -eq 5 ]
+  [ "${status}" -eq 1 ]
 }
 
-@test "a reply with an empty body exits 5" {
+@test "a reply with an empty body exits 1" {
   harness claude 'echo "PR_TITLE: fix: x"; echo PR_BODY_BEGIN; echo " "; echo PR_BODY_END'
   describe claude "${note}"
-  [ "${status}" -eq 5 ]
+  [ "${status}" -eq 1 ]
 }
 
-@test "a reply with an empty title exits 5" {
+@test "a reply with an empty title exits 1" {
   harness claude 'echo "PR_TITLE: "; echo PR_BODY_BEGIN; echo body; echo PR_BODY_END'
   describe claude "${note}"
-  [ "${status}" -eq 5 ]
+  [ "${status}" -eq 1 ]
 }
 
 @test "a failing pr-context.sh exits 1 with its output, and the session never runs" {
