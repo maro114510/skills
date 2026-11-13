@@ -64,6 +64,7 @@ One call blocks until `wait.sh` exits, and each exit costs exactly one turn. Pic
 |---|---|---|
 | Claude Code | Bash with `run_in_background: true`, then end the turn without polling or sleeping; the exit starts the next turn | 25 |
 | OpenCode | Foreground Bash with `timeout` set to `--max` plus 5 minutes, `3600000` ms | 55 |
+| DeepSeek Harness | Run `bash <scripts>/wait.sh ...` with `run_in_background: true`; end the turn while it runs, then collect the job with `job_output` when notified. Never start a duplicate job. | 25 |
 | Any other | Not measured. Run Report once instead and tell the user drive is unsupported here | — |
 
 Never use Monitor or a loop that polls `wait.sh` output: Monitor stops at 30 minutes and costs a turn per line.
