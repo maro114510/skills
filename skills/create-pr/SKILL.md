@@ -89,7 +89,16 @@ Write each reference from `== issues` in the description. Use each title for the
 
 ## Step 3. Generate the PR Description
 
-Read `<skill-dir>/references/description.md` in full before writing: it holds the sections, the template rules, the writing principles, the compact pass to run before Step 4, and the title rules.
+Do not write the title or description yourself, even when you know how: a fresh session writes them, with Steps 2, 3.1, 3.2, and 4 and `references/description.md` as its rules. Do not read `references/description.md` unless the script fails.
+
+1. Write a note to a temporary file outside the worktree, holding only facts you established: what changed, what was deferred, why, the alternatives rejected, and what was verified and what was not. Write no draft of the description.
+2. Run this in the worktree, with your harness, `claude`, `codex`, or `opencode`, and Step 1's argument tokens:
+
+   ```bash
+   bash <skill-dir>/scripts/describe.sh <harness> <note-file> <argument tokens>
+   ```
+
+3. On exit 0, use the text after `PR_TITLE: ` as the title and the lines between `PR_BODY_BEGIN` and `PR_BODY_END` as the description, verbatim, and skip Step 4. On exit 3, the session changed the worktree or HEAD: stop and push nothing. On any other exit, read `<skill-dir>/references/description.md` in full, then run Step 2 and write them yourself, and say that you did.
 
 ### 3.1 Language
 
