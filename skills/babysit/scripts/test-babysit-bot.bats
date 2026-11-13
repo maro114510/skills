@@ -40,9 +40,10 @@ EOF
 
   git clone -q "${tmp}/origin.git" "${tmp}/clone"
   cd "${tmp}/clone" || return 1
-  # The clone looks like an HTTPS GitHub one, which a Bot worktree requires; transports stay local.
-  git remote set-url origin "https://github.com/maro/x.git"
-  git config "url.file://${tmp}/origin.git.insteadOf" "https://github.com/maro/x.git"
+  # The fetch stays on the local transport while the push target reads as the HTTPS GitHub one a
+  # Bot worktree requires, which is what pushInsteadOf rewrites.
+  git remote set-url origin "file://${tmp}/origin.git"
+  git config "url.https://github.com/maro/x.git.pushInsteadOf" "file://${tmp}/origin.git"
 }
 
 opt_in() {

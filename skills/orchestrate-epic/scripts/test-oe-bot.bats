@@ -277,6 +277,17 @@ EOF
   [ -z "$(git -C "${wt}" config --get skills.bot.identity)" ]
 }
 
+@test "apply refuses a push URL that a pushInsteadOf rule rewrites to SSH" {
+  opt_in
+  git config --global skills.bot.helper bot-helper
+  git config "url.ssh://git@github.com/.pushInsteadOf" "https://github.com/maro/x.git"
+
+  run apply_in "${clone}" "${wt}"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"not an HTTPS GitHub URL"* ]]
+  [ -z "$(git -C "${wt}" config --get skills.bot.identity)" ]
+}
+
 @test "apply accepts an HTTPS push URL that differs from the fetch URL" {
   opt_in
   git config --global skills.bot.helper bot-helper

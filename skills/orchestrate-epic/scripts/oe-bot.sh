@@ -82,12 +82,11 @@ bot_config_ready() {
     echo "git config --global skills.bot.helper is unset, so nothing can act as the Bot" >&2
     return 1
   }
-  # git pushes to pushurl when one is set, so every configured push URL has to be the HTTPS one the
-  # helper answers for; reading the fetch URL alone would let a push leave under the person's SSH key.
-  push_urls="$(git -C "${at}" config --get-all remote.origin.pushurl 2>/dev/null)" || push_urls=""
-  if [[ -z "${push_urls}" ]]; then
-    push_urls="$(git -C "${at}" config --get remote.origin.url 2>/dev/null)" || push_urls=""
-  fi
+  # git pushes to pushurl when one is set, and its url.<base>.insteadOf and pushInsteadOf rules can
+  # rewrite that URL before the push, so every URL git would actually push to has to be the HTTPS one
+  # the helper answers for; reading the fetch URL alone would let a push leave under the person's
+  # SSH key.
+  push_urls="$(git -C "${at}" remote get-url --push --all origin 2>/dev/null)" || push_urls=""
   if [[ -z "${push_urls}" ]]; then
     echo "cannot read the push URL of origin, so a push could not be checked against the Bot helper" >&2
     return 1
