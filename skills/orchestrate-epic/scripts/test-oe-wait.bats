@@ -259,6 +259,22 @@ JSON
   [ "$(action_of 6)" = running ]
 }
 
+@test "a first read that holds an update-branch returns at once even with every agent slot taken, because the update starts no agent" {
+  jq -n '{
+    default_branch: {checks: {test: "success"}},
+    issues: [
+      {number: 4, closed: true, pull_requests: [{number: 40, state: "merged", opened: "07:05", merged: "07:30"}]},
+      {number: 5, branch: true, pull_requests: [{number: 50, opened: "07:10", checks: {test: "success"}, missing_merges: [40]}]}
+    ]
+  }' >"${OE_GITHUB}"
+  records 5 claim@07:00 attempt@07:01
+
+  run bash "${oe}" wait o/r 1 --max-agents 0 --timeout 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = update-branch ]
+}
+
 # Ends the agent on Issue $1 once oe wait has finished its first poll, within about thirty seconds.
 # The fake gh counts Epic reads only under GH_FAIL_EPIC_READ, so the test sets it to a read that never comes.
 ends_after_first_poll() {

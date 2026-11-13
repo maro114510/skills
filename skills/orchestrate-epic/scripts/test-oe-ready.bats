@@ -771,28 +771,67 @@ sibling_merged() {
   records 5 claim@07:00 attempt@07:01
 }
 
-@test "a head that passed its checks and lacks a merged sibling pull request waits for its branch update instead of a Verifier" {
+@test "a head that passed its checks and lacks a merged sibling pull request gets an update that starts no agent instead of a Verifier" {
   sibling_merged none '[40]'
 
   run --separate-stderr bash "${oe}" ready o/r 1
 
   [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = wait-update ]
+  [ "$(action_of 5)" = update-branch ]
   IFS=$'\t' read -r _ _ reason command <<<"${lines[1]}"
-  [ -z "${command}" ]
+  [ "${command}" = "bash '${oe}' update o/r 5" ]
   case "${reason}" in
   *"#40"*) ;;
   *) return 1 ;;
   esac
+  case "${command}" in
+  *" start "*) return 1 ;;
+  *) ;;
+  esac
 }
 
-@test "a head with a success verdict that lacks a merged sibling pull request waits for its branch update instead of the merge" {
+@test "a head with a success verdict that lacks a merged sibling pull request gets an update instead of the merge" {
   sibling_merged success '[40]'
 
   run bash "${oe}" ready o/r 1
 
   [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = wait-update ]
+  [ "$(action_of 5)" = update-branch ]
+}
+
+@test "running the command of an update-branch line leaves the attempt count unchanged and gives the new head the actions of any new head" {
+  sibling_merged success '[40]'
+  facts_of_5() { bash "${oe}" ready o/r 1 --facts | jq -r 'select(.number == 5) | '"$1"; }
+  before="$(facts_of_5 .attempts)"
+  [ "${before}" = 1 ]
+  run bash "${oe}" ready o/r 1
+  [ "$(action_of 5)" = update-branch ]
+  command="$(field_of 5 4)"
+
+  run --separate-stderr bash -c "${command}"
+  [ "${status}" -eq 0 ]
+
+  [ "$(facts_of_5 .attempts)" = "${before}" ]
+  [ "$(facts_of_5 .action)" = wait-ci ]
+  [ "$(facts_of_5 .head)" != "$(printf 'b%.0s' {1..38})50" ]
+
+  jq '.issues[1].pull_requests[0].checks = {test: "success"}' "${OE_GITHUB}" >"${OE_GITHUB}.new" && mv "${OE_GITHUB}.new" "${OE_GITHUB}"
+  run bash "${oe}" ready o/r 1
+  [ "$(action_of 5)" = start-verifier ]
+}
+
+@test "a head that conflicts with the base gives start-owner with the conflict as its reason, not an update" {
+  sibling_merged success '[40]'
+  jq '.issues[1].pull_requests[0].conflicting = true' "${OE_GITHUB}" >"${OE_GITHUB}.new" && mv "${OE_GITHUB}.new" "${OE_GITHUB}"
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-owner ]
+  case "$(field_of 5 3)" in
+  *"conflicts with its base"*) ;;
+  *) return 1 ;;
+  esac
 }
 
 @test "a head that contains the merged sibling pull request is verified, and one with a success verdict waits for the merge" {

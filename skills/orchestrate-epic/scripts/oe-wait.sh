@@ -28,6 +28,7 @@
 # The first oe ready run that succeeds is the baseline, and every later run is compared with it.
 # A baseline that already holds an Issue to start ends the wait at once while fewer than --max-agents agents run,
 # because no later run would show it as a change.
+# A baseline that holds an update-branch ends it at once whatever the agents run, because the update starts no agent.
 # Only each line's Issue number and action are compared, because a reason carries the seconds since a push,
 # which differ on every run while nothing the session can act on has changed.
 #
@@ -269,10 +270,12 @@ actions() {
 
 # Succeeds when a line of $current has an action that starts an agent and fewer than max_agents agents run, so the session can start it now.
 # The action decides, not a non-empty fourth field, because a wait-answer line carries an answer command there and starts nothing.
+# An update-branch line is always startable, because oe update starts no agent and the cap counts agents.
 startable() {
   local agents
   agents="$(cut -f2 <<<"${current}" | grep -cx running)"
-  ((agents < max_agents)) && cut -f2 <<<"${current}" | grep -qxE 'claim|start-owner|start-verifier'
+  cut -f2 <<<"${current}" | grep -qx update-branch ||
+    { ((agents < max_agents)) && cut -f2 <<<"${current}" | grep -qxE 'claim|start-owner|start-verifier'; }
 }
 
 current=""

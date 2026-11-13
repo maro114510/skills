@@ -3,20 +3,22 @@
 #
 # - An Owner start is an attempt record after the latest claim record, or any attempt record when there is no claim.
 # - Each start records head, the head of the Issue branch when it began; the field is absent when the branch did not exist.
-# - A start pushed when the head read later differs from the one it recorded:
-#   the next start's recorded head, or $current, the branch's head now, for the latest start.
+# - A start pushed when the head it left differs from the one it recorded.
+#   - The head it left is the head of the next record that follows it, an attempt or an update: the next start's recorded head,
+#     or the head an update recorded before it merged the base into the branch.
+#   - With no such record, it is $current, the branch's head now.
+#   - An update moves the head without an Owner, so reading the head after it would count a merge as the start's push.
 # - An attempt is a start that pushed.
 # - No agent's report decides it, so a start that ended in a question or in nothing never counts as an attempt.
 
-def owner_starts:
-  (map(.kind == "claim") | rindex(true)) as $claim
-  | [.[($claim // -1) + 1:][] | select(.kind == "attempt")];
-
 # Whether each Owner start pushed, oldest first.
 def start_flags($current):
-  owner_starts as $s
-  | [range(0; $s | length) as $i
-      | (if $i + 1 < ($s | length) then $s[$i + 1].head else $current end) != $s[$i].head];
+  (map(.kind == "claim") | rindex(true)) as $claim
+  | .[($claim // -1) + 1:] as $r
+  | [range(0; $r | length) as $i
+      | select($r[$i].kind == "attempt")
+      | ([$r[$i + 1:][] | select(.kind == "attempt" or .kind == "update")] | first) as $next
+      | (if $next == null then $current else $next.head end) != $r[$i].head];
 
 def attempts_used($current): [start_flags($current)[] | select(.)] | length;
 

@@ -16,8 +16,9 @@
 #
 # Output
 #
-# - Each line holds an Issue number, an action, a reason, and the oe start command that the action runs, separated by tabs.
-#   The command is empty for an action that starts no agent.
+# - Each line holds an Issue number, an action, a reason, and the command that the action runs, separated by tabs.
+#   The command is oe start for an action that starts an agent, oe update for update-branch, which starts none,
+#   and empty for every other action.
 # - A wait-answer line is the exception: its reason holds the open question, with each line break written as \n,
 #   and its command is the oe question --answer call that records the person's reply, ending in <reply>.
 # - An Issue whose agent runs gets the action running, which no row of the next-action table decides:
@@ -180,7 +181,8 @@ shell_quote() {
 }
 
 # Prints out's lines with a fourth field: the oe start command for an action that starts an agent,
-# the oe question command that records the person's answer for wait-answer, and nothing otherwise.
+# the oe update command for update-branch, the oe question command that records the person's answer for wait-answer,
+# and nothing otherwise.
 # A start command is complete and quoted, so a session that lost SKILL.md can run it as printed.
 # The answer command ends in <reply>, which the session replaces with the person's reply, quoted.
 with_start() {
@@ -197,6 +199,7 @@ with_start() {
     *) start="" ;;
     esac
     command="${start:+bash $(shell_quote "${dir}/oe") start ${start}}"
+    [[ "${action}" != update-branch ]] || command="bash $(shell_quote "${dir}/oe") update ${repo} ${n}"
     [[ "${action}" != wait-answer ]] || command="bash $(shell_quote "${dir}/oe") question ${repo} ${n} --answer <reply>"
     lines+="$(printf '%s\t%s\t%s\t%s' "${n}" "${action}" "${reason}" "${command}")"$'\n'
   done <<<"$1"
@@ -327,11 +330,11 @@ while IFS=$'\t' read -r n sha; do
 done <<<"${pulls}"
 
 # Each Issue, classified by oe-ready.jq.
-# Only the kind, time, bots, and branch head of claim and attempt records decide an action, so verdict findings stay out of the program.
+# Only the kind, time, bots, and branch head of claim, attempt, and update records decide an action, so verdict findings stay out of the program.
 i=0
 for n in ${sorted[@]+"${sorted[@]}"}; do
   issue_records="$(records_read "${repo}" "${n}" 2>"${err}")" || fail "$(head -n1 "${err}")"
-  issue_records="$(jq -c 'map(select(.kind == "claim" or .kind == "attempt") | {kind, at, bots, head})' <<<"${issue_records}")" ||
+  issue_records="$(jq -c 'map(select(.kind == "claim" or .kind == "attempt" or .kind == "update") | {kind, at, bots, head})' <<<"${issue_records}")" ||
     fail "records of Issue #${n} unreadable"
   line="$(jq -r "$(program "${entry}" "${pr_heads%,}" "${issue_records}" "${stale_heads%,}")" <<<"${responses[i]}" 2>"${err}")" ||
     fail "Issue #${n} read failed: $(head -n1 "${err}")"
