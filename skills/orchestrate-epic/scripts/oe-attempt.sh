@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # oe attempt
 #
-# Records an Owner attempt on this host before the Owner starts, and refuses once max_attempts are used.
+# Records an Owner start on this host before the Owner starts, with the head of the Issue branch, and refuses a start oe ready would park.
 # It counts attempts as oe ready does, so the Owner it admits is one that oe ready still allows.
 #
 # Usage
@@ -11,8 +11,12 @@
 # Counting
 #
 # - Records come from the record store that oe-store.sh defines.
-# - Only attempt records after the latest claim record count.
-# - Every attempt record counts when there is no claim record.
+# - Only attempt records after the latest claim record count as starts.
+# - Every attempt record counts as a start when there is no claim record.
+# - The record holds head, the Issue branch's head now, and none when the branch does not exist.
+# - An attempt is a start that pushed, as oe-starts.jq says: the head read later differs from the one the start recorded.
+#   A start that pushed nothing spends no attempt, but its record still holds the bot rounds it used.
+# - The start is refused when max_attempts attempts are used, and when the latest max_attempts starts pushed nothing.
 #
 # Bot rounds
 #
@@ -25,7 +29,7 @@
 #
 # Output
 #
-# - On success, one line holding attempt, its number, and max_attempts, separated by tabs.
+# - On success, one line holding attempt, the attempts used by earlier starts plus one, and max_attempts, separated by tabs.
 #
 # Exit codes
 #
@@ -34,7 +38,7 @@
 # | 0 | The attempt record was written | The attempt record |
 # | 1 | The record store or a GitHub read failed | Nothing |
 # | 2 | The arguments, or git config skills.bot, are invalid | Nothing |
-# | 4 | max_attempts attempts are already used | Nothing |
+# | 4 | max_attempts attempts are already used, or the latest max_attempts starts pushed nothing | Nothing |
 #
 # Two sessions never write for one Epic at once, because oe lock admits one, so reading and then writing does not race.
 set -uo pipefail
@@ -67,14 +71,7 @@ trap 'rm -f "${err}"' EXIT
 
 at="$(record_now 2>"${err}")" || usage "$(head -n1 "${err}")"
 records="$(records_read "${repo}" "${n}" 2>"${err}")" || fail "$(head -n1 "${err}")"
-used="$(jq -r '(map(.kind == "claim") | rindex(true)) as $claim
-  | [.[($claim // -1) + 1:][] | select(.kind == "attempt")] | length' <<<"${records}")" ||
-  fail "cannot count the attempts of Issue #${n}"
-
-if ((used >= max_attempts)); then
-  echo "oe attempt: Issue #${n} already used ${used} of ${max_attempts} attempts since its claim" >&2
-  exit 4
-fi
+starts="$(<"${dir}/oe-starts.jq")" || fail "cannot read oe-starts.jq"
 
 # Read 1: the Issue and its branch's open pull request, as oe ready reads them.
 issue_query="$(<"${dir}/oe-ready-issue.graphql")" || fail "cannot read oe-ready-issue.graphql"
@@ -104,21 +101,38 @@ program="$(printf '%s\n%s\n%s\n%s\n%s\n' "${bot}" "${trust}" "${bot_rules}" "${v
 | ([($r.pullRequests.nodes // [])[]
     | select(.isCrossRepository == false)
     | select(claimed_at == "" or .createdAt >= claimed_at)] | first) as $pr
-| if $pr == null then []
-  else ($pr.approvals.nodes // []) as $approvals
-    | ($pr.headRefOid) as $head
-    | [$pr.reviewThreads.nodes[] | bot_finding((if since_at == "" then null else since_at end); used_bots; bot_approved($approvals; $head)) | .login]
-    | unique
-  end')"
+| {head: ($r.ref.target.oid // null),
+    bots: (if $pr == null then []
+      else ($pr.approvals.nodes // []) as $approvals
+        | ($pr.headRefOid) as $head
+        | [$pr.reviewThreads.nodes[] | bot_finding((if since_at == "" then null else since_at end); used_bots; bot_approved($approvals; $head)) | .login]
+        | unique
+      end)}')"
 
-bots="$(gh api graphql -f query="${issue_query}" -F owner="${repo%/*}" -F repo="${repo#*/}" -F num="${n}" \
+read_out="$(gh api graphql -f query="${issue_query}" -F owner="${repo%/*}" -F repo="${repo#*/}" -F num="${n}" \
   -f branch="${branch_prefix}${n}" -f ref="refs/heads/${branch_prefix}${n}" \
   --jq "${program}" 2>"${err}")" || fail "Issue #${n} read failed: $(head -n1 "${err}")"
-jq -e 'type == "array" and all(.[]; type == "string")' <<<"${bots}" >/dev/null 2>&1 ||
-  fail "the bot list of Issue #${n} is unreadable"
+jq -e '(.bots | type == "array" and all(.[]; type == "string")) and (.head | type == "string" or . == null)' \
+  <<<"${read_out}" >/dev/null 2>&1 || fail "the read of Issue #${n} is unreadable"
+bots="$(jq -c .bots <<<"${read_out}")" || fail "cannot read the bots of Issue #${n}"
+branch_head="$(jq -c .head <<<"${read_out}")" || fail "cannot read the branch head of Issue #${n}"
 
-record="$(jq -cn --arg at "${at}" --argjson bots "${bots}" \
-  '{kind: "attempt", at: $at} + (if ($bots | length) > 0 then {bots: $bots} else {} end)')" ||
+used="$(jq -r --argjson current "${branch_head}" "${starts}"$'\n''attempts_used($current)' <<<"${records}")" ||
+  fail "cannot count the attempts of Issue #${n}"
+idle="$(jq -r --argjson current "${branch_head}" "${starts}"$'\n''starts_without_push($current)' <<<"${records}")" ||
+  fail "cannot count the starts of Issue #${n} that pushed nothing"
+if ((used >= max_attempts)); then
+  echo "oe attempt: Issue #${n} already used ${used} of ${max_attempts} attempts since its claim" >&2
+  exit 4
+fi
+if ((idle >= max_attempts)); then
+  echo "oe attempt: the latest ${idle} Owner starts on Issue #${n} pushed nothing" >&2
+  exit 4
+fi
+
+record="$(jq -cn --arg at "${at}" --argjson bots "${bots}" --argjson head "${branch_head}" \
+  '{kind: "attempt", at: $at} + (if $head != null then {head: $head} else {} end)
+    + (if ($bots | length) > 0 then {bots: $bots} else {} end)')" ||
   fail "cannot build the record of Issue #${n}"
 records_add "${repo}" "${n}" "${record}" 2>"${err}" ||
   fail "recording the attempt of Issue #${n} failed: $(head -n1 "${err}")"

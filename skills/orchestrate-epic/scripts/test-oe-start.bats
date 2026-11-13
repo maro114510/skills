@@ -76,7 +76,8 @@ JSON
   [ "${lines[1]}" = "repo o/r issue 5 base main worktree ${wt} reason no PR yet" ]
   [ "${#lines[@]}" -eq 2 ]
   [ "$(git -C "${wt}" branch --show-current)" = feat/issue-5 ]
-  [ "$(records_of 5 | jq -c 'select(.kind == "attempt")')" = '{"kind":"attempt","at":"2027-01-15T08:00:00Z"}' ]
+  # The record holds the head the Issue branch has when the Owner starts.
+  [ "$(records_of 5 | jq -c 'select(.kind == "attempt")')" = '{"kind":"attempt","at":"2027-01-15T08:00:00Z","head":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}' ]
 }
 
 @test "a started Owner leaves a run record naming its role" {
@@ -212,7 +213,7 @@ JSON
   github <<'JSON'
 {"issues": [{"number": 5, "branch": true}]}
 JSON
-  records 5 claim@07:00 attempt@07:01 attempt@07:20 attempt@07:40
+  records 5 claim@07:00 attempt@07:01#h1 attempt@07:20#h2 attempt@07:40#h3
 
   run --separate-stderr bash "${oe}" start owner o/r 5 "checks failed"
 
