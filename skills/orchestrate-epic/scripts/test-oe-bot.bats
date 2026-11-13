@@ -131,6 +131,30 @@ require_in() {
   [ ! -e "${tmp}/owner-calls" ]
 }
 
+@test "apply resets an inherited http authorization header the helper cannot replace" {
+  opt_in
+  git config --global skills.bot.helper bot-helper
+  git config --global http.https://github.com/.extraheader "Authorization: Basic OWNER"
+
+  run apply_in "${clone}" "${wt}"
+  [ "${status}" -eq 0 ]
+  [ "$(git config --get http.https://github.com/.extraheader)" = "Authorization: Basic OWNER" ]
+  [ -z "$(git -C "${wt}" config --get http.https://github.com/.extraheader)" ]
+}
+
+@test "clearing the identity gives the inherited http header back" {
+  opt_in
+  git config --global skills.bot.helper bot-helper
+  git config --global http.https://github.com/.extraheader "Authorization: Basic OWNER"
+  run apply_in "${clone}" "${wt}"
+  [ "${status}" -eq 0 ]
+
+  git config --unset skills.bot
+  run apply_in "${clone}" "${wt}"
+  [ "${status}" -eq 0 ]
+  [ "$(git -C "${wt}" config --get http.https://github.com/.extraheader)" = "Authorization: Basic OWNER" ]
+}
+
 @test "bot_identity_apply changes nothing when the clone does not opt in" {
   git config --global skills.bot.helper bot-helper
   run apply_in "${clone}" "${wt}"

@@ -151,6 +151,9 @@ bot_identity_apply() {
   git -C "${wt}" config --worktree credential.https://github.com.helper "" || return 1
   git -C "${wt}" config --worktree --add credential.https://github.com.helper "!${helper}" || return 1
   git -C "${wt}" config --worktree credential.https://github.com.useHttpPath true || return 1
+  # An inherited http.<url>.extraheader adds an Authorization header of its own, which no credential
+  # helper can replace, so the worktree resets the list instead of letting it answer as the person.
+  git -C "${wt}" config --worktree http.https://github.com/.extraheader "" || return 1
   git -C "${wt}" config --worktree skills.bot.identity "${login}" || return 1
 }
 
@@ -161,7 +164,8 @@ bot_identity_clear() {
   [[ -n "$(git -C "${wt}" config --get skills.bot.identity 2>/dev/null)" ]] || return 0
   git -C "${wt}" config extensions.worktreeConfig true || return 1
   for key in user.name user.email skills.bot.identity \
-    credential.https://github.com.helper credential.https://github.com.useHttpPath; do
+    credential.https://github.com.helper credential.https://github.com.useHttpPath \
+    http.https://github.com/.extraheader; do
     git -C "${wt}" config --worktree --unset-all "${key}" >/dev/null 2>&1 || true
   done
 }
