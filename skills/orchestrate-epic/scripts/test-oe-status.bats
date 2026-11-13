@@ -551,12 +551,13 @@ JSON
   [ "$(column_of 6 2)" = claim ]
 }
 
-@test "under a failed check on the default branch, every Issue waits for it as in oe ready, without reading the Issues" {
+@test "a failed check on the default branch does not change the step of any Issue" {
   github <<'JSON'
 {
   "default_branch": {"checks": {"test": "failure"}},
   "issues": [{"number": 5, "branch": true,
-    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "pushed_during_read": true}]}]
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "pushed_during_read": true}]},
+    {"number": 6}]
 }
 JSON
   records 5 claim@07:00 attempt@07:01
@@ -564,9 +565,8 @@ JSON
   run --separate-stderr bash "${oe}" status o/r 1
 
   [ "${status}" -eq 0 ]
-  [ "$(column_of 5 2)" = wait-base ]
-  [ "$(column_of 5 3)" = - ]
-  [ "$(column_of 5 9)" = "checks failed on main head aaaaaaa: test" ]
+  [ "$(column_of 5 2)" = read-again ]
+  [ "$(column_of 6 2)" = claim ]
 }
 
 @test "a default branch head with no checks past the grace shows each Issue's step and no end line" {

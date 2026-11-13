@@ -111,11 +111,9 @@ def contexts_page($after):
 def rollup: rollup_nodes | contexts_page(0);
 
 def epic_response:
-  (.default_branch // {}) as $d
-  | {data: {repository: {
+  {data: {repository: {
       nameWithOwner: "o/r",
-      defaultBranchRef: {name: "main", target: {oid: default_sha,
-        committedDate: ($d.committed // $d.pushed // "07:00" | time), statusCheckRollup: ($d | rollup)}},
+      defaultBranchRef: {name: "main"},
       issue: {subIssues: {totalCount: (.issues | length),
         nodes: [.issues[] | {number, state: (if .closed then "CLOSED" else "OPEN" end),
           repository: {nameWithOwner: "o/r"}}]}}}}};
@@ -203,10 +201,9 @@ def issue_rest($n):
 def sub_issues:
   [.issues[] | {number, state: (if .closed then "closed" else "open" end)}];
 
-# The page of checks after the cursor $after on the commit $oid: the default branch head or a pull request head.
+# The page of checks after the cursor $after on the pull request head $oid.
 def checks_response($oid; $after):
-  (if $oid == default_sha then .default_branch // {}
-   else [.issues[].pull_requests[]? | select(read_sha == $oid)] | first // error("unknown commit \($oid)") end) as $commit
+  ([.issues[].pull_requests[]? | select(read_sha == $oid)] | first // error("unknown commit \($oid)")) as $commit
   | {data: {repository: {object: {oid: $oid, statusCheckRollup: ($commit | rollup_nodes | contexts_page($after))}}}};
 
 # Whether the head $head contains the merge commit $base, as GitHub's compare status says.
