@@ -91,7 +91,7 @@ Write each reference from `== issues` in the description. Use each title for the
 
 A fresh session writes the title and description, with Steps 2, 3.1, 3.2, and 4 and `references/description.md` as its rules.
 
-1. Write a note to a temporary file outside the worktree, holding only facts you established: what changed, why, the alternatives rejected, and what was verified and what was not. Write no draft of the description.
+1. Write a note to a temporary file outside the worktree, holding only facts you established: what changed, what was deferred, why, the alternatives rejected, and what was verified and what was not. Write no draft of the description.
 2. Run this in the worktree, with your harness, `claude`, `codex`, or `opencode`, and Step 1's argument tokens:
 
    ```bash
