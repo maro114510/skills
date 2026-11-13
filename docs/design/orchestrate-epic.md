@@ -60,6 +60,7 @@ The record store lays out its state as `oe-store.sh` defines.
 | `records/<repo-key>/<issue>.jsonl` | One Issue's claim, attempt, run, and verdict records, oldest first, one JSON object per line. A verdict record holds its findings |
 | `boards/<repo-key>/<epic>` | The Herdr pane of the Epic's board |
 | `waits/<repo-key>/<epic>` | The process of the Epic's running oe wait |
+| `reads/<repo-key>/<epic>` | The latest full read of oe wait, with the light read's fingerprint of the state it was made in and its next deadline |
 | `notices/<repo-key>/<epic>` | Each item that needed the person at oe wait's latest read, with when the person was last told about it |
 
 `<repo-key>` is a hash of the lowercased repository name.
@@ -345,7 +346,7 @@ sequenceDiagram
 | Acceptance checks | Verification splits automated checks from manual ones, and no agent checks a box that needs a human, template boxes included |
 | The board in Herdr | Opt-in with git config `skills.herdr`, read only inside Herdr, so no other run calls herdr and no Herdr user gets a pane unasked |
 | Board start | oe board types the board command into the pane, and the pane's shell runs it only after its startup files finish, so output they print, such as direnv's "is taking a while" warning, comes before the board. The board clears the screen and shows one line before its first read. When the shell has not finished within `board_start_timeout`, oe board exits 1 saying so and records when it sent the command, and a rerun within 10 minutes waits for that start and types nothing again |
-| Board refresh | Every 3 minutes, each refresh reading GitHub through oe ready |
+| Board refresh | Every 3 minutes, as oe wait polls: one light read, and a full oe ready read only when the light read, the host-local state, or a deadline shows a change |
 | Board lifetime | The board stops once the session holding the Epic's lock ends, and leaves its last view. A `--watch` that never finds a session holding the lock refreshes until interrupted. A later start reuses its pane when the pane runs the board or sits at its shell's prompt, and never sends input to a pane that runs anything else |
 | Notifications | oe wait calls the command in git config `skills.notify` with a one-line message and a link for each new item that needs the person: a question, a park, an Issue waiting for a person or for the merge, 3 failed reads in a row, and the session's end with its reason. It calls again every hour while the person has not acted. Herdr is one example setting, and no path is Herdr-only. With no command set, oe notifies nobody |
 | Answers | The person answers in the session's conversation or with a comment on the Issue. The session records an answer from its conversation through oe, so the next Owner reads it on the Issue |
@@ -353,6 +354,6 @@ sequenceDiagram
 | Starting agents | Through oe start, which oe ready prints for each line that starts an agent, because a session that lost the skill to a compaction rebuilt the steps from memory and passed the Epic number as the Issue |
 | Waits per Epic | One on each host. A new oe wait stops no other: while one runs, the new one prints oe ready's output and exits at once, because a stopped wait reached the session as a stray completion, and the running wait already returns once an agent ends or the next actions change. Only oe lock release, or another session taking the lock, stops a wait |
 | Running agents | oe ready finds them in its own records, never from the session, because a session that lost its context forgot the agents it started. An agent runs while the run record oe start wrote is no older than the lock of the running session holding the Epic, and its worktree exists. An earlier session's leftover worktree therefore holds no Issue, and the same session acquiring its lock again keeps its agents |
-| Polling | One light read every 2 minutes. Every child Issue is read only on a change to it, its PR, or its checks, on a merge of a sibling PR, or at a deadline such as a head with no checks for 10 minutes |
-| Open PRs | oe ready reads only the PRs of the child Issues' branches |
+| Polling | One light read every 2 minutes. Every child Issue is read only on a change to it, its PR, or its checks, on a merge of a sibling PR, or at a deadline such as a head with no checks for 10 minutes. oe wait keeps its latest full read on this host, so each new call starts from it, and a full read is made at least once an hour |
+| Open PRs | oe ready reads only the PRs of the child Issues' branches, from the read of each Issue, and never lists the repository's open PRs |
 | Rate limit | oe wait waits until the reset time. Any other failed read is tried again at the next poll, and the wait goes on |

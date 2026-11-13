@@ -6,17 +6,21 @@
 # - fake-github-write.jq applies a write to the state, and this script saves the new state.
 # - The --jq filter is then applied to that response, as gh applies it.
 # - A call whose arguments contain GH_FAIL fails as if GitHub were down, and changes nothing.
-# - OE_GITHUB_NEXT, when set, names a state file that replaces the state at the second Epic read.
-#   It models GitHub changing between two oe ready runs, at a point the test controls.
+# - OE_GITHUB_NEXT, when set, names a state file that replaces the state once, at the first light read after an Epic read, or else at the second Epic read.
+#   It models GitHub changing between two polls, at a point the test controls.
 # - GH_FAIL_EPIC_READ=N fails only the Nth Epic read, as if GitHub were down for one oe ready run.
 #   It also appends each Epic read's epoch second to $OE_GITHUB.epic-read-times, one line per read.
 # - GH_RATE_LIMIT_UNTIL=EPOCH makes every GraphQL call fail as GitHub does with an exhausted bucket until that real epoch second.
 #   api rate_limit then reports the GraphQL bucket empty until that second, and full after it.
 #
+# - Every call appends its kind to $OE_GITHUB.calls, one line each, so a test counts the reads a command made.
+#   A kind is the call name in the table below, with graphql calls named epic, light, issue, or checks, and the write calls named write.
+#
 # | gh call | Answered as |
 # |---|---|
 # | api rate_limit | the buckets, as GH_RATE_LIMIT_UNTIL says |
 # | api graphql with the Epic query | epic |
+# | api graphql with the light read query | light |
 # | api graphql with the checks page query, oid=SHA, and after=CURSOR | checks SHA:CURSOR |
 # | api graphql with num=N | issue N |
 # | api repos/o/r/pulls | pulls |
@@ -85,7 +89,12 @@ unexpected() {
   exit 99
 }
 
+log_call() {
+  echo "$1" >>"${OE_GITHUB}.calls"
+}
+
 if [[ "${method}" == POST || "${method}" == PATCH ]]; then
+  log_call write
   case "${method} ${path}" in
   PATCH\ */issues/*) call=edit_issue arg="${path#*/issues/}" ;;
   PATCH\ *) unexpected ;;
@@ -115,7 +124,13 @@ fi
 
 case "${path}" in
 graphql)
-  if [[ "${query}" == *subIssues* ]]; then
+  if [[ "${query}" == *"query OeLight"* ]]; then
+    call=light arg=""
+    if [[ -n "${OE_GITHUB_NEXT:-}" && -s "${OE_GITHUB}.reads" && ! -e "${OE_GITHUB}.swapped" ]]; then
+      cp "${OE_GITHUB_NEXT}" "${OE_GITHUB}"
+      : >"${OE_GITHUB}.swapped"
+    fi
+  elif [[ "${query}" == *subIssues* ]]; then
     call=epic arg=""
     if [[ -n "${GH_FAIL_EPIC_READ:-}" ]]; then
       epic_reads=$(($(cat "${OE_GITHUB}.epic-reads" 2>/dev/null || echo 0) + 1))
@@ -129,7 +144,10 @@ graphql)
     if [[ -n "${OE_GITHUB_NEXT:-}" ]]; then
       reads=$(($(cat "${OE_GITHUB}.reads" 2>/dev/null || echo 0) + 1))
       echo "${reads}" >"${OE_GITHUB}.reads"
-      [[ "${reads}" -ne 2 ]] || cp "${OE_GITHUB_NEXT}" "${OE_GITHUB}"
+      if [[ "${reads}" -eq 2 && ! -e "${OE_GITHUB}.swapped" ]]; then
+        cp "${OE_GITHUB_NEXT}" "${OE_GITHUB}"
+        : >"${OE_GITHUB}.swapped"
+      fi
     fi
   elif [[ "${query}" == *"object(oid"* ]]; then
     call=checks arg="$(jq -r '"\(.oid):\(.after)"' <<<"${fields}")"
@@ -166,5 +184,6 @@ installation/repositories*) call=installation arg="" ;;
 *) unexpected ;;
 esac
 
+log_call "${call}"
 jq -n --argjson state "$(cat "${OE_GITHUB}")" --arg call "${call}" --arg arg "${arg}" \
   -f "${here}/fake-github.jq" | jq -r "${filter}"

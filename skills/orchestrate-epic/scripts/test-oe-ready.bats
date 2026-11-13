@@ -143,8 +143,8 @@ JSON
   [ "${status}" -eq 0 ]
   [ "$(action_of 5)" = start-verifier ]
 
-  # The Epic read, the Issue read, the pull request list, the commit statuses, and the push activity.
-  for read in subIssues "num=5" /pulls /statuses /activity; do
+  # The Epic read, the Issue read, the commit statuses, and the push activity.
+  for read in subIssues "num=5" /statuses /activity; do
     GH_FAIL="${read}" run --separate-stderr bash "${oe}" ready o/r 1
 
     [ "${status}" -eq 1 ]

@@ -9,7 +9,8 @@
 #   oe status <owner/repo> <epic-number> [--watch]
 #
 # - Run it from the clone the session runs in, so the AGENT column can find the agents' worktrees.
-# - --watch redraws the view every wait_interval seconds until interrupted.
+# - --watch checks every wait_interval seconds with the light read of oe-light.sh, and redraws only when it shows a change,
+#   when a time-based deadline arrives, or when the session holding the Epic's lock ends, so a board nothing changes under costs one light read a refresh.
 #   At a terminal it first clears the screen, so nothing the pane's shell printed while it started stays, and shows one line while the first read runs.
 #   A failed read is reported on stderr and retried at the next refresh.
 #   Once a refresh has found a running session holding the Epic's lock, the first refresh that finds none draws the last view and exits 0,
@@ -64,6 +65,8 @@ dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${dir}/oe-config.sh"
 # shellcheck source-path=SCRIPTDIR
 source "${dir}/oe-store.sh"
+# shellcheck source-path=SCRIPTDIR
+source "${dir}/oe-light.sh"
 
 usage() {
   echo "$1" >&2
@@ -111,12 +114,38 @@ agent_of() {
   fi
 }
 
-# Prints the whole view once, or fails with the reason on stderr and prints nothing.
+# Reads the facts of every child Issue into read_facts, with the light read's fingerprint taken before it, as oe-light.sh says,
+# so a change that lands during the read shows at the next refresh.
+# It also sets drawn_children and drawn_due, which only a full read changes, so the caller must not run it in a subshell.
+# Fails with the reason on stderr, leaving the last facts in place.
+read_facts=""
+drawn_children=""
+drawn_fp=""
+drawn_due=0
+fetch() {
+  local fp="" out
+  # shellcheck disable=SC2086 # one Issue number per word
+  [[ -z "${drawn_children}" ]] || fp="$(light_fingerprint "${repo}" "${epic}" ${drawn_children} 2>/dev/null)" || fp=""
+  out="$(bash "${dir}/oe-ready.sh" "${repo}" "${epic}" --facts)" || return 1
+  read_facts="${out}"
+  drawn_children="$(jq -r .number <<<"${out}" | tr '\n' ' ')"
+  drawn_due="$(light_deadline "${OE_NOW:-$(date -u +%s)}" "$(jq -r '[.number, .action, .reason] | @tsv' <<<"${out}")")"
+  drawn_fp="${fp}"
+}
+
+# Succeeds while the light read and the local state equal those of the latest full read and no deadline has arrived.
+unchanged() {
+  # shellcheck disable=SC2086
+  [[ -n "${drawn_fp}" && "${drawn_fp}" == "$(light_fingerprint "${repo}" "${epic}" ${drawn_children} 2>/dev/null)" ]] &&
+    (("${OE_NOW:-$(date -u +%s)}" < drawn_due))
+}
+
+# Prints the whole view of read_facts once, or fails with the reason on stderr and prints nothing.
 render() {
   local facts now line n head started since rows="" findings="" found action agent needs=""
   local done_n=0 progress_n=0 waiting_n=0 owner_n=0
-  facts="$(bash "${dir}/oe-ready.sh" "${repo}" "${epic}" --facts)" || return 1
   now="${OE_NOW:-$(date -u +%s)}"
+  facts="${read_facts}"
   held=no
   ! lock_held "${repo}" "${epic}" || held=yes
   root="$(worktree_root)" && root="$(cd "${root}" 2>/dev/null && pwd -P)" || root=""
@@ -188,7 +217,8 @@ render() {
   printf '%s' "${findings}"
 }
 
-if ((! watch)); then
+if ((!watch)); then
+  fetch || exit 1
   view="$(render)" || exit 1
   printf '%s\n' "${view}"
   exit 0
@@ -199,6 +229,7 @@ fi
 
 count=0
 seen=0
+drawn_children="$(light_children "${repo}" "${epic}" 2>/dev/null | tr '\n' ' ')"
 while :; do
   # The lock is read before the view, so the last view is drawn after the session ended.
   ended=0
@@ -207,11 +238,13 @@ while :; do
   elif ((seen)); then
     ended=1
   fi
-  if view="$(render)"; then
+  # A refresh with nothing changed redraws the facts it has, so the elapsed times move without reading GitHub in full.
+  if { ((!ended)) && unchanged; } || fetch; then
+    view="$(render)"
     [[ ! -t 1 ]] || printf '\033[H\033[2J'
     printf '%s\n' "${view}"
     # Only a drawn view ends the watch, so a failed read after the session ended is retried like any other.
-    ((! ended)) || exit 0
+    ((!ended)) || exit 0
   else
     echo "oe status: the read failed at $(date -u +%FT%TZ); retrying at the next refresh" >&2
   fi

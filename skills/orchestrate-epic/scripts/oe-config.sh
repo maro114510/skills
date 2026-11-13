@@ -10,8 +10,9 @@
 # | verify_context | oe/verify | The commit status context that holds the verdict |
 # | branch_prefix | feat/issue- | The prefix of an Issue branch, followed by the Issue number |
 # | wait_timeout | 540 | Seconds one oe wait call waits for oe ready's output to change, under the 10-minute limit Claude Code puts on a background command |
-# | wait_interval | 60 | Seconds between two oe ready runs inside oe wait |
-# | board_interval | 180 | Seconds between two refreshes of the board that oe board opens, longer than wait_interval because each refresh reads GitHub as oe ready does |
+# | wait_interval | 120 | Seconds between two polls inside oe wait; a poll is one light read, and oe-light.sh says when it becomes a full oe ready read |
+# | board_interval | 180 | Seconds between two refreshes of the board that oe board opens, longer than wait_interval because the board and the wait each pay for their own light reads |
+# | full_read_every | 3600 | Seconds after which oe wait and the board read every child Issue in full even when the light read shows no change, to find what the light read cannot see |
 # | board_start_timeout | 30 | Seconds oe board waits for the board to start in its pane, enough for a normal shell startup; when a slower one passes it, oe board says so and a rerun waits for the same start; a normal start takes a second |
 # | notify_repeat | 3600 | Seconds after which oe wait notifies the person again about an item they have not acted on |
 # | notify_failed_reads | 3 | Failed oe ready runs in a row inside one oe wait before it notifies the person, so one transient failure tells nobody |
@@ -24,8 +25,9 @@ max_verifier_starts=2
 verify_context=oe/verify
 branch_prefix=feat/issue-
 wait_timeout=540
-wait_interval=60
+wait_interval=120
 board_interval=180
+full_read_every=3600
 board_start_timeout=30
 notify_repeat=3600
 notify_failed_reads=3

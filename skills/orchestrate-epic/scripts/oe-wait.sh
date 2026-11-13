@@ -2,7 +2,8 @@
 # oe wait
 #
 # Blocks inside one call until oe ready's next actions change, so waiting for CI or a human costs the session no tokens.
-# It reads GitHub only through oe ready, and writes only its own process record, waits/<repo-key>/<epic> in the state oe-store.sh lays out,
+# It reads GitHub through oe ready and the light read of oe-light.sh, and writes only its own process record, waits/<repo-key>/<epic>
+# in the state oe-store.sh lays out, the record of its latest full read, reads/<repo-key>/<epic>,
 # and with a notification command set, the notices record, notices/<repo-key>/<epic>.
 #
 # Usage
@@ -14,12 +15,19 @@
 # - --max-agents is how many agents the session can run at once, 3 by default as in the skill.
 #   The session passes its running count after a start failed, so the failed Issue does not end the wait at once.
 # - --timeout bounds this call, wait_timeout seconds by default.
-#   The deadline is checked before each poll, so the call can run up to one poll interval past it.
+#   The last sleep ends at the deadline, so the call ends one poll after it at the latest.
 # - A wait never stops another. While an earlier oe wait for the same Epic runs on this host, a new one runs oe ready once,
 #   prints its output, and exits 6, because the earlier wait still returns once the next actions change.
 # - --idle-since is accepted and ignored, so a caller written for the idle limit still runs; the wait never ends the session for idling.
 # - OE_NOW sets the current time in epoch seconds, as in oe ready.
 # - OE_WAIT_INTERVAL sets the seconds between two polls, wait_interval by default.
+#
+# Polling
+#
+# A poll is one light read, which costs 1 GraphQL point for a 10-child Epic, and it runs oe ready only when oe-light.sh says a full read is due:
+# when the light read or the local state differs from the latest full read, when a time-based deadline has arrived, or when no full read is known.
+# The latest full read, with the state it was made in, is kept across oe wait calls in reads/<repo-key>/<epic>,
+# so a call that starts while nothing has changed reads nothing in full.
 #
 # A failed oe ready run ends nothing: the next run comes one poll interval later.
 # The exception is a failure with the GraphQL rate limit exhausted, which another job on the same account can cause at any time:
@@ -113,6 +121,8 @@ interval="${OE_WAIT_INTERVAL:-${wait_interval}}"
 
 # shellcheck source-path=SCRIPTDIR
 source "${dir}/oe-store.sh"
+# shellcheck source-path=SCRIPTDIR
+source "${dir}/oe-light.sh"
 
 # Records this wait for this Epic on this host, or fails when an earlier one still runs.
 wait_file=""
@@ -229,17 +239,72 @@ pause() {
   now="$(date -u +%s)"
   if ((rate_reset > now)); then
     seconds=$((rate_reset - now))
-    ((seconds <= deadline - now)) || seconds=$((deadline - now))
-    ((seconds >= 0)) || seconds=0
   fi
+  ((seconds <= deadline - now)) || seconds=$((deadline - now))
+  ((seconds >= 0)) || seconds=0
   sleep "${seconds}"
 }
 
-# Runs oe ready into $current, and fails leaving $current as it was when oe ready failed.
-# oe ready's own stderr names the failed read.
-poll() {
-  local out rc
+# The latest full read: the fingerprint of the state it was made in, the epoch second after which a full read is due again, the child Issues, and its output.
+# oe-light.sh says what the fingerprint holds.
+cache_fp=""
+cache_due=0
+cache_children=""
+cache_out=""
+read_file="$(read_record "${repo}" "${epic}")" || read_file=""
+
+# Loads the latest full read that an earlier oe wait call saved.
+load_cache() {
+  local header
+  [[ -n "${read_file}" && -r "${read_file}" ]] || return 0
+  header="$(head -n1 "${read_file}")"
+  IFS=$'\t' read -r cache_fp cache_due cache_children <<<"${header}"
+  [[ "${cache_due}" =~ ^[0-9]+$ ]] || {
+    cache_fp="" cache_due=0 cache_children=""
+    return 0
+  }
+  cache_out="$(tail -n +2 "${read_file}")"
+}
+
+# Saves the latest full read, unless the file cannot be written, which only costs the next call a full read.
+save_cache() {
+  [[ -n "${read_file}" ]] || return 0
+  { mkdir -p "${read_file%/*}" &&
+    {
+      printf '%s\t%s\t%s\n' "${cache_fp}" "${cache_due}" "${cache_children}"
+      printf '%s' "${cache_out}"
+    } >"${read_file}.$$" &&
+    mv -f "${read_file}.$$" "${read_file}"; } 2>/dev/null || rm -f "${read_file}.$$"
+}
+
+# Reads $current, from the light read alone while it shows no change since the latest full read, and from oe ready otherwise.
+# It fails leaving $current as it was when oe ready failed. oe ready's own stderr names the failed read.
+read_current() {
+  local now fp="" out rc
+  now="${OE_NOW:-$(date -u +%s)}"
+  [[ -n "${cache_children}" ]] || cache_children="$(light_children "${repo}" "${epic}" 2>/dev/null | tr '\n' ' ')"
+  # The fingerprint is taken before the full read, so a change that lands during the read shows at the next poll.
+  # shellcheck disable=SC2086 # one Issue number per word
+  fp="$(light_fingerprint "${repo}" "${epic}" ${cache_children} 2>/dev/null)" || fp=""
+  if [[ -n "${fp}" && "${fp}" == "${cache_fp}" ]] && ((now < cache_due)); then
+    current="${cache_out}"
+    return 0
+  fi
   out="$(bash "${dir}/oe-ready.sh" "${repo}" "${epic}")" && rc=0 || rc=$?
+  ((rc == 0)) || return "${rc}"
+  current="${out}"
+  cache_fp="${fp}"
+  cache_due="$(light_deadline "${now}" "${out}")"
+  cache_children="$(cut -f1 <<<"${out}" | tr '\n' ' ')"
+  cache_out="${out}"
+  save_cache
+  return 0
+}
+
+# Runs read_current, and fails leaving $current as it was when the full read failed.
+poll() {
+  local rc
+  read_current && rc=0 || rc=$?
   rate_reset=0
   if ((rc == 1)); then
     check_rate_limit
@@ -254,7 +319,6 @@ poll() {
         "${epic}" "${repo}" "${rc}" "${epic_link}" | notify keep
     return 1
   fi
-  current="${out}"
   failed_reads=0
   if [[ -n "${notice_file}" ]]; then
     waiting_items | notify prune
@@ -276,6 +340,7 @@ startable() {
 }
 
 current=""
+load_cache
 if ! single_wait; then
   echo "oe wait: another oe wait runs for ${repo}#${epic}, and returns once the next actions change" >&2
   poll || true
