@@ -62,7 +62,7 @@ opt_in() {
   [ "$(git -C "${wt}" config user.name)" = "maronium[bot]" ]
   [ "$(git -C "${wt}" config user.email)" = "123+maronium[bot]@users.noreply.github.com" ]
   [ "$(git -C "${wt}" config --get skills.bot.identity)" = "maronium" ]
-  [ "$(git -C "${wt}" config --get-all credential.https://github.com.helper | tail -n2 | tr '\n' ' ')" = " !bot-helper " ]
+  [ "$(git -C "${wt}" config --get-all credential.https://github.com.helper | tail -n3 | tr '\n' ' ')" = " !bot-helper !f() { echo quit=true; }; f " ]
   [ "$(git config user.name)" = "owner" ]
 }
 

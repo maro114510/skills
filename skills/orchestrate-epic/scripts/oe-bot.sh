@@ -150,6 +150,9 @@ bot_identity_apply() {
   # worktree asks the Bot helper only and never answers from the person's own login.
   git -C "${wt}" config --worktree credential.https://github.com.helper "" || return 1
   git -C "${wt}" config --worktree --add credential.https://github.com.helper "!${helper}" || return 1
+  # A helper that declines must not fall through to an askpass or a terminal, where the person's
+  # credential would answer, so a terminating helper ends the chain after the Bot one.
+  git -C "${wt}" config --worktree --add credential.https://github.com.helper "!f() { echo quit=true; }; f" || return 1
   git -C "${wt}" config --worktree credential.https://github.com.useHttpPath true || return 1
   # An inherited http.<url>.extraheader adds an Authorization header of its own, which no credential
   # helper can replace, so the worktree resets the list instead of letting it answer as the person.

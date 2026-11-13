@@ -112,7 +112,7 @@ require_in() {
   [ "$(git -C "${wt}" config user.email)" = "123+maronium[bot]@users.noreply.github.com" ]
   [ "$(git -C "${wt}" config --get skills.bot.identity)" = "maronium" ]
   [ "$(git -C "${wt}" config --get credential.https://github.com.useHttpPath)" = "true" ]
-  [ "$(git -C "${wt}" config --get-all credential.https://github.com.helper | tail -n2 | tr '\n' ' ')" = " !bot-helper " ]
+  [ "$(git -C "${wt}" config --get-all credential.https://github.com.helper | tail -n3 | tr '\n' ' ')" = " !bot-helper !f() { echo quit=true; }; f " ]
   [ "$(git config user.name)" = "owner" ]
 }
 
@@ -153,6 +153,30 @@ require_in() {
   run apply_in "${clone}" "${wt}"
   [ "${status}" -eq 0 ]
   [ "$(git -C "${wt}" config --get http.https://github.com/.extraheader)" = "Authorization: Basic OWNER" ]
+}
+
+@test "the worktree stops asking once the Bot helper declines, instead of falling back to the person" {
+  opt_in
+  cat >"${tmp}/bin/declining-helper" <<'EOF'
+#!/usr/bin/env bash
+exit 1
+EOF
+  cat >"${tmp}/bin/askpass" <<'EOF'
+#!/usr/bin/env bash
+printf 'personname\n'
+EOF
+  chmod +x "${tmp}/bin/declining-helper" "${tmp}/bin/askpass"
+  git config --global skills.bot.helper declining-helper
+
+  run apply_in "${clone}" "${wt}"
+  [ "${status}" -eq 0 ]
+
+  printf 'protocol=https\nhost=github.com\npath=maro/x.git\n\n' >"${tmp}/request"
+  run bash -c 'GIT_ASKPASS="$1" GIT_TERMINAL_PROMPT=1 git -C "$2" credential fill <"$3"' _ \
+    "${tmp}/bin/askpass" "${wt}" "${tmp}/request"
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"told us to quit"* ]]
+  [[ "${output}" != *"personname"* ]]
 }
 
 @test "bot_identity_apply changes nothing when the clone does not opt in" {
