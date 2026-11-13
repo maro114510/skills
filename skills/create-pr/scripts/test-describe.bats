@@ -196,6 +196,58 @@ has_line() {
   [ "${status}" -eq 2 ]
 }
 
+@test "codex runs ephemeral in a read-only sandbox and its last message is the reply" {
+  # shellcheck disable=SC2016 # expanded by the stub, not here
+  harness codex 'while [ $# -gt 0 ]; do [ "$1" = -o ] && o="$2"; shift; done; { '"${reply}"'; } >"$o"'
+  describe codex "${note}"
+  [ "${status}" -eq 0 ]
+  [ "${lines[0]}" = "PR_TITLE: fix(report): stop false positives" ]
+  [ "$(sed -n 1p "${args_file}")" = "exec" ]
+  grep -qxF -- "--ephemeral" "${args_file}"
+  grep -qxF -- 'sandbox_mode="read-only"' "${args_file}"
+  grep -qxF "CONTEXT-SENTINEL" "${stdin_file}"
+}
+
+# Prints a stub OpenCode body that answers `run --help`, listing --standalone only when $1 is v2, then runs $2.
+opencode_stub() {
+  local help='      --agent        agent to use'
+  [ "$1" = v2 ] && help='      --standalone   run in a private server\n      --agent        agent to use'
+  # shellcheck disable=SC2016 # expanded by the stub, not here
+  printf 'if [ "$1 $2" = "run --help" ]; then printf "%s\\n"; exit 0; fi\n%s' "${help}" "$2"
+}
+
+@test "opencode runs standalone with the input attached as a file" {
+  # shellcheck disable=SC2016 # expanded by the stub, not here
+  harness opencode "$(opencode_stub v2 'while [ $# -gt 0 ]; do [ "$1" = --file ] && cp "$2" "'"${BATS_TEST_TMPDIR}"'/attached"; shift; done; '"${reply}")"
+  describe opencode "${note}"
+  [ "${status}" -eq 0 ]
+  [ "$(sed -n 1p "${args_file}")" = "run" ]
+  [ "$(sed -n 2p "${args_file}")" = "--standalone" ]
+  grep -qxF "CONTEXT-SENTINEL" "${BATS_TEST_TMPDIR}/attached"
+}
+
+@test "opencode denies edits and every command but read-only ones" {
+  # shellcheck disable=SC2016 # expanded by the stub, not here
+  harness opencode "$(opencode_stub v2 'printf "%s" "${OPENCODE_CONFIG_CONTENT}" >"'"${BATS_TEST_TMPDIR}"'/config"; '"${reply}")"
+  describe opencode "${note}"
+  [ "${status}" -eq 0 ]
+  config="$(cat "${BATS_TEST_TMPDIR}/config")"
+  [ "$(jq -r '.permission.edit' <<<"${config}")" = "deny" ]
+  [ "$(jq -r '.permission.webfetch' <<<"${config}")" = "deny" ]
+  [ "$(jq -r '.permission.bash["*"]' <<<"${config}")" = "deny" ]
+  [ "$(jq -r '.permission.bash["git diff*"]' <<<"${config}")" = "allow" ]
+  [ "$(jq -r '.permission.bash["*>*"]' <<<"${config}")" = "deny" ]
+}
+
+@test "opencode without --standalone fails before the session runs" {
+  # shellcheck disable=SC2016 # expanded by the stub, not here
+  harness opencode "$(opencode_stub v1 'touch "'"${BATS_TEST_TMPDIR}"'/ran"; '"${reply}")"
+  describe opencode "${note}"
+  [ "${status}" -eq 1 ]
+  has_line "SESSION_EXIT=unsupported"
+  [ ! -e "${BATS_TEST_TMPDIR}/ran" ]
+}
+
 @test "claude runs in plan mode without saving the session" {
   harness claude "${reply}"
   describe claude "${note}"
