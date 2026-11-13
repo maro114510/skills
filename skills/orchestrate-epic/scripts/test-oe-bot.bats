@@ -240,14 +240,26 @@ EOF
   [ "$(git -C "${wt}" config --get credential.https://github.com.helper)" = "!owner-helper" ]
 }
 
-@test "apply refuses a clone with submodules, whose own settings would keep the person's credentials" {
+@test "apply refuses a worktree with submodules, whose own settings would keep the person's credentials" {
+  opt_in
+  git config --global skills.bot.helper bot-helper
+  : >"${wt}/.gitmodules"
+
+  run apply_in "${clone}" "${wt}"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"${wt} has submodules"* ]]
+  [ -z "$(git -C "${wt}" config --get skills.bot.identity)" ]
+}
+
+@test "a start refuses a clone with submodules before it creates a worktree" {
   opt_in
   git config --global skills.bot.helper bot-helper
   : >"${clone}/.gitmodules"
 
-  run apply_in "${clone}" "${wt}"
+  run bash "${start}" owner maro/x 5
   [ "${status}" -eq 1 ]
   [[ "${output}" == *"submodules"* ]]
+  [ "$(git worktree list --porcelain | grep -c '^worktree ')" -eq 2 ]
 }
 
 @test "a helper named by the clone's own config is ignored" {

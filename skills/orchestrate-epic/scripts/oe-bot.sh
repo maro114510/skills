@@ -68,25 +68,27 @@ bot_env() {
   export GH_TOKEN="${token}"
 }
 
-# Checks, without a network read, that a worktree of this clone could act as the Bot: the helper
-# is named globally, the remote is an HTTPS GitHub one, and no submodule keeps its own settings,
-# where the person's credentials would answer instead.
+# Checks, without a network read, that the worktree at $1, or the current one when $1 is omitted,
+# could act as the Bot: the helper is named globally, the remote is an HTTPS GitHub one, and no
+# submodule keeps its own settings, where the person's credentials would answer instead.
+# A caller names the worktree it is about to hand an agent, because the checkout it runs from is not
+# that worktree and can hold a different .gitmodules.
 # It runs before a fetch or a start, so a refused one changes nothing on GitHub.
 bot_config_ready() {
-  local login origin top
+  local login origin top at="${1:-.}"
   login="$(bot_login)"
   [[ -n "${login}" ]] || return 0
   bot_helper >/dev/null || {
     echo "git config --global skills.bot.helper is unset, so nothing can act as the Bot" >&2
     return 1
   }
-  origin="$(git config --get remote.origin.url 2>/dev/null)" || origin=""
+  origin="$(git -C "${at}" config --get remote.origin.url 2>/dev/null)" || origin=""
   if [[ "${origin}" != https://github.com/* ]]; then
     echo "remote.origin.url is not an HTTPS GitHub URL, so a push would not answer with the Bot helper" >&2
     return 1
   fi
-  top="$(git rev-parse --show-toplevel 2>/dev/null)" || top="."
-  if [[ -e "${top}/.gitmodules" ]]; then
+  top="$(git -C "${at}" rev-parse --show-toplevel 2>/dev/null)" || top=""
+  if [[ -n "${top}" && -e "${top}/.gitmodules" ]]; then
     echo "${top} has submodules, which keep their own credentials, so it cannot act as the Bot" >&2
     return 1
   fi
@@ -140,7 +142,7 @@ bot_identity_apply() {
     bot_identity_clear "${wt}"
     return 0
   fi
-  bot_config_ready || return 1
+  bot_config_ready "${wt}" || return 1
   helper="$(bot_helper)"
   id="${OE_BOT_ID:-}"
   [[ -n "${id}" ]] || id="$(bot_user_id "${login}")" || return 1
