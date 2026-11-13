@@ -59,7 +59,20 @@ bot_token() {
   printf '%s\n' "${out}"
 }
 
+# Prints the numeric id GitHub assigns the Bot, which its noreply address needs.
+bot_user_id() {
+  local login="$1" id
+  id="$(gh api "/users/${login}%5Bbot%5D" --jq .id 2>/dev/null)" || id=""
+  if [[ ! "${id}" =~ ^[0-9]+$ ]]; then
+    echo "cannot read the GitHub user id of ${login}[bot]" >&2
+    return 1
+  fi
+  printf '%s\n' "${id}"
+}
+
 # Puts a fresh token in GH_TOKEN when this worktree carries the identity, and does nothing otherwise.
+# A worktree with no marker keeps acting as the person: the person's own checkouts must stay theirs,
+# and every agent worktree is created with the marker, so no agent starts without it.
 bot_env() {
   local token
   [[ -n "$(bot_identity_login)" ]] || return 0
@@ -67,10 +80,16 @@ bot_env() {
   export GH_TOKEN="${token}"
 }
 
-# Refuses with a reason when the clone opts in but the helper cannot print a token.
+# Refuses with a reason when the clone opts in but the start cannot act as the Bot.
+# It runs before any step, so a failed check consumes no attempt and creates no branch.
+# The id it reads is exported, because the worktree step runs in a child process.
 bot_require_ready() {
-  [[ -n "$(bot_login)" ]] || return 0
+  local login id
+  login="$(bot_login)"
+  [[ -n "${login}" ]] || return 0
   bot_token "$1" >/dev/null || return 1
+  id="$(bot_user_id "${login}")" || return 1
+  export OE_BOT_ID="${id}"
 }
 
 # Applies the Bot identity to worktree $1, or does nothing when the clone does not opt in.
@@ -83,12 +102,26 @@ bot_identity_apply() {
     echo "git config --global skills.bot.helper is unset, so ${wt} cannot act as the Bot" >&2
     return 1
   }
-  id="$(gh api "/users/${login}%5Bbot%5D" --jq .id 2>/dev/null)" || id=""
-  if [[ ! "${id}" =~ ^[0-9]+$ ]]; then
-    echo "cannot read the GitHub user id of ${login}[bot], so ${wt} cannot carry its commits" >&2
+  id="${OE_BOT_ID:-}"
+  [[ -n "${id}" ]] || id="$(bot_user_id "${login}")" || return 1
+  git -C "${wt}" config extensions.worktreeConfig true || return 1
+  # Every SSH spelling GitHub documents becomes HTTPS, where the Bot helper answers. An SSH remote
+  # would authenticate with the person's key and bypass what the Bot may do.
+  git -C "${wt}" config --worktree --add url.https://github.com/.insteadOf "git@github.com:" || return 1
+  git -C "${wt}" config --worktree --add url.https://github.com/.insteadOf "ssh://git@github.com/" || return 1
+  git -C "${wt}" config --worktree --add url.https://github.com/.insteadOf "ssh://git@github.com:22/" || return 1
+  git -C "${wt}" config --worktree --add url.https://github.com/.insteadOf "ssh://git@github.com:443/" || return 1
+  git -C "${wt}" config --worktree --add url.https://github.com/.insteadOf "git@ssh.github.com:" || return 1
+  git -C "${wt}" config --worktree --add url.https://github.com/.insteadOf "ssh://git@ssh.github.com/" || return 1
+  git -C "${wt}" config --worktree --add url.https://github.com/.insteadOf "ssh://git@ssh.github.com:443/" || return 1
+  # A remote still reached another way, such as an SSH port or host not rewritten above, would
+  # authenticate as the person, so refuse before writing a marker that claims otherwise.
+  local push_url
+  push_url="$(git -C "${wt}" remote get-url --push origin 2>/dev/null)" || push_url=""
+  if [[ -n "${push_url}" && "${push_url}" != https://github.com/* ]]; then
+    echo "the push URL ${push_url} would not answer with the Bot helper, so ${wt} cannot act as the Bot" >&2
     return 1
   fi
-  git -C "${wt}" config extensions.worktreeConfig true || return 1
   git -C "${wt}" config --worktree user.name "${login}[bot]" || return 1
   git -C "${wt}" config --worktree user.email "${id}+${login}[bot]@users.noreply.github.com" || return 1
   # The empty value clears the helpers the person's config registers for github.com, so this
@@ -96,9 +129,5 @@ bot_identity_apply() {
   git -C "${wt}" config --worktree credential.https://github.com.helper "" || return 1
   git -C "${wt}" config --worktree --add credential.https://github.com.helper "!${helper}" || return 1
   git -C "${wt}" config --worktree credential.https://github.com.useHttpPath true || return 1
-  # An SSH remote would authenticate with the person's key and bypass the App's restrictions,
-  # so this worktree reaches GitHub over HTTPS, where the Bot helper answers.
-  git -C "${wt}" config --worktree --add url.https://github.com/.insteadOf "git@github.com:" || return 1
-  git -C "${wt}" config --worktree --add url.https://github.com/.insteadOf "ssh://git@github.com/" || return 1
   git -C "${wt}" config --worktree skills.bot.identity "${login}" || return 1
 }
