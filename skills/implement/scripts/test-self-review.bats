@@ -4,6 +4,12 @@
 # shellcheck disable=SC2030,SC2031 # result_line reads ${lines} inside the same @test subshell that `run` set it in.
 
 setup() {
+  # The developer's own git config and hooks must not reach the repositories built here.
+  # It sits in a subdirectory because the temp-file test counts the files directly under ${work}.
+  mkdir -p "${BATS_TEST_TMPDIR}/git"
+  export GIT_CONFIG_GLOBAL="${BATS_TEST_TMPDIR}/git/config" GIT_CONFIG_NOSYSTEM=1
+  unset GIT_CONFIG GIT_CONFIG_COUNT GIT_CONFIG_PARAMETERS
+  : >"${GIT_CONFIG_GLOBAL}"
   target="${BATS_TEST_DIRNAME}/self-review.sh"
   work="${BATS_TEST_TMPDIR}"
 }
