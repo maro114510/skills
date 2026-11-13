@@ -91,6 +91,7 @@ Any other output keeps the loop running, even when every remaining Issue waits o
 
 Each line holds an Issue number, an action, a reason, and a start command, separated by tabs.
 Take the lines whose action is `start-verifier`, then `start-owner`, then `claim`, and start one agent per line while fewer than `max-agents` agents run, counting each `running` line and each agent started in this pass.
+An `update-branch` line starts no agent and counts against no cap: run its command as printed, an `oe update` call, in every pass that shows one, then go to 3.1 once all of this pass's commands have run. On exit 4 or 1 go on, because the next `oe ready` reports a conflict as a repair or reads again.
 Every other action starts no agent: `done`, `parked`, and each `wait-*` wait for CI, an answer, a dependency, or an engineer, and `read-again` marks an Issue whose PR moved during the read, which the next pass classifies.
 A `running` line names the agent that runs for the Issue, and its reason holds the command to run once that agent ends, never before.
 

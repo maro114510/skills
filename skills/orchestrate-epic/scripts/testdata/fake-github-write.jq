@@ -10,6 +10,7 @@
 # | comment | Issue or pull request number | Appends a comment by the OWNER at 08:00 | Neither exists |
 # | status | Commit SHA | Puts a commit status on that SHA, newest first in written_statuses | Never |
 # | edit_issue | Issue number | Replaces the Issue's body with $fields.body | The Issue does not exist |
+# | update_branch | Pull request number | Moves the head to a new commit that contains every merge, with no checks or verdicts, pushed at 08:00, and appends the pull request number to branch_updates | The pull request is not open, its head differs from $fields.expected_head_sha, or it conflicts |
 
 def create_ref:
   ($fields.ref | capture("^refs/heads/feat/issue-(?<n>[1-9][0-9]*)$") // error("unexpected ref \($fields.ref)"))
@@ -50,9 +51,29 @@ def status($sha):
   ($fields | {sha: $sha, context, state, description, target_url}) as $new
   | {state: ($state | .written_statuses = [$new] + (.written_statuses // [])), response: $new};
 
+def pr_sha: .head_sha // ("\(.number)" as $n | ("b" * (40 - ($n | length))) + $n);
+
+def update_branch($n):
+  [$state.issues[].pull_requests[]? | select(.number == $n and (.state // "open") == "open")] as $found
+  | if ($found | length) == 0 then {error: "Not Found (HTTP 404)"}
+    elif ($found[0] | pr_sha) != $fields.expected_head_sha then
+      {error: "Update branch failed: expected head sha does not match the pull request head (HTTP 422)"}
+    elif $found[0].conflicting then {error: "merge conflict between base and head (HTTP 422)"}
+    else
+      ("\($n)" as $s | ("e" * (40 - ($s | length))) + $s) as $new
+      | {state: ($state
+          | .issues |= map(.pull_requests |= (if . == null then . else map(
+              if .number == $n then del(.checks, .check_runs, .statuses, .verdicts, .missing_merges)
+                + {head_sha: $new, pushed: "08:00"}
+              else . end) end))
+          | .branch_updates += [$n]),
+        response: {message: "Updating pull request branch."}}
+    end;
+
 if $call == "create_ref" then create_ref
 elif $call == "assign" then assign($arg | tonumber)
 elif $call == "comment" then comment($arg | tonumber)
 elif $call == "status" then status($arg)
 elif $call == "edit_issue" then edit_issue($arg | tonumber)
+elif $call == "update_branch" then update_branch($arg | tonumber)
 else error("unknown write \($call)") end

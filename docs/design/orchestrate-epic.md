@@ -35,7 +35,7 @@ oe starts no agent, edits no code, and never merges a PR. Its only writes to a P
 
 | Part | Job | Writes to |
 |---|---|---|
-| Host-local record store | Keeps each Issue's claim, attempt, run, and verdict records until oe forget drops them, and each Epic's lock, board pane, and running oe wait, as the layout below says | `$OE_STATE_DIR`, or else `$XDG_STATE_HOME/orchestrate-epic` or `~/.local/state/orchestrate-epic` |
+| Host-local record store | Keeps each Issue's claim, attempt, update, run, and verdict records until oe forget drops them, and each Epic's lock, board pane, and running oe wait, as the layout below says | `$OE_STATE_DIR`, or else `$XDG_STATE_HOME/orchestrate-epic` or `~/.local/state/orchestrate-epic` |
 | oe lock | Refuses a second session for the same Epic on the same host while the first one's process runs | The Epic's ref in the lock store |
 | oe ready | Reads GitHub and the record store and prints each Issue's next action, with the oe start command for an action that starts an agent, and names each running agent | nothing |
 | oe start | Runs every step that starts an Owner or a Verifier for one Issue, from oe claim to oe brief, records the agent as running, and prints the agent's prompt | What those steps write, and a run record |
@@ -48,6 +48,7 @@ oe starts no agent, edits no code, and never merges a PR. Its only writes to a P
 | oe attempt | Writes an attempt record for each Owner start before it runs, with the Issue branch's head and the bots whose rounds it uses, and refuses a start once 3 attempts are used or the latest 3 starts pushed nothing, counting as Attempts under Decisions says | The record store |
 | oe question | Writes an Owner's question in a fixed format, and records the answer the person gives in the session's conversation | An Issue comment for a question or an answer, and an answer's decision in the Issue body's decisions section |
 | oe rereview | Asks bots to review the PR again | A PR comment |
+| oe update | Updates an Issue branch with the base branch through GitHub when oe ready shows its head lacks a merged sibling PR. It starts no agent and spends no attempt, and records the head it replaced so the merge is never read as an Owner's push | A merge commit on the Issue branch, and an update record |
 | oe verdict | Writes a Verifier's verdict and findings | A commit status on the SHA, and the record store |
 | oe records | Prints an Issue's records from its latest claim on, for an Owner | nothing |
 | oe forget | Drops an Epic's records once every child Issue is closed | The record store |
@@ -57,7 +58,7 @@ The record store lays out its state as `oe-store.sh` defines.
 | Path under the state directory | Holds |
 |---|---|
 | `locks.git` | A bare Git repository with one ref per Epic, naming the session that holds the Epic's lock |
-| `records/<repo-key>/<issue>.jsonl` | One Issue's claim, attempt, run, and verdict records, oldest first, one JSON object per line. A verdict record holds its findings |
+| `records/<repo-key>/<issue>.jsonl` | One Issue's claim, attempt, update, run, and verdict records, oldest first, one JSON object per line. A verdict record holds its findings |
 | `boards/<repo-key>/<epic>` | The Herdr pane of the Epic's board |
 | `waits/<repo-key>/<epic>` | The process of the Epic's running oe wait |
 | `notices/<repo-key>/<epic>` | Each item that needed the person at oe wait's latest read, with when the person was last told about it |
@@ -153,7 +154,7 @@ For each Issue, oe ready reads this table from the top and outputs the action of
 | 6 | Work | Any repair signal below is present | Park the Issue when it already has 3 attempts, or when its latest 3 Owner starts pushed nothing. Otherwise start an Owner |
 | 7 | Verification | A check on the PR's head SHA is pending, or the SHA has had no checks for less than 10 minutes | Wait for CI |
 | 8 | Verification | The PR's head SHA still has no checks after 10 minutes | Park the Issue |
-| 9 | Verification | The PR's head SHA does not contain the commit that merged a sibling PR into the base branch | Update the branch with the base branch through GitHub, starting no agent and spending no attempt |
+| 9 | Verification | The PR's head SHA does not contain the commit that merged a sibling PR into the base branch | Update the branch with the base branch through GitHub with oe update (`update-branch`), starting no agent and spending no attempt |
 | 10 | Verification | The PR's head SHA has neither a success nor a failure verdict | Start a Verifier, or park the Issue when the SHA already has 2 pending statuses |
 | 11 | Verification | The PR's head SHA has a success verdict | Wait for an engineer to merge |
 
@@ -290,6 +291,7 @@ sequenceDiagram
 ## Accepted Risks
 
 - The token is shared, so a verdict status can be forged
+- The branch update starts the new head's checks only when the identity oe runs under is one whose pushes start workflows. A push made with the workflow's own `GITHUB_TOKEN` starts none, so a head that still has no checks after 10 minutes is parked at row 8
 - When a commit other than a sibling PR lands on the base branch after verification, nothing is verified again
 - A PR the engineer merges before its branch is updated and verified again lands without being verified against a sibling PR merged before it, as when two sibling PRs merge between two reads
 - Workflows the AI changed run with the repository's secrets
