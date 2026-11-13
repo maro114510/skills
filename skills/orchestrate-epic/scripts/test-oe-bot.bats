@@ -82,6 +82,10 @@ bot_env_in() {
   (cd "${1}" && source "${script}" && bot_env "${2}" && printf '%s\n' "${GH_TOKEN-}")
 }
 
+bot_env_start_in() {
+  (cd "${1}" && source "${script}" && bot_env_start "${2}" && printf '%s\n' "${GH_TOKEN-}")
+}
+
 bot_token_in() {
   (cd "${1}" && source "${script}" && bot_token "${2}")
 }
@@ -245,6 +249,33 @@ EOF
   [[ "${output}" == *"1Password is locked"* ]]
 }
 
+@test "bot_env_start puts a Bot token in GH_TOKEN for the steps a start runs" {
+  opt_in
+  git config --global skills.bot.helper bot-helper
+
+  run bot_env_start_in "${clone}" maro/x
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "ghs_test_token" ]
+  grep -q -- "token maro/x" "${tmp}/helper-calls"
+}
+
+@test "bot_env_start puts no token in GH_TOKEN when the clone does not opt in" {
+  git config --global skills.bot.helper bot-helper
+
+  run bot_env_start_in "${clone}" maro/x
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "" ]
+}
+
+@test "bot_env_start refuses with a reason when the helper is unset" {
+  opt_in
+  git config --global --unset skills.bot.helper || true
+
+  run bot_env_start_in "${clone}" maro/x
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"skills.bot.helper"* ]]
+}
+
 @test "a commit in the worktree is authored by the Bot" {
   opt_in
   git config --global skills.bot.helper bot-helper
@@ -286,6 +317,17 @@ EOF
   [ "${status}" -eq 1 ]
   [[ "${output}" == *"not an HTTPS GitHub URL"* ]]
   [ -z "$(git -C "${wt}" config --get skills.bot.identity)" ]
+}
+
+@test "apply refuses an SSH fetch URL even when the push URL is HTTPS" {
+  opt_in
+  git config --global skills.bot.helper bot-helper
+  git remote set-url origin "ssh://git@github.com:443/maro/x.git"
+  git remote set-url --push origin "https://github.com/maro/x-push.git"
+
+  run apply_in "${clone}" "${wt}"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"not an HTTPS GitHub URL"* ]]
 }
 
 @test "apply accepts an HTTPS push URL that differs from the fetch URL" {

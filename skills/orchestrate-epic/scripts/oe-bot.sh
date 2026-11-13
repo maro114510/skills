@@ -7,6 +7,7 @@
 # | bot_identity_login | Prints the Bot login this worktree carries, or nothing |
 # | bot_identity_apply <worktree> | Applies the identity to one fresh worktree, or does nothing when the clone does not opt in |
 # | bot_env <owner/repo> | Puts a fresh Bot token in GH_TOKEN when this worktree carries the identity |
+# | bot_env_start <owner/repo> | Puts a fresh Bot token in GH_TOKEN for the steps a start runs, in an opted-in clone |
 # | bot_require_ready <owner/repo> | Refuses with a reason when the clone opts in but a start could not act as the Bot |
 #
 # The helper command is read from the global git config skills.bot.helper only, never from a
@@ -68,20 +69,37 @@ bot_env() {
   export GH_TOKEN="${token}"
 }
 
+# Puts a fresh Bot token in GH_TOKEN for the steps a start runs, so the branch, the assignee, and the
+# pending status they write carry the Bot, and does nothing outside an opted-in clone.
+bot_env_start() {
+  local token
+  [[ -n "$(bot_login)" ]] || return 0
+  token="$(bot_token "$1")" || return 1
+  export GH_TOKEN="${token}"
+}
+
 # Checks, without a network read, that the worktree at $1, or the current one when $1 is omitted,
-# could act as the Bot: the helper is named globally, every URL a push would use is an HTTPS GitHub
-# one, and no submodule keeps its own settings, where the person's credentials would answer instead.
+# could act as the Bot: the helper is named globally, the configured remote and every URL a push
+# would use are HTTPS GitHub ones, and no submodule keeps its own settings, where the person's
+# credentials would answer instead.
 # A caller names the worktree it is about to hand an agent, because the checkout it runs from is not
-# that worktree and can hold a different .gitmodules or push URL.
+# that worktree and can hold a different .gitmodules or remote URL.
 # It runs before a fetch or a start, so a refused one changes nothing on GitHub.
 bot_config_ready() {
-  local login top at="${1:-.}" push_urls url
+  local login top at="${1:-.}" fetch_url push_urls url
   login="$(bot_login)"
   [[ -n "${login}" ]] || return 0
   bot_helper >/dev/null || {
     echo "git config --global skills.bot.helper is unset, so nothing can act as the Bot" >&2
     return 1
   }
+  # The fetch runs before the worktree carries the identity, so its URL has to be the HTTPS one as
+  # well, or git would answer it with the person's key.
+  fetch_url="$(git -C "${at}" config --get remote.origin.url 2>/dev/null)" || fetch_url=""
+  if [[ "${fetch_url}" != https://github.com/* ]]; then
+    echo "${fetch_url:-remote.origin.url} is not an HTTPS GitHub URL, so a fetch would not answer with the Bot helper" >&2
+    return 1
+  fi
   # git pushes to pushurl when one is set, and its url.<base>.insteadOf and pushInsteadOf rules can
   # rewrite that URL before the push, so every URL git would actually push to has to be the HTTPS one
   # the helper answers for; reading the fetch URL alone would let a push leave under the person's

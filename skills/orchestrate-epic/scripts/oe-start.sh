@@ -81,6 +81,13 @@ bot_require_ready "${repo}" || {
   exit 1
 }
 
+# The steps below write the branch, the assignee, and the Verifier's pending status, so they take a
+# Bot token; one that cannot be minted starts nothing instead of writing as the person.
+bot_env_start "${repo}" || {
+  echo "oe start: not starting an agent because the Bot token could not be minted" >&2
+  exit 1
+}
+
 # Runs oe subcommand $1 with the rest as arguments, and ends the run with its code on failure.
 # Its output is dropped on success, because a harness shows stderr merged into the prompt, and goes to stderr on failure.
 step() {
