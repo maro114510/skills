@@ -32,7 +32,7 @@ STUB
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"updated 42"* ]]
   grep -q -- "--method PUT repos/owner/repo/rulesets/42" "${calls}"
-  ! grep -q -- "--method POST" "${calls}"
+  [ "$(grep -c -- "--method POST" "${calls}")" -eq 0 ]
 }
 
 @test "apply exits 2 without a repository" {
@@ -83,4 +83,10 @@ STUB
     "APM install (claude)" "APM install (codex)" "APM install (opencode)"; do
     [[ "${output}" == *"${context}"* ]]
   done
+}
+
+@test "CODEOWNERS names the repository owner for workflows on a line of its own" {
+  # The ruleset's code-owner review makes this line the second layer over a workflow change.
+  run grep -E '^/\.github/workflows/ +@maro114510$' "${root}/.github/CODEOWNERS"
+  [ "${status}" -eq 0 ]
 }
