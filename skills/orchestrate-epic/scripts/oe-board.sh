@@ -22,9 +22,17 @@
 # |---|---|---|
 # | On this server and running this Epic's board | Leave it | reused |
 # | On this server and at its shell's prompt, as after the board stopped | Start the board in it | restarted |
+# | On this server, at its shell's prompt, with a start sent less than 10 minutes ago that the shell never confirmed | Send nothing, and wait for that start | restarted |
 # | Running anything else, closed, on another server, or none | Open a new pane and start the board in it | opened |
 #
 # A recorded pane that runs anything else is never sent input, because the user may have taken it over.
+#
+# A slow start
+#
+# The command is typed into the pane at once, and the shell runs it when its startup finishes, after anything its startup files print, such as direnv's "is taking a while" warning.
+# oe board waits board_start_timeout seconds for the board to run.
+# A pane that still sits in its shell then exits 1 and says the shell has not finished starting, and the record keeps when the command was sent.
+# A rerun in the next 10 minutes sends nothing again, so the command is never queued twice, and waits for the queued start.
 #
 # Output
 #
@@ -67,6 +75,8 @@ off() {
 repo="$1"
 epic="$2"
 start_timeout="${OE_BOARD_START_TIMEOUT:-${board_start_timeout}}"
+# Seconds a start that was sent and never seen running counts as queued behind a slow shell.
+queued_for=600
 [[ "${start_timeout}" =~ ^[0-9]+$ ]] || usage "OE_BOARD_START_TIMEOUT must be whole seconds"
 
 # Outside Herdr nothing else is read, so a run there behaves as if this command did not exist.
@@ -132,15 +142,37 @@ pane_state() {
   }
 }
 
+# Writes the record of pane $1, with the epoch second $2 when the command was sent to the pane and its start is unconfirmed.
+write_record() {
+  mkdir -p "${record%/*}" 2>/dev/null &&
+    jq -cn --arg pane "$1" --arg socket "${socket}" --arg sent "${2:-}" \
+      '{pane: $pane, socket: $socket} + (if $sent == "" then {} else {sent: ($sent | tonumber)} end)' >"${record}.tmp" 2>/dev/null &&
+    mv -f "${record}.tmp" "${record}" 2>/dev/null
+}
+
 # Starts the board in pane $1 and waits until it runs.
+# $2 is the epoch second of a start already sent to the pane, in which case nothing is sent again.
+# The shell runs the typed command only after its startup files finish, and a slow one, such as a .envrc that fetches secrets, can pass the timeout.
 start_board() {
-  local state i
-  herdr pane run "$1" "${command_line}" >/dev/null 2>"${err}" ||
-    fail "herdr pane run in $1 failed: $(head -n1 "${err}")"
+  local state i sent="${2:-}"
+  if [[ -z "${sent}" ]]; then
+    sent="$(date +%s)"
+    herdr pane run "$1" "${command_line}" >/dev/null 2>"${err}" ||
+      fail "herdr pane run in $1 failed: $(head -n1 "${err}")"
+  fi
   for ((i = 0; ; i++)); do
     state="$(pane_state "$1")" || exit 1
-    [[ "${state}" != board ]] || return 0
-    ((i < start_timeout)) || fail "the board did not start in pane $1 within ${start_timeout}s"
+    if [[ "${state}" == board ]]; then
+      write_record "$1" || fail "cannot write the board record ${record}"
+      return 0
+    fi
+    if ((i >= start_timeout)); then
+      if [[ "${state}" == prompt ]]; then
+        write_record "$1" "${sent}" || true
+        fail "the board did not start in pane $1 within ${start_timeout}s: the pane's shell has not finished starting, as with a slow startup file or .envrc, and the board starts when it does; run oe board again to wait for it"
+      fi
+      fail "the board did not start in pane $1 within ${start_timeout}s"
+    fi
     sleep 1
   done
 }
@@ -148,6 +180,7 @@ start_board() {
 if [[ -r "${record}" ]]; then
   recorded_pane="$(jq -r '.pane // empty' "${record}" 2>/dev/null)"
   recorded_socket="$(jq -r '.socket // empty' "${record}" 2>/dev/null)"
+  recorded_sent="$(jq -r '.sent // empty' "${record}" 2>/dev/null)"
   # Pane IDs belong to one server, so a pane recorded on another one is never asked about.
   if [[ -n "${recorded_pane}" && "${recorded_socket}" == "${socket}" ]]; then
     state="$(pane_state "${recorded_pane}")" || exit 1
@@ -157,7 +190,9 @@ if [[ -r "${record}" ]]; then
       exit 0
       ;;
     prompt)
-      start_board "${recorded_pane}"
+      # A command sent lately and never seen running is still queued behind the shell's startup.
+      [[ "${recorded_sent}" =~ ^[0-9]+$ ]] && (($(date +%s) - recorded_sent < queued_for)) || recorded_sent=""
+      start_board "${recorded_pane}" "${recorded_sent}"
       printf 'board\trestarted\t%s\n' "${recorded_pane}"
       exit 0
       ;;
@@ -174,9 +209,7 @@ pane="$(jq -r '.result.pane.pane_id // empty' <<<"${opened}" 2>/dev/null)"
 herdr pane rename "${pane}" "oe ${repo}#${epic}" >/dev/null 2>&1 || true
 
 # The record is written before the board starts, so a rerun finds this pane even if the start fails.
-if ! { mkdir -p "${record%/*}" 2>/dev/null &&
-  jq -cn --arg pane "${pane}" --arg socket "${socket}" '{pane: $pane, socket: $socket}' >"${record}.tmp" 2>/dev/null &&
-  mv -f "${record}.tmp" "${record}" 2>/dev/null; }; then
+if ! write_record "${pane}"; then
   fail "cannot write the board record ${record}"
 fi
 start_board "${pane}"

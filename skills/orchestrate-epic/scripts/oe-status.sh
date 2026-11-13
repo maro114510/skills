@@ -11,6 +11,7 @@
 #
 # - Run it from the clone the session runs in, so the AGENT column can find the agents' worktrees.
 # - --watch redraws the view every wait_interval seconds.
+#   At a terminal it first clears the screen, so nothing the pane's shell printed while it started stays, and shows one line while the first read runs.
 #   The refresh that finds no running session holding the Epic's lock draws the view once and exits 0,
 #   so a board left open after its session ended, crashed or not, and a board started with no session, stop reading GitHub.
 #   A failed read is retried at the next refresh, and stays on the view until a read succeeds.
@@ -241,6 +242,9 @@ if ((! watch)); then
   printf '%s\n' "${view}"
   exit 0
 fi
+
+# The first read takes seconds, and the screen shows only what the pane's shell printed until then.
+[[ ! -t 1 ]] || printf '\033[H\033[2J%s\n' "oe status: reading Epic #${epic} of ${repo} ..."
 
 count=0
 view=""
