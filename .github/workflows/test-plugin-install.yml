@@ -46,10 +46,13 @@ jobs:
       - name: Install Claude Code
         run: npm install -g @anthropic-ai/claude-code
 
-      - name: Configure git to use HTTPS with token
+      # marketplace.json names the plugin's source as the GitHub repo, which
+      # installs the default branch and never the PR under test. Point it at
+      # this checkout, in the runner's copy only.
+      - name: Point the plugin source at this checkout
         run: |
-          git config --global url."https://x-access-token:${{ github.token }}@github.com/".insteadOf "https://github.com/"
-          git config --global url."https://x-access-token:${{ github.token }}@github.com/".insteadOf "git@github.com:"
+          jq '.plugins |= map(.source = "./")' .claude-plugin/marketplace.json > "${RUNNER_TEMP}/marketplace.json"
+          mv "${RUNNER_TEMP}/marketplace.json" .claude-plugin/marketplace.json
 
       - name: Add marketplace
         run: claude plugin marketplace add ./
@@ -62,3 +65,18 @@ jobs:
 
       - name: Verify installation
         run: claude plugin list | grep skills
+
+      - name: Verify the installed plugin is this checkout and loads
+        run: |
+          install_path="$(jq -r '.plugins["skills@maro114510-agent-skills"][0].installPath' "${CLAUDE_CONFIG_DIR:-${HOME}/.claude}/plugins/installed_plugins.json")"
+          echo "Installed at: ${install_path}"
+          test -d "${install_path}/skills"
+          echo "::group::Installed files"
+          find "${install_path}/skills" -type f | sort
+          echo "::endgroup::"
+          # A PR's own changes must be what installs, so a difference fails the job.
+          diff -r --exclude=.git . "${install_path}"
+          echo "The installed plugin is identical to this checkout"
+          # The installed copy is what loads, so broken frontmatter fails here.
+          claude plugin validate --strict "${install_path}/skills"
+          claude plugin validate --strict "${install_path}/agents"
