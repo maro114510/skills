@@ -27,7 +27,7 @@ Repository instructions for coding agents.
 | `.github/rulesets/main.json` | The main-branch ruleset; the admin applies it with `.github/rulesets/apply.sh`, as its README describes |
 | `.github/workflows/test-plugin-install.yml` | CI: `validate` then `test-install`, on push to `main` and every PR |
 | `.github/workflows/secret-scan.yml` | CI: gitleaks on push to `main` and every PR |
-| `.github/workflows/release.yml` | Creates a GitHub Release on a `v*` tag push after checking the tag matches both manifests |
+| `.github/workflows/release.yml` | Creates a GitHub Release on a `v*` tag push after checking the tag matches both manifests and its commit is reachable from main |
 | `cliff.toml` | `git-cliff` config used by `make release` |
 
 `docs/design` holds only Design Docs that describe the current target, as `manage-design-documents` defines them; work the owner decided to build is an Issue.

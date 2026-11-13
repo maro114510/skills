@@ -93,7 +93,7 @@ The record store lays out its state as `oe-store.sh` defines.
 | Engineer input is only an unmarked comment or review by someone with the OWNER, MEMBER, or COLLABORATOR role, or an answer the session records through oe from the person's reply in its conversation, and labels mean nothing | Trusted input only |
 | A record on GitHub counts when such a person or the agents' own bot, named by git config `skills.bot`, wrote it, and nothing that bot writes is ever engineer input | Trusted input only |
 | A bot's text can start a repair but never instructs an agent | Trusted input only |
-| When a GitHub read fails, oe ready prints nothing and exits with an error. When one PR moves during the read, only its Issue is unreadable, and that Issue starts nothing until a later read | A failed read decides nothing |
+| When a GitHub read fails, oe ready prints nothing and exits with an error. When one PR moves during the read, only its Issue is unreadable: it gets the action read-again, starts nothing, and is classified at a later read | A failed read decides nothing |
 | Starting a session on an Epic is consent, and ending the session stops new starts | The entry gate. It is dropped because starting the session is consent |
 | Success is decided by the real CI on GitHub, never by a local reproduction | The locally reproduced check set. It is dropped because the real CI runs |
 
@@ -144,7 +144,7 @@ flowchart TB
 
 Every edge into the Attempts used check stands for one of the repair signals listed below the table. Row 2 applies to every claimed Issue, and the diagram draws Waiting for an engineer only from Waiting for CI, Verifier working, and Waiting for the merge.
 
-For each Issue, oe ready reads this table from the top and outputs the action of the first row that matches. It never reads the default branch's checks, so a failure on the default branch holds no Issue, and a PR failure the base causes is a failed check like any other. Claim and attempt records come from the record store. An Issue whose PR moved during the read matches no row: it starts nothing, and the next read classifies it.
+For each Issue, oe ready reads this table from the top and outputs the action of the first row that matches. It never reads the default branch's checks, so a failure on the default branch holds no Issue, and a PR failure the base causes is a failed check like any other. Claim and attempt records come from the record store. An Issue whose PR moved during the read matches no row: it gets read-again, which starts no agent and keeps the loop running, and oe status shows it as read-again until the next read classifies it.
 
 | Row | Phase | State | Next action |
 |---|---|---|---|
@@ -344,6 +344,7 @@ sequenceDiagram
 | Dropping records | oe forget, which the session runs when it ends with every Issue of its Epic done. It refuses while an Issue is open, and oe ready stays read-only |
 | Acceptance checks | Verification splits automated checks from manual ones, and no agent checks a box that needs a human, template boxes included |
 | The board in Herdr | Opt-in with git config `skills.herdr`, read only inside Herdr, so no other run calls herdr and no Herdr user gets a pane unasked |
+| Board start | oe board types the board command into the pane, and the pane's shell runs it only after its startup files finish, so output they print, such as direnv's "is taking a while" warning, comes before the board. The board clears the screen and shows one line before its first read. When the shell has not finished within `board_start_timeout`, oe board exits 1 saying so and records when it sent the command, and a rerun within 10 minutes waits for that start and types nothing again |
 | Board refresh | Every 3 minutes, each refresh reading GitHub through oe ready |
 | Board lifetime | The board stops once the session holding the Epic's lock ends, and leaves its last view. A `--watch` that never finds a session holding the lock refreshes until interrupted. A later start reuses its pane when the pane runs the board or sits at its shell's prompt, and never sends input to a pane that runs anything else |
 | Notifications | oe wait calls the command in git config `skills.notify` with a one-line message and a link for each new item that needs the person: a question, a park, an Issue waiting for a person or for the merge, 3 failed reads in a row, and the session's end with its reason. It calls again every hour while the person has not acted. Herdr is one example setting, and no path is Herdr-only. With no command set, oe notifies nobody |
