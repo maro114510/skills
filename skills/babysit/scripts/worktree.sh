@@ -71,6 +71,9 @@ common="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" ||
 lowered="$(printf '%s' "${repo}" | tr '[:upper:]' '[:lower:]')"
 wt="${common}/babysit/wt/${lowered}/${pr}"
 
+# A clone that opted in but cannot act as the Bot refuses before this touches the ledger or GitHub.
+bot_config_ready || fail "the Bot identity is not ready"
+
 # The lock shows this session owns the pull request, and touching it keeps the heartbeat fresh.
 bash "${script_dir}/ledger.sh" touch "${repo}" "${pr}" "${token}" || exit $?
 

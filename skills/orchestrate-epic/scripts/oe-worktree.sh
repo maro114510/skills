@@ -95,6 +95,9 @@ if [[ "${cmd}" == remove ]]; then
 fi
 
 tracking="refs/remotes/origin/${branch}"
+# A clone that opted in but cannot act as the Bot refuses here, before a fetch could use the
+# person's credential.
+bot_config_ready || exit 1
 git fetch --quiet origin "+refs/heads/${branch}:${tracking}" || fail "cannot fetch ${branch} from origin"
 git rev-parse --verify --quiet "${tracking}^{commit}" >/dev/null || fail "cannot read the fetched ${branch}"
 

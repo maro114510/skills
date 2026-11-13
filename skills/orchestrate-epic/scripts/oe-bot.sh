@@ -68,14 +68,18 @@ bot_env() {
   export GH_TOKEN="${token}"
 }
 
-# Refuses with a reason unless a start from this clone can act as the Bot: the helper can mint a
-# token, the Bot's commit address is set, and the remote is one the Bot helper answers for.
-# It runs before any step, so a refused start spends no attempt and creates no branch.
-bot_require_ready() {
-  local login email origin
+# Checks, without a network read, that a worktree of this clone could act as the Bot: the helper
+# is named globally, the commit address is set, the remote is an HTTPS GitHub one, and no
+# submodule keeps its own settings, where the person's credentials would answer instead.
+# It runs before a fetch or a start, so a refused one changes nothing on GitHub.
+bot_config_ready() {
+  local login email origin top
   login="$(bot_login)"
   [[ -n "${login}" ]] || return 0
-  bot_token "$1" >/dev/null || return 1
+  bot_helper >/dev/null || {
+    echo "git config --global skills.bot.helper is unset, so nothing can act as the Bot" >&2
+    return 1
+  }
   email="$(git config --get skills.bot.email 2>/dev/null)" || email=""
   if [[ -z "${email}" ]]; then
     echo "git config skills.bot.email is unset, so a commit could not carry the Bot" >&2
@@ -86,28 +90,34 @@ bot_require_ready() {
     echo "remote.origin.url is not an HTTPS GitHub URL, so a push would not answer with the Bot helper" >&2
     return 1
   fi
+  top="$(git rev-parse --show-toplevel 2>/dev/null)" || top="."
+  if [[ -e "${top}/.gitmodules" ]]; then
+    echo "${top} has submodules, which keep their own credentials, so it cannot act as the Bot" >&2
+    return 1
+  fi
 }
 
-# Applies the Bot identity to worktree $1, or does nothing when the clone does not opt in.
-# The address is a setting rather than a GitHub read, so applying it needs no network.
+# Refuses with a reason unless a start from this clone can act as the Bot: its settings are
+# ready and the helper can mint a token.
+# It runs before any step, so a refused start spends no attempt and creates no branch.
+bot_require_ready() {
+  bot_config_ready || return 1
+  [[ -n "$(bot_login)" ]] || return 0
+  bot_token "$1" >/dev/null || return 1
+}
+
+# Gives worktree $1 the identity its clone opted into, or clears the identity a reused worktree
+# may still carry when it opts out. The address is a setting, so neither needs a network read.
 bot_identity_apply() {
-  local wt="$1" login helper email origin
+  local wt="$1" login helper email
   login="$(bot_login)"
-  [[ -n "${login}" ]] || return 0
-  helper="$(bot_helper)" || {
-    echo "git config --global skills.bot.helper is unset, so ${wt} cannot act as the Bot" >&2
-    return 1
-  }
-  email="$(git config --get skills.bot.email 2>/dev/null)" || email=""
-  if [[ -z "${email}" ]]; then
-    echo "git config skills.bot.email is unset, so ${wt} has no Bot address to commit with" >&2
-    return 1
+  if [[ -z "${login}" ]]; then
+    bot_identity_clear "${wt}"
+    return 0
   fi
-  origin="$(git -C "${wt}" config --get remote.origin.url 2>/dev/null)" || origin=""
-  if [[ "${origin}" != https://github.com/* ]]; then
-    echo "remote.origin.url is not an HTTPS GitHub URL, so ${wt} cannot act as the Bot" >&2
-    return 1
-  fi
+  bot_config_ready || return 1
+  helper="$(bot_helper)"
+  email="$(git config --get skills.bot.email)"
   git -C "${wt}" config extensions.worktreeConfig true || return 1
   git -C "${wt}" config --worktree user.name "${login}[bot]" || return 1
   git -C "${wt}" config --worktree user.email "${email}" || return 1
@@ -117,4 +127,16 @@ bot_identity_apply() {
   git -C "${wt}" config --worktree --add credential.https://github.com.helper "!${helper}" || return 1
   git -C "${wt}" config --worktree credential.https://github.com.useHttpPath true || return 1
   git -C "${wt}" config --worktree skills.bot.identity "${login}" || return 1
+}
+
+# Removes the identity from a worktree its clone no longer opts in for, so nothing it kept can
+# make a later run act as the Bot.
+bot_identity_clear() {
+  local wt="$1" key
+  [[ -n "$(git -C "${wt}" config --get skills.bot.identity 2>/dev/null)" ]] || return 0
+  git -C "${wt}" config extensions.worktreeConfig true || return 1
+  for key in user.name user.email skills.bot.identity \
+    credential.https://github.com.helper credential.https://github.com.useHttpPath; do
+    git -C "${wt}" config --worktree --unset-all "${key}" >/dev/null 2>&1 || true
+  done
 }

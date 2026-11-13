@@ -210,6 +210,31 @@ EOF
   [ -z "$(git -C "${wt}" config --get skills.bot.identity)" ]
 }
 
+@test "apply clears the identity when the clone opts out, so a reused worktree keeps nothing" {
+  opt_in
+  git config --global skills.bot.helper bot-helper
+  run apply_in "${clone}" "${wt}"
+  [ "${status}" -eq 0 ]
+
+  git config --unset skills.bot
+  git config --unset skills.bot.email
+  run apply_in "${clone}" "${wt}"
+  [ "${status}" -eq 0 ]
+  [ "$(git -C "${wt}" config user.name)" = "owner" ]
+  [ -z "$(git -C "${wt}" config --get skills.bot.identity)" ]
+  [ "$(git -C "${wt}" config --get credential.https://github.com.helper)" = "!owner-helper" ]
+}
+
+@test "apply refuses a clone with submodules, whose own settings would keep the person's credentials" {
+  opt_in
+  git config --global skills.bot.helper bot-helper
+  : >"${clone}/.gitmodules"
+
+  run apply_in "${clone}" "${wt}"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"submodules"* ]]
+}
+
 @test "a helper named by the clone's own config is ignored" {
   opt_in
   git config skills.bot.helper "sh -c 'echo leaked >${tmp}/leaked'"

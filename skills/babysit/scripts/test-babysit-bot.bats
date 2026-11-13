@@ -61,6 +61,24 @@ opt_in() {
   [ "$(git config user.name)" = "owner" ]
 }
 
+@test "prepare clears the identity when the clone no longer opts in" {
+  opt_in
+  git config --global skills.bot.helper bot-helper
+  run bash "${script_dir}/ledger.sh" start maro/x 7 token-1
+  [ "${status}" -eq 0 ]
+  run bash "${script_dir}/worktree.sh" prepare maro/x 7 --session token-1 --branch feat/x --head "${head}"
+  [ "${status}" -eq 0 ]
+  wt="$(jq -r .path <<<"${output}")"
+  [ "$(git -C "${wt}" config user.name)" = "maronium[bot]" ]
+
+  git config --unset skills.bot
+  git config --unset skills.bot.email
+  run bash "${script_dir}/worktree.sh" prepare maro/x 7 --session token-1 --branch feat/x --head "${head}"
+  [ "${status}" -eq 0 ]
+  [ "$(git -C "${wt}" config user.name)" = "owner" ]
+  [ -z "$(git -C "${wt}" config --get skills.bot.identity)" ]
+}
+
 @test "drive.sh refuses to start when the clone opts in but the Bot helper is unset" {
   opt_in
   git config skills.babysit.agent "touch ${tmp}/agent-ran"
