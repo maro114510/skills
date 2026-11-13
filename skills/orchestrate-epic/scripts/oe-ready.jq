@@ -124,9 +124,10 @@ def question_text:
 #   - The read holds only the newest pull request with the branch name, so a newer one from a fork hides the Issue's own.
 # - Engineer input counts once.
 #   - Input before the latest attempt was already handed to that attempt's Owner.
-# - A head that cannot be read fails the read only when the action depends on the head.
-#   - A push between the reads is the usual cause.
-#   - next_action raises it right before row 8, the first row that needs the head.
+# - A head that moved between the reads leaves only its Issue unreadable, and the read goes on with every other Issue.
+#   - A push or a newly opened pull request between the reads is the cause.
+#   - next_action gives that Issue read-again right before row 8, the first row that needs the head.
+#   - A head unreadable for any other reason still fails the read when the action depends on it.
 # - A bot finding is a repair signal only while its bot's round is unused, and only when a trusted user has not approved the head.
 def issue_state:
   .data.repository as $r
@@ -212,6 +213,7 @@ def issue_state:
 # | 5 | No branch, and a dependency is not closed as completed | wait-dependencies |
 # | 6 | No branch, and every dependency is closed as completed | claim |
 # | 7 | The latest question has no answer after it | wait-answer |
+# | 8 | The head moved during the read | read-again |
 # | 8 | A repair signal is present, and fewer than max_attempts attempts were used | start-owner |
 # | 8 | A repair signal is present, and max_attempts attempts were used | parked |
 # | 9 | A check on the head is pending | wait-ci |
@@ -244,7 +246,9 @@ def next_action:
     else act("claim"; "every dependency completed") end
   elif .question_open then
     act("wait-answer"; "question \(.question.url) has no answer yet:\n\(.question.text)" | gsub("\r?\n"; "\\n"))
-  elif .head.unreadable != null then error(.head.unreadable)
+  elif .head.unreadable != null then
+    if .head.unreadable | test("changed during the read$") then act("read-again"; "\(.head.unreadable); read again at the next pass")
+    else error(.head.unreadable) end
   elif (.repairs | length) > 0 then
     (.repairs | join("; ")) as $why
     | if .attempts >= max_attempts then act("parked"; "\(.attempts) attempts used; still: \($why)")

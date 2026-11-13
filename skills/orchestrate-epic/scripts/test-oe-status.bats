@@ -534,6 +534,26 @@ EOF
   [ "$(printf '%s\n' "${lines[@]}" | grep -c '^ISSUE ')" -eq "${views_until_end}" ]
 }
 
+@test "an Issue whose PR moved during the read shows as read-again and the other Issues are shown as usual" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [
+    {"number": 5, "branch": true,
+      "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "pushed_during_read": true}]},
+    {"number": 6}
+  ]
+}
+JSON
+  records 5 claim@07:00 attempt@07:01
+
+  run --separate-stderr bash "${oe}" status o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(column_of 5 2)" = read-again ]
+  [ "$(column_of 6 2)" = claim ]
+}
+
 @test "under a failed check on the default branch, every Issue waits for it as in oe ready, without reading the Issues" {
   github <<'JSON'
 {

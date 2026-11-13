@@ -1545,6 +1545,54 @@ JSON
   [ "$(action_of 5)" = start-owner ]
 }
 
+# A push during the read
+
+@test "a push during the read does not hide a pending question" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "OWNER", "at": "07:30", "body": "<!-- oe:question -->\nWhich option?"}
+    ],
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "pushed_during_read": true}]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:01
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-answer ]
+}
+
+@test "a push during the read leaves only its Issue to be read again" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [
+    {
+      "number": 5,
+      "branch": true,
+      "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "pushed_during_read": true}]
+    },
+    {"number": 6}
+  ]
+}
+JSON
+  records 5 claim@07:00 attempt@07:01
+
+  run --separate-stderr bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = read-again ]
+  [ -z "$(field_of 5 4)" ]
+  [ "$(action_of 6)" = claim ]
+}
+
 # Reads that GitHub cuts short
 
 @test "a closed Issue with more comments than one read holds is done" {

@@ -67,6 +67,7 @@
 # | from_fork | Whether its branch lives in a fork | false |
 # | conflicting | Whether it conflicts with its base | false |
 # | pushed | When its head was pushed | Same as opened |
+# | pushed_during_read | Whether the branch head the Issue read returns differs from the pull request's head | false |
 # | committed | The commit time of its head | Same as opened |
 # | checks | Check name to result on its head | No checks |
 # | check_runs | Further check runs on its head, each with name, result, suite, started, and optionally the workflow that ran it, so one name can run in several check suites | None |
@@ -142,8 +143,8 @@ def light_response:
         else null end)},
         {key: "c\(.number)", value: {blockedBy: {nodes: [.blocked_by[]? | {number, state: (if .state == "open" then "OPEN" else "CLOSED" end)}]}}}] | from_entries))}};
 
-# The head the Issue read sees.
-def read_sha: pr_sha;
+# The branch head the Issue read sees, which differs from the pull request's head after a push during the read.
+def read_sha: if .pushed_during_read then "c" * 40 else pr_sha end;
 
 # A review-thread comment as the Issue read returns it, with the Bot type a listed bot carries.
 def thread_comment:
@@ -166,7 +167,7 @@ def review_threads:
 
 def pull_request:
   (read_sha) as $sha
-  | {number, isCrossRepository: (.from_fork // false), headRefOid: $sha,
+  | {number, isCrossRepository: (.from_fork // false), headRefOid: pr_sha,
     state: (.state // "open" | ascii_upcase), createdAt: (.opened | time),
     mergedAt: (if .merged then .merged | time else null end),
     baseRefName: (.base // "main"),
