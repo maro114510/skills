@@ -21,19 +21,6 @@ setup() {
   unset OE_WORKTREE_ROOT
 
   mkdir -p "${tmp}/bin"
-  cat >"${tmp}/bin/gh" <<EOF
-#!/usr/bin/env bash
-if [ "\${1:-}" = api ]; then
-  case "\${2:-}" in
-  /users/*)
-    printf '%s\n' "\${GH_BOT_ID:-123}"
-    exit 0
-    ;;
-  esac
-fi
-echo "unexpected gh: \$*" >&2
-exit 1
-EOF
   cat >"${tmp}/bin/bot-helper" <<EOF
 #!/usr/bin/env bash
 printf '%s\n' "\$*" >>"${tmp}/helper-calls"
@@ -54,7 +41,7 @@ printf '%s\n' "\$*" >>"${tmp}/owner-calls"
 cat >/dev/null
 printf 'username=owner\npassword=ghs_owner\n'
 EOF
-  chmod +x "${tmp}/bin/gh" "${tmp}/bin/bot-helper" "${tmp}/bin/owner-helper"
+  chmod +x "${tmp}/bin/bot-helper" "${tmp}/bin/owner-helper"
   export PATH="${tmp}/bin:${PATH}"
 
   git init -q --bare "${tmp}/origin.git"
@@ -72,6 +59,7 @@ EOF
 
 opt_in() {
   git config skills.bot 'maronium[bot]'
+  git config skills.bot.email '123+maronium[bot]@users.noreply.github.com'
 }
 
 bot_login_in() {
@@ -117,8 +105,7 @@ require_in() {
   [ "$(git -C "${wt}" config --get skills.bot.identity)" = "maronium" ]
   [ "$(git -C "${wt}" config --get credential.https://github.com.useHttpPath)" = "true" ]
   [ "$(git -C "${wt}" config --get-all credential.https://github.com.helper | tail -n2 | tr '\n' ' ')" = " !bot-helper " ]
-  [ "$(git -C "${wt}" config --get-all url.https://github.com/.insteadOf | LC_ALL=C sort | tr '\n' ' ')" = "git@github.com: git@ssh.github.com: ssh://git@github.com/ ssh://git@github.com:22/ ssh://git@github.com:443/ ssh://git@ssh.github.com/ ssh://git@ssh.github.com:443/ " ]
-  [ -z "$(git config user.name)" ] || [ "$(git config user.name)" = "owner" ]
+  [ "$(git config user.name)" = "owner" ]
 }
 
 @test "the worktree answers git's credential request with the Bot, not the owner" {
@@ -212,24 +199,14 @@ EOF
   [ "$(git -C "${wt}" log -1 --format='%an <%ae>')" = "maronium[bot] <123+maronium[bot]@users.noreply.github.com>" ]
 }
 
-@test "an SSH spelling with a port becomes HTTPS, so the Bot answers" {
+@test "apply refuses an SSH remote instead of pushing with the person's key" {
   opt_in
   git config --global skills.bot.helper bot-helper
   git remote set-url origin "ssh://git@github.com:443/maro/x.git"
 
   run apply_in "${clone}" "${wt}"
-  [ "${status}" -eq 0 ]
-  [ "$(git -C "${wt}" remote get-url --push origin)" = "https://github.com/maro/x.git" ]
-}
-
-@test "apply refuses a remote it cannot turn into an HTTPS one, before it claims the identity" {
-  opt_in
-  git config --global skills.bot.helper bot-helper
-  git remote set-url origin "ssh://git@github.com:2222/maro/x.git"
-
-  run apply_in "${clone}" "${wt}"
   [ "${status}" -eq 1 ]
-  [[ "${output}" == *"would not answer with the Bot helper"* ]]
+  [[ "${output}" == *"not an HTTPS GitHub URL"* ]]
   [ -z "$(git -C "${wt}" config --get skills.bot.identity)" ]
 }
 
@@ -244,13 +221,13 @@ EOF
   [ ! -e "${tmp}/leaked" ]
 }
 
-@test "oe start checks the Bot user id before any step and starts nothing" {
-  opt_in
+@test "oe start refuses when the Bot address is unset" {
+  git config skills.bot 'maronium[bot]'
   git config --global skills.bot.helper bot-helper
 
-  GH_BOT_ID=nope run bash "${start}" owner maro/x 5
+  run bash "${start}" owner maro/x 5
   [ "${status}" -eq 1 ]
-  [[ "${output}" == *"GitHub user id"* ]]
+  [[ "${output}" == *"skills.bot.email"* ]]
   [ "$(git worktree list --porcelain | grep -c '^worktree ')" -eq 2 ]
 }
 
