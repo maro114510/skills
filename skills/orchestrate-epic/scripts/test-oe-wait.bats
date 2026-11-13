@@ -737,3 +737,25 @@ JSON
   [ ! -e "${notified}" ]
   [ -z "$(find "${OE_STATE_DIR}" -path '*/notices/*' 2>/dev/null)" ]
 }
+
+@test "every poll saves the facts it read, so oe status can draw them without GitHub" {
+  pr_15_checks_running
+
+  run bash "${oe}" wait o/r 1 --timeout 0
+
+  [ "${status}" -eq 5 ]
+  [ "$(jq -r '.lines[0].action' "$(facts_record o/r 1)")" = wait-ci ]
+  [ "$(jq -r '.at' "$(facts_record o/r 1)")" = "${OE_NOW}" ]
+}
+
+@test "a poll that fails to read GitHub records the failure and keeps the facts" {
+  pr_15_checks_running
+  run bash "${oe}" wait o/r 1 --timeout 0
+  [ "${status}" -eq 5 ]
+
+  GH_FAIL=subIssues run bash "${oe}" wait o/r 1 --timeout 0
+
+  [ "${status}" -eq 1 ]
+  [ "$(jq -r '.lines[0].action' "$(facts_record o/r 1)")" = wait-ci ]
+  [ -n "$(jq -r '.failure.reason' "$(facts_record o/r 1)")" ]
+}

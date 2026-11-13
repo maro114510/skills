@@ -2,16 +2,20 @@
 # oe ready
 #
 # Prints the next action of every child Issue of an Epic.
-# It reads GitHub through gh and the record store that oe-store.sh defines, and writes nothing anywhere.
+# It reads GitHub through gh and the record store that oe-store.sh defines, and writes nothing anywhere unless --save is given.
 # The actions follow the next-action table in docs/design/orchestrate-epic.md.
 #
 # Usage
 #
-#   oe ready <owner/repo> <epic-number> [--running <issue-number>]... [--facts]
+#   oe ready <owner/repo> <epic-number> [--running <issue-number>]... [--facts | --save]
 #
 # - --running is accepted and ignored, so a caller written for it still runs: oe finds the running agents in its own records.
 # - --facts, for oe status, prints each line as the JSON object that facts in oe-ready.jq describes.
 #   It changes only the format: the same reads run, and the same action is decided.
+# - --save, for the session's oe wait and its own reads, also saves what oe status draws in the facts record that oe-store.sh describes:
+#   the facts of every Issue when the read succeeds, and the reason when a GitHub read fails, which keeps the facts of the read before it.
+#   It adds no GitHub read and changes neither the output nor the exit code; a record that cannot be written is reported on stderr.
+#   It cannot be combined with --facts, which oe status runs and which writes nothing.
 # - OE_NOW sets the current time in epoch seconds.
 #
 # Output
@@ -32,7 +36,7 @@
 # | Code | Meaning | Output |
 # |---|---|---|
 # | 0 | Every Issue was classified | One line per Issue |
-# | 1 | A GitHub read or the record store read failed | Nothing |
+# | 1 | A GitHub read or the record store read failed | Nothing, and with --save the reason in the facts record |
 # | 2 | The arguments, or git config skills.bot, are invalid | Nothing |
 #
 # Files
@@ -46,7 +50,7 @@
 # | oe-bots.jq | The review bots whose findings start a repair, and how a finding is read |
 # | oe-records.jq | Which comments count as questions and as engineer input |
 # | oe-config.sh | The limits and names shared with oe's writers |
-# | oe-store.sh | Where each Issue's claim and attempt records live on this host |
+# | oe-store.sh | Where each Issue's claim and attempt records, and the saved facts, live on this host |
 #
 # Reads, in order
 #
@@ -69,12 +73,15 @@ source "${dir}/oe-store.sh"
 
 usage() {
   echo "$1" >&2
-  echo "Usage: oe ready <owner/repo> <epic-number> [--running <issue-number>]... [--facts]" >&2
+  echo "Usage: oe ready <owner/repo> <epic-number> [--running <issue-number>]... [--facts | --save]" >&2
   exit 2
 }
 
+save=0
 fail() {
   echo "oe ready: $1" >&2
+  # facts_fail runs here, where every failed read ends, and its own failure only adds a line on stderr.
+  ((! save)) || facts_fail "${repo}" "${epic}" "$1" || true
   exit 1
 }
 
@@ -91,10 +98,16 @@ while [[ $# -gt 0 ]]; do
     shift
     continue
   fi
+  if [[ "$1" == --save ]]; then
+    save=1
+    shift
+    continue
+  fi
   [[ "$1" == --running && "${2:-}" =~ ^[1-9][0-9]*$ ]] || usage "Expected --running <issue-number>, got: $*"
   shift 2
 done
 
+((! save)) || [[ "${entry}" == classify ]] || usage "--save cannot be combined with --facts"
 now="${OE_NOW:-$(date -u +%s)}"
 [[ "${now}" =~ ^[0-9]+$ ]] || usage "OE_NOW must be epoch seconds"
 
@@ -245,10 +258,12 @@ agent_of() {
 }
 
 sorted=()
+listed=()
 running_lines=""
 if [[ ${#issues[@]} -gt 0 ]]; then
   while read -r n; do
     agent="$(agent_of "${n}")" || exit 1
+    listed+=("${n}")
     if [[ -n "${agent}" ]]; then
       running_lines+="${n}"$'\t'running$'\t'"${agent} runs; once it ends, run: bash $(shell_quote "${dir}/oe") worktree remove ${n}"$'\n'
     else
@@ -256,28 +271,43 @@ if [[ ${#issues[@]} -gt 0 ]]; then
     fi
   done < <(printf '%s\n' "${issues[@]}" | sort -n -u)
 fi
+# The Issues to read: the ones without a running agent, and with --save, every one.
+reads=(${sorted[@]+"${sorted[@]}"})
+((! save)) || reads=(${listed[@]+"${listed[@]}"})
 
 # Prints the classified lines $1 with the running agents' lines, sorted by Issue number, each with its command.
 print_lines() {
   with_start "$(printf '%s%s' "$1" "${running_lines}" | sort -t $'\t' -k1,1n)"
 }
 
+# The facts to save: one JSON object per line, the same ones oe status draws.
+# Every Issue is read, a running one too, because oe status shows its attempts and head under the running agent.
+saved=""
+save_facts() {
+  ((save)) || return 0
+  facts_write "${repo}" "${epic}" "${saved}" || echo "oe ready: the facts were not saved" >&2
+}
+
 out=""
 if [[ -n "${gate_reason}" ]]; then
-  for n in ${sorted[@]+"${sorted[@]}"}; do
+  for n in ${reads[@]+"${reads[@]}"}; do
     # A closed Issue starts nothing, so the gate has nothing to hold, and holding it would hide that the Epic is done.
     if [[ "${closed}" == *" ${n} "* ]]; then
       action="done" reason=closed
     else
       action=wait-base reason="${gate_reason}"
     fi
-    if [[ "${entry}" == classify ]]; then
+    if [[ "${entry}" == classify && " ${sorted[*]-} " == *" ${n} "* ]]; then
       out+="${n}"$'\t'"${action}"$'\t'"${reason}"$'\n'
-    else
-      out+="$(jq -cn --argjson n "${n}" --arg action "${action}" --arg reason "${reason}" \
-        '{number: $n, action: $action, reason: $reason}')"$'\n' || fail "cannot format Issue #${n}"
+    fi
+    if [[ "${entry}" != classify || ${save} -eq 1 ]]; then
+      line="$(jq -cn --argjson n "${n}" --arg action "${action}" --arg reason "${reason}" \
+        '{number: $n, action: $action, reason: $reason}')" || fail "cannot format Issue #${n}"
+      saved+="${line}"$'\n'
+      [[ "${entry}" == classify ]] || out+="${line}"$'\n'
     fi
   done
+  save_facts
   if [[ "${entry}" == classify ]]; then
     print_lines "${out}"
   else
@@ -301,7 +331,7 @@ pr_heads=""
 while IFS=$'\t' read -r n sha; do
   [[ -n "${n}" ]] || continue
   [[ "${n}" =~ ^[1-9][0-9]*$ && "${sha}" =~ ^[0-9a-f]{40}$ ]] || fail "pull request list unreadable"
-  [[ " ${sorted[*]-} " == *" ${n} "* ]] || continue
+  [[ " ${reads[*]-} " == *" ${n} "* ]] || continue
   states="$(gh api "repos/${repo}/commits/${sha}/statuses?per_page=100" --paginate \
     --jq '.[] | select(.context == "'"${verify_context}"'") | .state' 2>"${err}")" ||
     fail "status read for ${sha} failed: $(head -n1 "${err}")"
@@ -323,7 +353,7 @@ done <<<"${pulls}"
 
 # Read 5: each Issue.
 responses=()
-for n in ${sorted[@]+"${sorted[@]}"}; do
+for n in ${reads[@]+"${reads[@]}"}; do
   response="$(gh api graphql -f query="${issue_query}" -F owner="${repo%/*}" -F repo="${repo#*/}" -F num="${n}" \
     -f branch="${branch_prefix}${n}" -f ref="refs/heads/${branch_prefix}${n}" 2>"${err}")" ||
     fail "Issue #${n} read failed: $(head -n1 "${err}")"
@@ -348,7 +378,7 @@ siblings="$(sort <<<"${siblings}")"
 # compare reports ahead or identical when the head contains it, and behind or diverged when it does not.
 stale_heads=""
 while IFS=$'\t' read -r n sha; do
-  [[ -n "${n}" && " ${sorted[*]-} " == *" ${n} "* ]] || continue
+  [[ -n "${n}" && " ${reads[*]-} " == *" ${n} "* ]] || continue
   newest=""
   while IFS=$'\t' read -r _ sibling_issue sibling_pr merge; do
     [[ -n "${sibling_issue}" && "${sibling_issue}" != "${n}" ]] || continue
@@ -368,15 +398,23 @@ done <<<"${pulls}"
 # Each Issue, classified by rows 3 to 13 in oe-ready.jq.
 # Only the kind, time, and bots of claim and attempt records decide an action, so verdict findings stay out of the program.
 i=0
-for n in ${sorted[@]+"${sorted[@]}"}; do
+for n in ${reads[@]+"${reads[@]}"}; do
   issue_records="$(records_read "${repo}" "${n}" 2>"${err}")" || fail "$(head -n1 "${err}")"
   issue_records="$(jq -c 'map(select(.kind == "claim" or .kind == "attempt") | {kind, at, bots})' <<<"${issue_records}")" ||
     fail "records of Issue #${n} unreadable"
-  line="$(jq -r "$(program "${entry}" "${pr_heads%,}" "${issue_records}" "${stale_heads%,}")" <<<"${responses[i]}" 2>"${err}")" ||
-    fail "Issue #${n} read failed: $(head -n1 "${err}")"
-  out+="${line}"$'\n'
+  if [[ " ${sorted[*]-} " == *" ${n} "* ]]; then
+    line="$(jq -r "$(program "${entry}" "${pr_heads%,}" "${issue_records}" "${stale_heads%,}")" <<<"${responses[i]}" 2>"${err}")" ||
+      fail "Issue #${n} read failed: $(head -n1 "${err}")"
+    out+="${line}"$'\n'
+  fi
+  if ((save)); then
+    saved+="$(jq -r "$(program 'facts | tojson' "${pr_heads%,}" "${issue_records}" "${stale_heads%,}")" <<<"${responses[i]}" 2>"${err}")" ||
+      fail "Issue #${n} read failed: $(head -n1 "${err}")"
+    saved+=$'\n'
+  fi
   i=$((i + 1))
 done
+save_facts
 if [[ "${entry}" == classify ]]; then
   print_lines "${out}"
 else
