@@ -10,6 +10,10 @@
 # Everything but linking goes through REST, because another job can drain the GraphQL limit while REST still has room; with GraphQL exhausted, linking is skipped with a NOTICE and the body keyword remains.
 set -uo pipefail
 
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source-path=SCRIPTDIR
+source "${script_dir}/../../orchestrate-epic/scripts/oe-bot.sh"
+
 attempts="${LINK_POLL_ATTEMPTS:-10}"
 interval="${LINK_POLL_INTERVAL:-3}"
 
@@ -46,6 +50,17 @@ done
 if [[ -z "${repo}" && "${link_pr}" =~ ^https?://[^/]+/([^/]+/[^/]+)/pull/[0-9]+ ]]; then
   repo="${BASH_REMATCH[1]}"
 fi
+# The Bot identity needs the repository spelled out; the caller may leave it to gh.
+if [[ -z "${repo}" ]]; then
+  origin_url="$(git config --get remote.origin.url 2>/dev/null)" || origin_url=""
+  if [[ "${origin_url}" =~ github\.com[:/]([^/]+/[^/]+)$ ]]; then
+    repo="${BASH_REMATCH[1]%.git}"
+  fi
+fi
+bot_env "${repo}" || {
+  echo "create-linked-pr: cannot act as the Bot on ${repo:-this repository}" >&2
+  exit 1
+}
 repo_args=()
 [[ -n "${repo}" ]] && repo_args=(--repo "${repo}")
 api_repo="repos/{owner}/{repo}"

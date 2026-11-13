@@ -64,6 +64,8 @@ dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${dir}/oe-config.sh"
 # shellcheck source-path=SCRIPTDIR
 source "${dir}/oe-store.sh"
+# shellcheck source-path=SCRIPTDIR
+source "${dir}/oe-bot.sh"
 
 usage() {
   echo "$1" >&2
@@ -82,6 +84,7 @@ fail() {
 [[ "$2" =~ ^[1-9][0-9]*$ ]] || usage "Invalid Issue number: $2"
 repo="$1"
 n="$2"
+bot_env "${repo}" || fail "cannot act as the Bot on ${repo}"
 
 lang="$(bash "${dir}/../../create-pr/scripts/lang.sh")"
 case $? in

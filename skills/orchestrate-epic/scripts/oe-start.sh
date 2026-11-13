@@ -40,6 +40,8 @@ set -uo pipefail
 dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source-path=SCRIPTDIR
 source "${dir}/oe-store.sh"
+# shellcheck source-path=SCRIPTDIR
+source "${dir}/oe-bot.sh"
 
 usage() {
   echo "$1" >&2
@@ -71,6 +73,13 @@ verifier)
   ;;
 *) usage "Unknown role: ${role}" ;;
 esac
+
+# A clone that opts in starts no agent when its Bot helper cannot mint a token: acting as the
+# person instead would make the agent's work look like the person's.
+bot_require_ready "${repo}" || {
+  echo "oe start: not starting an agent because the Bot identity is not ready" >&2
+  exit 1
+}
 
 # Runs oe subcommand $1 with the rest as arguments, and ends the run with its code on failure.
 # Its output is dropped on success, because a harness shows stderr merged into the prompt, and goes to stderr on failure.

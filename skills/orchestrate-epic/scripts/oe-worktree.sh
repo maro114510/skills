@@ -36,6 +36,8 @@ unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE GIT_OBJECT_DIRECTORY G
 dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source-path=SCRIPTDIR
 source "${dir}/oe-config.sh"
+# shellcheck source-path=SCRIPTDIR
+source "${dir}/oe-bot.sh"
 
 usage() {
   echo "$1" >&2
@@ -104,4 +106,8 @@ else
   git worktree add --quiet --track -B "${branch}" "${wt}" "origin/${branch}" ||
     fail "cannot create ${wt} on ${branch}"
 fi
+bot_identity_apply "${wt}" || {
+  git worktree remove --force "${wt}" >/dev/null 2>&1 || true
+  fail "cannot apply the Bot identity to ${wt}"
+}
 printf '%s\n' "${wt}"
