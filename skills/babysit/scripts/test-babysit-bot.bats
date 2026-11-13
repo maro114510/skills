@@ -86,6 +86,21 @@ opt_in() {
   [ -z "$(git -C "${wt}" config --get skills.bot.identity)" ]
 }
 
+@test "remove deletes the drive worktree even when the Bot helper is gone" {
+  opt_in
+  git config --global skills.bot.helper bot-helper
+  run bash "${script_dir}/ledger.sh" start maro/x 7 token-1
+  [ "${status}" -eq 0 ]
+  run bash "${script_dir}/worktree.sh" prepare maro/x 7 --session token-1 --branch feat/x --head "${head}"
+  [ "${status}" -eq 0 ]
+  wt="$(jq -r .path <<<"${output}")"
+
+  git config --global --unset skills.bot.helper || true
+  run bash "${script_dir}/worktree.sh" remove maro/x 7 --session token-1
+  [ "${status}" -eq 0 ]
+  [ ! -e "${wt}" ]
+}
+
 @test "drive.sh refuses to start when the clone opts in but the Bot helper is unset" {
   opt_in
   git config skills.babysit.agent "touch ${tmp}/agent-ran"
