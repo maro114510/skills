@@ -69,24 +69,35 @@ bot_env() {
 }
 
 # Checks, without a network read, that the worktree at $1, or the current one when $1 is omitted,
-# could act as the Bot: the helper is named globally, the remote is an HTTPS GitHub one, and no
-# submodule keeps its own settings, where the person's credentials would answer instead.
+# could act as the Bot: the helper is named globally, every URL a push would use is an HTTPS GitHub
+# one, and no submodule keeps its own settings, where the person's credentials would answer instead.
 # A caller names the worktree it is about to hand an agent, because the checkout it runs from is not
-# that worktree and can hold a different .gitmodules.
+# that worktree and can hold a different .gitmodules or push URL.
 # It runs before a fetch or a start, so a refused one changes nothing on GitHub.
 bot_config_ready() {
-  local login origin top at="${1:-.}"
+  local login top at="${1:-.}" push_urls url
   login="$(bot_login)"
   [[ -n "${login}" ]] || return 0
   bot_helper >/dev/null || {
     echo "git config --global skills.bot.helper is unset, so nothing can act as the Bot" >&2
     return 1
   }
-  origin="$(git -C "${at}" config --get remote.origin.url 2>/dev/null)" || origin=""
-  if [[ "${origin}" != https://github.com/* ]]; then
-    echo "remote.origin.url is not an HTTPS GitHub URL, so a push would not answer with the Bot helper" >&2
+  # git pushes to pushurl when one is set, so every configured push URL has to be the HTTPS one the
+  # helper answers for; reading the fetch URL alone would let a push leave under the person's SSH key.
+  push_urls="$(git -C "${at}" config --get-all remote.origin.pushurl 2>/dev/null)" || push_urls=""
+  if [[ -z "${push_urls}" ]]; then
+    push_urls="$(git -C "${at}" config --get remote.origin.url 2>/dev/null)" || push_urls=""
+  fi
+  if [[ -z "${push_urls}" ]]; then
+    echo "cannot read the push URL of origin, so a push could not be checked against the Bot helper" >&2
     return 1
   fi
+  while IFS= read -r url; do
+    if [[ "${url}" != https://github.com/* ]]; then
+      echo "${url} is not an HTTPS GitHub URL, so a push would not answer with the Bot helper" >&2
+      return 1
+    fi
+  done <<<"${push_urls}"
   top="$(git -C "${at}" rev-parse --show-toplevel 2>/dev/null)" || top=""
   if [[ -n "${top}" && -e "${top}/.gitmodules" ]]; then
     echo "${top} has submodules, which keep their own credentials, so it cannot act as the Bot" >&2

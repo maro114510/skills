@@ -218,6 +218,27 @@ EOF
   [ -z "$(git -C "${wt}" config --get skills.bot.identity)" ]
 }
 
+@test "apply refuses an SSH push URL even when the fetch URL is HTTPS" {
+  opt_in
+  git config --global skills.bot.helper bot-helper
+  git remote set-url --push origin "ssh://git@github.com:443/maro/x.git"
+
+  run apply_in "${clone}" "${wt}"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"not an HTTPS GitHub URL"* ]]
+  [ -z "$(git -C "${wt}" config --get skills.bot.identity)" ]
+}
+
+@test "apply accepts an HTTPS push URL that differs from the fetch URL" {
+  opt_in
+  git config --global skills.bot.helper bot-helper
+  git remote set-url --push origin "https://github.com/maro/x-push.git"
+
+  run apply_in "${clone}" "${wt}"
+  [ "${status}" -eq 0 ]
+  [ "$(git -C "${wt}" config --get skills.bot.identity)" = "maronium" ]
+}
+
 @test "apply clears the identity when the clone opts out, so a reused worktree keeps nothing" {
   opt_in
   git config --global skills.bot.helper bot-helper
