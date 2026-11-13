@@ -81,7 +81,7 @@ Use this only when no test or command in the repository reaches the behavior. St
 
 - A check run cited for a criterion that does not name that check, such as `make ci -> exit 0` or `go test ./... -> exit 0` for a criterion about a feature. It shows that nothing broke, not that the behavior exists. Report it as a check.
 - For a behavior criterion: a file path, a `file:line`, or reading the code.
-- A replayed result instead of a run on the final state: a cached test result such as Go's `(cached)`, a remote cache hit, or an earlier run's output. A CI run on the same SHA, as section 2.1 accepts it, is a run on the final state.
+- A replayed result instead of a run on the final state: a cached test result such as Go's `(cached)`, a remote cache hit, or an earlier run's output. A CI run that section 2.1's CI run rule accepts is a run on the final state.
 - A run or observation that broke any rule in section 2.
 - A commit message, a code comment, or another agent's account of its own work, such as a worker's report. Each is a lead to check. A fresh-context run under section 2.3 is an observation, not such an account.
 - A TODO, a new Issue, out of scope, future work, or a later Epic.
