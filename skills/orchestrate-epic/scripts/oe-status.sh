@@ -11,6 +11,7 @@
 # - Run it from the clone the session runs in, so the AGENT column can find the agents' worktrees.
 # - --watch checks every wait_interval seconds with the light read of oe-light.sh, and redraws only when it shows a change,
 #   when a time-based deadline arrives, or when the session holding the Epic's lock ends, so a board nothing changes under costs one light read a refresh.
+#   At a terminal it first clears the screen, so nothing the pane's shell printed while it started stays, and shows one line while the first read runs.
 #   A failed read is reported on stderr and retried at the next refresh.
 #   Once a refresh has found a running session holding the Epic's lock, the first refresh that finds none draws the last view and exits 0,
 #   so a board left open after its session ended, crashed or not, stops reading GitHub.
@@ -222,6 +223,9 @@ if ((!watch)); then
   printf '%s\n' "${view}"
   exit 0
 fi
+
+# The first read takes seconds, and the screen shows only what the pane's shell printed until then.
+[[ ! -t 1 ]] || printf '\033[H\033[2J%s\n' "oe status: reading Epic #${epic} of ${repo} ..."
 
 count=0
 seen=0

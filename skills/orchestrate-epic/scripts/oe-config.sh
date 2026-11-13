@@ -13,7 +13,7 @@
 # | wait_interval | 120 | Seconds between two polls inside oe wait; a poll is one light read, and oe-light.sh says when it becomes a full oe ready read |
 # | board_interval | 180 | Seconds between two refreshes of the board that oe board opens, longer than wait_interval because the board and the wait each pay for their own light reads |
 # | full_read_every | 3600 | Seconds after which oe wait and the board read every child Issue in full even when the light read shows no change, to find what the light read cannot see |
-# | board_start_timeout | 30 | Seconds oe board waits for the board to start in its pane, enough for a slow shell startup; a normal start takes a second |
+# | board_start_timeout | 30 | Seconds oe board waits for the board to start in its pane, enough for a normal shell startup; when a slower one passes it, oe board says so and a rerun waits for the same start; a normal start takes a second |
 # | notify_repeat | 3600 | Seconds after which oe wait notifies the person again about an item they have not acted on |
 # | notify_failed_reads | 3 | Failed oe ready runs in a row inside one oe wait before it notifies the person, so one transient failure tells nobody |
 #
