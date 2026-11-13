@@ -1652,23 +1652,28 @@ JSON
   [ "$(action_of 5)" = wait-answer ]
 }
 
-@test "a push during the read fails the read when the action depends on the head" {
+@test "a push during the read leaves only its Issue to be read again" {
   github <<'JSON'
 {
   "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "pushed_during_read": true}]
-  }]
+  "issues": [
+    {
+      "number": 5,
+      "branch": true,
+      "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "pushed_during_read": true}]
+    },
+    {"number": 6}
+  ]
 }
 JSON
   records 5 claim@07:00 attempt@07:01
 
   run --separate-stderr bash "${oe}" ready o/r 1
 
-  [ "${status}" -eq 1 ]
-  [ -z "${output}" ]
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = read-again ]
+  [ -z "$(field_of 5 4)" ]
+  [ "$(action_of 6)" = claim ]
 }
 
 # Reads that GitHub cuts short

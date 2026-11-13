@@ -10,9 +10,12 @@
 #   It models GitHub changing between two oe ready runs, at a point the test controls.
 # - GH_FAIL_EPIC_READ=N fails only the Nth Epic read, as if GitHub were down for one oe ready run.
 #   It also appends each Epic read's epoch second to $OE_GITHUB.epic-read-times, one line per read.
+# - GH_RATE_LIMIT_UNTIL=EPOCH makes every GraphQL call fail as GitHub does with an exhausted bucket until that real epoch second.
+#   api rate_limit then reports the GraphQL bucket empty until that second, and full after it.
 #
 # | gh call | Answered as |
 # |---|---|
+# | api rate_limit | the buckets, as GH_RATE_LIMIT_UNTIL says |
 # | api graphql with the Epic query | epic |
 # | api graphql with the checks page query, oid=SHA, and after=CURSOR | checks SHA:CURSOR |
 # | api graphql with num=N | issue N |
@@ -59,6 +62,22 @@ while [[ $# -gt 0 ]]; do
   esac
   shift
 done
+
+rate_limited=""
+if [[ -n "${GH_RATE_LIMIT_UNTIL:-}" && $(date +%s) -lt "${GH_RATE_LIMIT_UNTIL}" ]]; then
+  rate_limited=1
+fi
+if [[ "${path}" == rate_limit ]]; then
+  remaining=5000
+  [[ -z "${rate_limited}" ]] || remaining=0
+  jq -n --argjson remaining "${remaining}" --argjson reset "${GH_RATE_LIMIT_UNTIL:-0}" \
+    '{resources: {core: {remaining: 5000, reset: ($reset + 3600)}, graphql: {remaining: $remaining, reset: $reset}}}' | jq -r "${filter}"
+  exit
+fi
+if [[ "${path}" == graphql && -n "${rate_limited}" ]]; then
+  echo "gh: GraphQL: API rate limit already exceeded for user ID 1. (HTTP 403)" >&2
+  exit 1
+fi
 
 here="$(dirname "${BASH_SOURCE[0]}")"
 unexpected() {

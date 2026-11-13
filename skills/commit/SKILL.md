@@ -2,8 +2,8 @@
 name: commit
 description: >
   Stage and commit the current working tree changes with a high-quality Conventional Commits message.
-  Analyzes the diff to infer type, scope, and intent, and screens for secrets and other risky changes.
-  It never asks: it leaves a suspected secret out, commits the rest, and reports what it did, excluded, or flagged.
+  Analyzes the diff to infer type, scope, and intent.
+  It never asks: it resolves its own findings and reports what it did, excluded, or flagged.
   Called by create-pr and implement when they need to commit changes.
   Can also be invoked directly with phrases like "commit this," "write a commit message," or "commit these changes."
 argument-hint: "[optional hint, e.g. an issue number or message override]"
@@ -27,29 +27,15 @@ If both `git status --short` and `git diff --staged` are empty, report "nothing 
 
 If `git status --short` holds any change this session did not make itself, touch nothing, including your own changes, and end with `STOPPED: foreign changes` and the paths.
 
-This skill never asks the user and never waits for an answer, in a chat session or without a human. Every step below resolves its own findings and lists them in Step 8.
+This skill never asks the user and never waits for an answer, in a chat session or without a human. Every step below resolves its own findings and lists them in Step 7.
 
-## Step 2. Screen for secrets
+## Step 2. Stage the change
 
-Cover staged, unstaged, and untracked changes: a suspected secret never ends up in a commit, however it got into the working tree.
+- If `git diff --staged` is non-empty, commit only what is staged and leave unstaged changes untouched.
+- Otherwise stage each file with `git add -- <path>`. Never `git add -A` or `git add .`.
+- Re-run `git diff --staged`; Steps 3 and 5 work from this refreshed diff.
 
-- **Filenames** in `git status --short`: `.env*`, `*.pem`, `*.key`, `id_rsa*`, `*credentials*`, `*secret*`, `*.p12`, `service-account*.json`, and similar.
-- **Content** of the staged and unstaged diff, since a token can sit in an ordinary file such as `config.yaml`: AWS keys `AKIA[0-9A-Z]{16}`, private key headers `-----BEGIN [A-Z ]*PRIVATE KEY-----`, GitHub tokens `gh[pousr]_[A-Za-z0-9]{20,}`, OpenAI or Anthropic-style keys `\bsk-[A-Za-z0-9_-]{20,}` (covers `sk-ant-api03-…` and `sk-proj-…`), Slack tokens `xox[baprs]-`, and a literal-looking value assigned to `password` or `token`.
-
-This is a best-effort heuristic: when in doubt, treat it as a match. For every match:
-
-- If the file is staged, unstage it: `git restore --staged -- <path>`.
-- Never `git add` it.
-- List in Step 8 each excluded file and why, with the line number for a content match, never the matched value. What to do with it is the user's decision, so leave it uncommitted.
-- Continue Steps 3-7 with the remaining files, so an unrelated change is not held hostage to the secret.
-
-## Step 3. Stage the change
-
-- If `git diff --staged` is non-empty, including after Step 2's exclusions, commit only what is staged and leave unstaged changes untouched.
-- Otherwise stage each file with `git add -- <path>`, skipping Step 2's exclusions. Never `git add -A` or `git add .`.
-- Re-run `git diff --staged`; Steps 4 and 6 work from this refreshed diff.
-
-## Step 4. Compose the message
+## Step 3. Compose the message
 
 **Language**: the language most of Step 1's subjects use, ignoring quoted text. With no commits yet, the language `bash <skills-root>/create-pr/scripts/lang.sh` prints. The type, scope, trailers, and `Closes`/`Related` lines stay in English.
 
@@ -74,15 +60,15 @@ Keep caller-supplied `Removed-Test:` trailers verbatim, as the last paragraph.
 Add no `Co-Authored-By` or other AI attribution trailer, matching this repository's history.
 Incorporate any hint in `$ARGUMENTS`: an issue number, a message override, or context the diff lacks.
 
-## Step 5. Compact Pass
+## Step 4. Compact Pass
 
 Re-read the bullets. Cut what/how, verification results, and file enumeration. Split or trim a "because/since/so/which" chain. Over 4 bullets, or one wrapped by character count: shorten, defer to the PR description, or split the change. Otherwise keep as written. Never remove a trailer such as `Removed-Test:`.
 
-## Step 6. Check the staged change
+## Step 5. Check the staged change
 
-Resolve each finding yourself and list it in Step 8:
+Resolve each finding yourself and list it in Step 7:
 
-- The diff mixes clearly unrelated concerns, such as an unrelated `fix` bundled with a `feat`: keep one concern staged, unstage the rest with `git restore --staged -- <path>`, commit it, then run Steps 3 to 8 again for the rest.
+- The diff mixes clearly unrelated concerns, such as an unrelated `fix` bundled with a `feat`: keep one concern staged, unstage the rest with `git restore --staged -- <path>`, commit it, then run Steps 2 to 7 again for the rest.
 - Some changed files look unrelated to the rest, possibly stray edits: unstage them and leave them uncommitted.
 - A confident Conventional Commits type/scope cannot be determined: use the closest type and omit the scope.
 
@@ -92,10 +78,10 @@ Then run the classifier; its header lists the conditions. Pass each critical dec
 bash <skill-dir>/scripts/classify-approval.sh --staged [--require "critical decision: <decision>"]...
 ```
 
-Whatever it exits, go to Step 7, and list every printed `reason:` line in Step 8. Approval belongs to the push, through implement's range review or the PR review, and a local commit can still be undone before then.
+Whatever it exits, go to Step 6, and list every printed `reason:` line in Step 7. Approval belongs to the push, through implement's range review or the PR review, and a local commit can still be undone before then.
 A failing-test-only change is committed as `test:`.
 
-## Step 7. Commit
+## Step 6. Commit
 
 ```bash
 git commit -m "$(cat <<'EOF'
@@ -109,10 +95,10 @@ EOF
 ```
 
 Never pass `--no-verify`.
-If a hook rejects a test-only commit because the test fails, stage the implementation files the caller names, redo Steps 2 to 6, and commit both as one `feat:` or `fix:`; if none are named, leave the test staged and report back.
+If a hook rejects a test-only commit because the test fails, stage the implementation files the caller names, redo Steps 2 to 5, and commit both as one `feat:` or `fix:`; if none are named, leave the test staged and report back.
 A merge commit keeps red `test:` commits on the default branch, so bisect with `git bisect start --first-parent`.
 
-## Step 8. Report
+## Step 7. Report
 
 After every commit, show the commit hash and subject in one short line. Never commit silently.
-Under it, list each file Step 2 or Step 6 left uncommitted and why, each type chosen without confidence, and each `reason:` line from Step 6.
+Under it, list each file Step 5 left uncommitted and why, each type chosen without confidence, and each `reason:` line from Step 5.

@@ -25,7 +25,8 @@ Repository instructions for coding agents.
 | `skills/**/*.bats` | Script tests that `.github/workflows/lint-shell.yml` runs |
 | `docs/design/orchestrate-epic.md` | The orchestrate-epic Design Doc that oe and the agents implement |
 | `.github/workflows/test-plugin-install.yml` | CI: `validate` then `test-install`, on push to `main` and every PR |
-| `.github/workflows/release.yml` | Creates a GitHub Release on a `v*` tag push after checking the tag matches both manifests |
+| `.github/workflows/secret-scan.yml` | CI: gitleaks on push to `main` and every PR |
+| `.github/workflows/release.yml` | Creates a GitHub Release on a `v*` tag push after checking the tag matches both manifests and its commit is reachable from main |
 | `cliff.toml` | `git-cliff` config used by `make release` |
 
 `docs/design` holds only Design Docs that describe the current target, as `manage-design-documents` defines them; work the owner decided to build is an Issue.
@@ -109,7 +110,8 @@ claude plugin marketplace add ./
 claude plugin install skills@maro114510-agent-skills --scope user
 claude plugin list | grep skills
 
-# Pre-commit hooks for shell scripts and workflows: https://github.com/j178/prek
+# Pre-commit hooks for shell scripts, workflows, and secrets: https://github.com/j178/prek
 brew install j178/tap/prek   # macOS, once
+brew install gitleaks        # the secret hook's scanner, once
 prek install                 # from the repo root
 ```
