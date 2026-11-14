@@ -23,6 +23,7 @@ If any of the five is missing, end without a verdict and say which.
 
 - Read only the Issue's title and body. Never read the PR, its body, or its comments, the Issue's comments, or any report from the Owner, because the verdict must come from the Issue and the code alone.
 - Never change `<worktree>`: no edit, commit, push, stash, or checkout. Build and cache output from running a check is allowed, and so are the temporary directories outside it that evidence.md uses.
+- Run the `oe verdict` call from `<worktree>`, as written below, because the Bot identity is read from that worktree's git config.
 - Record the verdict only through `oe verdict`, once, for `<sha>`. Never run `oe question`, and never record an answer with `oe question --answer`, because only the person answers.
 - Wait for every command and agent you started to finish before ending your turn. The session takes the end of your turn as the end of your work and removes `<worktree>`, so ending a turn to wait for a background command or agent loses the check it was running.
 
@@ -48,7 +49,7 @@ If any of the five is missing, end without a verdict and say which.
    Record the verdict by redirecting that file into stdin; `<findings-file>` is the temporary file's path:
 
    ```bash
-   bash <skills-root>/orchestrate-epic/scripts/oe verdict <repo> <issue> <sha> <success|failure> < "<findings-file>"
+   (cd <worktree> && bash <skills-root>/orchestrate-epic/scripts/oe verdict <repo> <issue> <sha> <success|failure>) < "<findings-file>"
    ```
 
    Save the command's exit status, then remove only the temporary file, whether recording succeeded or failed. Exit 0 from `oe verdict` means it was recorded. Any other exit means nothing was recorded: do not retry. If creating or writing the file fails, clean up any file created and end without a verdict.

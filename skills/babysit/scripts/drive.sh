@@ -20,6 +20,8 @@ set -uo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source-path=SCRIPTDIR disable=SC1091 # CI runs shellcheck without -x, so it cannot follow this.
 source "${script_dir}/common.sh"
+# shellcheck source-path=SCRIPTDIR disable=SC1091 # CI runs shellcheck without -x, so it cannot follow this.
+source "${script_dir}/../../orchestrate-epic/scripts/oe-bot.sh"
 
 WAIT="${BABYSIT_WAIT:-${script_dir}/wait.sh}"
 PR_STATE="${BABYSIT_PR_STATE:-${script_dir}/pr-state.sh}"
@@ -65,6 +67,12 @@ why_not="$(jq -r '[ (if .viewer != .author then "authored by \(.author), not \(.
 token=""
 errors='[]'
 work=""
+
+# A clone that opts in starts no drive when its Bot helper cannot act, so nothing runs as the person.
+bot_require_ready "${repo}" || {
+  echo "drive: cannot act as the Bot on ${repo}" >&2
+  exit 2
+}
 
 note() {
   echo "drive: $1" >&2
@@ -139,6 +147,16 @@ bot_status() {
     <<<"$1" >/dev/null 2>&1
 }
 
+# Posts the reply through the Bot when the clone opted in, so the reply never looks like the person's.
+bot_reply() {
+  local reply_token
+  if [[ -n "$(bot_login)" ]]; then
+    reply_token="$(bot_token "${repo}")" || return 1
+    export GH_TOKEN="${reply_token}"
+  fi
+  bash "${script_dir}/reply.sh" "$@"
+}
+
 # Posts reply text $1 for the comment event $2. Succeeds when the reply went out; otherwise the item is parked.
 post_reply() {
   local text="$1" line="$2" key hash thread out code file target
@@ -149,7 +167,7 @@ post_reply() {
   printf '%s\n' "${text}" >"${file}"
   target=(--conversation)
   [[ -z "${thread}" ]] || target=(--thread "${thread}")
-  out="$(bash "${script_dir}/reply.sh" "${repo}" "${pr}" --session "${token}" "${target[@]}" --body-file "${file}")"
+  out="$(bot_reply "${repo}" "${pr}" --session "${token}" "${target[@]}" --body-file "${file}")"
   code=$?
   case "${code}" in
   0) return 0 ;;

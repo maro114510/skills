@@ -1,0 +1,481 @@
+#!/usr/bin/env bats
+# Tests for the Bot identity the agents act as, in oe-bot.sh and the oe start guard.
+#
+# - The identity lives in one worktree: the clone opts in with git config skills.bot, and
+#   bot_identity_apply writes the Bot's user, credential helper, and marker into that worktree only.
+# - Fake gh answers the Bot user lookup; a fake helper prints tokens and records each call; a bare
+#   origin and a clone keep the worktrees real.
+# shellcheck disable=SC2292 # bats fails a test on a mid-test `[[ ]]` only under bash 4.1+; `[ ]` works on every bash.
+
+setup() {
+  bats_require_minimum_version 1.5.0
+  script="${BATS_TEST_DIRNAME}/oe-bot.sh"
+  start="${BATS_TEST_DIRNAME}/oe-start.sh"
+  tmp="$(cd "${BATS_TEST_TMPDIR}" && pwd -P)"
+  export GIT_CONFIG_GLOBAL="${tmp}/gitconfig"
+  export GIT_CONFIG_NOSYSTEM=1
+  git config --global user.name owner
+  git config --global user.email owner@example.com
+  git config --global init.defaultBranch main
+  git config --global credential.https://github.com.helper '!owner-helper'
+  unset OE_WORKTREE_ROOT
+
+  mkdir -p "${tmp}/bin"
+  cat >"${tmp}/bin/gh" <<EOF
+#!/usr/bin/env bash
+if [ "\${1:-}" = api ] && [ "\${2:-}" = "/users/maronium%5Bbot%5D" ]; then
+  printf '%s\n' "\${GH_BOT_ID:-123}"
+  exit 0
+fi
+echo "unexpected gh: \$*" >&2
+exit 1
+EOF
+  cat >"${tmp}/bin/bot-helper" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >>"${tmp}/helper-calls"
+if [ "\${1:-}" = get ]; then
+  cat >/dev/null
+  printf 'username=x-access-token\npassword=ghs_test_token\n'
+  exit 0
+fi
+if [ "\${1:-}" = token ]; then
+  printf 'ghs_test_token\n'
+  exit 0
+fi
+exit 1
+EOF
+  cat >"${tmp}/bin/owner-helper" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >>"${tmp}/owner-calls"
+cat >/dev/null
+printf 'username=owner\npassword=ghs_owner\n'
+EOF
+  chmod +x "${tmp}/bin/gh" "${tmp}/bin/bot-helper" "${tmp}/bin/owner-helper"
+  export PATH="${tmp}/bin:${PATH}"
+
+  git init -q --bare "${tmp}/origin.git"
+  git clone -q "${tmp}/origin.git" "${tmp}/seed"
+  git -C "${tmp}/seed" commit -q --allow-empty -m base
+  git -C "${tmp}/seed" push -q origin main
+  git clone -q "${tmp}/origin.git" "${tmp}/clone"
+  cd "${tmp}/clone" || return 1
+  # A real opt-in clone reaches GitHub over HTTPS; the bare origin above is only for the trees.
+  git remote set-url origin "https://github.com/maro/x.git"
+  git worktree add -q "${tmp}/wt" -b feat/issue-5
+  wt="${tmp}/wt"
+  clone="${tmp}/clone"
+}
+
+opt_in() {
+  git config skills.bot 'maronium[bot]'
+}
+
+bot_login_in() {
+  (cd "${1}" && source "${script}" && bot_login)
+}
+
+apply_in() {
+  (cd "${1}" && source "${script}" && bot_identity_apply "${2}")
+}
+
+bot_env_in() {
+  (cd "${1}" && source "${script}" && bot_env "${2}" && printf '%s\n' "${GH_TOKEN-}")
+}
+
+bot_env_start_in() {
+  (cd "${1}" && source "${script}" && bot_env_start "${2}" && printf '%s\n' "${GH_TOKEN-}")
+}
+
+bot_token_in() {
+  (cd "${1}" && source "${script}" && bot_token "${2}")
+}
+
+require_in() {
+  (cd "${1}" && source "${script}" && bot_require_ready "${2}")
+}
+
+@test "bot_login prints the opt-in login without the suffix it carries in REST" {
+  opt_in
+  run bot_login_in "${clone}"
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "maronium" ]
+
+  git config --unset skills.bot
+  run bot_login_in "${clone}"
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "" ]
+}
+
+@test "bot_identity_apply writes the Bot identity into the worktree only" {
+  opt_in
+  git config --global skills.bot.helper bot-helper
+
+  run apply_in "${clone}" "${wt}"
+  [ "${status}" -eq 0 ]
+  [ "$(git -C "${wt}" config user.name)" = "maronium[bot]" ]
+  [ "$(git -C "${wt}" config user.email)" = "123+maronium[bot]@users.noreply.github.com" ]
+  [ "$(git -C "${wt}" config --get skills.bot.identity)" = "maronium" ]
+  [ "$(git -C "${wt}" config --get credential.https://github.com.useHttpPath)" = "true" ]
+  [ "$(git -C "${wt}" config --get-all credential.https://github.com.helper | tail -n3 | tr '\n' ' ')" = " !bot-helper !f() { echo quit=true; }; f " ]
+  [ "$(git config user.name)" = "owner" ]
+}
+
+@test "the worktree answers git's credential request with the Bot, not the owner" {
+  opt_in
+  git config --global skills.bot.helper bot-helper
+  run apply_in "${clone}" "${wt}"
+  [ "${status}" -eq 0 ]
+
+  printf 'protocol=https\nhost=github.com\npath=maro/x.git\n\n' >"${tmp}/request"
+  run bash -c 'git -C "$1" credential fill <"$2"' _ "${wt}" "${tmp}/request"
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"password=ghs_test_token"* ]]
+  run cat "${tmp}/helper-calls"
+  [[ "${output}" == *"get"* ]]
+  [ ! -e "${tmp}/owner-calls" ]
+}
+
+@test "apply resets an inherited http authorization header the helper cannot replace" {
+  opt_in
+  git config --global skills.bot.helper bot-helper
+  git config --global http.https://github.com/.extraheader "Authorization: Basic OWNER"
+
+  run apply_in "${clone}" "${wt}"
+  [ "${status}" -eq 0 ]
+  [ "$(git config --get http.https://github.com/.extraheader)" = "Authorization: Basic OWNER" ]
+  [ -z "$(git -C "${wt}" config --get http.https://github.com/.extraheader)" ]
+}
+
+@test "apply refuses a path-scoped http header the host reset cannot clear" {
+  opt_in
+  git config --global skills.bot.helper bot-helper
+  git config --global "http.https://github.com/maro/x.git.extraheader" "Authorization: Basic OWNER"
+
+  run apply_in "${clone}" "${wt}"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"authorization header"* ]]
+  [ -z "$(git -C "${wt}" config --get skills.bot.identity)" ]
+}
+
+@test "apply refuses a path-scoped header on any push URL, not only the first" {
+  opt_in
+  git config --global skills.bot.helper bot-helper
+  git remote set-url --add --push origin "https://github.com/maro/first.git"
+  git remote set-url --add --push origin "https://github.com/maro/second.git"
+  git config --global "http.https://github.com/maro/second.git.extraheader" "Authorization: Basic OWNER"
+
+  run apply_in "${clone}" "${wt}"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"authorization header"* ]]
+  [ -z "$(git -C "${wt}" config --get skills.bot.identity)" ]
+}
+
+@test "clearing the identity gives the inherited http header back" {
+  opt_in
+  git config --global skills.bot.helper bot-helper
+  git config --global http.https://github.com/.extraheader "Authorization: Basic OWNER"
+  run apply_in "${clone}" "${wt}"
+  [ "${status}" -eq 0 ]
+
+  git config --unset skills.bot
+  run apply_in "${clone}" "${wt}"
+  [ "${status}" -eq 0 ]
+  [ "$(git -C "${wt}" config --get http.https://github.com/.extraheader)" = "Authorization: Basic OWNER" ]
+}
+
+@test "the worktree stops asking once the Bot helper declines, instead of falling back to the person" {
+  opt_in
+  cat >"${tmp}/bin/declining-helper" <<'EOF'
+#!/usr/bin/env bash
+exit 1
+EOF
+  cat >"${tmp}/bin/askpass" <<'EOF'
+#!/usr/bin/env bash
+printf 'personname\n'
+EOF
+  chmod +x "${tmp}/bin/declining-helper" "${tmp}/bin/askpass"
+  git config --global skills.bot.helper declining-helper
+
+  run apply_in "${clone}" "${wt}"
+  [ "${status}" -eq 0 ]
+
+  printf 'protocol=https\nhost=github.com\npath=maro/x.git\n\n' >"${tmp}/request"
+  run bash -c 'GIT_ASKPASS="$1" GIT_TERMINAL_PROMPT=1 git -C "$2" credential fill <"$3"' _ \
+    "${tmp}/bin/askpass" "${wt}" "${tmp}/request"
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"told us to quit"* ]]
+  [[ "${output}" != *"personname"* ]]
+}
+
+@test "bot_identity_apply changes nothing when the clone does not opt in" {
+  git config --global skills.bot.helper bot-helper
+  run apply_in "${clone}" "${wt}"
+  [ "${status}" -eq 0 ]
+  [ "$(git -C "${wt}" config --get user.name)" = "owner" ]
+  [ -z "$(git -C "${wt}" config --get skills.bot.identity)" ]
+}
+
+@test "bot_identity_apply refuses when the clone opts in but the helper is unset" {
+  opt_in
+  git config --global --unset skills.bot.helper || true
+  run apply_in "${clone}" "${wt}"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"skills.bot.helper"* ]]
+}
+
+@test "bot_env puts a fresh token in GH_TOKEN only where the identity is carried" {
+  opt_in
+  git config --global skills.bot.helper bot-helper
+  run apply_in "${clone}" "${wt}"
+  [ "${status}" -eq 0 ]
+
+  run bot_env_in "${wt}" maro/x
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "ghs_test_token" ]
+  grep -q -- "token maro/x" "${tmp}/helper-calls"
+
+  run bot_env_in "${clone}" maro/x
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "" ]
+}
+
+@test "bot_env refuses with a reason when the helper is unset" {
+  opt_in
+  git config --global skills.bot.helper bot-helper
+  run apply_in "${clone}" "${wt}"
+  [ "${status}" -eq 0 ]
+  git config --global --unset skills.bot.helper || true
+
+  run bot_env_in "${wt}" maro/x
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"skills.bot.helper"* ]]
+}
+
+@test "bot_require_ready passes without opt-in, mints when the helper works, and refuses when it fails" {
+  run require_in "${clone}" maro/x
+  [ "${status}" -eq 0 ]
+
+  opt_in
+  git config --global skills.bot.helper bot-helper
+  run require_in "${clone}" maro/x
+  [ "${status}" -eq 0 ]
+  grep -q -- "token maro/x" "${tmp}/helper-calls"
+
+  cat >"${tmp}/bin/failing-helper" <<'EOF'
+#!/usr/bin/env bash
+echo "1Password is locked" >&2
+exit 1
+EOF
+  chmod +x "${tmp}/bin/failing-helper"
+  git config --global skills.bot.helper failing-helper
+  run require_in "${clone}" maro/x
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"1Password is locked"* ]]
+}
+
+@test "bot_git answers a credential request with the Bot, not the owner" {
+  opt_in
+  git config --global skills.bot.helper bot-helper
+  printf 'protocol=https\nhost=github.com\npath=maro/x.git\n\n' >"${tmp}/request"
+
+  run bash -c 'cd "$1" && source "$2" && bot_git credential fill <"$3"' _ "${clone}" "${script}" "${tmp}/request"
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"password=ghs_test_token"* ]]
+  [ ! -e "${tmp}/owner-calls" ]
+}
+
+@test "bot_git clears an inherited host-scoped http header" {
+  opt_in
+  git config --global skills.bot.helper bot-helper
+  git config --global http.https://github.com/.extraheader "Authorization: Basic OWNER"
+
+  run bash -c 'cd "$1" && source "$2" && bot_git config --get-urlmatch http.extraheader https://github.com/maro/x.git' _ "${clone}" "${script}"
+  [ "${status}" -eq 0 ]
+  [ -z "${output}" ]
+}
+
+@test "bot_git refuses a path-scoped http header it cannot clear" {
+  opt_in
+  git config --global skills.bot.helper bot-helper
+  git config --global "http.https://github.com/maro/x.git.extraheader" "Authorization: Basic OWNER"
+
+  run bash -c 'cd "$1" && source "$2" && bot_git fetch --quiet origin "+refs/heads/main:refs/babysit/x"' _ "${clone}" "${script}"
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"authorization header"* ]]
+}
+
+@test "bot_git leaves git alone when the clone does not opt in" {
+  run bash -c 'cd "$1" && source "$2" && bot_git config --get credential.https://github.com.helper' _ "${clone}" "${script}"
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "!owner-helper" ]
+}
+
+@test "bot_env_start puts a Bot token in GH_TOKEN for the steps a start runs" {
+  opt_in
+  git config --global skills.bot.helper bot-helper
+
+  run bot_env_start_in "${clone}" maro/x
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "ghs_test_token" ]
+  grep -q -- "token maro/x" "${tmp}/helper-calls"
+}
+
+@test "bot_env_start puts no token in GH_TOKEN when the clone does not opt in" {
+  git config --global skills.bot.helper bot-helper
+
+  run bot_env_start_in "${clone}" maro/x
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "" ]
+}
+
+@test "bot_env_start refuses with a reason when the helper is unset" {
+  opt_in
+  git config --global --unset skills.bot.helper || true
+
+  run bot_env_start_in "${clone}" maro/x
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"skills.bot.helper"* ]]
+}
+
+@test "a commit in the worktree is authored by the Bot" {
+  opt_in
+  git config --global skills.bot.helper bot-helper
+  run apply_in "${clone}" "${wt}"
+  [ "${status}" -eq 0 ]
+
+  (cd "${wt}" && echo content >file && git add file && git commit -q -m change)
+  [ "$(git -C "${wt}" log -1 --format='%an <%ae>')" = "maronium[bot] <123+maronium[bot]@users.noreply.github.com>" ]
+}
+
+@test "apply refuses an SSH remote instead of pushing with the person's key" {
+  opt_in
+  git config --global skills.bot.helper bot-helper
+  git remote set-url origin "ssh://git@github.com:443/maro/x.git"
+
+  run apply_in "${clone}" "${wt}"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"not an HTTPS GitHub URL"* ]]
+  [ -z "$(git -C "${wt}" config --get skills.bot.identity)" ]
+}
+
+@test "apply refuses an SSH push URL even when the fetch URL is HTTPS" {
+  opt_in
+  git config --global skills.bot.helper bot-helper
+  git remote set-url --push origin "ssh://git@github.com:443/maro/x.git"
+
+  run apply_in "${clone}" "${wt}"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"not an HTTPS GitHub URL"* ]]
+  [ -z "$(git -C "${wt}" config --get skills.bot.identity)" ]
+}
+
+@test "apply refuses a push URL that a pushInsteadOf rule rewrites to SSH" {
+  opt_in
+  git config --global skills.bot.helper bot-helper
+  git config "url.ssh://git@github.com/.pushInsteadOf" "https://github.com/maro/x.git"
+
+  run apply_in "${clone}" "${wt}"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"not an HTTPS GitHub URL"* ]]
+  [ -z "$(git -C "${wt}" config --get skills.bot.identity)" ]
+}
+
+@test "apply refuses an SSH fetch URL even when the push URL is HTTPS" {
+  opt_in
+  git config --global skills.bot.helper bot-helper
+  git remote set-url origin "ssh://git@github.com:443/maro/x.git"
+  git remote set-url --push origin "https://github.com/maro/x-push.git"
+
+  run apply_in "${clone}" "${wt}"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"not an HTTPS GitHub URL"* ]]
+}
+
+@test "apply refuses a fetch URL that insteadOf rewrites to SSH" {
+  opt_in
+  git config --global skills.bot.helper bot-helper
+  # The push URL stays the HTTPS one, and only the fetch is rewritten to SSH.
+  git remote set-url --push origin "https://github.com/maro/other.git"
+  git config "url.ssh://git@github.com/.insteadOf" "https://github.com/maro/x.git"
+
+  run apply_in "${clone}" "${wt}"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"not an HTTPS GitHub URL"* ]]
+}
+
+@test "apply accepts an HTTPS push URL that differs from the fetch URL" {
+  opt_in
+  git config --global skills.bot.helper bot-helper
+  git remote set-url --push origin "https://github.com/maro/x-push.git"
+
+  run apply_in "${clone}" "${wt}"
+  [ "${status}" -eq 0 ]
+  [ "$(git -C "${wt}" config --get skills.bot.identity)" = "maronium" ]
+}
+
+@test "apply clears the identity when the clone opts out, so a reused worktree keeps nothing" {
+  opt_in
+  git config --global skills.bot.helper bot-helper
+  run apply_in "${clone}" "${wt}"
+  [ "${status}" -eq 0 ]
+
+  git config --unset skills.bot
+  run apply_in "${clone}" "${wt}"
+  [ "${status}" -eq 0 ]
+  [ "$(git -C "${wt}" config user.name)" = "owner" ]
+  [ -z "$(git -C "${wt}" config --get skills.bot.identity)" ]
+  [ "$(git -C "${wt}" config --get credential.https://github.com.helper)" = "!owner-helper" ]
+}
+
+@test "apply refuses a worktree with submodules, whose own settings would keep the person's credentials" {
+  opt_in
+  git config --global skills.bot.helper bot-helper
+  : >"${wt}/.gitmodules"
+
+  run apply_in "${clone}" "${wt}"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"${wt} has submodules"* ]]
+  [ -z "$(git -C "${wt}" config --get skills.bot.identity)" ]
+}
+
+@test "a start refuses a clone with submodules before it creates a worktree" {
+  opt_in
+  git config --global skills.bot.helper bot-helper
+  : >"${clone}/.gitmodules"
+
+  run bash "${start}" owner maro/x 5
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"submodules"* ]]
+  [ "$(git worktree list --porcelain | grep -c '^worktree ')" -eq 2 ]
+}
+
+@test "a helper named by the clone's own config is ignored" {
+  opt_in
+  git config skills.bot.helper "sh -c 'echo leaked >${tmp}/leaked'"
+  git config --global --unset skills.bot.helper || true
+
+  run bot_token_in "${clone}" maro/x
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"skills.bot.helper"* ]]
+  [ ! -e "${tmp}/leaked" ]
+}
+
+@test "oe start reads the Bot id before any step and starts nothing when it fails" {
+  opt_in
+  git config --global skills.bot.helper bot-helper
+
+  GH_BOT_ID=nope run bash "${start}" owner maro/x 5
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"GitHub user id"* ]]
+  [ "$(git worktree list --porcelain | grep -c '^worktree ')" -eq 2 ]
+}
+
+@test "oe start refuses to start an agent when the clone opts in but the helper is unset" {
+  opt_in
+  git config --global --unset skills.bot.helper || true
+
+  run bash "${start}" owner maro/x 5
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"skills.bot.helper"* ]]
+  [ "$(git worktree list --porcelain | grep -c '^worktree ')" -eq 2 ]
+}
