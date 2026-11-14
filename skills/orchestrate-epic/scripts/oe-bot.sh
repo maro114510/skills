@@ -6,6 +6,7 @@
 # | bot_login | Prints the opt-in login of this clone, without the [bot] suffix, or nothing |
 # | bot_identity_login | Prints the Bot login this worktree carries, or nothing |
 # | bot_identity_apply <worktree> | Applies the identity to one fresh worktree, or does nothing when the clone does not opt in |
+# | bot_git <git args...> | Runs git with the Bot as its only credential source in an opted-in clone |
 # | bot_env <owner/repo> | Puts a fresh Bot token in GH_TOKEN when this worktree carries the identity |
 # | bot_env_start <owner/repo> | Puts a fresh Bot token in GH_TOKEN for the steps a start runs, in an opted-in clone |
 # | bot_require_ready <owner/repo> | Refuses with a reason when the clone opts in but a start could not act as the Bot |
@@ -59,6 +60,22 @@ bot_token() {
     return 1
   fi
   printf '%s\n' "${out}"
+}
+
+# Runs git with the Bot as its only credential source, so a fetch that runs before the worktree
+# carries the identity never answers with the person's credential, and a helper that declines fails
+# instead of asking. Outside an opted-in clone it runs git unchanged.
+bot_git() {
+  local helper
+  if [[ -z "$(bot_login)" ]]; then
+    git "$@"
+    return
+  fi
+  helper="$(bot_helper)" || return 1
+  git -c credential.https://github.com.helper= \
+    -c credential.https://github.com.helper="!${helper}" \
+    -c "credential.https://github.com.helper=!f() { echo quit=true; }; f" \
+    -c credential.https://github.com.useHttpPath=true "$@"
 }
 
 # Puts a fresh token in GH_TOKEN when this worktree carries the identity, and does nothing otherwise.

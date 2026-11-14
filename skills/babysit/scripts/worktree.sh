@@ -97,7 +97,7 @@ bot_config_ready || fail "the Bot identity is not ready"
 # A private ref, so neither FETCH_HEAD nor a branch of the user's changes. Git forbids a ref component that
 # starts with "." or ends in ".lock", and a repository can be named like that (owner/.github), so "." is encoded.
 ref="refs/babysit/${lowered//./%2e}/${pr}"
-git fetch --quiet origin "+refs/heads/${branch}:${ref}" || fail "cannot fetch ${branch} from origin"
+bot_git fetch --quiet origin "+refs/heads/${branch}:${ref}" || fail "cannot fetch ${branch} from origin"
 sha="$(git rev-parse --verify "${ref}^{commit}")" || fail "cannot read the fetched head"
 [[ -z "${expected}" || "${expected}" == "${sha}" ]] || fail "the head moved: origin has ${sha}, expected ${expected}"
 

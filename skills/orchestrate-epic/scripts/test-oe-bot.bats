@@ -273,6 +273,23 @@ EOF
   [[ "${output}" == *"1Password is locked"* ]]
 }
 
+@test "bot_git answers a credential request with the Bot, not the owner" {
+  opt_in
+  git config --global skills.bot.helper bot-helper
+  printf 'protocol=https\nhost=github.com\npath=maro/x.git\n\n' >"${tmp}/request"
+
+  run bash -c 'cd "$1" && source "$2" && bot_git credential fill <"$3"' _ "${clone}" "${script}" "${tmp}/request"
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"password=ghs_test_token"* ]]
+  [ ! -e "${tmp}/owner-calls" ]
+}
+
+@test "bot_git leaves git alone when the clone does not opt in" {
+  run bash -c 'cd "$1" && source "$2" && bot_git config --get credential.https://github.com.helper' _ "${clone}" "${script}"
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "!owner-helper" ]
+}
+
 @test "bot_env_start puts a Bot token in GH_TOKEN for the steps a start runs" {
   opt_in
   git config --global skills.bot.helper bot-helper
