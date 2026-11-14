@@ -66,16 +66,31 @@ bot_token() {
 # carries the identity never answers with the person's credential, and a helper that declines fails
 # instead of asking. Outside an opted-in clone it runs git unchanged.
 bot_git() {
-  local helper
+  local helper url header
+  local -a scoped
   if [[ -z "$(bot_login)" ]]; then
     git "$@"
     return
   fi
   helper="$(bot_helper)" || return 1
-  git -c credential.https://github.com.helper= \
-    -c credential.https://github.com.helper="!${helper}" \
-    -c "credential.https://github.com.helper=!f() { echo quit=true; }; f" \
-    -c credential.https://github.com.useHttpPath=true "$@"
+  scoped=(
+    -c credential.https://github.com.helper=
+    -c credential.https://github.com.helper="!${helper}"
+    -c "credential.https://github.com.helper=!f() { echo quit=true; }; f"
+    -c credential.https://github.com.useHttpPath=true
+    -c http.https://github.com/.extraheader=
+  )
+  # A key with a longer path is more specific than the reset above and would still answer, so
+  # refuse rather than let an Authorization header ride along with the fetch.
+  url="$(git remote get-url origin 2>/dev/null)" || url=""
+  if [[ -n "${url}" ]]; then
+    header="$(git "${scoped[@]}" config --get-urlmatch http.extraheader "${url}" 2>/dev/null)" || header=""
+    if [[ -n "${header}" ]]; then
+      echo "a http authorization header is configured for ${url}, which no credential helper can replace" >&2
+      return 1
+    fi
+  fi
+  git "${scoped[@]}" "$@"
 }
 
 # Puts a fresh token in GH_TOKEN when this worktree carries the identity, and does nothing otherwise.

@@ -22,6 +22,7 @@ If any of the first four is missing, end without changing anything and say which
 
 ## Rules
 
+- Run `oe question` and `oe rereview` from `<worktree>`, as written below, because the Bot identity is read from that worktree's git config.
 - Write to GitHub only by `git push` without force, `create-linked-pr.sh`, `oe question` without `--answer`, and `oe rereview`. Never record an answer, because an answer counts as the person's even under the agents' bot, and only the orchestrate-epic session records one from the person's reply. Never comment, reply to or resolve a review thread, review, edit a PR or Issue, or touch a label, because oe ready reads any unmarked comment from this token as engineer input.
 - Never merge, enable auto-merge, or bypass a push guard such as a hook that asks for approval.
 - Work only in `<worktree>`. Never switch, pull, or edit the shared checkout or another worktree.
@@ -81,7 +82,7 @@ If any of the first four is missing, end without changing anything and say which
    Write a Question this way:
 
    ```bash
-   bash <skills-root>/orchestrate-epic/scripts/oe question <repo> <issue> <<'EOF'
+   (cd <worktree> && bash <skills-root>/orchestrate-epic/scripts/oe question <repo> <issue>) <<'EOF'
    <the question>
    EOF
    ```
@@ -111,7 +112,7 @@ If any of the first four is missing, end without changing anything and say which
 10. Ask the bots to review again. This step follows any push, because the repair may have come from a bot finding:
 
     ```bash
-    bash <skills-root>/orchestrate-epic/scripts/oe rereview <repo> <issue>
+    (cd <worktree> && bash <skills-root>/orchestrate-epic/scripts/oe rereview <repo> <issue>)
     ```
 
     It asks only the bots the latest `attempt` record names, one marked PR comment each, and writes nothing when it names none. A non-zero exit ends the run after the push that already happened, and the error is worth reporting.

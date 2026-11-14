@@ -284,6 +284,26 @@ EOF
   [ ! -e "${tmp}/owner-calls" ]
 }
 
+@test "bot_git clears an inherited host-scoped http header" {
+  opt_in
+  git config --global skills.bot.helper bot-helper
+  git config --global http.https://github.com/.extraheader "Authorization: Basic OWNER"
+
+  run bash -c 'cd "$1" && source "$2" && bot_git config --get-urlmatch http.extraheader https://github.com/maro/x.git' _ "${clone}" "${script}"
+  [ "${status}" -eq 0 ]
+  [ -z "${output}" ]
+}
+
+@test "bot_git refuses a path-scoped http header it cannot clear" {
+  opt_in
+  git config --global skills.bot.helper bot-helper
+  git config --global "http.https://github.com/maro/x.git.extraheader" "Authorization: Basic OWNER"
+
+  run bash -c 'cd "$1" && source "$2" && bot_git fetch --quiet origin "+refs/heads/main:refs/babysit/x"' _ "${clone}" "${script}"
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"authorization header"* ]]
+}
+
 @test "bot_git leaves git alone when the clone does not opt in" {
   run bash -c 'cd "$1" && source "$2" && bot_git config --get credential.https://github.com.helper' _ "${clone}" "${script}"
   [ "${status}" -eq 0 ]
