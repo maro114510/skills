@@ -820,6 +820,41 @@ sibling_merged() {
   [ "$(action_of 5)" = start-verifier ]
 }
 
+@test "a head whose update was requested less than 10 minutes ago waits for its new head instead of updating again" {
+  sibling_merged success '[40]'
+  records 5 "update@07:55#$(printf 'b%.0s' {1..38})50"
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-update ]
+  [ -z "$(field_of 5 4)" ]
+}
+
+@test "a head that still lacks the merged sibling 10 minutes after its update was requested is parked" {
+  sibling_merged success '[40]'
+  records 5 "update@07:50#$(printf 'b%.0s' {1..38})50"
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = parked ]
+  case "$(field_of 5 3)" in
+  *"oe update"*) ;;
+  *) return 1 ;;
+  esac
+}
+
+@test "an update requested on an earlier head does not hold back the update of the current head" {
+  sibling_merged success '[40]'
+  records 5 "update@07:50#$(printf 'a%.0s' {1..40})"
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = update-branch ]
+}
+
 @test "a head that conflicts with the base gives start-owner with the conflict as its reason, not an update" {
   sibling_merged success '[40]'
   jq '.issues[1].pull_requests[0].conflicting = true' "${OE_GITHUB}" >"${OE_GITHUB}.new" && mv "${OE_GITHUB}.new" "${OE_GITHUB}"

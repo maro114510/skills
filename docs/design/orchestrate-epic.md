@@ -154,7 +154,7 @@ For each Issue, oe ready reads this table from the top and outputs the action of
 | 6 | Work | Any repair signal below is present | Park the Issue when it already has 3 attempts, or when its latest 3 Owner starts pushed nothing. Otherwise start an Owner |
 | 7 | Verification | A check on the PR's head SHA is pending, or the SHA has had no checks for less than 10 minutes | Wait for CI |
 | 8 | Verification | The PR's head SHA still has no checks after 10 minutes | Park the Issue |
-| 9 | Verification | The PR's head SHA does not contain the commit that merged a sibling PR into the base branch | Update the branch with the base branch through GitHub with oe update (`update-branch`), starting no agent and spending no attempt |
+| 9 | Verification | The PR's head SHA does not contain the commit that merged a sibling PR into the base branch | Update the branch with the base branch through GitHub with oe update (`update-branch`), starting no agent and spending no attempt. Once an update was requested on that SHA, wait for the new head (`wait-update`), and park the Issue when the SHA has not moved 10 minutes after the request |
 | 10 | Verification | The PR's head SHA has neither a success nor a failure verdict | Start a Verifier, or park the Issue when the SHA already has 2 pending statuses |
 | 11 | Verification | The PR's head SHA has a success verdict | Wait for an engineer to merge |
 
@@ -292,6 +292,7 @@ sequenceDiagram
 
 - The token is shared, so a verdict status can be forged
 - The branch update starts the new head's checks only when the identity oe runs under is one whose pushes start workflows. A push made with the workflow's own `GITHUB_TOKEN` starts none, so a head that still has no checks after 10 minutes is parked at row 8
+- An update that fails once, even for a passing cause such as a network error, is not retried on the same head, and the Issue parks 10 minutes later
 - When a commit other than a sibling PR lands on the base branch after verification, nothing is verified again
 - A PR the engineer merges before its branch is updated and verified again lands without being verified against a sibling PR merged before it, as when two sibling PRs merge between two reads
 - Workflows the AI changed run with the repository's secrets
