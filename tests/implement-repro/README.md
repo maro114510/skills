@@ -23,7 +23,7 @@ With a harness, copy `template/` to a new directory, commit it on `main` with a 
 Then run implement on a case, from that repository, where `<co>` is this checkout:
 
 ```bash
-claude -p "Follow <co>/skills/implement/SKILL.md, and <co>/skills/commit/SKILL.md for commits, on the repository in the current directory. Nobody can answer: where the skill would ask or open difit, stop and print it. Never push or open a PR; there is no Issue. \$ARGUMENTS is the text after the line ARGUMENTS.
+claude -p "Follow <co>/skills/implement/SKILL.md, and <co>/skills/commit/SKILL.md for commits, on the repository in the current directory. Never push or open a PR; there is no Issue. \$ARGUMENTS is the text after the line ARGUMENTS.
 
 ARGUMENTS
 $(cat <co>/tests/implement-repro/cases/<case>.md)" \
@@ -31,7 +31,8 @@ $(cat <co>/tests/implement-repro/cases/<case>.md)" \
   --allowedTools "Bash,Read,Edit,Write,Glob,Grep,Skill,Task"
 ```
 
-To run without a human, make a linked worktree first and say in the prompt that no human is reachable, which worktree to work in, and where to write questions.
+implement behaves the same whoever calls it, so one command covers every caller: it ends by returning Busy, Questions, or Built, and never asks.
+To hand it a worktree, make a linked worktree first and name it in the prompt.
 
 The agent can run any command with your credentials.
 Run it in a throwaway environment, without `gh` signed in, and with the skills directory read-only.
@@ -49,14 +50,15 @@ For `missing-precondition`, also run the final `tests/` against `src/` of `origi
 
 One run per row on 2026-10-26, on the last commit of this branch, with Claude Code 2.1.310 in headless mode (`claude -p`) and the model `sonnet`, on this checkout's own `skills/implement/SKILL.md`.
 The recorded runs used the same instructions as the command above, worded a little longer, and also told the agent to use no installed copy of either skill.
+The runs predate the single flow: the rows run in the checkout ran as the old normal mode, and the rows run in a handed worktree as the old autonomous mode.
 Every run passed the suite in default order and shuffled for seeds 1 to 5, and for `missing-precondition` one `FAIL:` and no `ERROR:` on the unfixed `src/`.
 
-| Harness | Model | Mode | Case | Result | Commits |
+| Harness | Model | Run | Case | Result | Commits |
 |---|---|---|---|---|---|
-| claude 2.1.310 | sonnet | normal | `missing-precondition` | pass | `test:` that converts before `rates_set`, then `fix:` |
-| claude 2.1.310 | sonnet | autonomous | `missing-precondition` | pass | Same |
-| claude 2.1.310 | sonnet | normal | `order-dependence` | pass | Stub, `test:`, `feat:`, then a `test:` and `fix:` pair; `SHARED_CART` is not used |
-| claude 2.1.310 | sonnet | autonomous | `order-dependence` | pass | Stub, `test:`, `feat:`; `SHARED_CART` is not used |
+| claude 2.1.310 | sonnet | in the checkout | `missing-precondition` | pass | `test:` that converts before `rates_set`, then `fix:` |
+| claude 2.1.310 | sonnet | in a handed worktree | `missing-precondition` | pass | Same |
+| claude 2.1.310 | sonnet | in the checkout | `order-dependence` | pass | Stub, `test:`, `feat:`, then a `test:` and `fix:` pair; `SHARED_CART` is not used |
+| claude 2.1.310 | sonnet | in a handed worktree | `order-dependence` | pass | Stub, `test:`, `feat:`; `SHARED_CART` is not used |
 
 ## Limits
 

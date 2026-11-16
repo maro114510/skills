@@ -45,12 +45,13 @@
 # | oe-ready.jq | Every rule that turns a response into an action |
 # | oe-bots.jq | The review bots whose findings start a repair, and how a finding is read |
 # | oe-records.jq | Which comments count as questions and as engineer input |
+# | oe-starts.jq | Which Owner starts pushed and count as attempts |
 # | oe-config.sh | The limits and names shared with oe's writers |
 # | oe-store.sh | Where each Issue's claim and attempt records live on this host |
 #
 # Reads, in order
 #
-# 1. The Epic read gives the default branch head, its checks, and the child Issues.
+# 1. The Epic read gives the default branch name and the child Issues.
 # 2. One read per Issue, with its claim and attempt records from this host, gives everything else, including the head of its newest PR.
 #    No read lists the repository's open PRs, so the cost grows with the child Issues and not with the PRs of the repository.
 # 3. Commit statuses give the verdict on each head and the number of Verifier starts.
@@ -58,7 +59,8 @@
 # 5. One compare per listed head, when another Issue's pull request merged into the default branch,
 #    gives whether the head contains that merge.
 #
-# Reads 1 and 2 hold 100 checks of a commit, and one more read per page gives the rest.
+# Read 2 holds 100 checks of a commit, and one more read per page gives the rest.
+# No read covers the default branch's checks, so its state never decides an action.
 set -uo pipefail
 
 dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -103,8 +105,9 @@ issue_query="$(<"${dir}/oe-ready-issue.graphql")" || fail "cannot read oe-ready-
 checks_query="$(<"${dir}/oe-ready-checks.graphql")" || fail "cannot read oe-ready-checks.graphql"
 trust="$(<"${dir}/oe-records.jq")" || fail "cannot read oe-records.jq"
 bots="$(<"${dir}/oe-bots.jq")" || fail "cannot read oe-bots.jq"
+starts="$(<"${dir}/oe-starts.jq")" || fail "cannot read oe-starts.jq"
 rules="$(<"${dir}/oe-ready.jq")" || fail "cannot read oe-ready.jq"
-rules="${trust}"$'\n'"${bots}"$'\n'"${rules}"
+rules="${trust}"$'\n'"${bots}"$'\n'"${starts}"$'\n'"${rules}"
 bot="$(bot_def)" || usage "Invalid git config skills.bot"
 
 # Prints the jq program that runs the entry point $1 of oe-ready.jq,
@@ -153,42 +156,22 @@ all_checks() {
 # Read 1: the Epic.
 epic_response="$(gh api graphql -f query="${epic_query}" -F owner="${repo%/*}" -F repo="${repo#*/}" -F epic="${epic}" \
   2>"${err}")" || fail "Epic read failed: $(head -n1 "${err}")"
-epic_response="$(all_checks "${epic_response}")" || exit 1
 epic_lines="$(jq -r "$(program epic_lines)" <<<"${epic_response}" 2>"${err}")" ||
   fail "Epic read failed: $(head -n1 "${err}")"
 
 issues=()
-closed=" "
-default_line=""
-while IFS=$'\t' read -r kind a b c d; do
+default_name=""
+while IFS=$'\t' read -r kind a b; do
   case "${kind}" in
-  default) default_line="${a}"$'\t'"${b}"$'\t'"${c}"$'\t'"${d}" ;;
+  default) default_name="${a}" ;;
   issue)
     [[ "${b}" =~ ^(OPEN|CLOSED)$ ]] || fail "unknown state of Issue #${a}: ${b}"
     issues+=("${a}")
-    [[ "${b}" == OPEN ]] || closed+="${a} "
     ;;
   *) fail "unexpected Epic read line: ${kind}" ;;
   esac
 done <<<"${epic_lines}"
-IFS=$'\t' read -r default_name default_sha default_ci default_detail <<<"${default_line}"
-[[ "${default_name}" =~ ^[A-Za-z0-9._/-]+$ && "${default_sha}" =~ ^[0-9a-f]{40}$ &&
-  "${default_ci}" =~ ^(none|pending|failed|passed)$ ]] ||
-  fail "default branch head unreadable"
-
-# Rows 1 and 2 of the next-action table gate every open Issue on the default branch head.
-#
-# | Row | When | Result |
-# |---|---|---|
-# | 1 | A check on the head failed | Every open Issue gets wait-base, and every closed Issue gets done |
-# | 2 | A check on the head is pending, or the head has no checks | Every Issue goes on to rows 3 to 13 |
-#
-# Row 2 holds nothing, because a pending or missing check does not show the default branch is broken,
-# and each pull request's own CI still runs on its merge base.
-gate_reason=""
-if [[ "${default_ci}" == failed ]]; then
-  gate_reason="checks failed on ${default_name} head ${default_sha:0:7}: ${default_detail//[$'\t\r']/ }"
-fi
+[[ "${default_name}" =~ ^[A-Za-z0-9._/-]+$ ]] || fail "default branch unreadable"
 
 # Prints $1 in single quotes, so a shell reads it back unchanged in any locale.
 shell_quote() {
@@ -263,28 +246,6 @@ print_lines() {
 }
 
 out=""
-if [[ -n "${gate_reason}" ]]; then
-  for n in ${sorted[@]+"${sorted[@]}"}; do
-    # A closed Issue starts nothing, so the gate has nothing to hold, and holding it would hide that the Epic is done.
-    if [[ "${closed}" == *" ${n} "* ]]; then
-      action="done" reason=closed
-    else
-      action=wait-base reason="${gate_reason}"
-    fi
-    if [[ "${entry}" == classify ]]; then
-      out+="${n}"$'\t'"${action}"$'\t'"${reason}"$'\n'
-    else
-      out+="$(jq -cn --argjson n "${n}" --arg action "${action}" --arg reason "${reason}" \
-        '{number: $n, action: $action, reason: $reason}')"$'\n' || fail "cannot format Issue #${n}"
-    fi
-  done
-  if [[ "${entry}" == classify ]]; then
-    print_lines "${out}"
-  else
-    printf '%s' "${out}"
-  fi
-  exit 0
-fi
 
 # Read 2: each Issue.
 responses=()
@@ -368,12 +329,12 @@ while IFS=$'\t' read -r n sha; do
   esac
 done <<<"${pulls}"
 
-# Each Issue, classified by rows 3 to 13 in oe-ready.jq.
-# Only the kind, time, and bots of claim and attempt records decide an action, so verdict findings stay out of the program.
+# Each Issue, classified by oe-ready.jq.
+# Only the kind, time, bots, and branch head of claim and attempt records decide an action, so verdict findings stay out of the program.
 i=0
 for n in ${sorted[@]+"${sorted[@]}"}; do
   issue_records="$(records_read "${repo}" "${n}" 2>"${err}")" || fail "$(head -n1 "${err}")"
-  issue_records="$(jq -c 'map(select(.kind == "claim" or .kind == "attempt") | {kind, at, bots})' <<<"${issue_records}")" ||
+  issue_records="$(jq -c 'map(select(.kind == "claim" or .kind == "attempt") | {kind, at, bots, head})' <<<"${issue_records}")" ||
     fail "records of Issue #${n} unreadable"
   line="$(jq -r "$(program "${entry}" "${pr_heads%,}" "${issue_records}" "${stale_heads%,}")" <<<"${responses[i]}" 2>"${err}")" ||
     fail "Issue #${n} read failed: $(head -n1 "${err}")"
