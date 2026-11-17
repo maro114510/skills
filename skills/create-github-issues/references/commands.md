@@ -129,7 +129,7 @@ Script output is not proof: read the relations back before Step 6 and stop on an
 gh api graphql -f query='{ __type(name:"Issue"){ fields { name } } }'
 ```
 
-Sub-issue count: Epic sub-issues are the `Tn` level only, so the expected count is the number of non-dotted ids created. Run the same query for each container `Tn`, expecting its created `Tn.m`.
+Sub-issue count: Epic sub-issues are the `Tn` level only, so the expected count is the number of non-dotted `Tn` ids created, never counting a person Issue. Run the same query for each container `Tn`, expecting its created `Tn.m`.
 
 ```bash
 gh api graphql -f owner="<owner>" -f name="<name>" -F number=<Epic number> -f query='
