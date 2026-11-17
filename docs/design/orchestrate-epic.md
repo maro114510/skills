@@ -35,10 +35,10 @@ oe starts no agent, edits no code, and never merges a PR. Its only writes to a P
 
 | Part | Job | Writes to |
 |---|---|---|
-| Host-local record store | Keeps each Issue's claim, attempt, update, run, and verdict records until oe forget drops them, and each Epic's lock, board pane, and running oe wait, as the layout below says | `$OE_STATE_DIR`, or else `$XDG_STATE_HOME/orchestrate-epic` or `~/.local/state/orchestrate-epic` |
-| oe lock | Refuses a second session for the same Epic on the same host while the first one's process runs | The Epic's ref in the lock store |
+| Host-local record store | Keeps each Issue's claim, attempt, update, run, and verdict records, each Epic's sessions, and each Epic's lock, board pane, and running oe wait, as the layout below says. Nothing drops a claim, attempt, update, run, verdict, or sessions record | `$OE_STATE_DIR`, or else `$XDG_STATE_HOME/orchestrate-epic` or `~/.local/state/orchestrate-epic` |
+| oe lock | Refuses a second session for the same Epic on the same host while the first one's process runs, and records each session that takes the lock | The Epic's ref in the lock store, and the Epic's sessions record |
 | oe ready | Reads GitHub and the record store and prints each Issue's next action, with the oe start command for an action that starts an agent, and names each running agent | nothing |
-| oe start | Runs every step that starts an Owner or a Verifier for one Issue, from oe claim to oe brief, records the agent as running, and prints the agent's prompt | What those steps write, and a run record |
+| oe start | Runs every step that starts an Owner or a Verifier for one Issue, from oe claim to oe brief, records the agent as running with the session ID of the session that started it, and prints the agent's prompt | What those steps write, and a run record |
 | oe wait | Blocks until oe ready's next actions change, reading GitHub as Polling and Rate limit under Decisions say, and tells the person as Notifications under Decisions says | The record store, and the configured notification command |
 | oe status | Shows each Issue's step, PR, CI result, verdict and failure reason, attempts, running agent, Wait state, and time in step. `--watch` refreshes it until the session holding the Epic's lock ends | nothing |
 | oe board | Inside Herdr with git config `skills.herdr` true, opens a pane that runs `oe status --watch`, or reuses the Epic's pane from an earlier start | A Herdr pane, and the pane's record on this host |
@@ -51,7 +51,6 @@ oe starts no agent, edits no code, and never merges a PR. Its only writes to a P
 | oe update | Updates an Issue branch with the base branch through GitHub when oe ready shows its head lacks a merged sibling PR. It starts no agent and spends no attempt, and records the head it replaced so the merge is never read as an Owner's push | A merge commit on the Issue branch, and an update record |
 | oe verdict | Writes a Verifier's verdict and findings | A commit status on the SHA, and the record store |
 | oe records | Prints an Issue's records from its latest claim on, for an Owner | nothing |
-| oe forget | Drops an Epic's records once every child Issue is closed | The record store |
 
 The record store lays out its state as `oe-store.sh` defines.
 
@@ -59,6 +58,7 @@ The record store lays out its state as `oe-store.sh` defines.
 |---|---|
 | `locks.git` | A bare Git repository with one ref per Epic, naming the session that holds the Epic's lock |
 | `records/<repo-key>/<issue>.jsonl` | One Issue's claim, attempt, update, run, and verdict records, oldest first, one JSON object per line. A verdict record holds its findings |
+| `sessions/<repo-key>/<epic>.jsonl` | One line for each time a session took the Epic's lock, oldest first: the time, the checkout it ran in, and the session ID when the harness gave one |
 | `boards/<repo-key>/<epic>` | The Herdr pane of the Epic's board |
 | `waits/<repo-key>/<epic>` | The process of the Epic's running oe wait |
 | `notices/<repo-key>/<epic>` | Each item that needed the person at oe wait's latest read, with when the person was last told about it |
@@ -286,6 +286,19 @@ sequenceDiagram
 | Bot finding | CodeRabbit reports a Major finding. An Owner checks it in the code, repairs, pushes, and asks CodeRabbit to review again. A Major finding in that re-review goes to the engineer. A Minor finding starts nothing |
 | Reached cap | When a repair signal remains after 3 attempts, the Issue is parked and the Issues that depend on it stop too. The engineer either finishes and merges it by hand, or deletes the branch so the AI starts over |
 
+## Reviewing a run
+
+oe keeps the facts of a run as they are and never scores them. These viewpoints say where each is.
+
+| Viewpoint | Where the facts are |
+|---|---|
+| Result | The Issue and PR on GitHub, the verdict and CI on the merged head, and the manual checks left in the PR body |
+| Human involvement | Questions, answers, unmarked comments, and Changes requested reviews on GitHub, and the person's messages in the session's log |
+| Scope | The Issue body and the PR's diff on GitHub |
+| Environment | The session's log, which holds oe's exit codes for a failed start or read, and its stderr for a rate-limit wait |
+| Retries | The attempt, update, run, and verdict records, and the commit statuses on each head |
+| Agent internals | The agent's log in the harness, found from the session's log by the time and the Issue |
+
 ## Accepted Risks
 
 - The token is shared, so a verdict status can be forged
@@ -299,6 +312,9 @@ sequenceDiagram
 - oe lock works only within one host, so a session for the same Epic on another host lets two agents touch the same branch
 - Resuming an Epic on another host, or after losing the record store, resets attempt counts, bot rounds, and findings, and earlier engineer input and bot findings count as repair signals again
 - Records carry the host's clock, so clock skew can misorder them against GitHub events
+- An Issue closed and reopened with its branch kept keeps its attempts, so it parks when a repair signal is present and 3 attempts are used; deleting its branch starts a new claim
+- A Verifier that outlives its session and writes its verdict after a replacement session started another Verifier on the same head is traced to the later run, because a verdict carries no session
+- When the agents and the person write as one account, a person's push counts as an Owner attempt, and a person's comment or review cannot be told from an agent's
 - A session killed while its agents run leaves them running, and the next session can start a second agent on the same Issue
 - oe ready reads only the newest PR with an Issue's branch name, so a newer PR from a fork with that name hides the Issue's own PR; its Owners find nothing to repair, and the Issue parks
 - A bot that drops the level word from its first line or skips draft PRs has its findings missed
@@ -339,7 +355,8 @@ sequenceDiagram
 | Worktrees | An agent's worktree is removed when the agent ends, and unpushed work is discarded |
 | Where records go | The record store, because comments under the user's account cluttered timelines. Only questions, answers, and re-review requests stay on GitHub, in a fixed format that says an agent or the session wrote them |
 | Record key | Repository and Issue: an Issue has one parent Epic, and no writer is given the Epic |
-| Dropping records | oe forget, which the session runs when it ends with every Issue of its Epic done. It refuses while an Issue is open, and oe ready stays read-only |
+| Keeping records | Records and sessions are never dropped, because an Issue's attempt heads and a verdict's findings exist nowhere else, and a run that ended or died leaves no later chance to keep them. Only the records of an Issue that is closed and then reopened with its branch kept can count again, as Accepted Risks says |
+| The session's identity | oe lock records a session after it takes the lock, and not when the same token, process, and process start take it again. oe start writes the same session ID on each run record, so a verdict traces to the session that started the Verifier before it, not to the lock's latest holder. A line that cannot be written is reported on stderr and never fails the lock, because no reader decides from it. oe records the session ID the harness puts in the environment, `OE_SESSION_ID`, then `CLAUDE_CODE_SESSION_ID`, `CODEX_THREAD_ID`, and `DSH_SESSION_ID`, so a session that passes nothing is still recorded, and none when no variable is set. Without an ID, the checkout and the time locate the session in the harness's log |
 | Acceptance checks | No agent checks a box that needs a human, template boxes included |
 | The board in Herdr | Opt-in with git config `skills.herdr`, read only inside Herdr, so no other run calls herdr and no Herdr user gets a pane unasked |
 | Board start | oe board types the board command into the pane, and the pane's shell runs it only after its startup files finish, so output they print, such as direnv's "is taking a while" warning, comes before the board. The board clears the screen and shows one line before its first read. When the shell has not finished within `board_start_timeout`, oe board exits 1 saying so and records when it sent the command, and a rerun within 10 minutes waits for that start and types nothing again |
