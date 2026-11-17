@@ -292,7 +292,7 @@ oe keeps the facts of a run as they are and never scores them. These viewpoints 
 
 | Viewpoint | Where the facts are |
 |---|---|
-| Result | The Issue and PR on GitHub, the verdict and CI on the merged head, and the manual checks left in the PR body |
+| Result | The Issue and PR on GitHub, the verdict and CI on the PR's last head before the merge, which is the SHA the retained verdict record names, and the manual checks left in the PR body |
 | Human involvement | Questions, answers, unmarked comments, and Changes requested reviews on GitHub, and the person's messages in the session's log |
 | Scope | The Issue body and the PR's diff on GitHub |
 | Environment | The session's log, which holds oe's exit codes for a failed start or read, and its stderr for a rate-limit wait |
