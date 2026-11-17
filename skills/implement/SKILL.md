@@ -109,7 +109,7 @@ An item is open only if it survives the Phase 1 lookup and its remaining reading
 
 | # | Trigger | Fires when |
 |---|---|---|
-| 1 | Acceptance in doubt | Done cannot be judged because the criteria are missing and cannot be derived from the request's intent, or because they cannot be verified. This includes a criterion that neither a checkout of the repository nor its CI can observe, such as one that needs a deploy or a person; its Questions carry, after the question and outside its parts, a drafted Issue for that criterion and, when an Issue backs the request, the edit that moves the criterion there |
+| 1 | Acceptance in doubt | Done cannot be judged because the criteria are missing and cannot be derived from the request's intent, or because they cannot be verified. This includes a criterion that neither a checkout of the repository nor its CI can observe, such as one that needs a deploy or a person; its question's recommended option drafts an Issue for that criterion, naming its title and the criterion, and when an Issue backs the request, the edit that removes the criterion from it |
 | 2 | Premise in doubt | The request conflicts with what you observed: the bug does not reproduce, the target does not exist or already behaves as desired, the change cannot achieve its stated goal, or the request needs more than one change unit, as Split Check below says |
 | 3 | Sources contradict | The Issue body, comments, Epic, repository instructions, caller prompt, or criteria disagree with each other, and no later statement by the same author resolves it |
 | 4 | Unsettled critical decision | No source settles a decision where a wrong choice could cause a security exposure, data loss or corruption, financial harm, an irreversible change, or a broken public interface. Only an explicit statement or an established repository convention settles one, never your own inference |
@@ -239,8 +239,7 @@ Unsatisfied: <criterion> -> <reason>
 ## Phase 7: Finish
 
 1. Commit any uncommitted work with the `commit` skill, so the range holds the whole change. Give it the Issue number, as Phase 5 says. If a commit hook rewrote any file, rerun Phase 6.9 on the committed state.
-2. If Phase 6.9 left any criterion unsatisfied and a branch commit carries `Closes #<N>`, say so in the report, because create-pr copies that keyword into the PR.
-3. Release the Issue Claim if this run took one.
-4. Return Built: the Phase 6.9 table, the Phase 6.5 outcome with its reviewed HEAD, every commit in `<reviewed-head>..HEAD` as unreviewed, or all of the range when the outcome is `not-run` or `git merge-base --is-ancestor <reviewed-head> HEAD` fails, and every file the `commit` skill left uncommitted with every `reason:` line it listed.
+2. Release the Issue Claim if this run took one.
+3. Return Built: the Phase 6.9 table, the Phase 6.5 outcome with its reviewed HEAD, every commit in `<reviewed-head>..HEAD` as unreviewed, or all of the range when the outcome is `not-run` or `git merge-base --is-ancestor <reviewed-head> HEAD` fails, and every file the `commit` skill left uncommitted with every `reason:` line it listed.
 
 Never push, and never create a PR. The caller checks the range before it publishes anything.
