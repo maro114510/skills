@@ -116,8 +116,8 @@ bot="$(bot_def)" || usage "Invalid git config skills.bot"
 program() {
   printf 'def now_s: %s; def no_checks_grace: %s; def max_attempts: %s; def max_verifier_starts: %s;\n' \
     "${now}" "${no_checks_grace}" "${max_attempts}" "${max_verifier_starts}"
-  printf 'def verify_context: "%s"; def pr_heads: {%s}; def records: %s; def stale_heads: {%s};\n%s\n%s\n' \
-    "${verify_context}" "${2:-}" "${3:-[]}" "${4:-}" "${bot}"$'\n'"${rules}" "$1"
+  printf 'def verify_context: "%s"; def branch_prefix: "%s"; def pr_heads: {%s}; def records: %s; def stale_heads: {%s};\n%s\n%s\n' \
+    "${verify_context}" "${branch_prefix}" "${2:-}" "${3:-[]}" "${4:-}" "${bot}"$'\n'"${rules}" "$1"
 }
 
 err="$(mktemp)" || fail "mktemp failed"

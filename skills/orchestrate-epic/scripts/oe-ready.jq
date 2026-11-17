@@ -9,6 +9,7 @@
 # | max_attempts | Owner starts after the latest claim that pushed, or that pushed nothing in a row, before the Issue parks |
 # | max_verifier_starts | Verifier starts on one commit before the Issue parks |
 # | verify_context | The commit status context that holds the verdict |
+# | branch_prefix | The prefix of an Issue branch, followed by the Issue number |
 # | pr_heads | The verdict, the Verifier starts, and the push time of each open pull request head |
 # | records | The Issue's claim, attempt, and update records from this host, oldest first, each with kind and at |
 # | stale_heads | Each open pull request head that lacks the merge commit of a sibling pull request, with that pull request's number |
@@ -172,6 +173,7 @@ def issue_state:
       number: $issue.number,
       closed: ($issue.state == "CLOSED"),
       branch: $branch,
+      unclaimed: ($branch and $claim == null),
       merged_pr: $merged.number,
       abandoned_pr: (if $branch and $pr.state == "CLOSED" then $pr.number else null end),
       waiting_on: (if $branch then [] else
@@ -213,6 +215,7 @@ def issue_state:
 # | 1 | The Issue is closed | done |
 # | 2 | A pull request merged after the latest claim | wait-engineer |
 # | 2 | The branch exists and its pull request closed without merging | wait-engineer |
+# | 2 | The branch exists and has no claim record on this host | wait-engineer |
 # | 3 | No branch, and a dependency is not closed as completed | wait-dependencies |
 # | 4 | No branch, and every dependency is closed as completed | claim |
 # | 5 | The latest question has no answer after it | wait-answer |
@@ -247,6 +250,7 @@ def next_action:
   if .closed then act("done"; "closed")
   elif .merged_pr != null then act("wait-engineer"; "PR #\(.merged_pr) merged; the Issue is still open")
   elif .abandoned_pr != null then act("wait-engineer"; "PR #\(.abandoned_pr) closed without merging")
+  elif .unclaimed then act("wait-engineer"; "\(branch_prefix)\(.number) exists with no claim on this host")
   elif .branch | not then
     if (.waiting_on | length) > 0 then act("wait-dependencies"; .waiting_on | join(", "))
     else act("claim"; "every dependency completed") end
