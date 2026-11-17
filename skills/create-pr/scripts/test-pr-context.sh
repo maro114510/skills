@@ -368,4 +368,19 @@ run
 [[ "${rc}" == 0 && "$(grep -c '^== manual checks$' <<<"${out}")" == 1 && -z "$(section 'manual checks')" ]] && r=0 || r=1
 check "no issue: an empty manual checks section" "${r}"
 
+# 10. Checks in an issue's Verification stay with the issue: no section after issues copies them out.
+setup
+cat >"${STUB_DIR}/body.5" <<'BODY'
+## Acceptance Criteria
+
+### Verification
+
+#### Checks a person runs
+- Follow the README on a new Mac.
+BODY
+commit $'feat: a\n\nCloses #5' a
+run
+[[ "${rc}" == 0 && "$(grep '^== ' <<<"${out}" | tail -n 1)" == "== issues" && "$(section issues)" == $'Closes #5\tTitle of 5' ]] && r=0 || r=1
+check "closed issue with checks in Verification: the issues section is the last section" "${r}"
+
 exit "${fail}"
