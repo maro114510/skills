@@ -222,7 +222,7 @@ This phase always runs. Phase 2's criteria live in context, and context drifts t
 1. Re-fetch the source: the Issue body, linked spec, and caller's prompt. If it changed since Phase 2, say so first.
 2. Quote each acceptance criterion verbatim, because paraphrasing is where a criterion gets softened. A criterion derived from the request's intent has no source text, so prefix it with `(derived)` and never present it as a quote.
 3. Read `references/evidence.md`, relative to this skill's directory. Classify each criterion, attach evidence tagged `[behavior]` or `[static]` as it defines, and classify the outcome. A behavior criterion needs `[behavior]` evidence. A green CI run is never behavior evidence for a criterion that does not name that check.
-4. Treat a `No evidence` criterion, and one whose run observed the opposite of what it names, as unsatisfied. List each in Built with its reason, `no evidence` or `failure observed`, and still return Built, because the caller passes them on to whoever verifies the change. This holds for an unobservable criterion that trigger 1 missed at the Contract, because commits already exist. Never report one as satisfied.
+4. Treat a `No evidence` criterion, and one whose run observed the opposite of what it names, as unsatisfied. List each in Built with its reason, `no evidence` or `failure observed`, and still return Built, because the caller passes them on to whoever verifies the change. Never report one as satisfied.
 
 ```
 | Criterion (verbatim, or `(derived)`) | Evidence |
