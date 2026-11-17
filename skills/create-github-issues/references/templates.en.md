@@ -341,7 +341,8 @@ The Epic body's dependency diagram (or table), and any container Tn's own depend
 
 (Only when a create failed:
 ### Not created
-- <title>: <the error gh printed>. <Issues that should depend on it, by number> are not blocked by it. Create it by hand with parent #<Epic or container> and blocked-by <its own dependencies, by number>, add it as blocked-by to those Issues, and replace its "(creation failed)" in the Epic body with its number. For a failed person Issue: Create it by hand with no parent and blocked-by <the Issues it waits for, by number>.)
+- <title>: <the error gh printed>. <Issues that should depend on it, by number> are not blocked by it. Create it by hand with parent #<Epic or container> and blocked-by <its own dependencies, by number>, add it as blocked-by to those Issues, and replace its "(creation failed)" in the Epic body with its number.
+- For a failed person Issue instead: <title>: <the error gh printed>. Create it by hand with no parent and blocked-by <the Issues it waits for, by number>.)
 
 (Only when a doc-update dependency was wired transitively: <Tn(s)> depend on the doc-update Tn transitively via <Tvia> — they are not directly blocked by it. This ordering is intentional; do not "fix" it by adding or removing edges.)
 ```
