@@ -14,13 +14,14 @@ Documented installs follow releases, and `main` is the owner's early-access trac
 
 | Concept | Definition |
 |---|---|
-| Early-access track | `main`, which the owner installs without naming a version |
-| Run commit | A commit on `main` the owner has run and chooses to release. It is the parent of its Release tag's commit; for a tag on `main`, the tag's commit itself |
+| Early-access track | `main`, which the owner installs through APM or npx skills without naming a version |
+| Run commit | A commit on `main` the owner has run and chooses to release. It is the single parent of its Release tag's commit. `v1.2.0`, the last tag made on `main`, is its own Run commit |
 | Release branch | A branch that starts at the Run commit and holds the Bump commit on top |
-| Bump commit | The one commit a release adds to the Run commit. It sets the new version in both manifests, the marketplace entry's `ref`, and the README's install commands |
+| Bump commit | The one commit a release adds to the Run commit. It sets the new version in both manifests, the marketplace entry's `ref`, and the npx skills tag in the README |
 | Release tag | `v<version>` on the Bump commit. Immutable releases keep it on that content |
-| Release range | The commits after the previous release's Run commit, up to this release's Run commit. The version bump and the Release notes both count this range |
-| Release notes | Notes the release workflow generates with git-cliff for the Release range, opening with one entry per breaking commit: its `BREAKING CHANGE` footer text, or its subject when it has none |
+| Previous release | The published GitHub Release with the highest version below this one |
+| Release range | The commits after the Previous release's Run commit, up to this release's Run commit, leaving out the commits Back-merge PRs added to `main`. The version bump and the Release notes both count this range |
+| Release notes | Notes the release workflow generates with git-cliff for the Release range, opening with one entry per breaking commit: its `BREAKING CHANGE` or `BREAKING-CHANGE` footer text, or its subject when it has neither |
 | Back-merge PR | The pull request that brings the Bump commit from the Release branch into `main` |
 
 | Route | Documented install resolves | Without a version |
@@ -58,8 +59,8 @@ sequenceDiagram
 ## Invariants
 
 - The release workflow publishes a tag only when all of these hold:
-    - The Run commit is reachable from `main` and descends from the previous release's Run commit.
-    - The Bump commit changes nothing but the version in both manifests, the marketplace entry's `ref`, and the README's install commands.
+    - The tag's commit has one parent, the Run commit, which is reachable from `main` and descends from the Previous release's Run commit.
+    - The Bump commit changes nothing but the version in both manifests, the marketplace entry's `ref`, and the npx skills tag in the README.
     - Each of those equals the tag, with the manifests omitting its `v`.
 - The version and the marketplace entry's `ref` on `main` never move to an older release: a Back-merge PR that would move them back is not merged.
 
