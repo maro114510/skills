@@ -40,7 +40,7 @@ In any Mermaid node label, a double quote in a title must be written as `#quot;`
 **Summary**: <purpose in one line>
 **Background**: <what led to needing this Epic, in 1-2 sentences>
 **Scope (included)**: <bullet> / <bullet>
-**Scope (not included)**: <only if applicable: items the source defers, puts out of scope, or assigns to another Epic, and exclusions the conversation named. Give each item left out of the source with the wording that excludes it, as "<item> — source: "<excluding wording>"". Omit this line entirely if there are none>
+**Scope (not included)**: <only if applicable: items the source defers, puts out of scope, or assigns to another Epic, exclusions the conversation named, and deployment or other operational work, marked as operational work. Give each item left out of the source with the wording that excludes it, as "<item> — source: "<excluding wording>"". Omit this line entirely if there are none>
 **Target state**: <what must be true when every child Issue is done, in one line>
 **Verification**: <how to confirm the whole Epic is done, built from the children's verification below, plus any check of the whole Epic that a person runs>
 
@@ -103,11 +103,11 @@ Only when a Tn was promoted to a container, show it in this shape instead — Re
 
 ### Person Issues (M total; not sub-issues of the Epic)
 
-Only when work needs a person, another machine, a real device, or an environment. Omit this section when there is none.
+Only when the plan explicitly requires a manual verification tied to an implementation Issue, such as a check on a real device. Deployment and other operational work never appears here. Omit this section when there is none.
 
-#### P1: <title> (Blocked by: T1, T2)
-- Background: <why a person does this, in one line>
-- What to do: <bullet> / <bullet>
+#### P1: <title, such as "Check the --shout flag on a real device"> (Blocked by: T1, T2)
+- Background: <why the verification needs a person, such as a real device no CI runner has, in one line>
+- What to do: <manual verification the plan requires> / <bullet>
 
 Only when you have additions beyond the source, write the next section and the closing line that starts with "Additions are included". With no additions, write neither.
 
@@ -256,11 +256,11 @@ Every `Pn` uses this shape. It is not a sub-issue of the Epic; Step 5 sets its b
 ```markdown
 ## Background
 
-{Why this work needs a person, and the titles of the implementation Issues it waits for — 1-2 sentences}
+{Why this verification needs a person, such as a real device no CI runner has, and the titles of the implementation Issues it waits for — 1-2 sentences}
 
 ## What to do
 
-- {Source item that needs a person, another machine, a real device, or an environment}
+- {Manual verification the plan explicitly requires, such as a check on a real device; never a deployment or other operational work}
 ```
 
 ## Step 4.5: Body Review Format

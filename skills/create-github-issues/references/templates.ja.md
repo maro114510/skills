@@ -40,7 +40,7 @@ In any Mermaid node label, a double quote in a title must be written as `#quot;`
 **サマリー**: <目的を1行で>
 **背景**: <この Epic が必要になった経緯を1〜2文で>
 **スコープ（含む）**: <bullet> / <bullet>
-**スコープ（含まない）**: <該当する場合のみ。ソースが後回し・対象外・別 Epic とした項目と、会話で明示的に除外された項目。ソースから外した項目には「<項目> — ソース: 「<外す根拠となるソースの文言>」」の形でその文言を添える。どれもなければこの行ごと省略>
+**スコープ（含まない）**: <該当する場合のみ。ソースが後回し・対象外・別 Epic とした項目と、会話で明示的に除外された項目、およびデプロイなどの運用作業（運用作業と明記する）。ソースから外した項目には「<項目> — ソース: 「<外す根拠となるソースの文言>」」の形でその文言を添える。どれもなければこの行ごと省略>
 **目標状態**: <すべての子 Issue が完了したときに成り立つ状態を1行で>
 **検証**: <Epic 全体の完了を確かめる方法。下の子 Issue の検証と、人が行う Epic 全体の確認から組み立てる>
 
@@ -103,11 +103,11 @@ Step 1.5 で統合済み文書が変更され、この Tn の内容が変わっ�
 
 ### 人が行う Issue（M 件、Epic のサブ Issue ではない）
 
-人、別のマシン、実機、または環境が必要な作業がある場合のみ記載する。なければこの節ごと省略する。
+計画が実装 Issue に紐づく手動検証を明示的に求めている場合のみ記載する。例えば実機での確認。デプロイなどの運用作業はここに書かない。なければこの節ごと省略する。
 
-#### P1: <タイトル>（ブロック元: T1, T2）
-- 背景: <人が行う理由を1行で>
-- やること: <bullet> / <bullet>
+#### P1: <タイトル。例えば「実機で --shout フラグを確認する」>（ブロック元: T1, T2）
+- 背景: <検証に人が必要な理由を1行で。例えば CI のランナーにない実機が必要>
+- やること: <計画が求める手動検証> / <bullet>
 
 ソースにない追加案がある場合のみ、次の節と、末尾の「追加案は」で始まる行を書く。追加案がなければ、どちらも書かない。
 
@@ -256,11 +256,11 @@ flowchart LR
 ```markdown
 ## 背景
 
-{Why this work needs a person, and the titles of the implementation Issues it waits for — 1〜2文}
+{Why this verification needs a person, such as a real device no CI runner has, and the titles of the implementation Issues it waits for — 1〜2文}
 
 ## やること
 
-- {Source item that needs a person, another machine, a real device, or an environment}
+- {Manual verification the plan explicitly requires, such as a check on a real device; never a deployment or other operational work}
 ```
 
 ## Step 4.5: Body Review Format

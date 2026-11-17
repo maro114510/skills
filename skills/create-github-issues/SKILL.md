@@ -50,7 +50,7 @@ Anything still unresolved is never decided later: it gets the confirmation tag o
 ## Step 2: Structure Tasks and Dependencies
 
 Read `references/structure.md` in full first, and follow it.
-From the context, extract the Epic (title, purpose, scope) and child tasks `T1`, `T2`, ... with title, role, at most 5 requirement bullets and 5 spec bullets, and `depends_on` taken only from what the conversation stated or clearly implied. Move work that needs a person into person Issues `P1`, `P2`, ..., as its § Person Issues says. Compute waves by topological order. On a dependency cycle, ask with **AskUserQuestion** instead of breaking it.
+From the context, extract the Epic (title, purpose, scope) and child tasks `T1`, `T2`, ... with title, role, at most 5 requirement bullets and 5 spec bullets, and `depends_on` taken only from what the conversation stated or clearly implied. Move each manual verification the plan explicitly requires into a person Issue `P1`, `P2`, ..., and keep deployment and other operational work out of every Issue, as its § Person Issues says. Compute waves by topological order. On a dependency cycle, ask with **AskUserQuestion** instead of breaking it.
 
 ## Step 3: Show Summary and Get Approval
 
