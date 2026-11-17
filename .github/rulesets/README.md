@@ -1,6 +1,11 @@
 # Repository rulesets
 
-`main.json` is the "Protect main" ruleset for the `main` branch. A ruleset is a repository setting, so a pull request cannot create it: the repository admin applies it.
+| File | Ruleset | Target |
+|---|---|---|
+| `main.json` | "Protect main" | The `main` branch |
+| `tags.json` | "Protect release tags" | Tags that match `v*` |
+
+A ruleset is a repository setting, so a pull request cannot create it: the repository admin applies them.
 
 ## Apply
 
@@ -8,9 +13,9 @@
 bash .github/rulesets/apply.sh maro114510/skills
 ```
 
-The script creates the ruleset, or updates the one named "Protect main" so that rerunning it after an edit to `main.json` is safe. It needs `gh` authenticated as a repository admin.
+The script creates each ruleset, or updates the one that carries its name, so that rerunning it after an edit to a file is safe. It needs `gh` authenticated as a repository admin.
 
-## What it enforces
+## What the main ruleset enforces
 
 | Rule | Effect |
 |---|---|
@@ -21,6 +26,13 @@ The script creates the ruleset, or updates the one named "Protect main" so that 
 
 Required checks are only jobs of workflows that run on every pull request. A job of a path-filtered workflow, such as lint-shell, never starts for a pull request that misses its paths, and a required check that never starts stays pending forever. Add a check here only after confirming its workflow has no `paths:` under `on:`.
 
+## What the tag ruleset enforces
+
+| Rule | Effect |
+|---|---|
+| `creation` | Only the bypass actor can create a `v*` tag |
+| Bypass | The Repository admin role, the same as for `main`, so the owner can push the Release tag that triggers the release workflow |
+
 ## Limits
 
 - The admin bypass also lets the admin merge a pull request whose checks failed, through GitHub's explicit bypass prompt. Nobody else can.
@@ -30,6 +42,7 @@ Required checks are only jobs of workflows that run on every pull request. A job
 
 ```bash
 gh api repos/maro114510/skills/rules/branches/main
+gh api repos/maro114510/skills/rulesets
 ```
 
-The output lists the rules and the required checks above.
+The first lists the rules and the required checks above, and the second lists both rulesets by name.
