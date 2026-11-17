@@ -77,7 +77,7 @@ If any of the first four is missing, end without changing anything and say which
    - Busy: push nothing and end with `RESULT: none` naming the owner it printed.
    - Questions: write the Questions implement returned with `oe question` as below, push nothing, and end.
    - Neither Result, because implement stopped before committing its work: push nothing and end.
-   - Built: go to step 7.
+   - Built: go to step 7, even when Built lists `Unsatisfied:` lines, because an unsatisfied criterion is no reason to end without pushing: the Verifier judges it.
 
    Write a Question this way:
 
@@ -99,7 +99,7 @@ If any of the first four is missing, end without changing anything and say which
    ```
 
    If the push is rejected, end without retrying.
-9. For a new task, open the PR. Have a fresh session write its title and body, as `<skills-root>/create-pr/SKILL.md` Step 3 says, and never write them yourself; take its metadata from Steps 1 to 5, in the language its `Arguments:` line resolves, running Step 1 as `bash <skills-root>/create-pr/scripts/pr-context.sh base <base>` in the worktree and ending on its non-zero exit. Check no box that needs a human, as its Step 3.2 says. End the body with the line `<!-- automation-owner: orchestrate-epic -->`, alone on its line and exactly as written, then one sentence in the body's language saying that orchestrate-epic owns this PR and that deleting that line hands it over; other automations that honor the marker then neither push nor reply here. `--owner orchestrate-epic` appends the line when the body lacks it, because nothing may add it once the PR exists. Then run in the worktree, pasting Step 1's `== create flags` line verbatim as `<create flags>`, which carries `--base`, `--draft`, and `--assignee @me`:
+9. For a new task, open the PR. Have a fresh session write its title and body, as `<skills-root>/create-pr/SKILL.md` Step 3 says, and never write them yourself; take its metadata from Steps 1 to 5, in the language its `Arguments:` line resolves, running Step 1 as `bash <skills-root>/create-pr/scripts/pr-context.sh base <base>` in the worktree and ending on its non-zero exit. Check no box that needs a human, as its Step 3.2 says. Put each `Unsatisfied:` line Built listed in the note, so the body lists every unsatisfied criterion with its reason for the Verifier. End the body with the line `<!-- automation-owner: orchestrate-epic -->`, alone on its line and exactly as written, then one sentence in the body's language saying that orchestrate-epic owns this PR and that deleting that line hands it over; other automations that honor the marker then neither push nor reply here. `--owner orchestrate-epic` appends the line when the body lacks it, because nothing may add it once the PR exists. Then run in the worktree, pasting Step 1's `== create flags` line verbatim as `<create flags>`, which carries `--base`, `--draft`, and `--assignee @me`:
 
    ```bash
    bash <skills-root>/create-pr/scripts/create-linked-pr.sh --repo <repo> --head <branch> --owner orchestrate-epic <create flags> \

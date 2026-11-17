@@ -109,12 +109,10 @@ An item is open only if it survives the Phase 1 lookup and its remaining reading
 
 | # | Trigger | Fires when |
 |---|---|---|
-| 1 | Acceptance in doubt | Done cannot be judged because the criteria are missing and cannot be derived from the request's intent, or because they cannot be verified |
+| 1 | Acceptance in doubt | Done cannot be judged because the criteria are missing and cannot be derived from the request's intent, or because they cannot be verified. This includes a criterion that neither a checkout of the repository nor its CI can observe, such as one that needs a deploy or a person; its question's recommended option drafts an Issue for that criterion, naming its title and the criterion, and when an Issue backs the request, the edit that removes the criterion from it |
 | 2 | Premise in doubt | The request conflicts with what you observed: the bug does not reproduce, the target does not exist or already behaves as desired, the change cannot achieve its stated goal, or the request needs more than one change unit, as Split Check below says |
 | 3 | Sources contradict | The Issue body, comments, Epic, repository instructions, caller prompt, or criteria disagree with each other, and no later statement by the same author resolves it |
 | 4 | Unsettled critical decision | No source settles a decision where a wrong choice could cause a security exposure, data loss or corruption, financial harm, an irreversible change, or a broken public interface. Only an explicit statement or an established repository convention settles one, never your own inference |
-
-A manual check, as references/evidence.md section 4 defines, never fires trigger 1.
 
 Decide everything else yourself. Follow repository conventions, prefer the smallest reversible option within scope, and record the choice in the decision log.
 
@@ -187,7 +185,7 @@ Route each part of the task in the Phase 3 plan. A playbook, relative to this sk
 
 Before the first edit, read `references/test-policy.md` and the routed playbook, and put the playbook's steps verbatim at the top of the todo list. Mark a step you skip `skip: <reason>`.
 
-Commit each step with the `commit` skill, giving it the type the playbook names, because it infers `test:` for a test-only diff, any `Removed-Test` trailer, and, when the work traces to an Issue, its number and whether anything is deferred so far. Never push.
+Commit each step with the `commit` skill, giving it the type the playbook names, because it infers `test:` for a test-only diff, any `Removed-Test` trailer, and, when the work traces to an Issue, its number. Never push.
 The `commit` skill never asks, so carry every file it left uncommitted and every type it chose without confidence into your final report.
 
 A test that is hard to write is a signal to revisit the design. Touch nothing beyond what the task requires.
@@ -224,7 +222,7 @@ This phase always runs. Phase 2's criteria live in context, and context drifts t
 1. Re-fetch the source: the Issue body, linked spec, and caller's prompt. If it changed since Phase 2, say so first.
 2. Quote each acceptance criterion verbatim, because paraphrasing is where a criterion gets softened. A criterion derived from the request's intent has no source text, so prefix it with `(derived)` and never present it as a quote.
 3. Read `references/evidence.md`, relative to this skill's directory. Classify each criterion, attach evidence tagged `[behavior]` or `[static]` as it defines, and classify the outcome. A behavior criterion needs `[behavior]` evidence. A green CI run is never behavior evidence for a criterion that does not name that check.
-4. Treat a `No evidence` criterion as unsatisfied. Deferring a criterion is the person's call, and surfacing it is yours. A manual check is never deferred.
+4. Treat a `No evidence` criterion, and one whose run observed the opposite of what it names, as unsatisfied. List each in Built with its reason, `no evidence` or `failure observed`, and still return Built, because the caller passes them on to whoever verifies the change. Never report one as satisfied.
 
 ```
 | Criterion (verbatim, or `(derived)`) | Evidence |
@@ -232,19 +230,16 @@ This phase always runs. Phase 2's criteria live in context, and context drifts t
 | <behavior criterion> | `[behavior]` <command or input>; observed <result> |
 | <structure or content criterion> | `[static]` <file:line> |
 | <criterion without evidence> | none |
-| <manual check> | manual |
 
-Deferred, not satisfied: <criterion> -> <what was done instead, and why>
-No evidence: <criterion>
+Unsatisfied: <criterion> -> <reason>
 ```
 
 ---
 
 ## Phase 7: Finish
 
-1. Commit any uncommitted work with the `commit` skill, so the range holds the whole change. Give it the Issue number and whether anything is deferred, as Phase 5 says. If a commit hook rewrote any file, rerun Phase 6.9 on the committed state.
-2. If Phase 6.9 left anything deferred and a branch commit carries `Closes #<N>`, say so in the report, because create-pr copies that keyword into the PR.
-3. Release the Issue Claim if this run took one.
-4. Return Built: the Phase 6.9 table, the Phase 6.5 outcome with its reviewed HEAD, every commit in `<reviewed-head>..HEAD` as unreviewed, or all of the range when the outcome is `not-run` or `git merge-base --is-ancestor <reviewed-head> HEAD` fails, and every file the `commit` skill left uncommitted with every `reason:` line it listed.
+1. Commit any uncommitted work with the `commit` skill, so the range holds the whole change. Give it the Issue number, as Phase 5 says. If a commit hook rewrote any file, rerun Phase 6.9 on the committed state.
+2. Release the Issue Claim if this run took one.
+3. Return Built: the Phase 6.9 table, the Phase 6.5 outcome with its reviewed HEAD, every commit in `<reviewed-head>..HEAD` as unreviewed, or all of the range when the outcome is `not-run` or `git merge-base --is-ancestor <reviewed-head> HEAD` fails, and every file the `commit` skill left uncommitted with every `reason:` line it listed.
 
 Never push, and never create a PR. The caller checks the range before it publishes anything.
