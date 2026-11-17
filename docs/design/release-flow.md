@@ -70,5 +70,6 @@ sequenceDiagram
 
 ## References
 
+- `../adr/release-by-tag-push.md` for why a tag push, not a pull request merge, triggers a release
 - [The decision record](https://github.com/maro114510/skills/discussions/905#discussioncomment-19671463) for the checked premises, each route's behavior, and the decisions
 - [Host and maintain a marketplace](https://code.claude.com/docs/en/plugins/host-marketplace.md) for a marketplace entry's `ref`
