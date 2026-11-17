@@ -115,6 +115,13 @@ records_drop() {
   rmdir "${file%/*}" 2>/dev/null || true
 }
 
+# Prints the session ID the harness set, or nothing when it set none.
+session_id() {
+  if [[ -n "${OE_SESSION_ID:-}" ]]; then
+    printf '%s\n' "${OE_SESSION_ID}"
+  fi
+}
+
 # Prints the sessions record of Epic $2 in repository $1.
 sessions_path() {
   local key

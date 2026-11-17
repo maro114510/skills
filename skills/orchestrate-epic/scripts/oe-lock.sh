@@ -138,7 +138,8 @@ session_checkout() {
 
 # Prints the sessions line this session adds if it takes the lock.
 session_line() {
-  jq -cn --arg at "${started}" --arg checkout "$(session_checkout)" '{at: $at, checkout: $checkout}'
+  jq -cn --arg at "${started}" --arg checkout "$(session_checkout)" --arg session_id "$(session_id)" \
+    '{at: $at, checkout: $checkout, session_id: $session_id}'
 }
 
 # Succeeds when the holder blob $1 names this session: the same token, process, and process start.
