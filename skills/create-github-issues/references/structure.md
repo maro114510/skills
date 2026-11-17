@@ -21,7 +21,7 @@ SKILL.md Step 2 reads this file in full before it structures any task.
 
 - An implementation Issue, a non-container `Tn` or a `Tn.m`, holds only work and checks observable from a checkout of the repository or from CI, without a human's credentials.
 - A manual verification that the plan explicitly requires and that is tied to an implementation Issue, such as a check on a real device, another machine, or an environment, becomes its own person Issue with a temporary ID `P1`, `P2`, ..., instead of an item in a `Tn`. No other human activity becomes a person Issue.
-- Deployment and other operational work is repository-specific, often automated and otherwise scheduled at a person's discretion, so it never becomes a person Issue and is never written into an implementation Issue's Verification. Leave it out of every Issue, and name it on Step 3's out-of-scope line as operational work.
+- Deployment and other operational work is repository-specific, often automated and otherwise scheduled at a person's discretion, so it never becomes a person Issue and is never written into an implementation Issue's Verification.
 - A person Issue is blocked by the implementation Issues it waits for, and is not a sub-issue of the Epic or of any `Tn`. Its `blocked_by` lists those `Tn` or `Tn.m`.
 - Moving a source item into a person Issue is not an addition, and its `blocked_by` edge is not an inferred dependency, so neither needs the additions list.
 - A check of the whole Epic that a person runs may stay in the Epic's Verification instead.

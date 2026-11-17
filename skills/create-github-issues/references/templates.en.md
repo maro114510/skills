@@ -40,7 +40,7 @@ In any Mermaid node label, a double quote in a title must be written as `#quot;`
 **Summary**: <purpose in one line>
 **Background**: <what led to needing this Epic, in 1-2 sentences>
 **Scope (included)**: <bullet> / <bullet>
-**Scope (not included)**: <only if applicable: items the source defers, puts out of scope, or assigns to another Epic, exclusions the conversation named, and deployment or other operational work, marked as operational work. Give each item left out of the source with the wording that excludes it, as "<item> — source: "<excluding wording>"". Omit this line entirely if there are none>
+**Scope (not included)**: <only if applicable: items the source defers, puts out of scope, or assigns to another Epic, and exclusions the conversation named. Give each item left out of the source with the wording that excludes it, as "<item> — source: "<excluding wording>"". Omit this line entirely if there are none>
 **Target state**: <what must be true when every child Issue is done, in one line>
 **Verification**: <how to confirm the whole Epic is done, built from the children's verification below, plus any check of the whole Epic that a person runs>
 
