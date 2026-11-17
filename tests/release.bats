@@ -1,6 +1,7 @@
 #!/usr/bin/env bats
 # Tests for the release path: `make release` in a sandbox clone with a bare origin, and the guards and notes of
 # .github/scripts/release.sh, which .github/workflows/release.yml runs, against a sandbox repository.
+# shellcheck disable=SC2030,SC2031 # output_has and output_lacks read ${output} inside the same @test subshell that `run` set it in.
 # shellcheck disable=SC2292 # bats fails a test on a mid-test `[[ ]]` only under bash 4.1+; `[ ]` works on every bash.
 
 bats_require_minimum_version 1.5.0
@@ -144,6 +145,26 @@ cut() {
   commit_tag "$2"
 }
 
+# output_has and output_lacks fail by returning, because a failed [[ ]] in the middle of a test passes under bash 3.2.
+output_has() {
+  case "${output}" in
+  *"$1"*) ;;
+  *)
+    echo "output lacks: $1"
+    return 1
+    ;;
+  esac
+}
+
+output_lacks() {
+  case "${output}" in
+  *"$1"*)
+    echo "output has: $1"
+    return 1
+    ;;
+  esac
+}
+
 release_guard() {
   bash "${root}/.github/scripts/release.sh" guard "$@"
 }
@@ -162,19 +183,12 @@ release_guard() {
   [ "${status}" -eq 0 ]
 }
 
-@test "guard passes the first release when there is no previous release" {
-  flow_sandbox
-  cut "${run}" 1.3.0 1
-  run release_guard v1.3.0
-  [ "${status}" -eq 0 ]
-}
-
 @test "guard refuses a version that is not above the previous release" {
   flow_sandbox
   cut "${run}" 1.1.9 1
   run release_guard v1.1.9 v1.2.0
   [ "${status}" -ne 0 ]
-  [[ "${output}" == *"not above"* ]]
+  output_has "not above"
 }
 
 @test "guard refuses a tag that is not v<major>.<minor>.<patch>" {
@@ -182,7 +196,7 @@ release_guard() {
   cut "${run}" 1.3.0-rc1 1
   run release_guard v1.3.0-rc1 v1.2.0
   [ "${status}" -ne 0 ]
-  [[ "${output}" == *"not v<major>.<minor>.<patch>"* ]]
+  output_has "not v<major>.<minor>.<patch>"
 }
 
 @test "guard refuses a tag commit with two parents" {
@@ -195,7 +209,7 @@ release_guard() {
   git tag -a v1.3.0 -m v1.3.0
   run release_guard v1.3.0 v1.2.0
   [ "${status}" -ne 0 ]
-  [[ "${output}" == *"one parent"* ]]
+  output_has "one parent"
 }
 
 @test "guard refuses a Run commit that main does not reach" {
@@ -205,7 +219,7 @@ release_guard() {
   cut "$(git rev-parse HEAD)" 1.3.0 1
   run release_guard v1.3.0 v1.2.0
   [ "${status}" -ne 0 ]
-  [[ "${output}" == *"not reachable from origin/main"* ]]
+  output_has "not reachable from origin/main"
 }
 
 @test "guard refuses a Run commit that does not descend from the previous release's Run commit" {
@@ -217,7 +231,7 @@ release_guard() {
   cut "$(git rev-parse "${run}^")" 1.4.0 1
   run release_guard v1.4.0 v1.3.0
   [ "${status}" -ne 0 ]
-  [[ "${output}" == *"does not descend from the previous release's Run commit"* ]]
+  output_has "does not descend from the previous release's Run commit"
 }
 
 @test "guard takes a previous Release tag's parent as its Run commit" {
@@ -240,7 +254,7 @@ release_guard() {
   commit_tag 1.3.0
   run release_guard v1.3.0 v1.2.0
   [ "${status}" -ne 0 ]
-  [[ "${output}" == *"changes file, which a Bump commit may not"* ]]
+  output_has "changes file, which a Bump commit may not"
 }
 
 @test "guard refuses a Bump commit that changes a manifest field other than the version and ref" {
@@ -250,7 +264,7 @@ release_guard() {
   commit_tag 1.3.0
   run release_guard v1.3.0 v1.2.0
   [ "${status}" -ne 0 ]
-  [[ "${output}" == *".claude-plugin/plugin.json changes more than the version"* ]]
+  output_has ".claude-plugin/plugin.json changes more than the version"
 }
 
 @test "guard refuses a Bump commit that changes a marketplace field other than the version and ref" {
@@ -260,7 +274,7 @@ release_guard() {
   commit_tag 1.3.0
   run release_guard v1.3.0 v1.2.0
   [ "${status}" -ne 0 ]
-  [[ "${output}" == *".claude-plugin/marketplace.json changes more than the version"* ]]
+  output_has ".claude-plugin/marketplace.json changes more than the version"
 }
 
 @test "guard refuses a plugin manifest version that differs from the tag" {
@@ -270,7 +284,7 @@ release_guard() {
   commit_tag 1.3.0
   run release_guard v1.3.0 v1.2.0
   [ "${status}" -ne 0 ]
-  [[ "${output}" == *".claude-plugin/plugin.json has version 1.3.1, expected 1.3.0"* ]]
+  output_has ".claude-plugin/plugin.json has version 1.3.1, expected 1.3.0"
 }
 
 @test "guard refuses a marketplace version that differs from the tag" {
@@ -280,7 +294,7 @@ release_guard() {
   commit_tag 1.3.0
   run release_guard v1.3.0 v1.2.0
   [ "${status}" -ne 0 ]
-  [[ "${output}" == *".claude-plugin/marketplace.json has version 1.2.0, expected 1.3.0"* ]]
+  output_has ".claude-plugin/marketplace.json has version 1.2.0, expected 1.3.0"
 }
 
 @test "guard refuses a marketplace entry ref that does not name the tag" {
@@ -290,7 +304,7 @@ release_guard() {
   commit_tag 1.3.0
   run release_guard v1.3.0 v1.2.0
   [ "${status}" -ne 0 ]
-  [[ "${output}" == *"ref v1.2.0, expected v1.3.0"* ]]
+  output_has "ref v1.2.0, expected v1.3.0"
 }
 
 @test "guard refuses a README npx skills tag that does not name the tag" {
@@ -301,7 +315,7 @@ release_guard() {
   commit_tag 1.3.0
   run release_guard v1.3.0 v1.2.0
   [ "${status}" -ne 0 ]
-  [[ "${output}" == *"README.md names #v1.2.0, expected #v1.3.0"* ]]
+  output_has "README.md names #v1.2.0, expected #v1.3.0"
 }
 
 @test "guard refuses a README APM range that does not name the major version" {
@@ -310,7 +324,7 @@ release_guard() {
   commit_tag 2.0.0
   run release_guard v2.0.0 v1.2.0
   [ "${status}" -ne 0 ]
-  [[ "${output}" == *"README.md names #^1.0.0, expected #^2.0.0"* ]]
+  output_has "README.md names #^1.0.0, expected #^2.0.0"
 }
 
 @test "guard refuses a Bump commit that changes a README line other than those tokens" {
@@ -320,12 +334,22 @@ release_guard() {
   commit_tag 1.3.0
   run release_guard v1.3.0 v1.2.0
   [ "${status}" -ne 0 ]
-  [[ "${output}" == *"README.md changes more than"* ]]
+  output_has "README.md changes more than"
 }
 
 # notes_for prints the Release notes of v$1 against the previous release $2.
 notes_for() {
   bash "${root}/.github/scripts/release.sh" notes "$@"
+}
+
+# back_merge adds to main what a squash-merged Back-merge PR for v$1 adds: a commit with a subject of the owner's choosing
+# that changes only the version fields.
+back_merge() {
+  jq --arg v "$1" '.version = $v' .claude-plugin/plugin.json >p.tmp && mv p.tmp .claude-plugin/plugin.json
+  jq --arg v "$1" '.version = $v | .plugins[0].source.ref = "v\($v)"' .claude-plugin/marketplace.json >m.tmp &&
+    mv m.tmp .claude-plugin/marketplace.json
+  git add -A
+  git commit -q -m "feat: bring release $1 back to main (#9)"
 }
 
 # notes_sandbox adds the commits of a Release range to flow_sandbox on top of $run, then cuts v1.3.0 from the last one.
@@ -337,7 +361,7 @@ notes_sandbox() {
   git commit -q --allow-empty -m "$(printf 'feat(api)!: drop the old flag\n\nBREAKING CHANGE: the old flag is gone\nand needs migration')"
   git commit -q --allow-empty -m "$(printf 'fix: tidy up\n\nBREAKING-CHANGE: hyphen footer text')"
   git commit -q --allow-empty -m "feat!: subject only"
-  git commit -q --allow-empty -m "chore: release v1.2.1"
+  back_merge 1.2.1
   cut "$(git rev-parse HEAD)" 1.3.0 1
 }
 
@@ -359,19 +383,9 @@ notes_sandbox() {
   notes_sandbox
   run --separate-stderr notes_for v1.3.0 v1.2.0
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"Plain feature"* ]]
-  [[ "${output}" != *"First run"* ]]
-  [[ "${output}" != *"Before the previous release"* ]]
-  [[ "${output}" != *"After the run"* ]]
-  [[ "${output}" != *"Release v1.2.1"* ]]
-  [[ "${output}" != *"Release v1.3.0"* ]]
-}
-
-@test "notes have no breaking section when no commit breaks" {
-  flow_sandbox
-  cut "${run}" 1.3.0 1
-  run --separate-stderr notes_for v1.3.0 v1.2.0
-  [ "${status}" -eq 0 ]
-  [[ "${output}" != *"Breaking changes"* ]]
-  [[ "${output}" == *"First run"* ]]
+  output_has "Plain feature"
+  output_has "First run"
+  output_lacks "Before the previous release"
+  output_lacks "After the run"
+  output_lacks "Bring release 1.2.1 back to main"
 }

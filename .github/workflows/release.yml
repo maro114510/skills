@@ -33,13 +33,14 @@ jobs:
           previous="$(gh release list --limit 1000 --json tagName,isDraft,isPrerelease \
             --jq '.[] | select(.isDraft | not) | select(.isPrerelease | not) | .tagName' |
             grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | grep -vx "${TAG_NAME}" | sort -V | tail -n 1 || true)"
+          test -n "${previous}" || { echo "No previous release found; refusing to release"; exit 1; }
           echo "previous=${previous}" >> "${GITHUB_OUTPUT}"
 
       - name: Verify the publish guards
         env:
           TAG_NAME: ${{ github.ref_name }}
           PREVIOUS: ${{ steps.previous.outputs.previous }}
-        run: bash .github/scripts/release.sh guard "${TAG_NAME}" ${PREVIOUS:+"${PREVIOUS}"}
+        run: bash .github/scripts/release.sh guard "${TAG_NAME}" "${PREVIOUS}"
 
       - name: Install git-cliff
         run: pip install git-cliff==2.14.2
@@ -48,7 +49,7 @@ jobs:
         env:
           TAG_NAME: ${{ github.ref_name }}
           PREVIOUS: ${{ steps.previous.outputs.previous }}
-        run: bash .github/scripts/release.sh notes "${TAG_NAME}" ${PREVIOUS:+"${PREVIOUS}"} > "${RUNNER_TEMP}/notes.md"
+        run: bash .github/scripts/release.sh notes "${TAG_NAME}" "${PREVIOUS}" > "${RUNNER_TEMP}/notes.md"
 
       - name: Create GitHub Release
         env:

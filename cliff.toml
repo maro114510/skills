@@ -34,7 +34,6 @@ filter_unconventional = true
 # Without the anchor, v[0-9]* also matches a prefixed tag such as foo-v1.0.0.
 tag_pattern = "^v[0-9]"
 commit_parsers = [
-    { message = "^chore: release v[0-9]", skip = true },
     { message = "^feat", group = "Features" },
     { message = "^fix", group = "Fixes" },
     { message = "^perf", group = "Performance" },
