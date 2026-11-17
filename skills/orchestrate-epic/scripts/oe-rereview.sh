@@ -36,6 +36,8 @@ dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${dir}/oe-config.sh"
 # shellcheck source-path=SCRIPTDIR
 source "${dir}/oe-store.sh"
+# shellcheck source-path=SCRIPTDIR
+source "${dir}/oe-bot.sh"
 
 usage() {
   echo "$1" >&2
@@ -59,6 +61,7 @@ refuse() {
 repo="$1"
 n="$2"
 branch="${branch_prefix}${n}"
+bot_env "${repo}" || fail "cannot act as the Bot on ${repo}"
 
 err="$(mktemp)" || fail "mktemp failed"
 trap 'rm -f "${err}"' EXIT

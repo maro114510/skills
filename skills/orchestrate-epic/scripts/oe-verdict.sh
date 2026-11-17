@@ -43,6 +43,8 @@ dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${dir}/oe-config.sh"
 # shellcheck source-path=SCRIPTDIR
 source "${dir}/oe-store.sh"
+# shellcheck source-path=SCRIPTDIR
+source "${dir}/oe-bot.sh"
 
 usage() {
   echo "$1" >&2
@@ -65,6 +67,7 @@ n="$2"
 sha="$3"
 state="$4"
 branch="${branch_prefix}${n}"
+bot_env "${repo}" || fail "cannot act as the Bot on ${repo}"
 
 findings="$(cat)" || usage "Cannot read the findings from stdin"
 [[ "${findings}" =~ [^[:space:]] ]] || usage "The findings on stdin are empty"

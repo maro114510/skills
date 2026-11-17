@@ -36,6 +36,8 @@ unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE GIT_OBJECT_DIRECTORY G
 dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source-path=SCRIPTDIR
 source "${dir}/oe-config.sh"
+# shellcheck source-path=SCRIPTDIR
+source "${dir}/oe-bot.sh"
 
 usage() {
   echo "$1" >&2
@@ -93,7 +95,10 @@ if [[ "${cmd}" == remove ]]; then
 fi
 
 tracking="refs/remotes/origin/${branch}"
-git fetch --quiet origin "+refs/heads/${branch}:${tracking}" || fail "cannot fetch ${branch} from origin"
+# A clone that opted in but cannot act as the Bot refuses here, before a fetch could use the
+# person's credential.
+bot_config_ready || exit 1
+bot_git fetch --quiet origin "+refs/heads/${branch}:${tracking}" || fail "cannot fetch ${branch} from origin"
 git rev-parse --verify --quiet "${tracking}^{commit}" >/dev/null || fail "cannot read the fetched ${branch}"
 
 remove_worktree
@@ -104,4 +109,8 @@ else
   git worktree add --quiet --track -B "${branch}" "${wt}" "origin/${branch}" ||
     fail "cannot create ${wt} on ${branch}"
 fi
+bot_identity_apply "${wt}" || {
+  git worktree remove --force "${wt}" >/dev/null 2>&1 || true
+  fail "cannot apply the Bot identity to ${wt}"
+}
 printf '%s\n' "${wt}"
