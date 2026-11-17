@@ -138,8 +138,9 @@ session_checkout() {
 
 # Prints the sessions line this session adds if it takes the lock.
 session_line() {
+  # A harness that gave no ID leaves the field out, so a reader never takes an empty string for one.
   jq -cn --arg at "${started}" --arg checkout "$(session_checkout)" --arg session_id "$(session_id)" \
-    '{at: $at, checkout: $checkout, session_id: $session_id}'
+    '{at: $at, checkout: $checkout} + (if $session_id == "" then {} else {session_id: $session_id} end)'
 }
 
 # Succeeds when the holder blob $1 names this session: the same token, process, and process start.
