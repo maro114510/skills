@@ -22,24 +22,36 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Verify tag matches manifest versions
+      - name: Find the previous release
+        id: previous
         env:
+          GH_TOKEN: ${{ github.token }}
           TAG_NAME: ${{ github.ref_name }}
         run: |
           set -eu
-          VERSION="${TAG_NAME#v}"
-          PLUGIN_VERSION="$(sed -nE 's/^[[:space:]]*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' .claude-plugin/plugin.json | head -n 1)"
-          MARKETPLACE_VERSION="$(sed -nE 's/^[[:space:]]*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' .claude-plugin/marketplace.json | head -n 1)"
-          test "${PLUGIN_VERSION}" = "${VERSION}" || { echo ".claude-plugin/plugin.json has version ${PLUGIN_VERSION}, expected ${VERSION}"; exit 1; }
-          test "${MARKETPLACE_VERSION}" = "${VERSION}" || { echo ".claude-plugin/marketplace.json has version ${MARKETPLACE_VERSION}, expected ${VERSION}"; exit 1; }
+          # The Previous release is the published GitHub Release with the highest version, other than this tag.
+          previous="$(gh release list --limit 1000 --json tagName,isDraft,isPrerelease \
+            --jq '.[] | select(.isDraft | not) | select(.isPrerelease | not) | .tagName' |
+            grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | grep -vx "${TAG_NAME}" | sort -V | tail -n 1 || true)"
+          echo "previous=${previous}" >> "${GITHUB_OUTPUT}"
 
-      - name: Verify tag is reachable from main
-        run: |
-          set -eu
-          git merge-base --is-ancestor "${GITHUB_SHA}" origin/main || { echo "${GITHUB_SHA} is not reachable from main; refusing to release"; exit 1; }
+      - name: Verify the publish guards
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+          PREVIOUS: ${{ steps.previous.outputs.previous }}
+        run: bash .github/scripts/release.sh guard "${TAG_NAME}" ${PREVIOUS:+"${PREVIOUS}"}
+
+      - name: Install git-cliff
+        run: pip install git-cliff==2.14.2
+
+      - name: Generate the release notes
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+          PREVIOUS: ${{ steps.previous.outputs.previous }}
+        run: bash .github/scripts/release.sh notes "${TAG_NAME}" ${PREVIOUS:+"${PREVIOUS}"} > "${RUNNER_TEMP}/notes.md"
 
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG_NAME: ${{ github.ref_name }}
-        run: gh release create "${TAG_NAME}" --title "${TAG_NAME}" --generate-notes --verify-tag
+        run: gh release create "${TAG_NAME}" --title "${TAG_NAME}" --notes-file "${RUNNER_TEMP}/notes.md" --verify-tag

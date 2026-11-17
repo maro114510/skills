@@ -3,15 +3,19 @@
 
 [changelog]
 body = """
-{% if version %}\
-## {{ version | trim_start_matches(pat="v") }} - {{ timestamp | date(format="%Y-%m-%d") }}
-{% else %}\
-## Unreleased
-{% endif %}\
-{% for group, commits in commits | group_by(attribute="group") %}
+{% set breaking = commits | filter(attribute="breaking", value=true) %}\
+{% if breaking | length > 0 %}\
+### Breaking changes
 
+{% for commit in breaking %}\
+{% set notes = commit.footers | filter(attribute="breaking", value=true) %}\
+- {% if notes | length > 0 %}{{ notes | first | get(key="value") }}{% else %}{{ commit.raw_message | split(pat="\\n") | first }}{% endif %}
+{% endfor %}
+{% endif %}\
+{% for group, commits in commits | group_by(attribute="group") %}\
 ### {{ group | striptags | trim | upper_first }}
-{% for commit in commits %}
+
+{% for commit in commits %}\
 - {% if commit.scope %}*({{ commit.scope }})* {% endif %}{% if commit.breaking %}**breaking:** {% endif %}{{ commit.message | upper_first }}
 {% endfor %}
 {% endfor %}
@@ -30,6 +34,7 @@ filter_unconventional = true
 # Without the anchor, v[0-9]* also matches a prefixed tag such as foo-v1.0.0.
 tag_pattern = "^v[0-9]"
 commit_parsers = [
+    { message = "^chore: release v[0-9]", skip = true },
     { message = "^feat", group = "Features" },
     { message = "^fix", group = "Fixes" },
     { message = "^perf", group = "Performance" },
