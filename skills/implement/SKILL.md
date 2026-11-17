@@ -9,7 +9,7 @@ description: >
   Trigger on requests like
   「これを実装して」「機能を追加して」「バグを修正して」「変更して」「これを作って」
   「リファクタリングして」「対応して」 and similar implementation requests.
-  Implements only the first planned change unit per run, listing the rest as deferred.
+  Builds one Request as one change unit for one PR, and returns Questions asking to split the Issue or request when it needs more.
   Works in a worktree, commits as it goes, and before it returns has a fresh context check that the branch adds nothing the request did not ask for and lacks nothing it asks for,
   then self-reviews the whole branch range on the first pass and only the fix delta on a second.
   Claims an Issue locally first, so a second session handed the same Issue returns Busy instead of duplicating the work.
@@ -24,7 +24,7 @@ Prioritize implementation quality. Scale the flow to the task: skip steps that a
 
 Read `references/worktree.md` in full before Phase 1, unless the caller names the worktree to work in.
 
-Relative paths and `<skill-dir>` name this skill's directory, the one containing this SKILL.md.
+Relative paths and `<skill-dir>` name this skill's directory, the one containing this SKILL.md, and `<skills-root>` is its parent.
 
 ## Result
 
@@ -110,7 +110,7 @@ An item is open only if it survives the Phase 1 lookup and its remaining reading
 | # | Trigger | Fires when |
 |---|---|---|
 | 1 | Acceptance in doubt | Done cannot be judged because the criteria are missing and cannot be derived from the request's intent, or because they cannot be verified |
-| 2 | Premise in doubt | The request conflicts with what you observed: the bug does not reproduce, the target does not exist or already behaves as desired, or the change cannot achieve its stated goal |
+| 2 | Premise in doubt | The request conflicts with what you observed: the bug does not reproduce, the target does not exist or already behaves as desired, the change cannot achieve its stated goal, or the request needs more than one change unit, as Split Check below says |
 | 3 | Sources contradict | The Issue body, comments, Epic, repository instructions, caller prompt, or criteria disagree with each other, and no later statement by the same author resolves it |
 | 4 | Unsettled critical decision | No source settles a decision where a wrong choice could cause a security exposure, data loss or corruption, financial harm, an irreversible change, or a broken public interface. Only an explicit statement or an established repository convention settles one, never your own inference |
 
@@ -127,6 +127,10 @@ These triggers govern clarification only. Every operational stop elsewhere in th
 When a trigger fires, raise every open triggered item before any repository mutation, and return them as Questions says. A later run returns Questions again only when an answer raises a new trigger.
 If the requested change looks unnecessary or its premise wrong, say so candidly in the Questions and let the person decide.
 
+### Split Check
+
+Read `<skills-root>/create-github-issues/references/change-units.md` in full before judging trigger 2. The request needs more than one change unit when that file splits it, or when a repository rule requires a split. Then the question asks to split the Issue, or the request when no Issue backs it. A fix to the unit's own pull request, such as a repair, stays in that unit and never fires this check.
+
 ---
 
 ## Phase 3: Present the Plan
@@ -137,7 +141,7 @@ Before any repository mutation, present a decision-complete implementation plan 
 - Relevant evidence about the current state
 - The implementation approach and affected interfaces or data flow
 - Failure, compatibility, migration, and operational behavior where applicable
-- The change units, decided here before any code is written. Read `references/change-units.md` in full first and list the units as it defines
+- The one change unit this run builds, as Phase 2 trigger 2 checked it; never split or defer it here
 - A test strategy mapped to the acceptance criteria
 - Explicit non-goals, risks, and the decision log
 
@@ -146,16 +150,6 @@ Then proceed without waiting for approval of the plan: the PR is where the chang
 If new information, repository drift, or a scope change raises a Phase 2 trigger later, stop and return Questions, leaving the partial work in the worktree.
 
 - A run that receives the answer inspects the branch's commits and the uncommitted changes including untracked files. Undo only the work that implements an option the answer rejected, reverting a commit with `git revert`, and keep everything else.
-
-### Run One Unit
-
-Implement only the first unit of the plan, the first one listed with `depends on: none`, so each unit is reviewed and merged before a dependent one starts and no unit's code is written on top of an unreviewed unit. A change the base branch already contains is done and is not planned again, and a dependency on it counts as `none`, so a later run starts at the next unit.
-
-- A unit ends only at a green commit that closes a complete playbook cycle, never between a test commit and the commit that makes it pass. Phase 6 then shows HEAD green.
-- Every other unit is deferred. Make no edit for it in this run, and report it as Phase 6.9 describes.
-- A deferred unit counts as deferred from the first commit, because the plan already knows it. A non-empty deferred list makes the `commit` skill write `Related #<N>` and not `Closes #<N>`.
-- Start the next unit only after the earlier unit is merged and visible in the base, dependent or not. A run picks its unit from the base alone, so a second run begun earlier would pick the same unit again. Use no stack and no `gh-stack`.
-- A run that follows a merged unit starts on a new branch from the fetched base, never on the merged unit's branch, so its PR carries only its own unit. Phase 4 sets this up.
 
 ---
 
@@ -193,7 +187,7 @@ Route each part of the task in the Phase 3 plan. A playbook, relative to this sk
 
 Before the first edit, read `references/test-policy.md` and the routed playbook, and put the playbook's steps verbatim at the top of the todo list. Mark a step you skip `skip: <reason>`.
 
-Commit each step with the `commit` skill, giving it the type the playbook names, because it infers `test:` for a test-only diff, any `Removed-Test` trailer, and, when the work traces to an Issue, its number and whether anything is deferred so far, counting units Run One Unit deferred. Never push.
+Commit each step with the `commit` skill, giving it the type the playbook names, because it infers `test:` for a test-only diff, any `Removed-Test` trailer, and, when the work traces to an Issue, its number and whether anything is deferred so far. Never push.
 The `commit` skill never asks, so carry every file it left uncommitted and every type it chose without confidence into your final report.
 
 A test that is hard to write is a signal to revisit the design. Touch nothing beyond what the task requires.
@@ -244,18 +238,6 @@ Deferred, not satisfied: <criterion> -> <what was done instead, and why>
 No evidence: <criterion>
 ```
 
-Each unit Run One Unit deferred is one more `Deferred, not satisfied` entry of 5 to 10 lines: the first line names the unit, and its acceptance criteria that no earlier unit satisfies, and the lines under it give the goal, the dependency, the expected files, and the constraints. It uses no new field.
-
-```
-Deferred, not satisfied: unit <n>, <its one sentence> -> not done in this run: <why it is separate>
-  goal: <what the unit achieves>
-  depends on: <unit numbers, or none>
-  expected files: <paths>
-  constraints: <what the next run must keep>
-```
-
-Lead with the last two lines whenever either has content.
-
 ---
 
 ## Phase 7: Finish
@@ -263,6 +245,6 @@ Lead with the last two lines whenever either has content.
 1. Commit any uncommitted work with the `commit` skill, so the range holds the whole change. Give it the Issue number and whether anything is deferred, as Phase 5 says. If a commit hook rewrote any file, rerun Phase 6.9 on the committed state.
 2. If Phase 6.9 left anything deferred and a branch commit carries `Closes #<N>`, say so in the report, because create-pr copies that keyword into the PR.
 3. Release the Issue Claim if this run took one.
-4. Return Built: the Phase 6.9 table, the Phase 6.5 outcome with its reviewed HEAD, every commit in `<reviewed-head>..HEAD` as unreviewed, or all of the range when the outcome is `not-run` or `git merge-base --is-ancestor <reviewed-head> HEAD` fails, the deferred units, and every file the `commit` skill left uncommitted with every `reason:` line it listed.
+4. Return Built: the Phase 6.9 table, the Phase 6.5 outcome with its reviewed HEAD, every commit in `<reviewed-head>..HEAD` as unreviewed, or all of the range when the outcome is `not-run` or `git merge-base --is-ancestor <reviewed-head> HEAD` fails, and every file the `commit` skill left uncommitted with every `reason:` line it listed.
 
 Never push, and never create a PR. The caller checks the range before it publishes anything.
