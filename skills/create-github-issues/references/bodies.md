@@ -13,10 +13,14 @@ Every non-container `Tn`, and every `Tn.m`:
   - `Tn.m`: points to its parent `Tn`'s body instead — the Epic never shows grandchildren, per the dependency-scope rule in `references/structure.md`.
   Don't restate the full dependency chain here; that lives only in the parent.
 - Acceptance Criteria section: concrete, verifiable statements equivalent to "Given X, When Y, Then Z", not vague phrases like "works correctly". Cap the Verification subsection at 5 items. If the real scenarios don't fit in 5, the Step 2 options apply. **Split** (the default): go back to Step 2, split this task into more siblings or grandchildren, and re-run Step 3 approval before writing bodies again. **Compress**: rejected — never silently drop or squeeze items to fit the cap, since that discards the plan's analysis. **Point** (only when an upstream authoritative document — typically a merged, already-reviewed implementation plan — owns the full list): keep 5 items chosen by failure mode rather than happy path, one per distinct kind of failure before a second of the same kind, and write a single prose line after the bullets — never as a sixth bullet — pointing to that document as the authoritative full list, consistent with the existing rule to add a single line linking to an existing design doc and never restate the doc inline. Without such a document, point is unavailable and split remains the default.
-- Verification has two lists under the template's headings, and an empty one is omitted. The cap counts both.
-  - Automated checks: an agent can run them in the repository or CI.
-  - Manual checks: they need a human, such as another machine, a real device, or production. Make a check manual only when no automated check can show it, because pr-verify judges only the automated list.
-  - When the conversation did not say which kind a check is, decide by where it can run: from a checkout of the repository or in CI, without a human's credentials, is automated; anything else, such as a staging environment that needs a login or a dashboard, is manual, and so is a check that names an environment, such as staging, whose access the conversation never described. Step 3 shows the split, so approving the summary settles it. When a task ends with no automated check, say so under it in Step 3, since pr-verify would then have nothing to judge.
+- Verification is one list with no subheading, and every item in it is observable from a checkout of the repository or from CI, without a human's credentials. A manual verification the plan explicitly requires that needs anything else is a person Issue, as `references/structure.md` § Person Issues says, never an item here, and deployment and other operational work is neither. Move a check there only when no check from a checkout or CI can show it. When a task's Verification is empty after that move, say so under it in Step 3, since pr-verify would then have nothing to judge.
+
+## Person Issue body
+
+Every `Pn`, as `references/structure.md` § Person Issues defines it:
+
+- Background section: why the verification needs a person and which implementation Issues it waits for, named by title.
+- What to do section: the moved manual verifications, verbatim in substance.
 
 ## Container `Tn` body
 
@@ -28,6 +32,7 @@ Only when Step 2 promoted it:
 
 ## Epic
 
+- Verification may hold checks of the whole Epic that a person runs, besides checks built from the children's Verification.
 - Dependencies & Parallel Execution Plan section: a Mermaid `flowchart` grouping child Issues into `subgraph` blocks per wave, using `{{Tn}}` tokens (double curly braces) everywhere a real Issue number will later be substituted — both in node labels and in any prose. **If there are more than 12 child Issues, replace the flowchart with the compact wave table** in `references/templates.<LANG>.md` instead — a graph that large stops being readable.
   - **Escaping in node labels:** if a title contains a double quote, write it as the entity code `#quot;` inside the `["..."]` label — never a raw `"` (it terminates the label) and never a backslash-escaped `\"` (Mermaid does not support backslash escaping and the diagram fails to render). Same rule applies to the Step 3 dependency preview.
 - This diagram is a rendering of the same `depends_on`/wave data that Step 5 also uses to set native GitHub blocked-by/blocking relations on each child Issue. Both are generated once, from the same approved data, in the same run — the diagram is a human-readable view, not a hand-maintained duplicate that can drift from the real relations after creation.
@@ -41,7 +46,7 @@ Do not use any `{{Tn}}` or `{{Tn.m}}` token in a leaf body (a non-container `Tn`
 Check the generated bodies mechanically, by re-reading each one against every check below, since no tool but `gh` is allowed; there is no need to show them to the user unless a check fails:
 
 - Every leaf Issue's (non-container `Tn`, or any `Tn.m`) Requirements / Specs / Verification bullet lists stay within the 5-item cap. The three Step 2 options — split (default), compress (rejected), point (doc-owned) — agree here: an Issue using point still passes this check, because the pointer is a prose line after the bullets, not a bullet, so the Verification list stays at 5 items.
-- Every leaf Issue's Verification items sit under the template's check headings, spelled exactly as written there.
+- Every leaf Issue's Verification is one list with no subheading, and no item in it needs a person, another machine, a real device, or an environment, or is a deployment or other operational step.
 - No Mermaid node label (Step 3 preview, Epic body, or a container `Tn` body) contains a raw `"` — a title with a quote must use `#quot;` instead.
 - Leaf bodies never contain a `{{Tn}}` or `{{Tn.m}}` token — that substitution syntax is container-body-only (the Epic for its `Tn` tokens, a container `Tn` for its own `Tn.m` tokens).
 - Collect every `{{Tn}}` token appearing anywhere in the Epic body (diagram/table node labels, dependency-column references, prose) and confirm that set of ids exactly matches the set of `Tn` (leaf and container alike) about to be created — none missing, none referring to a `Tn` that doesn't exist. Separately, for each container `Tn`, collect every `{{Tn.m}}` token in its own body and confirm that set exactly matches the set of its own `Tn.m` grandchildren — none missing, none referring to a different container's child. A given id may legitimately appear more than once within its own scope (e.g. once as its own row, again in another row's dependency column), so check set membership, not occurrence count.
