@@ -336,7 +336,7 @@ JSON
   [ "$(column_of 6 8)" = 45m ]
 }
 
-@test "a head waiting for its branch update waits on the owner at the pull request, and counts from its push" {
+@test "a head that gets a branch update is in progress, waits on nobody, and counts from its push" {
   github <<'JSON'
 {
   "default_branch": {"checks": {"test": "success"}},
@@ -353,11 +353,9 @@ JSON
   run --separate-stderr bash "${oe}" status o/r 1
 
   [ "${status}" -eq 0 ]
-  [ "${lines[0]}" = "Epic #1: 1 done, 0 in progress, 0 waiting, 1 waiting on you" ]
-  [ "${lines[1]}" = "- #5 Update the PR's branch with its base branch" ]
-  [ "${lines[2]}" = "  https://github.com/o/r/pull/50" ]
-  [ "${lines[3]}" = "  why: bbbbbbb lacks sibling PR #40, merged into the base branch" ]
-  [ "$(column_of 5 2)" = wait-update ]
+  [ "${lines[0]}" = "Epic #1: 1 done, 1 in progress, 0 waiting, 0 waiting on you" ]
+  [ "${lines[1]}" = "Nothing waits on you." ]
+  [ "$(column_of 5 2)" = update-branch ]
   [ "$(column_of 5 8)" = 40m ]
 }
 

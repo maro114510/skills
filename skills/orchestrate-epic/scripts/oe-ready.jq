@@ -10,7 +10,7 @@
 # | max_verifier_starts | Verifier starts on one commit before the Issue parks |
 # | verify_context | The commit status context that holds the verdict |
 # | pr_heads | The verdict, the Verifier starts, and the push time of each open pull request head |
-# | records | The Issue's claim and attempt records from this host, oldest first, each with kind and at |
+# | records | The Issue's claim, attempt, and update records from this host, oldest first, each with kind and at |
 # | stale_heads | Each open pull request head that lacks the merge commit of a sibling pull request, with that pull request's number |
 
 def epoch: sub("\\.[0-9]+"; "") | fromdateiso8601;
@@ -160,7 +160,9 @@ def issue_state:
       | ($target | ci) as $ci
       | ($facts.pushed // ($target.committedDate | epoch)) as $pushed
       | {sha: $target.oid[0:7], ci: $ci.state, ci_detail: $ci.detail, verdict: $facts.verdict, starts: $facts.starts,
-          oid: $target.oid, pushed: $pushed, age: (now_s - $pushed), lacks: stale_heads[$target.oid]}
+          oid: $target.oid, pushed: $pushed, age: (now_s - $pushed), lacks: stale_heads[$target.oid],
+          updated: ([records | .[($claim // -1) + 1:][] | select(.kind == "update" and .head == $target.oid) | .at]
+            | last | if . == null then null else epoch end)}
     ) catch {unreadable: .}
     else null end) as $head
   | (if $head == null or $head.unreadable != null then []
@@ -221,7 +223,9 @@ def issue_state:
 # | 7 | A check on the head is pending | wait-ci |
 # | 7 | The head has no checks, and no_checks_grace has not passed since its push | wait-ci |
 # | 8 | The head has no checks, and no_checks_grace has passed since its push | parked |
-# | 9 | The head lacks a sibling's merge commit | wait-update |
+# | 9 | The head lacks a sibling's merge commit, and an update on it was requested less than no_checks_grace ago | wait-update |
+# | 9 | The head lacks a sibling's merge commit, and an update on it was requested no_checks_grace ago or earlier | parked |
+# | 9 | The head lacks a sibling's merge commit, and no update on it was requested | update-branch |
 # | 10 | The head has no verdict, and the Verifier started max_verifier_starts times | parked |
 # | 10 | The head has no verdict, and the Verifier started fewer times | start-verifier |
 # | 11 | The head has a success verdict | wait-merge |
@@ -260,7 +264,11 @@ def next_action:
   elif .head.ci == "none" and .head.age < no_checks_grace then
     act("wait-ci"; "no checks yet on \(.head.sha), \(.head.age)s after its push")
   elif .head.ci == "none" then act("parked"; "no checks on \(.head.sha) \(.head.age)s after its push")
-  elif .head.lacks != null then act("wait-update"; "\(.head.sha) lacks sibling PR #\(.head.lacks), merged into the base branch")
+  elif .head.lacks != null and .head.updated != null and now_s - .head.updated < no_checks_grace then
+    act("wait-update"; "update of \(.head.sha) requested \(now_s - .head.updated)s ago; waiting for its new head")
+  elif .head.lacks != null and .head.updated != null then
+    act("parked"; "\(.head.sha) still lacks sibling PR #\(.head.lacks) \(now_s - .head.updated)s after its update was requested; oe update shows why")
+  elif .head.lacks != null then act("update-branch"; "\(.head.sha) lacks sibling PR #\(.head.lacks), merged into the base branch")
   elif .head.verdict != "success" and .head.starts >= max_verifier_starts then
     act("parked"; "Verifier started \(.head.starts) times on \(.head.sha) without a verdict")
   elif .head.verdict != "success" then act("start-verifier"; "checks passed on \(.head.sha)")
@@ -288,7 +296,8 @@ def classify:
 # | Action | Started at |
 # |---|---|
 # | wait-answer | The latest question |
-# | wait-ci, wait-update, start-verifier, wait-merge | The push of the head |
+# | wait-ci, update-branch, start-verifier, wait-merge | The push of the head |
+# | wait-update | The update request on the head |
 # | start-owner, parked | The latest attempt, or the latest claim without one |
 # | Any other | null |
 def facts:
@@ -298,7 +307,8 @@ def facts:
     | {number, action: $action, reason: $reason, pr, head: .head.oid, ci: .head.ci, verdict: .head.verdict, starts: .head.starts, attempts,
         started: (
           if $action == "wait-answer" then .question_at | epoch
-          elif $action == "wait-ci" or $action == "wait-update" or $action == "start-verifier" or $action == "wait-merge" then .head.pushed
+          elif $action == "wait-update" then .head.updated
+          elif $action == "wait-ci" or $action == "update-branch" or $action == "start-verifier" or $action == "wait-merge" then .head.pushed
           elif $action == "start-owner" or $action == "parked" then .since // null | if . then epoch else null end
           else null end)}
   end;

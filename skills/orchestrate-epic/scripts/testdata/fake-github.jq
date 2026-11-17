@@ -35,6 +35,7 @@
 # | default_branch.statuses | Status context to state | No statuses |
 # | issues | The child Issues of the Epic | No Issues |
 # | written_statuses | Commit statuses oe wrote, newest first, each with sha, context, state, description, and target_url | None |
+# | branch_updates | Numbers of the pull requests whose branch a branch update moved, written by the fake, never read | None |
 #
 # | Issue field | Holds | Default |
 # |---|---|---|

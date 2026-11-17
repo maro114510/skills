@@ -5,7 +5,7 @@
 # | Path under the state directory | Holds | Written by |
 # |---|---|---|
 # | locks.git | One ref per Epic that a session holds | oe lock; read by oe status through lock_held |
-# | records/<repo-key>/<issue>.jsonl | One Issue's records, oldest first, one JSON object per line | oe claim, oe attempt, oe start, oe verdict; dropped by oe forget |
+# | records/<repo-key>/<issue>.jsonl | One Issue's records, oldest first, one JSON object per line | oe claim, oe attempt, oe start, oe update, oe verdict; dropped by oe forget |
 # | boards/<repo-key>/<epic> | The Herdr pane of the Epic's board and the server it is on, as JSON | oe board, which overwrites it |
 # | waits/<repo-key>/<epic> | The process ID and start time of the Epic's running oe wait | oe wait, which writes it only while no other wait runs and drops it when it ends on its own; oe lock release, and an acquire by another session, stop that process |
 # | notices/<repo-key>/<epic> | Each item that needed the person at the latest read, with when the person was last notified about it, as tab-separated lines | oe wait, only with git config skills.notify set, which overwrites it |
@@ -19,10 +19,13 @@
 # | claim | kind, at |
 # | attempt | kind, at, head, bots |
 # | run | kind, at, role: owner or verifier |
+# | update | kind, at, head |
 # | verdict | kind, at, sha, state, findings |
 #
 # - An attempt record is an Owner start. head is the Issue branch's head when it began, absent when the branch did not exist,
 #   and bots names the bots whose findings it repairs. oe-starts.jq reads head to tell whether the start pushed.
+# - An update record is a branch update oe update asked GitHub for, and head is the Issue branch's head before it.
+#   oe-starts.jq reads it so that the merge is never counted as a push of the Owner start before it.
 # - A run record marks an agent oe start started. oe ready counts the agent as running while the record is no older than
 #   the lock of the session holding the Epic, and the agent's worktree, which the session removes once the agent ends, exists.
 #
