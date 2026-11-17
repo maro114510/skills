@@ -287,3 +287,51 @@ session_lines() {
   [ "$(jq -r 'has("session_id")' "$(sessions_record o/r 1)")" = "false" ]
   [ "$(jq -r '.checkout | length > 0' "$(sessions_record o/r 1)")" = "true" ]
 }
+
+@test "a session that takes its own lock again appends no second line" {
+  start_session
+  first="${session_pid}"
+  OE_SESSION_ID=harness-1 OE_SESSION_PID="${first}" run bash "${oe}" lock acquire o/r 1
+  [ "${status}" -eq 0 ]
+  token="$(token_of "${output}")"
+  [ "$(session_lines o/r 1)" -eq 1 ]
+
+  OE_SESSION_ID=harness-1 OE_SESSION_PID="${first}" run bash "${oe}" lock acquire o/r 1 "${token}"
+
+  [ "${status}" -eq 0 ]
+  [ "$(session_lines o/r 1)" -eq 1 ]
+}
+
+@test "a session that takes the lock over from a dead holder appends a second line" {
+  start_session
+  first="${session_pid}"
+  OE_NOW=1760000000 OE_SESSION_ID=first-session OE_SESSION_PID="${first}" run bash "${oe}" lock acquire o/r 1
+  [ "${status}" -eq 0 ]
+  end_session "${first}"
+  start_session
+
+  OE_NOW=1760000100 OE_SESSION_ID=second-session OE_SESSION_PID="${session_pid}" run bash "${oe}" lock acquire o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(session_lines o/r 1)" -eq 2 ]
+  [ "$(jq -r .at "$(sessions_record o/r 1)" | tr '\n' ' ')" = "2025-10-09T08:53:20Z 2025-10-09T08:55:00Z " ]
+  [ "$(jq -r 'select(.at == "2025-10-09T08:55:00Z") | .session_id' "$(sessions_record o/r 1)")" = "second-session" ]
+}
+
+@test "a sessions line that cannot be written warns on stderr and keeps the lock" {
+  mkdir -p "${OE_STATE_DIR}"
+  : >"${OE_STATE_DIR}/sessions"
+  start_session
+
+  OE_SESSION_PID="${session_pid}" run --separate-stderr bash "${oe}" lock acquire o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ -n "$(token_of "${output}")" ]
+  case "${stderr}" in
+  *"sessions"*) ;;
+  *) return 1 ;;
+  esac
+  start_session
+  OE_SESSION_PID="${session_pid}" run bash "${oe}" lock acquire o/r 1
+  [ "${status}" -eq 4 ]
+}
