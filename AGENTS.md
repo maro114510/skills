@@ -100,13 +100,13 @@ Every harness loads this file, but not every one follows an import from it, so t
 
 Route new work by two questions, in order:
 
-1. Is what to do decided? Until it is, it stays in a Discussion.
+1. Is what to do decided? If not, it goes to a Discussion.
 2. Does the change move a boundary, such as a skill contract, user-visible behavior, a safety gate, a git config key, or a data format?
 
 | Decided | Moves a boundary | Path |
 |---|---|---|
 | No | - | A Discussion |
-| Yes | Yes | The owner's decision in the Discussion that holds the intent, a merged Design Doc, then an Epic driven by oe |
+| Yes | Yes | Intent in a Discussion, the owner's decision, a merged Design Doc, then an Epic driven by oe |
 | Yes | No | An Issue |
 
 - Create an Issue only after the owner wrote that the work will be done
@@ -127,7 +127,7 @@ Route new work by two questions, in order:
 - Write posts and Issues in English
 - Keep general facts, such as error class and status, endpoint, counts, timing, and the skill involved
 - Drop anything that identifies private work: names of private repositories, organizations, and app installations, their PR and Issue numbers, product and domain terms, code, and data
-- When the owner decides to build an idea, open a new Issue that links the Discussion, even if an older Issue for it was closed, then comment the Issue URL on the Discussion and close it as resolved
+- When the owner decides to build an idea, start its path from the table above with a link to the Discussion, even if an older Issue for it was closed: a new Issue, or for a change that moves a boundary, a Design Doc pull request. Then comment its URL on the Discussion and close it as resolved
 
 ```bash
 # Search
