@@ -109,10 +109,11 @@ Route new work by two questions, in order:
 | Yes | Yes | Intent in a Discussion, the owner's decision, a merged Design Doc, then an Epic driven by oe |
 | Yes | No | An Issue |
 
-- Create an Issue only after the owner wrote that the work will be done; a bug fix still gets an Issue, but needs no decision from the owner
-- Keep at most 5 decided units open at once: an Epic counts as one, a standalone Issue counts as one, and a bug fix does not count
-    - A unit counts from the owner's decision, so a change that moves a boundary counts while its Design Doc is still open
-    - While 5 are open, a newly decided unit waits in its Discussion and starts when one closes
+- Create an Issue only after the owner wrote that the work will be done; a bug fix, or a fix such as a typo that changes no behavior, still gets an Issue, but needs no decision from the owner
+- Keep at most 5 decided units open at once: an Epic counts as one, a standalone Issue counts as one, and a bug fix or a fix that changes no behavior does not count
+    - A unit counts from when it starts, so a change that moves a boundary counts while its Design Doc is still open
+    - While 5 are open, a newly decided unit waits in its Discussion without counting, and starts when one closes
+- When the owner decides in a conversation and no Discussion holds the work, open one that states the intent and quotes the decision
 - Close anything decided against with the observation that would reopen it
 - Quote the question and the owner's answer behind each decision where it is recorded: the comment that closes a Discussion, and the body of a Design Doc pull request
 
