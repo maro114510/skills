@@ -91,7 +91,7 @@ Any other output keeps the loop running, even when every remaining Issue waits o
 
 Each line holds an Issue number, an action, a reason, and a start command, separated by tabs.
 Take the lines whose action is `start-verifier`, then `start-owner`, then `claim`, and start one agent per line while fewer than `max-agents` agents run, counting each `running` line and each agent started in this pass.
-Every other action starts no agent: `done`, `parked`, and each `wait-*` wait for CI, an answer, a dependency, or an engineer.
+Every other action starts no agent: `done`, `parked`, and each `wait-*` wait for CI, an answer, a dependency, or an engineer, and `read-again` marks an Issue whose PR moved during the read, which the next pass classifies.
 A `running` line names the agent that runs for the Issue, and its reason holds the command to run once that agent ends, never before.
 
 A `wait-answer` line holds an Owner's open question in its reason, with each line break written as `\n`, and an `oe question … --answer <reply>` command in place of a start command:

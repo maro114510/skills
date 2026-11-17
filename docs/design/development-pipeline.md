@@ -73,7 +73,6 @@ flowchart TB
 | Wait state | `oe ready` action | Person's action |
 |---|---|---|
 | `answer` | Wait for the answer | Reply to the Question in the Coordinator's conversation or on the Ticket |
-| `respond` | Wait for a person, after 2 Owner starts without a push | Respond in the Coordinator's conversation or on the Ticket |
 | `merge` | Wait for an engineer to merge | Review and merge, or let repository automation merge |
 | `restart` | Park the Issue | Delete the branch so the Coordinator starts over, or finish and merge by hand |
 | `dependency` | Wait for the dependencies, with a dependency closed as not planned or duplicate | Replace or remove the dependency |

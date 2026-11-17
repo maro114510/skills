@@ -23,6 +23,7 @@ If any of the five is missing, end without a verdict and say which.
 
 - Read only the Issue's title and body. Never read the PR, its body, or its comments, the Issue's comments, or any report from the Owner, because the verdict must come from the Issue and the code alone.
 - Never change `<worktree>`: no edit, commit, push, stash, or checkout. Build and cache output from running a check is allowed, and so are the temporary directories outside it that evidence.md uses.
+- Run the `oe verdict` call from `<worktree>`, as written below, because the Bot identity is read from that worktree's git config.
 - Record the verdict only through `oe verdict`, once, for `<sha>`. Never run `oe question`, and never record an answer with `oe question --answer`, because only the person answers.
 - Wait for every command and agent you started to finish before ending your turn. The session takes the end of your turn as the end of your work and removes `<worktree>`, so ending a turn to wait for a background command or agent loses the check it was running.
 
@@ -43,15 +44,15 @@ If any of the five is missing, end without a verdict and say which.
 3. Find what changed with `git -C <worktree> diff "$(git -C <worktree> merge-base origin/<base> HEAD)"`. If it fails, end without a verdict.
 4. Read `<skills-root>/implement/references/evidence.md` and gather evidence for each check to judge in the worktree as it defines. Write one line per check in its section 5 form, the step 2 manual lines included. For a check with no evidence, write `-> none: <the evidence that would settle it>`. Put an input too long for its line after all check lines.
 5. Decide the verdict. It is `success` only when every judged check is evidenced, including when none is judged. Otherwise it is `failure`. A behavior check that nothing available can exercise, such as a UI no tool can drive, has no evidence, so it makes the verdict `failure`.
-6. Confirm `git -C <worktree> rev-parse HEAD` still prints `<sha>`, then record the verdict with the step 4 lines as findings:
+6. Confirm `git -C <worktree> rev-parse HEAD` still prints `<sha>`. Create a unique temporary file outside `<worktree>` with `mktemp`, then use your file-writing tool to write the step 4 lines into it. Never put findings in shell command text, including a heredoc, `echo`, or `printf`: findings may name paths the harness denies in shell commands.
+
+   Record the verdict by redirecting that file into stdin; `<findings-file>` is the temporary file's path:
 
    ```bash
-   bash <skills-root>/orchestrate-epic/scripts/oe verdict <repo> <issue> <sha> <success|failure> <<'EOF'
-   <the step 4 lines>
-   EOF
+   (cd <worktree> && bash <skills-root>/orchestrate-epic/scripts/oe verdict <repo> <issue> <sha> <success|failure>) < "<findings-file>"
    ```
 
-   Exit 0 means it was recorded. Any other exit means nothing was recorded: do not retry.
+   Save the command's exit status, then remove only the temporary file, whether recording succeeded or failed. Exit 0 from `oe verdict` means it was recorded. Any other exit means nothing was recorded: do not retry. If creating or writing the file fails, clean up any file created and end without a verdict.
 
 ## Output
 

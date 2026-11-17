@@ -55,7 +55,8 @@ validate-apm: ## Verify APM deploys the agents portably (APM_TARGET=claude|codex
 	@tests/validate-apm.sh $(APM_TARGET)
 
 release: check-version ## Bump manifests, commit, tag, and push a release.
-	@test "$$(git branch --show-current)" = 'main' || { printf 'Release must run from main, not %s.\n' "$$(git branch --show-current)"; exit 1; }; \
+	@set -e; \
+	test "$$(git branch --show-current)" = 'main' || { printf 'Release must run from main, not %s.\n' "$$(git branch --show-current)"; exit 1; }; \
 	test -z "$$(git status --porcelain)" || { printf '%s\n' 'Working tree must be clean before release.'; git status --short; exit 1; }; \
 	git fetch --tags origin; \
 	last_tag="$$(git describe --tags --match 'v[0-9]*' --abbrev=0 2>/dev/null || true)"; \
@@ -86,5 +87,4 @@ release: check-version ## Bump manifests, commit, tag, and push a release.
 	git add $(MANIFESTS); \
 	git commit -m "chore: release $$tag"; \
 	git tag -a "$$tag" -m "$$tag"; \
-	git push origin HEAD; \
-	git push origin "$$tag"
+	git push --atomic origin HEAD "$$tag"

@@ -10,6 +10,7 @@
 #
 # - Run it from the clone the session runs in, so the AGENT column can find the agents' worktrees.
 # - --watch redraws the view every wait_interval seconds until interrupted.
+#   At a terminal it first clears the screen, so nothing the pane's shell printed while it started stays, and shows one line while the first read runs.
 #   A failed read is reported on stderr and retried at the next refresh.
 #   Once a refresh has found a running session holding the Epic's lock, the first refresh that finds none draws the last view and exits 0,
 #   so a board left open after its session ended, crashed or not, stops reading GitHub.
@@ -24,7 +25,7 @@
 # |---|---|
 # | done | done |
 # | waiting on you | wait-answer, parked, wait-engineer, wait-update, wait-merge |
-# | waiting | wait-dependencies, wait-base |
+# | waiting | wait-dependencies |
 # | in progress | Any other, running included |
 #
 # Under it, each Issue waiting on the owner shows three lines, sorted by Issue number, or one line says nothing waits:
@@ -42,10 +43,10 @@
 # | PR | The pull request opened from its branch after the latest claim |
 # | CI | The CI state of that pull request's open head |
 # | VERDICT | The oe/verify state on that head |
-# | ATTEMPTS | Owner attempts since the latest claim, out of max_attempts |
+# | ATTEMPTS | Owner starts since the latest claim that pushed, out of max_attempts |
 # | AGENT | owner or verifier while a running session holds the Epic's lock and that agent's worktree exists |
 # | SINCE | Time since the Issue entered its step, as facts in oe-ready.jq defines it |
-# | REASON | For a running agent, its attempt or start out of the cap; else oe ready's reason for the step |
+# | REASON | For a running Owner, the attempts used; for a running Verifier, its start out of the cap; else oe ready's reason for the step |
 #
 # - Under the table, each Issue whose head has a failure verdict shows that verdict's findings, one line each.
 #
@@ -124,11 +125,11 @@ render() {
     [[ -n "${line}" ]] || continue
     n="$(jq -r .number <<<"${line}")" || return 1
     agent="$(agent_of "${n}")"
-    # A running agent's own attempt already counts, so oe ready's next action would describe the attempt after it.
+    # A running agent's own start is already recorded, so oe ready's next action would describe the start after it.
     if [[ "${agent}" != - && "$(jq -r .action <<<"${line}")" != "done" ]]; then
       line="$(jq -c --arg agent "${agent}" --argjson max "${max_attempts}" --argjson vmax "${max_verifier_starts}" '
         .action = "running"
-        | .reason = (if $agent == "owner" then "Owner attempt \(.attempts // 0) of \($max)"
+        | .reason = (if $agent == "owner" then "Owner runs; \(.attempts // 0) of \($max) attempts used"
             else "Verifier start \(.starts // 0) of \($vmax) on \((.head // "")[0:7])" end)' <<<"${line}")" || return 1
     fi
     action="$(jq -r .action <<<"${line}")" || return 1
@@ -146,7 +147,7 @@ render() {
         | "- #\(.number) \($todo)\n  https://github.com/\($repo)/\($path)\n  why: \(.reason)"' \
         <<<"${line}")"$'\n' || return 1
       ;;
-    wait-dependencies | wait-base) waiting_n=$((waiting_n + 1)) ;;
+    wait-dependencies) waiting_n=$((waiting_n + 1)) ;;
     *) progress_n=$((progress_n + 1)) ;;
     esac
     started="$(jq -r '.started // empty' <<<"${line}")" || return 1
@@ -192,6 +193,9 @@ if ((! watch)); then
   printf '%s\n' "${view}"
   exit 0
 fi
+
+# The first read takes seconds, and the screen shows only what the pane's shell printed until then.
+[[ ! -t 1 ]] || printf '\033[H\033[2J%s\n' "oe status: reading Epic #${epic} of ${repo} ..."
 
 count=0
 seen=0

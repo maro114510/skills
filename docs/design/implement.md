@@ -18,7 +18,7 @@ implement turns one Request into one Change Unit, committed and verified on its 
 | Splitting work into Issues of one Change Unit each | Whoever files the Issues |
 | Dropping an Acceptance Criterion or moving it to another Issue; implement only drafts the edit | A person, by editing the Issue |
 | The worktree and the Lock once a run returns | The caller |
-| Checking the Range before anything is published, pushing, and opening and merging a pull request | The caller |
+| Pushing, and opening and merging a pull request | The caller |
 
 ## Domain Model
 

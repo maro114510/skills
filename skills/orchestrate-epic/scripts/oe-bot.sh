@@ -1,0 +1,242 @@
+# shellcheck shell=bash
+# The Bot identity the agents act as, when a clone opts in with git config skills.bot.
+#
+# | Function | Does |
+# |---|---|
+# | bot_login | Prints the opt-in login of this clone, without the [bot] suffix, or nothing |
+# | bot_identity_login | Prints the Bot login this worktree carries, or nothing |
+# | bot_identity_apply <worktree> | Applies the identity to one fresh worktree, or does nothing when the clone does not opt in |
+# | bot_git <git args...> | Runs git with the Bot as its only credential source in an opted-in clone |
+# | bot_env <owner/repo> | Puts a fresh Bot token in GH_TOKEN when this worktree carries the identity |
+# | bot_env_start <owner/repo> | Puts a fresh Bot token in GH_TOKEN for the steps a start runs, in an opted-in clone |
+# | bot_require_ready <owner/repo> | Refuses with a reason when the clone opts in but a start could not act as the Bot |
+#
+# The helper command is read from the global git config skills.bot.helper only, never from a
+# clone's own config, so a repository cannot name the command that mints its credentials.
+# A person's own checkout carries no identity and keeps acting as the person; every agent
+# worktree is created with the identity, and a start refuses when it could not be.
+
+# Prints the opt-in login of this clone, without the [bot] suffix REST adds.
+bot_login() {
+  local login
+  login="$(git config --get skills.bot 2>/dev/null)" || login=""
+  printf '%s\n' "${login%\[bot\]}"
+}
+
+# Prints the Bot login this worktree carries, or nothing outside a Bot worktree.
+bot_identity_login() {
+  git config --get skills.bot.identity 2>/dev/null || true
+}
+
+# Prints the helper command. Only the global config names it.
+bot_helper() {
+  local helper
+  helper="$(git config --global --get skills.bot.helper 2>/dev/null)" || return 1
+  [[ -n "${helper}" ]] || return 1
+  printf '%s\n' "${helper}"
+}
+
+# Prints one token for repository $1, or fails with the helper's own first line of error.
+bot_token() {
+  local repo="$1" helper err out
+  local -a bot_cmd
+  helper="$(bot_helper)" || {
+    echo "git config --global skills.bot.helper is unset, so no Bot token can be minted" >&2
+    return 1
+  }
+  read -r -a bot_cmd <<<"${helper}"
+  err="$(mktemp)" || {
+    echo "mktemp failed" >&2
+    return 1
+  }
+  if ! out="$("${bot_cmd[@]}" token "${repo}" 2>"${err}")"; then
+    echo "the Bot helper could not print a token for ${repo}: $(head -n1 "${err}")" >&2
+    rm -f "${err}"
+    return 1
+  fi
+  rm -f "${err}"
+  if [[ -z "${out}" ]]; then
+    echo "the Bot helper printed no token for ${repo}" >&2
+    return 1
+  fi
+  printf '%s\n' "${out}"
+}
+
+# Runs git with the Bot as its only credential source, so a fetch that runs before the worktree
+# carries the identity never answers with the person's credential, and a helper that declines fails
+# instead of asking. Outside an opted-in clone it runs git unchanged.
+bot_git() {
+  local helper url header
+  local -a scoped
+  if [[ -z "$(bot_login)" ]]; then
+    git "$@"
+    return
+  fi
+  helper="$(bot_helper)" || return 1
+  scoped=(
+    -c credential.https://github.com.helper=
+    -c credential.https://github.com.helper="!${helper}"
+    -c "credential.https://github.com.helper=!f() { echo quit=true; }; f"
+    -c credential.https://github.com.useHttpPath=true
+    -c http.https://github.com/.extraheader=
+  )
+  # A key with a longer path is more specific than the reset above and would still answer, so
+  # refuse rather than let an Authorization header ride along with the fetch.
+  url="$(git remote get-url origin 2>/dev/null)" || url=""
+  if [[ -n "${url}" ]]; then
+    header="$(git "${scoped[@]}" config --get-urlmatch http.extraheader "${url}" 2>/dev/null)" || header=""
+    if [[ -n "${header}" ]]; then
+      echo "a http authorization header is configured for ${url}, which no credential helper can replace" >&2
+      return 1
+    fi
+  fi
+  git "${scoped[@]}" "$@"
+}
+
+# Puts a fresh token in GH_TOKEN when this worktree carries the identity, and does nothing otherwise.
+bot_env() {
+  local token
+  [[ -n "$(bot_identity_login)" ]] || return 0
+  token="$(bot_token "$1")" || return 1
+  export GH_TOKEN="${token}"
+}
+
+# Puts a fresh Bot token in GH_TOKEN for the steps a start runs, so the branch, the assignee, and the
+# pending status they write carry the Bot, and does nothing outside an opted-in clone.
+bot_env_start() {
+  local token
+  [[ -n "$(bot_login)" ]] || return 0
+  token="$(bot_token "$1")" || return 1
+  export GH_TOKEN="${token}"
+}
+
+# Checks, without a network read, that the worktree at $1, or the current one when $1 is omitted,
+# could act as the Bot: the helper is named globally, the configured remote and every URL a push
+# would use are HTTPS GitHub ones, and no submodule keeps its own settings, where the person's
+# credentials would answer instead.
+# A caller names the worktree it is about to hand an agent, because the checkout it runs from is not
+# that worktree and can hold a different .gitmodules or remote URL.
+# It runs before a fetch or a start, so a refused one changes nothing on GitHub.
+bot_config_ready() {
+  local login top at="${1:-.}" fetch_url effective_fetch push_urls url
+  login="$(bot_login)"
+  [[ -n "${login}" ]] || return 0
+  bot_helper >/dev/null || {
+    echo "git config --global skills.bot.helper is unset, so nothing can act as the Bot" >&2
+    return 1
+  }
+  # The fetch runs before the worktree carries the identity, so its URL has to be the HTTPS one as
+  # well, or git would answer it with the person's key.
+  fetch_url="$(git -C "${at}" config --get remote.origin.url 2>/dev/null)" || fetch_url=""
+  if [[ "${fetch_url}" != https://github.com/* ]]; then
+    echo "${fetch_url:-remote.origin.url} is not an HTTPS GitHub URL, so a fetch would not answer with the Bot helper" >&2
+    return 1
+  fi
+  # A url.<base>.insteadOf rule can rewrite the fetch after that, so read the URL git would use too.
+  # A file:// transport sends no credential and stands in for the network in the tests.
+  effective_fetch="$(git -C "${at}" remote get-url origin 2>/dev/null)" || effective_fetch=""
+  if [[ "${effective_fetch}" != https://github.com/* && "${effective_fetch}" != file://* ]]; then
+    echo "${effective_fetch:-remote.origin.url} is not an HTTPS GitHub URL, so a fetch would not answer with the Bot helper" >&2
+    return 1
+  fi
+  # git pushes to pushurl when one is set, and its url.<base>.insteadOf and pushInsteadOf rules can
+  # rewrite that URL before the push, so every URL git would actually push to has to be the HTTPS one
+  # the helper answers for; reading the fetch URL alone would let a push leave under the person's
+  # SSH key.
+  push_urls="$(git -C "${at}" remote get-url --push --all origin 2>/dev/null)" || push_urls=""
+  if [[ -z "${push_urls}" ]]; then
+    echo "cannot read the push URL of origin, so a push could not be checked against the Bot helper" >&2
+    return 1
+  fi
+  while IFS= read -r url; do
+    if [[ "${url}" != https://github.com/* ]]; then
+      echo "${url} is not an HTTPS GitHub URL, so a push would not answer with the Bot helper" >&2
+      return 1
+    fi
+  done <<<"${push_urls}"
+  top="$(git -C "${at}" rev-parse --show-toplevel 2>/dev/null)" || top=""
+  if [[ -n "${top}" && -e "${top}/.gitmodules" ]]; then
+    echo "${top} has submodules, which keep their own credentials, so it cannot act as the Bot" >&2
+    return 1
+  fi
+}
+
+# Prints the numeric id GitHub assigns the Bot, which makes its noreply commit address.
+bot_user_id() {
+  local login="$1" id
+  id="$(gh api "/users/${login}%5Bbot%5D" --jq .id 2>/dev/null)" || id=""
+  if [[ ! "${id}" =~ ^[0-9]+$ ]]; then
+    echo "cannot read the GitHub user id of ${login}[bot]" >&2
+    return 1
+  fi
+  printf '%s\n' "${id}"
+}
+
+# Refuses with a reason unless a start from this clone can act as the Bot: its settings are
+# ready, the helper can mint a token, and GitHub gives the Bot an id. The id is passed to the
+# worktree step, which runs in a child process.
+# It runs before any step, so a refused start spends no attempt and creates no branch.
+bot_require_ready() {
+  local id
+  bot_config_ready || return 1
+  [[ -n "$(bot_login)" ]] || return 0
+  bot_token "$1" >/dev/null || return 1
+  id="$(bot_user_id "$(bot_login)")" || return 1
+  export OE_BOT_ID="${id}"
+}
+
+# Gives worktree $1 the identity its clone opted into, or clears the identity a reused worktree
+# may still carry when it opts out. The address is a setting, so neither needs a network read.
+bot_identity_apply() {
+  local wt="$1" login helper id email url header push_urls
+  login="$(bot_login)"
+  if [[ -z "${login}" ]]; then
+    bot_identity_clear "${wt}"
+    return 0
+  fi
+  bot_config_ready "${wt}" || return 1
+  helper="$(bot_helper)"
+  id="${OE_BOT_ID:-}"
+  [[ -n "${id}" ]] || id="$(bot_user_id "${login}")" || return 1
+  email="${id}+${login}[bot]@users.noreply.github.com"
+  git -C "${wt}" config extensions.worktreeConfig true || return 1
+  git -C "${wt}" config --worktree user.name "${login}[bot]" || return 1
+  git -C "${wt}" config --worktree user.email "${email}" || return 1
+  # The empty value clears the helpers the person's config registers for github.com, so this
+  # worktree asks the Bot helper only and never answers from the person's own login.
+  git -C "${wt}" config --worktree credential.https://github.com.helper "" || return 1
+  git -C "${wt}" config --worktree --add credential.https://github.com.helper "!${helper}" || return 1
+  # A helper that declines must not fall through to an askpass or a terminal, where the person's
+  # credential would answer, so a terminating helper ends the chain after the Bot one.
+  git -C "${wt}" config --worktree --add credential.https://github.com.helper "!f() { echo quit=true; }; f" || return 1
+  git -C "${wt}" config --worktree credential.https://github.com.useHttpPath true || return 1
+  # An inherited http.<url>.extraheader adds an Authorization header of its own, which no credential
+  # helper can replace, so the worktree resets the list instead of letting it answer as the person.
+  git -C "${wt}" config --worktree http.https://github.com/.extraheader "" || return 1
+  # A key with a longer path is more specific than the reset above and would still answer, so refuse
+  # rather than let an Authorization header outrank the Bot helper. Every configured push URL
+  # receives the push, so check each one and not only the first.
+  push_urls="$(git -C "${wt}" remote get-url --push --all origin 2>/dev/null)" || push_urls=""
+  while IFS= read -r url; do
+    [[ -n "${url}" ]] || continue
+    header="$(git -C "${wt}" config --get-urlmatch http.extraheader "${url}" 2>/dev/null)" || header=""
+    if [[ -n "${header}" ]]; then
+      echo "a http authorization header is configured for ${url}, which no credential helper can replace" >&2
+      return 1
+    fi
+  done <<<"${push_urls}"
+  git -C "${wt}" config --worktree skills.bot.identity "${login}" || return 1
+}
+
+# Removes the identity from a worktree its clone no longer opts in for, so nothing it kept can
+# make a later run act as the Bot.
+bot_identity_clear() {
+  local wt="$1" key
+  [[ -n "$(git -C "${wt}" config --get skills.bot.identity 2>/dev/null)" ]] || return 0
+  git -C "${wt}" config extensions.worktreeConfig true || return 1
+  for key in user.name user.email skills.bot.identity \
+    credential.https://github.com.helper credential.https://github.com.useHttpPath \
+    http.https://github.com/.extraheader; do
+    git -C "${wt}" config --worktree --unset-all "${key}" >/dev/null 2>&1 || true
+  done
+}

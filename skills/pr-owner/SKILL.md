@@ -1,8 +1,8 @@
 ---
 name: pr-owner
 description: >
-  Move one orchestrate-epic Issue one step forward: implement it and open its PR, or repair its open PR, by following implement without a human and pushing the result.
-  When it cannot decide, it writes a question with `oe question` and pushes nothing.
+  Move one orchestrate-epic Issue one step forward: implement it and open its PR, or repair its open PR, by calling implement like any caller and pushing the result.
+  When implement returns Questions, it writes them with `oe question` and pushes nothing.
   Started by orchestrate-epic with a brief holding the Issue, the base branch, and the Issue branch's worktree.
   Never merges and never enables auto-merge.
 disable-model-invocation: true
@@ -22,6 +22,7 @@ If any of the first four is missing, end without changing anything and say which
 
 ## Rules
 
+- Run `oe question` and `oe rereview` from `<worktree>`, as written below, because the Bot identity is read from that worktree's git config.
 - Write to GitHub only by `git push` without force, `create-linked-pr.sh`, `oe question` without `--answer`, and `oe rereview`. Never record an answer, because an answer counts as the person's even under the agents' bot, and only the orchestrate-epic session records one from the person's reply. Never comment, reply to or resolve a review thread, review, edit a PR or Issue, or touch a label, because oe ready reads any unmarked comment from this token as engineer input.
 - Never merge, enable auto-merge, or bypass a push guard such as a hook that asks for approval.
 - Work only in `<worktree>`. Never switch, pull, or edit the shared checkout or another worktree.
@@ -69,22 +70,28 @@ If any of the first four is missing, end without changing anything and say which
    git -C <worktree> merge --no-edit origin/<base>
    ```
 
-   Resolve each conflict so that both sides' intent holds, then commit the merge with `git -C <worktree> commit --no-edit`. If you cannot tell how to resolve one, run `git -C <worktree> merge --abort`, ask about it with `oe question` as in step 6, and end without running implement or pushing.
-5. Read `<skills-root>/implement/SKILL.md` and follow it with `<task>` as its arguments, saying that no human is reachable, that the worktree is `<worktree>`, that the base branch is `<base>`, and that questions go to `oe question` as in step 6.
+   Resolve each conflict so that both sides' intent holds, then commit the merge with `git -C <worktree> commit --no-edit`. If you cannot tell how to resolve one, run `git -C <worktree> merge --abort`, write it as a Question with `oe question` as in step 6, and end without running implement or pushing.
+5. Read `<skills-root>/implement/SKILL.md` and follow it with `<task>` as its arguments, saying that the worktree is `<worktree>` and the base branch is `<base>`. It returns Busy, Questions, or Built as its first line, `IMPLEMENT: busy`, `IMPLEMENT: questions`, or `IMPLEMENT: built`, and never asks.
    `<task>` is `Implement GitHub Issue #<issue> in <repo>.` for a new task, or `Repair PR #<pr> for GitHub Issue #<issue> in <repo>.` followed by every present item for a repair. Append the answers from step 3 as the user's decisions.
-6. If you wrote a question while following implement, push nothing and end. If implement stopped before committing its work, push nothing and end. Otherwise go to step 7. Write a question this way:
+6. Act on what implement returned:
+   - Busy: push nothing and end with `RESULT: none` naming the owner it printed.
+   - Questions: write the Questions implement returned with `oe question` as below, push nothing, and end.
+   - Neither Result, because implement stopped before committing its work: push nothing and end.
+   - Built: go to step 7.
+
+   Write a Question this way:
 
    ```bash
-   bash <skills-root>/orchestrate-epic/scripts/oe question <repo> <issue> <<'EOF'
+   (cd <worktree> && bash <skills-root>/orchestrate-epic/scripts/oe question <repo> <issue>) <<'EOF'
    <the question>
    EOF
    ```
 
-   - Write only the question blocking the work first, as `<skills-root>/implement/references/question.md` writes it, in the language `bash <skills-root>/create-pr/scripts/lang.sh` prints. The next Owner asks the rest once it is answered.
+   - Write only the Question blocking the work first, as `<skills-root>/implement/references/question.md` writes it, in the language `bash <skills-root>/create-pr/scripts/lang.sh` prints. The next Owner returns the rest once it is answered, because implement runs again with the answer.
    - Write each option as `- A. <label>`, lettered A to D in order, with its line on how it fares indented under it, because the person answers with the letter.
    - On exit 2, `oe question` wrote nothing and listed what breaks the template: fix those parts and run it again.
 
-7. If `git -C <worktree> rev-list --count origin/<branch>..HEAD` prints 0 and the task is a repair, there is nothing to push: end. For a new task, first run `git -C <worktree> fetch origin <base>`, because nothing else refreshes `origin/<base>` and a stale one puts the base's own commits and their closing footers in the range, then run `bash <skills-root>/create-pr/scripts/issue-refs.sh origin/<base>` in the worktree. Exit 3 means an older commit closes the Issue that the newest marks Related: ask about it with `oe question` as in step 6, and push nothing.
+7. If `git -C <worktree> rev-list --count origin/<branch>..HEAD` prints 0 and the task is a repair, there is nothing to push: end. For a new task, first run `git -C <worktree> fetch origin <base>`, because nothing else refreshes `origin/<base>` and a stale one puts the base's own commits and their closing footers in the range, then run `bash <skills-root>/create-pr/scripts/issue-refs.sh origin/<base>` in the worktree. Exit 3 means an older commit closes the Issue that the newest marks Related: write a Question about it with `oe question` as in step 6, and push nothing.
 8. Push:
 
    ```bash
@@ -92,7 +99,7 @@ If any of the first four is missing, end without changing anything and say which
    ```
 
    If the push is rejected, end without retrying.
-9. For a new task, open the PR. Write its title, body, and metadata by `<skills-root>/create-pr/SKILL.md` Steps 1 to 5, in the language its `Arguments:` line resolves, running Step 1 as `bash <skills-root>/create-pr/scripts/pr-context.sh base <base>` in the worktree and ending on its non-zero exit. Check no box that needs a human, as its Step 3.2 says. End the body with the line `<!-- automation-owner: orchestrate-epic -->`, alone on its line and exactly as written, then one sentence in the body's language saying that orchestrate-epic owns this PR and that deleting that line hands it over; other automations that honor the marker then neither push nor reply here. `--owner orchestrate-epic` appends the line when the body lacks it, because nothing may add it once the PR exists. Then run in the worktree, pasting Step 1's `== create flags` line verbatim as `<create flags>`, which carries `--base`, `--draft`, and `--assignee @me`:
+9. For a new task, open the PR. Have a fresh session write its title and body, as `<skills-root>/create-pr/SKILL.md` Step 3 says, and never write them yourself; take its metadata from Steps 1 to 5, in the language its `Arguments:` line resolves, running Step 1 as `bash <skills-root>/create-pr/scripts/pr-context.sh base <base>` in the worktree and ending on its non-zero exit. Check no box that needs a human, as its Step 3.2 says. End the body with the line `<!-- automation-owner: orchestrate-epic -->`, alone on its line and exactly as written, then one sentence in the body's language saying that orchestrate-epic owns this PR and that deleting that line hands it over; other automations that honor the marker then neither push nor reply here. `--owner orchestrate-epic` appends the line when the body lacks it, because nothing may add it once the PR exists. Then run in the worktree, pasting Step 1's `== create flags` line verbatim as `<create flags>`, which carries `--base`, `--draft`, and `--assignee @me`:
 
    ```bash
    bash <skills-root>/create-pr/scripts/create-linked-pr.sh --repo <repo> --head <branch> --owner orchestrate-epic <create flags> \
@@ -105,7 +112,7 @@ If any of the first four is missing, end without changing anything and say which
 10. Ask the bots to review again. This step follows any push, because the repair may have come from a bot finding:
 
     ```bash
-    bash <skills-root>/orchestrate-epic/scripts/oe rereview <repo> <issue>
+    (cd <worktree> && bash <skills-root>/orchestrate-epic/scripts/oe rereview <repo> <issue>)
     ```
 
     It asks only the bots the latest `attempt` record names, one marked PR comment each, and writes nothing when it names none. A non-zero exit ends the run after the push that already happened, and the error is worth reporting.
