@@ -19,7 +19,7 @@
 # next order: work in progress, then the number of open Issues it unblocks, then a parent Epic with progress, then
 # the lower number. In progress means a worktree, an open pull request, or the viewer among the assignees.
 # blocked order: fewer open blockers, then more Issues unblocked, then the lower number.
-# discussions order: the most recently updated, then the lower number.
+# discussions order: the least recently updated, then the lower number.
 
 def checks: .commits.nodes[0].commit.statusCheckRollup.state // null;
 
@@ -97,6 +97,6 @@ def body_excerpt: (.body // "")[0:1500];
       ([$in.discussions[]
         | {kind: "discussion", number, title, url, body: body_excerpt, category: .category.name,
            answered: .isAnswered, updatedAt}]
-       | sort_by(.updatedAt, -.number) | reverse) as $discussions
+       | sort_by(.updatedAt, .number)) as $discussions
       | {discussions: $discussions[0:$in.limit], discussionsTotal: ($discussions | length)}
     end
