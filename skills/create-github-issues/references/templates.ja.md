@@ -42,7 +42,7 @@ In any Mermaid node label, a double quote in a title must be written as `#quot;`
 **スコープ（含む）**: <bullet> / <bullet>
 **スコープ（含まない）**: <該当する場合のみ。ソースが後回し・対象外・別 Epic とした項目と、会話で明示的に除外された項目。ソースから外した項目には「<項目> — ソース: 「<外す根拠となるソースの文言>」」の形でその文言を添える。どれもなければこの行ごと省略>
 **目標状態**: <すべての子 Issue が完了したときに成り立つ状態を1行で>
-**検証**: <Epic 全体の完了を確かめる方法。下の子 Issue の検証だけから組み立てる>
+**検証**: <Epic 全体の完了を確かめる方法。下の子 Issue の検証と、人が行う Epic 全体の確認から組み立てる>
 
 （会話で挙げられたタスク数と子 Issue 数が一致しない場合のみ記載: **会話からの構成変更**: <どのタスクをどう分割/統合したか、その理由を1〜2文で>）
 
@@ -77,8 +77,7 @@ flowchart LR
 - 要件: <bullet> / <bullet>
 - 仕様: <bullet>（決定済み事項がなければ「なし」と書く）
 - 理想状態: <完了時に成り立つべき状態を1行で>
-- 自動確認: <bullet>、またはなし（その場合は pr-verify が判定するものがないと添える）
-- 手動確認: <bullet>、またはなし
+- 検証方法: <bullet>。どれもチェックアウトか CI で確かめられるもの。なければなしと書き、pr-verify が判定するものがないと添える
 - 全項目: <文書のパスと節>（このタスクがポイント方式を使う場合のみ）
 
 #### T2: <タイトル>（Wave 2 / 依存: T1）
@@ -86,8 +85,7 @@ flowchart LR
 - 要件: <bullet>
 - 仕様: なし
 - 理想状態: <1行>
-- 自動確認: <bullet>
-- 手動確認: なし
+- 検証方法: <bullet>
 
 Step 1.5 で統合済み文書が変更され、この Tn の内容が変わった場合は、見出しの依存部分を単純な「依存: ...」ではなく「依存: T<doc>（直接）」または「依存: T<via>（T<doc> に推移的）」と完全な形で書く — サマリーでどちらになるかを承認する必要がある。
 
@@ -102,6 +100,14 @@ Step 1.5 で統合済み文書が変更され、この Tn の内容が変わっ�
 
 ##### T3.2: <タイトル>（Wave 2 / 依存: T3.1）
 - 同上
+
+### 人が行う Issue（M 件、Epic のサブ Issue ではない）
+
+人、別のマシン、実機、または環境が必要な作業がある場合のみ記載する。なければこの節ごと省略する。
+
+#### P1: <タイトル>（ブロック元: T1, T2）
+- 背景: <人が行う理由を1行で>
+- やること: <bullet> / <bullet>
 
 ソースにない追加案がある場合のみ、次の節と、末尾の「追加案は」で始まる行を書く。追加案がなければ、どちらも書かない。
 
@@ -157,7 +163,7 @@ flowchart LR
 {What must be true when all child Issues are done}
 
 ### 検証方法
-{How to confirm completion — E2E or integration checks}
+{How to confirm completion — E2E or integration checks, including any check of the whole Epic that a person runs}
 ```
 
 ### Table variant (>12 child Issues)
@@ -236,16 +242,26 @@ flowchart LR
 
 ### 検証方法
 
-#### 自動確認
-- {Automated check: assert what, run which command}
+- {Check observable from a checkout or CI: assert what, run which command}
 
-#### 手動確認
-- {Manual check, one line}
-
-{Up to 5 bullets across both lists. If it takes more than 5 to cover the real scenarios, that's a signal this Issue should be split — see Step 2 — unless an upstream authoritative document owns the full list: then keep 5 bullets chosen by failure mode rather than happy path, and add one prose line after the bullets (never a sixth bullet) pointing to that document as the authoritative full list. The pointer option is unavailable when no such document exists.}
+{Up to 5 bullets. If it takes more than 5 to cover the real scenarios, that's a signal this Issue should be split — see Step 2 — unless an upstream authoritative document owns the full list: then keep 5 bullets chosen by failure mode rather than happy path, and add one prose line after the bullets (never a sixth bullet) pointing to that document as the authoritative full list. The pointer option is unavailable when no such document exists.}
 ```
 
 **Banned in every section above:** lettered step sequences (`a→b→c→d`), pseudocode, function signatures, multi-level nested bullets. If a task genuinely needs that much detail to specify, split it into more child Issues, or add a single line linking to an existing design doc — never restate the doc inline.
+
+## Person Issue body (Step 4)
+
+すべての `Pn` がこの形を使う。Epic のサブ Issue にはせず、Step 5 で blocked-by 関係を設定する。
+
+```markdown
+## 背景
+
+{Why this work needs a person, and the titles of the implementation Issues it waits for — 1〜2文}
+
+## やること
+
+- {Source item that needs a person, another machine, a real device, or an environment}
+```
 
 ## Step 4.5: Body Review Format
 
@@ -286,7 +302,15 @@ Only used when the user explicitly asked to see the full draft (see Step 4.5 in 
 
 ---
 
-上記内容で Issue を作成します。Epic を先に作成し、Tn はその番号を親として順に作成し、コンテナ化された Tn がある場合はその番号を親として孫 Issue を作成するため、作成順は Epic → Tn → Tn.m になります。
+人が行う Issue がある場合のみ以下を表示する。
+
+### 人が行う Issue P1: <タイトル>
+
+<人が行う Issue P1 本文全文>
+
+---
+
+上記内容で Issue を作成します。Epic を先に作成し、Tn はその番号を親として順に作成し、コンテナ化された Tn がある場合はその番号を親として孫 Issue を作成し、最後に人が行う Issue を親なしで、待つ Issue にブロックされる形で作成するため、作成順は Epic → Tn → Tn.m → 人が行う Issue になります。
 修正があれば箇所を指定して教えてください。問題なければ「作成してください」と返信してください。
 ```
 
@@ -305,6 +329,10 @@ Only used when the user explicitly asked to see the full draft (see Step 4.5 in 
   - #<number> <title>（孫）
   - #<number> <title>（孫）
 ...
+
+（人が行う Issue がある場合のみ:
+### 人が行う Issue（Epic のサブ Issue ではない）
+- #<number> <title> — #<number>, #<number> にブロックされています）
 
 Epic と各Tn、コンテナ化されたTnと各孫Issueは `gh issue create --parent` による Sub-issue 関係で紐づけました。
 依存関係は `--blocked-by` による Blocked-by/Blocking 関係として設定済みです — 孫同士の依存は同じ親Tn配下のみです。
