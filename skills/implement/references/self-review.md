@@ -21,7 +21,7 @@ Run every review in the background through the harness when it can, and wait for
    | The reviewer says | Action |
    |---|---|
    | A change adds a requirement the request does not ask for | Confirm it against the request. Remove each confirmed one as a fix Phase 5 routes, commit it as in step 1, rerun Phase 6, and continue at step 4 |
-   | The change does not deliver something the request asks for | Confirm it against the request. Add each one the request plainly asks for as a fix Phase 5 routes, commit it as in step 1, rerun Phase 6, and continue at step 4. Return Questions about any the request leaves open to another reading. A unit Run One Unit deferred stays deferred |
+   | The change does not deliver something the request asks for | Confirm it against the request. Add each one the request plainly asks for as a fix Phase 5 routes, commit it as in step 1, rerun Phase 6, and continue at step 4. Return Questions about any the request leaves open to another reading |
    | The change should not be made, or a different, simpler design would do | Return Questions |
 
 4. Record `<reviewed-head>`, the SHA from `git -C <worktree-path> rev-parse HEAD`, then run the script below for the code review's first pass.
