@@ -132,7 +132,7 @@ Route new work by two questions, in order:
 - Drop anything that identifies private work: names of private repositories, organizations, and app installations, their PR and Issue numbers, product and domain terms, code, and data
 - When the owner decides to build an idea, start its path from the table above with a link to the Discussion, even if an older Issue for it was closed: a new Issue, or for a change that moves a boundary, a Design Doc pull request. Comment its URL on the Discussion, and close the Discussion when the Issue opens or the Design Doc merges
 - Close a Discussion with the reason that fits, and state that reason in the closing comment
-    - Resolved when the work the owner decided to build has started, as the bullet above says
+    - Resolved when the work the owner decided to build has started: its Issue opened or its Design Doc merged
     - Outdated when the owner decided against it, with the observation that would reopen it
     - Duplicate when another Discussion already holds it, linking that one
 
