@@ -146,7 +146,7 @@ For each Issue, oe ready reads this table from the top and outputs the action of
 | Row | Phase | State | Next action |
 |---|---|---|---|
 | 1 | Before claim | The Issue is closed | Mark it done |
-| 2 | Before claim | A PR merged after the latest claim record, or the branch exists and its PR was closed without merging | Wait for an engineer |
+| 2 | Before claim | A PR merged after the latest claim record, the branch exists and its PR was closed without merging, or the branch exists and no claim record exists for it | Wait for an engineer |
 | 3 | Before claim | No branch exists, and a dependency is not completed | Wait for the dependencies |
 | 4 | Before claim | No branch exists, and every dependency is completed | Claim and start an Owner |
 | 5 | Work | No answer has been given since the Issue's latest question | Wait for the answer |
@@ -297,7 +297,7 @@ sequenceDiagram
 - oe does not scan for secrets
 - A comment the AI forgot to mark is read as engineer input
 - oe lock works only within one host, so a session for the same Epic on another host lets two agents touch the same branch
-- Resuming an Epic on another host, or after losing the record store, resets attempt counts, bot rounds, and findings, and earlier engineer input and bot findings count as repair signals again
+- Resuming an Epic on another host, or after losing the record store, waits for an engineer on every Issue whose branch exists instead of repairing it; the engineer finishes the branch or deletes it so oe can claim again
 - Records carry the host's clock, so clock skew can misorder them against GitHub events
 - A session killed while its agents run leaves them running, and the next session can start a second agent on the same Issue
 - oe ready reads only the newest PR with an Issue's branch name, so a newer PR from a fork with that name hides the Issue's own PR; its Owners find nothing to repair, and the Issue parks
