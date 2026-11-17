@@ -96,17 +96,17 @@ Skills read them with `git config --get <key>`, so git decides between local and
 
 ## Development Flow
 
-Every harness loads this file and none follows an import from it, so these rules live here and nowhere else.
+Every harness loads this file, but not every one follows an import from it, so these rules live here and nowhere else.
 
 Route new work by two questions, in order:
 
-1. Is what to do decided, that is, did the owner write that the work will be done? If not, it goes to a Discussion.
+1. Is what to do decided? Until it is, it stays in a Discussion.
 2. Does the change move a boundary, such as a skill contract, user-visible behavior, a safety gate, a git config key, or a data format?
 
 | Decided | Moves a boundary | Path |
 |---|---|---|
 | No | - | A Discussion |
-| Yes | Yes | Intent in a Discussion, the owner's decision, a merged Design Doc, then an Epic driven by oe |
+| Yes | Yes | The owner's decision in the Discussion that holds the intent, a merged Design Doc, then an Epic driven by oe |
 | Yes | No | An Issue |
 
 - Create an Issue only after the owner wrote that the work will be done
