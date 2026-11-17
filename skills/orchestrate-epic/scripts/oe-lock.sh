@@ -22,6 +22,8 @@
 #
 # - One ref per Epic in a bare Git repository under the state directory that oe-store.sh defines, so every clone on the host shares it.
 # - Every change is a compare-and-swap on that ref, so two sessions racing for a lock never both get it.
+# - One line per session that takes the lock, in the Epic's sessions record under the same state directory: the time the lock was taken,
+#   the checkout, and the session ID when the harness set one. A line that cannot be written is reported on stderr and never fails the lock.
 #
 # Exit codes
 #
@@ -123,6 +125,22 @@ blob="$(printf 'token=%s\npid=%s\nlstart=%s\nrepo=%s\nepic=%s\nstarted=%s\n' \
   "${token}" "${pid}" "${lstart}" "${repo}" "${epic}" "${started}" |
   store_git hash-object -w --stdin)" || fail "cannot write to the lock store"
 
+# Prints the checkout this session runs in: the top of the worktree, or the current directory when it is in none.
+session_checkout() {
+  local top
+  top="$(git rev-parse --show-toplevel 2>/dev/null)" || top=""
+  if [[ -n "${top}" ]]; then
+    (cd "${top}" && pwd -P)
+  else
+    printf '%s\n' "${PWD}"
+  fi
+}
+
+# Prints the sessions line this session adds if it takes the lock.
+session_line() {
+  jq -cn --arg at "${started}" --arg checkout "$(session_checkout)" '{at: $at, checkout: $checkout}'
+}
+
 # Succeeds when the holder blob $1 names this session: the same token, process, and process start.
 same_session() {
   [[ "$(lock_field token "$1")" == "${token}" && "$(lock_field pid "$1")" == "${pid}" ]] &&
@@ -148,6 +166,7 @@ for _ in 1 2 3; do
   if store_git update-ref "${ref}" "${blob}" "${expected}" 2>/dev/null; then
     # A wait left by a session that ended would answer every new wait with exit 6 while its own completion reaches no one.
     stop_recorded_wait "${repo}" "${epic}"
+    sessions_add "${repo}" "${epic}" "$(session_line)" || true
     printf 'token=%s\n' "${token}"
     exit 0
   fi
