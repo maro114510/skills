@@ -136,6 +136,18 @@ JSON
   [ "$(records_of 5 | tail -n1 | jq -r .session_id)" = "first" ]
 }
 
+@test "a harness session ID with a control character is left off the run record" {
+  github <<'JSON'
+{"issues": [{"number": 5, "branch": true}]}
+JSON
+  records 5 claim@07:00
+
+  OE_SESSION_ID=$'bad\nid' run --separate-stderr bash "${oe}" start owner o/r 5 "no PR yet"
+
+  [ "${status}" -eq 0 ]
+  [ "$(records_of 5 | tail -n1)" = '{"kind":"run","at":"2027-01-15T08:00:00Z","role":"owner"}' ]
+}
+
 @test "starting an Owner with --claim claims the Issue first" {
   github <<'JSON'
 {"default_branch": {"checks": {"test": "success"}}, "issues": [{"number": 5}]}
