@@ -78,7 +78,7 @@ Write each reference from `== issues` in the description. Use each title for the
 
 | Case | Reference |
 |---|---|
-| Line printed | Copy the reference before the tab, but write `Closes` for a `Related` the rule below does not allow |
+| Line printed | Copy the reference before the tab as printed |
 | Issue only in the branch name or a commit subject | `Closes #NNN`, or `Related #NNN` when the rule below allows it |
 
 - `Related` only when a deferred requirement that still needs implementing is reported in the conversation, commits, or a caller's `SKIPPED`; the user says the implementation is partial; or the issue is only cited in passing. Post-merge verification, QA, E2E, and release work never count.

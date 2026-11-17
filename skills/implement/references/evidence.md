@@ -82,7 +82,7 @@ Use this only when no test or command in the repository reaches the behavior. St
 - A run or observation that broke any rule in section 2.
 - A commit message, a code comment, or another agent's account of its own work, such as a worker's report. Each is a lead to check. A fresh-context run under section 2.3 is an observation, not such an account.
 - A TODO, a new Issue, out of scope, future work, or a later Epic.
-- A user decision. It can justify deferring a criterion, which is reported as deferred, never as met.
+- A user decision.
 
 ## 4. Classify the Outcome
 
@@ -93,9 +93,6 @@ Use this only when no test or command in the repository reaches the behavior. St
 
 A `No evidence` criterion is unsatisfied.
 
-A check under a `Manual checks` or `手動確認` heading in the source's Verification section is the engineer's.
-Report it as `-> manual` without evidence. It is never `No evidence` or deferred, and never fails a verdict. No other check is manual.
-
 ## 5. Report Lines
 
 Each criterion takes one line, quoted verbatim or prefixed `(derived)`.
@@ -105,7 +102,6 @@ Any line this file puts into a report field, including a criterion in `SKIPPED` 
 <criterion> -> [behavior] <command or input>; observed <result>
 <criterion> -> [static] <file:line>
 <criterion> -> none
-<criterion> -> manual
 ```
 
 | Criterion | Kind | Attached | Line |
