@@ -19,9 +19,9 @@ Distribution stays harness-neutral: the documented installs go through package m
 | Early-access track | `main`, which the owner installs through APM or npx skills without naming a version |
 | Run commit | A commit on `main` the owner has run and chooses to release. It is the single parent of its Release tag's commit. `v1.2.0`, the last tag made on `main`, is its own Run commit |
 | Release branch | A branch that starts at the Run commit and holds the Bump commit on top |
-| Bump commit | The one commit a release adds to the Run commit. It sets the new version in both manifests, the marketplace entry's `ref`, and the npx skills tag in the README |
+| Bump commit | The one commit a release adds to the Run commit. It sets the new version in both manifests, the marketplace entry's `ref`, and the npx skills tag and, on a major release, the APM range in the README |
 | Release tag | `v<version>` on the Bump commit. GitHub's immutable releases keep a published tag on that content |
-| Previous release | The published GitHub Release with the highest version below this one |
+| Previous release | The published GitHub Release with the highest version |
 | Release range | The commits after the Previous release's Run commit, up to this release's Run commit, leaving out the commits Back-merge PRs added to `main`. The version bump and the Release notes both count this range |
 | Release notes | Notes the release workflow generates with git-cliff for the Release range, opening with one entry per breaking commit: its `BREAKING CHANGE` or `BREAKING-CHANGE` footer text, or its subject when it has neither |
 | Back-merge PR | The pull request that brings the Bump commit from the Release branch into `main` |
@@ -50,21 +50,21 @@ sequenceDiagram
     alt Every guard holds
         WF->>WF: Generate the Release notes
         WF->>WF: Publish the GitHub Release
+        Owner->>Owner: Open the Back-merge PR
+        opt The Back-merge PR moves no version or ref to an older release
+            Owner->>Owner: Merge the Back-merge PR as any other PR
+        end
     else A guard fails
         WF->>WF: Refuse the tag
-    end
-    Owner->>Owner: Open the Back-merge PR
-    opt The Back-merge PR moves no version or ref to an older release
-        Owner->>Owner: Merge the Back-merge PR as any other PR
     end
 ```
 
 ## Invariants
 
 - The release workflow publishes a tag only when all of these hold:
-    - The tag's commit has one parent, the Run commit, which is reachable from `main` and descends from the Previous release's Run commit.
-    - The Bump commit changes nothing but the version in both manifests, the marketplace entry's `ref`, and the npx skills tag in the README.
-    - Each of those equals the tag, with the manifests omitting its `v`.
+    - The tag's version is above the Previous release's, and the tag's commit has one parent, the Run commit, which is reachable from `main` and descends from the Previous release's Run commit.
+    - The Bump commit changes nothing but the version in both manifests, the marketplace entry's `ref`, and the npx skills tag and, on a major release, the APM range in the README.
+    - Each of those matches the tag: the manifests omit its `v`, and the APM range names its major version.
 - A published Release tag never moves to other content.
 - The version and the marketplace entry's `ref` on `main` never move to an older release: a Back-merge PR that would move them back is not merged.
 
