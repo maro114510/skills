@@ -58,7 +58,7 @@ sequenceDiagram
 
 ### Installing
 
-A user other than the owner installs as the README says and gets a release; the owner installs without a version and gets `main`. The Claude Code plugin reads its marketplace entry from `main`, so it moves to a new release only when the Back-merge PR merges.
+A user other than the owner installs as the README says and gets a release. The owner gets `main` by installing through APM or npx skills without a version; the Claude Code plugin always installs the Release tag its `ref` names. The Claude Code plugin reads its marketplace entry from `main`, so it moves to a new release only when the Back-merge PR merges.
 
 ## Invariants
 
