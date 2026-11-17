@@ -344,6 +344,34 @@ release_guard() {
   output_has "README.md names #^1.0.0, expected #^2.0.0"
 }
 
+# run_with_readme replaces the README on main with $1 and makes that commit the Run commit.
+run_with_readme() {
+  printf '%s' "$1" >README.md
+  git add -A
+  git commit -q -m "docs: change the README install section"
+  run="$(git rev-parse HEAD)"
+  git push -q origin main
+  git fetch -q origin
+}
+
+@test "guard refuses a README that names no npx skills tag" {
+  flow_sandbox
+  run_with_readme $'apm install o/r#^1.0.0\nplain text\n'
+  cut "${run}" 1.3.0 1
+  run release_guard v1.3.0 v1.2.0
+  [ "${status}" -ne 0 ]
+  output_has "README.md names no npx skills tag, expected #v1.3.0"
+}
+
+@test "guard refuses a README that names no APM range" {
+  flow_sandbox
+  run_with_readme $'npx skills add o/r#v1.2.0\nplain text\n'
+  cut "${run}" 1.3.0 1
+  run release_guard v1.3.0 v1.2.0
+  [ "${status}" -ne 0 ]
+  output_has "README.md names no APM range, expected #^1.0.0"
+}
+
 @test "guard refuses a Bump commit that changes a README line other than those tokens" {
   flow_sandbox
   bump_release "${run}" 1.3.0 1
