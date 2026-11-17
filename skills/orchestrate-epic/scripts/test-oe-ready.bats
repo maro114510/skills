@@ -230,7 +230,7 @@ JSON
   [ "$(action_of 5)" = wait-dependencies ]
 }
 
-@test "an Issue whose branch exists without a pull request and without any record on this host is not claimed again and gets an Owner" {
+@test "an Issue whose branch exists without a claim record on this host and without a pull request waits for an engineer instead of getting an Owner" {
   github <<'JSON'
 {
   "default_branch": {"checks": {"test": "success"}},
@@ -240,6 +240,25 @@ JSON
   }]
 }
 JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-engineer ]
+  [ "$(field_of 5 3)" = "feat/issue-5 exists with no claim on this host" ]
+}
+
+@test "an Issue whose branch exists with a claim record on this host and without a pull request gets an Owner" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true
+  }]
+}
+JSON
+  records 5 claim@07:00
 
   run bash "${oe}" ready o/r 1
 
