@@ -10,6 +10,7 @@ on:
       - 'tests/**'
       - 'Makefile'
       - '.github/workflows/release.yml'
+      - 'cliff.toml'
       - '.shellcheckrc'
       - '.github/workflows/lint-shell.yml'
   pull_request:
@@ -20,6 +21,7 @@ on:
       - 'tests/**'
       - 'Makefile'
       - '.github/workflows/release.yml'
+      - 'cliff.toml'
       - '.shellcheckrc'
       - '.github/workflows/lint-shell.yml'
 
@@ -41,6 +43,10 @@ jobs:
 
       - name: Install bats
         run: sudo apt-get update && sudo apt-get install -y bats
+
+      # tests/release.bats generates Release notes with the same git-cliff version the release workflow installs.
+      - name: Install git-cliff
+        run: pipx install git-cliff==2.14.2
 
       # Files run in parallel through the runner's preinstalled GNU parallel.
       # Tests within a file stay serial: no single file dominates the run,
