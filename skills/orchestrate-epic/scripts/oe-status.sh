@@ -141,7 +141,7 @@ render() {
         {"wait-answer": "Answer the Owner'\''s question in the session'\''s conversation or with a comment on the Issue",
           "parked": "Fix it by hand, or delete its branch so the AI starts over",
           "wait-engineer": "Close the Issue, reopen the PR, or delete its branch so the AI starts over",
-          "wait-merge": "Review the PR, run its manual checks, and merge it"}[.action] as $todo
+          "wait-merge": "Review the PR and merge it"}[.action] as $todo
         | (if .action != "wait-answer" and .pr then "pull/\(.pr)" else "issues/\(.number)" end) as $path
         | "- #\(.number) \($todo)\n  https://github.com/\($repo)/\($path)\n  why: \(.reason)"' \
         <<<"${line}")"$'\n' || return 1
