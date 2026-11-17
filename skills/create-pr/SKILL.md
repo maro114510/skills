@@ -52,7 +52,6 @@ It fetches `origin/<base>` and prints everything later steps use. Do not read th
 | `== diff stat`, `== diff` | The stat, and the diff without lockfiles when it fits 20 files and 1,000 lines | 2 |
 | `== template <path>` or `== template none` | The PR template's contents, or none | 3 |
 | `== issues` | `Closes #N` or `Related #N` from the newest commit footer, a tab, and the issue title | 2.1 |
-| `== manual checks` | `#N`, a tab, and one manual check of an issue the branch closes, per line | 3 |
 
 When `== diff` says `omitted`, read only meaningful files with `git diff origin/<base>...HEAD -- <path>...`, skipping generated and vendored code.
 
