@@ -109,8 +109,10 @@ Route new work by two questions, in order:
 | Yes | Yes | Intent in a Discussion, the owner's decision, a merged Design Doc, then an Epic driven by oe |
 | Yes | No | An Issue |
 
-- Create an Issue only after the owner wrote that the work will be done
+- Create an Issue only after the owner wrote that the work will be done; a bug fix still gets an Issue, but needs no decision from the owner
 - Keep at most 5 decided units open at once: an Epic counts as one, a standalone Issue counts as one, and a bug fix does not count
+    - A unit counts from the owner's decision, so a change that moves a boundary counts while its Design Doc is still open
+    - While 5 are open, a newly decided unit waits in its Discussion and starts when one closes
 - Close anything decided against with the observation that would reopen it
 - Quote the question and the owner's answer behind each decision where it is recorded: the comment that closes a Discussion, and the body of a Design Doc pull request
 
@@ -127,7 +129,11 @@ Route new work by two questions, in order:
 - Write posts and Issues in English
 - Keep general facts, such as error class and status, endpoint, counts, timing, and the skill involved
 - Drop anything that identifies private work: names of private repositories, organizations, and app installations, their PR and Issue numbers, product and domain terms, code, and data
-- When the owner decides to build an idea, start its path from the table above with a link to the Discussion, even if an older Issue for it was closed: a new Issue, or for a change that moves a boundary, a Design Doc pull request. Then comment its URL on the Discussion and close it as resolved
+- When the owner decides to build an idea, start its path from the table above with a link to the Discussion, even if an older Issue for it was closed: a new Issue, or for a change that moves a boundary, a Design Doc pull request. Then comment its URL on the Discussion and close it
+- Close a Discussion with the reason that fits, and state that reason in the closing comment
+    - Resolved when the owner decided to build it
+    - Outdated when the owner decided against it
+    - Duplicate when another Discussion already holds it, linking that one
 
 ```bash
 # Search
