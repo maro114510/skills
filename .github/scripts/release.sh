@@ -107,12 +107,13 @@ guard() {
     '[.plugins[]? | select(.name == $n) | .source.ref? // empty] | first // "none"')"
   [[ "${found}" = "${tag}" ]] || fail "The ${marketplace} entry has ref ${found}, expected ${tag}"
 
-  while IFS= read -r found; do
-    [[ "${found}" = "#${tag}" ]] || fail "README.md names ${found}, expected #${tag}"
-  done < <(git show "${commit}:README.md" | grep -oE "${npx_tag}" | sort -u)
-  while IFS= read -r found; do
-    [[ "${found}" = "#^${major}.0.0" ]] || fail "README.md names ${found}, expected #^${major}.0.0"
-  done < <(git show "${commit}:README.md" | grep -oE "${apm_range}" | sort -u)
+  # A README with no token gives the two loops nothing to check, so each route must name its version at least once.
+  found="$(git show "${commit}:README.md" | grep -oE "${npx_tag}" | sort -u)"
+  [[ -n "${found}" ]] || fail "README.md names no npx skills tag, expected #${tag}"
+  [[ "${found}" = "#${tag}" ]] || fail "README.md names ${found//$'\n'/ }, expected #${tag}"
+  found="$(git show "${commit}:README.md" | grep -oE "${apm_range}" | sort -u)"
+  [[ -n "${found}" ]] || fail "README.md names no APM range, expected #^${major}.0.0"
+  [[ "${found}" = "#^${major}.0.0" ]] || fail "README.md names ${found//$'\n'/ }, expected #^${major}.0.0"
 }
 
 # back_merge_commit succeeds for a commit that moves the plugin manifest's version and nothing else a Bump commit may not,
