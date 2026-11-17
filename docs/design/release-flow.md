@@ -39,21 +39,22 @@ The owner has run `main` for some time and wants other users to get that commit.
 
 ```mermaid
 sequenceDiagram
+    autonumber
     actor Owner
-    participant Release as Release branch
     participant WF as Release workflow
-    participant Main as main
-    Owner->>Release: Start at the Run commit and add the Bump commit
-    Owner->>Release: Push the Release tag on the Bump commit
-    Release->>WF: Tag push
-    alt Guards pass
+    Owner->>Owner: Create the Release branch at the Run commit
+    Owner->>Owner: Add the Bump commit
+    Owner->>WF: Push the Release tag on the Bump commit
+    alt Every guard holds
         WF->>WF: Generate the Release notes
-        WF-->>Owner: GitHub Release published
+        WF->>WF: Publish the GitHub Release
     else A guard fails
-        WF-->>Owner: No release
+        WF->>WF: Refuse the tag
     end
-    Owner->>Main: Open the Back-merge PR
-    Main-->>Main: The owner merges it as any other PR
+    Owner->>Owner: Open the Back-merge PR
+    opt The Back-merge PR moves no version or ref to an older release
+        Owner->>Owner: Merge the Back-merge PR as any other PR
+    end
 ```
 
 ## Invariants
