@@ -50,23 +50,23 @@ Anything still unresolved is never decided later: it gets the confirmation tag o
 ## Step 2: Structure Tasks and Dependencies
 
 Read `references/structure.md` in full first, and follow it.
-From the context, extract the Epic (title, purpose, scope) and child tasks `T1`, `T2`, ... with title, role, at most 5 requirement bullets and 5 spec bullets, and `depends_on` taken only from what the conversation stated or clearly implied. Compute waves by topological order. On a dependency cycle, ask with **AskUserQuestion** instead of breaking it.
+From the context, extract the Epic (title, purpose, scope) and child tasks `T1`, `T2`, ... with title, role, at most 5 requirement bullets and 5 spec bullets, and `depends_on` taken only from what the conversation stated or clearly implied. Move each manual verification the plan explicitly requires into a person Issue `P1`, `P2`, ..., and keep deployment and other operational work out of every Issue, as its § Person Issues says. Compute waves by topological order. On a dependency cycle, ask with **AskUserQuestion** instead of breaking it.
 
 ## Step 3: Show Summary and Get Approval
 
-Use the "Step 3: Summary Format" in `references/templates.<LANG>.md`. Per task, or once for tasks that differ only in one value as the template allows, show its `Tn` id, title, wave/dependency, one-line background, requirement bullets, spec bullets, one-line target state, the full verification list, and any point-option pointer; for the Epic, its background, scope, target state, and verification; and a dependency preview keyed by `Tn` — Mermaid for 12 or fewer tasks, the wave table for more, the same form Step 4 renders. When a doc-update `Tn` exists, state that the document is out of sync with the answers. Step 4.5 is skipped by default, so approving this summary must be equivalent to approving the final bodies.
+Use the "Step 3: Summary Format" in `references/templates.<LANG>.md`. Per task, or once for tasks that differ only in one value as the template allows, show its `Tn` id, title, wave/dependency, one-line background, requirement bullets, spec bullets, one-line target state, the full verification list, and any point-option pointer; for the Epic, its background, scope, target state, and verification; each person Issue with its title, the Issues it waits for, and its What to do items; and a dependency preview keyed by `Tn` — Mermaid for 12 or fewer tasks, the wave table for more, the same form Step 4 renders. When a doc-update `Tn` exists, state that the document is out of sync with the answers. Step 4.5 is skipped by default, so approving this summary must be equivalent to approving the final bodies.
 
 **End your response here and wait for the user's reply. Do not proceed to Step 4 until approval is received.**
 On requested changes, update the summary, including the graph and waves, and show it again.
 
 ## Step 4: Generate Issue Bodies
 
-Read `references/bodies.md` in full first. Write the Epic and child bodies from the templates in `references/templates.<LANG>.md`, using only the content approved in Step 3, without adding, softening, or elaborating it.
+Read `references/bodies.md` in full first. Write the Epic, child, and person Issue bodies from the templates in `references/templates.<LANG>.md`, using only the content approved in Step 3, without adding, softening, or elaborating it.
 
 ## Step 4.5: Full Draft Review (only if requested)
 
 Skip by default. Run only when the user explicitly asked to see the full draft (e.g. "ドラフト見せて", "本文を確認したい", "show me the draft"), in their Step 3 reply or earlier.
-Then display the Epic and every child in the "Step 4.5: Body Review Format", noting that `{{Tn}}` tokens become real numbers (`#123`) after creation. **Stop after presenting; do not proceed to Step 4.6 until the user explicitly approves.** Apply requested changes and display again.
+Then display the Epic, every child, and every person Issue in the "Step 4.5: Body Review Format", noting that `{{Tn}}` tokens become real numbers (`#123`) after creation. **Stop after presenting; do not proceed to Step 4.6 until the user explicitly approves.** Apply requested changes and display again.
 
 ## Step 4.6: Automated Pre-Creation Validation
 
@@ -76,11 +76,11 @@ Always run every check in `references/bodies.md` § Pre-Creation Checks. If any 
 
 Follow `references/commands.md`, including its failure rules. Every command starts with `gh`; read its "Tool permission contract" before adding or changing one.
 
-- Create the Epic first, then every `Tn` in wave order with `--parent <Epic>` and `--blocked-by` for created dependencies, then each container's `Tn.m` with `--parent <that Tn>` and `--blocked-by` limited to its siblings. Never pass a number that does not exist.
+- Create the Epic first, then every `Tn` in wave order with `--parent <Epic>` and `--blocked-by` for created dependencies, then each container's `Tn.m` with `--parent <that Tn>` and `--blocked-by` limited to its siblings, then each person Issue with `--blocked-by` and no `--parent`. Never pass a number that does not exist.
 - Substitute bottom-up: each container's `{{Tn.m}}` first, then the Epic's `{{Tn}}`; a failed create becomes "creation failed", and a failed `Tn` gets no grandchildren.
 - Verify the sub-issue and blocked-by relations against GitHub before Step 6, and stop on a mismatch.
 - Only when `PROJECT_NUM` is set, run 5.7. Never map Wave numbers onto a `Stage` or `Wave` project field.
 
 ## Step 6: Report Completion
 
-Use the "Step 6: Completion Report" template in `references/templates.<LANG>.md`, including failed creates, dropped edges, and the numbering order. When the doc-update `Tn`'s dependency was wired transitively rather than directly, say so explicitly — a later reader may otherwise "fix" the ordering by adding or removing edges.
+Use the "Step 6: Completion Report" template in `references/templates.<LANG>.md`, including every person Issue, failed creates, dropped edges, and the numbering order. When the doc-update `Tn`'s dependency was wired transitively rather than directly, say so explicitly — a later reader may otherwise "fix" the ordering by adding or removing edges.

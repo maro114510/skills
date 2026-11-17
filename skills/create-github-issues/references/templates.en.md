@@ -42,7 +42,7 @@ In any Mermaid node label, a double quote in a title must be written as `#quot;`
 **Scope (included)**: <bullet> / <bullet>
 **Scope (not included)**: <only if applicable: items the source defers, puts out of scope, or assigns to another Epic, and exclusions the conversation named. Give each item left out of the source with the wording that excludes it, as "<item> — source: "<excluding wording>"". Omit this line entirely if there are none>
 **Target state**: <what must be true when every child Issue is done, in one line>
-**Verification**: <how to confirm the whole Epic is done, built only from the children's verification below>
+**Verification**: <how to confirm the whole Epic is done, built from the children's verification below, plus any check of the whole Epic that a person runs>
 
 (Only if the number of tasks discussed differs from the number of child Issues: **Restructured from the conversation**: <which tasks were split/merged and why, in 1-2 sentences>)
 
@@ -77,8 +77,7 @@ flowchart LR
 - Requirements: <bullet> / <bullet>
 - Specs: <bullet> (write "none" if nothing was decided)
 - Target state: <what must be true when done, in one line>
-- Automated checks: <bullet>, or none, noting that pr-verify then has nothing to judge
-- Manual checks: <bullet>, or none
+- Verification: <bullet>, each observable from a checkout or CI, or none, noting that pr-verify then has nothing to judge
 - Full list: <document path and section> (only when this task uses the point option)
 
 #### T2: <title> (Wave 2 / Depends on: T1)
@@ -86,8 +85,7 @@ flowchart LR
 - Requirements: <bullet>
 - Specs: none
 - Target state: <one line>
-- Automated checks: <bullet>
-- Manual checks: none
+- Verification: <bullet>
 
 When this Tn's content changed because Step 1.5 changed a merged document, write its heading's dependency part in full as "Depends on: T<doc>, directly" or "Depends on: T<via>, transitively on T<doc>" instead of the plain "Depends on: ..." — the summary must approve which of the two applies.
 
@@ -102,6 +100,14 @@ Only when a Tn was promoted to a container, show it in this shape instead — Re
 
 ##### T3.2: <title> (Wave 2 / Depends on: T3.1)
 - Same as above
+
+### Person Issues (M total; not sub-issues of the Epic)
+
+Only when the plan explicitly requires a manual verification tied to an implementation Issue, such as a check on a real device. Deployment and other operational work never appears here. Omit this section when there is none.
+
+#### P1: <title, such as "Check the --shout flag on a real device"> (Blocked by: T1, T2)
+- Background: <why the verification needs a person, such as a real device no CI runner has, in one line>
+- What to do: <manual verification the plan requires> / <bullet>
 
 Only when you have additions beyond the source, write the next section and the closing line that starts with "Additions are included". With no additions, write neither.
 
@@ -157,7 +163,7 @@ flowchart LR
 {What must be true when all child Issues are done}
 
 ### Verification
-{How to confirm completion — E2E or integration checks}
+{How to confirm completion — E2E or integration checks, including any check of the whole Epic that a person runs}
 ```
 
 ### Table variant (>12 child Issues)
@@ -236,16 +242,26 @@ Both a non-container `Tn` (leaf) and a `Tn.m` (grandchild) use this shape.
 
 ### Verification
 
-#### Automated checks
-- {Automated check: assert what, run which command}
+- {Check observable from a checkout or CI: assert what, run which command}
 
-#### Manual checks
-- {Manual check, one line}
-
-{Up to 5 bullets across both lists. If it takes more than 5 to cover the real scenarios, that's a signal this Issue should be split — see Step 2 — unless an upstream authoritative document owns the full list: then keep 5 bullets chosen by failure mode rather than happy path, and add one prose line after the bullets (never a sixth bullet) pointing to that document as the authoritative full list. The pointer option is unavailable when no such document exists.}
+{Up to 5 bullets. If it takes more than 5 to cover the real scenarios, that's a signal this Issue should be split — see Step 2 — unless an upstream authoritative document owns the full list: then keep 5 bullets chosen by failure mode rather than happy path, and add one prose line after the bullets (never a sixth bullet) pointing to that document as the authoritative full list. The pointer option is unavailable when no such document exists.}
 ```
 
 **Banned in every section above:** lettered step sequences (`a→b→c→d`), pseudocode, function signatures, multi-level nested bullets. If a task genuinely needs that much detail to specify, split it into more child Issues, or add a single line linking to an existing design doc — never restate the doc inline.
+
+## Person Issue body (Step 4)
+
+Every `Pn` uses this shape. It is not a sub-issue of the Epic; Step 5 sets its blocked-by relations.
+
+```markdown
+## Background
+
+{Why this verification needs a person, such as a real device no CI runner has, and the titles of the implementation Issues it waits for — 1-2 sentences}
+
+## What to do
+
+- {Manual verification the plan explicitly requires, such as a check on a real device; never a deployment or other operational work}
+```
 
 ## Step 4.5: Body Review Format
 
@@ -286,7 +302,15 @@ Only show the following when a Tn was promoted to a container.
 
 ---
 
-I'll create the Issues above. The Epic is created first, then each Tn with the Epic's number as its parent, then — for any container Tn — its Tn.m grandchildren with that Tn's number as their parent, so the creation order is Epic → Tn → Tn.m.
+Only show the following when a person Issue exists.
+
+### Person Issue P1: <title>
+
+<Full person Issue P1 body>
+
+---
+
+I'll create the Issues above. The Epic is created first, then each Tn with the Epic's number as its parent, then — for any container Tn — its Tn.m grandchildren with that Tn's number as their parent, then each person Issue with no parent, blocked by the Issues it waits for, so the creation order is Epic → Tn → Tn.m → person Issue.
 Let me know which part needs changes. If everything looks good, reply "create them".
 ```
 
@@ -297,7 +321,7 @@ Let me know which part needs changes. If everything looks good, reply "create th
 
 ### Epic
 - #<number> <title>  (<URL>)
-  (The Epic's number is lower than the child Issues' since it was created first; the child Issues follow in wave order<, and every grandchild comes after all of them — only when a container exists>.)
+  (The Epic's number is lower than the child Issues' since it was created first; the child Issues follow in wave order<, and every grandchild comes after all of them — only when a container exists><, and every person Issue comes last — only when a person Issue exists>.)
 
 ### Child Issues
 - #<number> <title>
@@ -306,6 +330,10 @@ Let me know which part needs changes. If everything looks good, reply "create th
   - #<number> <title> (grandchild)
 ...
 
+(Only when a person Issue exists:
+### Person Issues (not sub-issues of the Epic)
+- #<number> <title> — blocked by #<number>, #<number>)
+
 The Epic and each Tn, and any container Tn and its grandchild Issues, are linked via `gh issue create --parent` sub-issue relationships.
 Dependencies are set as Blocked-by/Blocking relationships via `--blocked-by` — grandchild-to-grandchild dependencies only within the same parent Tn.
 You can check both in the Issue sidebar on GitHub (Sub-issues / Relationships).
@@ -313,7 +341,8 @@ The Epic body's dependency diagram (or table), and any container Tn's own depend
 
 (Only when a create failed:
 ### Not created
-- <title>: <the error gh printed>. <Issues that should depend on it, by number> are not blocked by it. Create it by hand with parent #<Epic or container> and blocked-by <its own dependencies, by number>, add it as blocked-by to those Issues, and replace its "(creation failed)" in the Epic body with its number.)
+- <title>: <the error gh printed>. <Issues that should depend on it, by number> are not blocked by it. Create it by hand with parent #<Epic or container> and blocked-by <its own dependencies, by number>, add it as blocked-by to those Issues, and replace its "(creation failed)" in the Epic body with its number.
+- For a failed person Issue instead: <title>: <the error gh printed>. Create it by hand with no parent and blocked-by <the Issues it waits for, by number>.)
 
 (Only when a doc-update dependency was wired transitively: <Tn(s)> depend on the doc-update Tn transitively via <Tvia> — they are not directly blocked by it. This ordering is intentional; do not "fix" it by adding or removing edges.)
 ```
