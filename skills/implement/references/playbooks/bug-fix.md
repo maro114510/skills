@@ -4,7 +4,7 @@ Tests for a task that corrects behavior that differs from what was specified or 
 Steps only: the rules are in [test-policy.md](../test-policy.md), cited by section.
 
 1. Find the condition that makes the defect occur, as the regression rule in § Preconditions asks.
-2. Red. Write one test that sets that condition inside the test and asserts the correct outcome. On the current code it fails at its assertion with the reported symptom, as § Process says; if it passes, the defect does not reproduce: Phase 2 trigger 2.
+2. Red. Write one test that sets that condition inside the test and asserts the correct outcome. On the current code it fails at its assertion with the reported symptom, as § Process says. If it passes for a code-review finding, the test disproves the finding: dismiss it, report the test command and result, and raise no question about it. If it passes for the request's own premise, the defect does not reproduce: Phase 2 trigger 2.
    Record the command, exit code, and failure excerpt. This run is the evidence that the test fails without the fix, as [evidence.md](../evidence.md) section 2.2 says. Commit the test as `test:`.
 3. Fix production code only, never the step 2 test, as § Prohibitions says, and commit as `fix:`.
 4. Refactor while green, without changing an assertion, and commit as `refactor:`. Skip it when nothing needs it.
