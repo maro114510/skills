@@ -321,7 +321,7 @@ Only used when the user explicitly asked to see the full draft (see Step 4.5 in 
 
 ### Epic
 - #<number> <title>  (<URL>)
-  Epic を先に作成しているため、Epic の番号は子 Issue より小さくなります。子 Issue は wave 順に続きます<。孫はすべての子 Issue の後に続きます — コンテナがある場合のみ>。
+  Epic を先に作成しているため、Epic の番号は子 Issue より小さくなります。子 Issue は wave 順に続きます<。孫はすべての子 Issue の後に続きます — コンテナがある場合のみ><。人が行う Issue は最後に続きます — 人が行う Issue がある場合のみ>。
 
 ### 子Issue
 - #<number> <title>

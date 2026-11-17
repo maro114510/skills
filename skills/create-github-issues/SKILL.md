@@ -66,7 +66,7 @@ Read `references/bodies.md` in full first. Write the Epic, child, and person Iss
 ## Step 4.5: Full Draft Review (only if requested)
 
 Skip by default. Run only when the user explicitly asked to see the full draft (e.g. "ドラフト見せて", "本文を確認したい", "show me the draft"), in their Step 3 reply or earlier.
-Then display the Epic and every child in the "Step 4.5: Body Review Format", noting that `{{Tn}}` tokens become real numbers (`#123`) after creation. **Stop after presenting; do not proceed to Step 4.6 until the user explicitly approves.** Apply requested changes and display again.
+Then display the Epic, every child, and every person Issue in the "Step 4.5: Body Review Format", noting that `{{Tn}}` tokens become real numbers (`#123`) after creation. **Stop after presenting; do not proceed to Step 4.6 until the user explicitly approves.** Apply requested changes and display again.
 
 ## Step 4.6: Automated Pre-Creation Validation
 

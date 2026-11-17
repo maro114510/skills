@@ -321,7 +321,7 @@ Let me know which part needs changes. If everything looks good, reply "create th
 
 ### Epic
 - #<number> <title>  (<URL>)
-  (The Epic's number is lower than the child Issues' since it was created first; the child Issues follow in wave order<, and every grandchild comes after all of them — only when a container exists>.)
+  (The Epic's number is lower than the child Issues' since it was created first; the child Issues follow in wave order<, and every grandchild comes after all of them — only when a container exists><, and every person Issue comes last — only when a person Issue exists>.)
 
 ### Child Issues
 - #<number> <title>
