@@ -43,7 +43,7 @@ jobs:
         run: bash .github/scripts/release.sh guard "${TAG_NAME}" "${PREVIOUS}"
 
       - name: Install git-cliff
-        run: pip install git-cliff==2.14.2
+        run: pipx install git-cliff==2.14.2
 
       - name: Generate the release notes
         env:

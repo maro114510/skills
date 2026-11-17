@@ -307,6 +307,23 @@ release_guard() {
   output_has "ref v1.2.0, expected v1.3.0"
 }
 
+@test "guard refuses a Bump commit that moves the ref of another marketplace entry" {
+  flow_sandbox
+  jq '.plugins += [{"name":"other","source":{"source":"github","repo":"o/x","ref":"stable"}}]' \
+    .claude-plugin/marketplace.json >m.tmp && mv m.tmp .claude-plugin/marketplace.json
+  git add -A
+  git commit -q -m "feat: add another entry"
+  run="$(git rev-parse HEAD)"
+  git push -q origin main
+  git fetch -q origin
+  bump_release "${run}" 1.3.0 1
+  jq '.plugins[1].source.ref = "main"' .claude-plugin/marketplace.json >m.tmp && mv m.tmp .claude-plugin/marketplace.json
+  commit_tag 1.3.0
+  run release_guard v1.3.0 v1.2.0
+  [ "${status}" -ne 0 ]
+  output_has ".claude-plugin/marketplace.json changes more than the version and the entry's ref"
+}
+
 @test "guard refuses a README npx skills tag that does not name the tag" {
   flow_sandbox
   bump_release "${run}" 1.3.0 1
@@ -352,7 +369,7 @@ back_merge() {
   git commit -q -m "feat: bring release $1 back to main (#9)"
 }
 
-# notes_sandbox adds the commits of a Release range to flow_sandbox on top of $run, then cuts v1.3.0 from the last one.
+# notes_sandbox adds the commits of a Release range to flow_sandbox on top of $run, and leaves the Release to the test.
 notes_sandbox() {
   flow_sandbox
   git checkout -q main
@@ -362,11 +379,11 @@ notes_sandbox() {
   git commit -q --allow-empty -m "$(printf 'fix: tidy up\n\nBREAKING-CHANGE: hyphen footer text')"
   git commit -q --allow-empty -m "feat!: subject only"
   back_merge 1.2.1
-  cut "$(git rev-parse HEAD)" 1.3.0 1
 }
 
 @test "notes open with each breaking commit's footer text, or its subject when it has no footer" {
   notes_sandbox
+  cut "$(git rev-parse HEAD)" 1.3.0 1
   run --separate-stderr notes_for v1.3.0 v1.2.0
   [ "${status}" -eq 0 ]
   expected="$(printf '%s\n' \
@@ -381,6 +398,7 @@ notes_sandbox() {
 
 @test "notes cover only the Release range and leave out Bump commits" {
   notes_sandbox
+  cut "$(git rev-parse HEAD)" 1.3.0 1
   run --separate-stderr notes_for v1.3.0 v1.2.0
   [ "${status}" -eq 0 ]
   output_has "Plain feature"
@@ -388,4 +406,31 @@ notes_sandbox() {
   output_lacks "Before the previous release"
   output_lacks "After the run"
   output_lacks "Bring release 1.2.1 back to main"
+}
+
+@test "notes keep a fix that changes only a README install tag" {
+  notes_sandbox
+  git checkout -q main
+  sed -i.bak 's/#v1.2.0/#v1.2.1/' README.md
+  rm -f README.md.bak
+  git add -A
+  git commit -q -m "fix(readme): correct the npx skills install tag"
+  cut "$(git rev-parse HEAD)" 1.3.0 1
+  run --separate-stderr notes_for v1.3.0 v1.2.0
+  [ "${status}" -eq 0 ]
+  output_has "Correct the npx skills install tag"
+}
+
+@test "notes leave out a Back-merge PR merged with a merge commit" {
+  notes_sandbox
+  git checkout -q main
+  git checkout -q -b back-merge-branch
+  back_merge 1.2.2
+  git checkout -q main
+  git merge -q --no-ff -m "chore: bring v1.2.2 back to main" back-merge-branch
+  cut "$(git rev-parse HEAD)" 1.3.0 1
+  run --separate-stderr notes_for v1.3.0 v1.2.0
+  [ "${status}" -eq 0 ]
+  output_lacks "Bring v1.2.2 back to main"
+  output_lacks "Bring release 1.2.2 back to main"
 }
