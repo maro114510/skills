@@ -261,3 +261,19 @@ session_lines() {
   [ "${status}" -eq 0 ]
   [ "$(jq -r .session_id "$(sessions_record o/r 1)")" = "harness-1" ]
 }
+
+@test "the sessions line reads the first session ID the harness set" {
+  start_session
+  n=1
+  for var in OE_SESSION_ID CLAUDE_CODE_SESSION_ID CODEX_THREAD_ID DSH_SESSION_ID; do
+    OE_SESSION_PID="${session_pid}" run env "${var}=from-${var}" bash "${oe}" lock acquire o/r "${n}"
+    [ "${status}" -eq 0 ]
+    [ "$(jq -r .session_id "$(sessions_record o/r "${n}")")" = "from-${var}" ]
+    n=$((n + 1))
+  done
+  OE_SESSION_PID="${session_pid}" run env OE_SESSION_ID=first CLAUDE_CODE_SESSION_ID=second CODEX_THREAD_ID=third DSH_SESSION_ID=fourth \
+    bash "${oe}" lock acquire o/r "${n}"
+
+  [ "${status}" -eq 0 ]
+  [ "$(jq -r .session_id "$(sessions_record o/r "${n}")")" = "first" ]
+}
