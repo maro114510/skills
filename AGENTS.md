@@ -22,10 +22,13 @@ Repository instructions for coding agents.
 | `skills/<skill-name>/references/` | Optional large static documents the prompt pulls in |
 | `agents/<agent-name>.md` | Portable subagent that APM deploys; only `name`, `description`, and `mode: subagent` frontmatter, and listed in `tests/validate-apm.sh` |
 | `skills/orchestrate-epic/scripts/oe` | Shell helpers that read and write orchestrate-epic's state on GitHub and in host-local records, laid out in `oe-store.sh`; each `oe-<subcommand>.sh` header documents one subcommand |
+| `skills/orchestrate-epic/scripts/oe-bot.sh` | The Bot identity an agent's worktree carries when its clone sets `skills.bot`, and the token the scripts that write to GitHub take from it |
 | `skills/**/*.bats` | Script tests that `.github/workflows/lint-shell.yml` runs |
 | `docs/design/orchestrate-epic.md` | The orchestrate-epic Design Doc that oe and the agents implement |
+| `.github/rulesets/main.json` | The main-branch ruleset; the admin applies it with `.github/rulesets/apply.sh`, as its README describes |
 | `.github/workflows/test-plugin-install.yml` | CI: `validate` then `test-install`, on push to `main` and every PR |
-| `.github/workflows/release.yml` | Creates a GitHub Release on a `v*` tag push after checking the tag matches both manifests |
+| `.github/workflows/secret-scan.yml` | CI: gitleaks on push to `main` and every PR |
+| `.github/workflows/release.yml` | Creates a GitHub Release on a `v*` tag push after checking the tag matches both manifests and its commit is reachable from main |
 | `cliff.toml` | `git-cliff` config used by `make release` |
 
 `docs/design` holds only Design Docs that describe the current target, as `manage-design-documents` defines them; work the owner decided to build is an Issue.
@@ -76,7 +79,6 @@ argument-hint: "[ready] [base <branch>]"
 - Japanese stays only in `description` trigger phrases and user-facing output templates
 - Convert an older Japanese body only when already editing it for another reason
 - Do not declare `allowed-tools`: it only pre-approves tools in Claude Code and has no effect in OpenCode or Pi, so it cannot restrict a skill's tools on every supported harness
-- Push approval has one mechanism and no hook: `implement` Phase 7 classifies the push range with `commit`'s `classify-approval.sh` and has the user approve it in difit when required, and `create-pr` runs the same check in its Step 6.1 before it pushes, once the user asks for a PR. Under orchestrate-epic, pr-owner pushes an Issue branch without that approval, and the human approves the PR instead
 
 ## Target Repository Config
 
@@ -89,7 +91,8 @@ Skills read them with `git config --get <key>`, so git decides between local and
 | `skills.herdr` | `true`, `false`; unset means `false` | `skills/orchestrate-epic/scripts/oe-board.sh` only, and only inside Herdr; `true` opens the Epic's board pane |
 | `skills.babysit.agent` | An agent command, such as `claude -p`; unset makes `drive.sh` exit 2 | `skills/babysit/scripts/drive.sh` only; split on whitespace, with the prompt appended as the last argument |
 | `skills.notify` | A shell command, such as `herdr notification show "$1" --body "$2"`; unset or empty means no notification | `skills/orchestrate-epic/scripts/oe-wait.sh` only; run through `sh -c` with a one-line message as `$1` and a link as `$2` for each item that needs the person |
-| `skills.bot` | The login of the GitHub App bot the agents act as, with or without the `[bot]` suffix; unset means none | `bot_def` in `skills/orchestrate-epic/scripts/oe-config.sh` and `babysit_bot` in `skills/babysit/scripts/common.sh`; its records count for oe, and its comments never count as a person's |
+| `skills.bot` | The login of the GitHub App bot the agents act as, with or without the `[bot]` suffix; unset means none. A clone that sets it opts in: the worktree an agent gets carries the Bot's git user and credential helper, while the person's own checkout keeps the person's. Its remote and every push URL must be an HTTPS GitHub URL, and neither the clone nor the worktree an agent gets may have submodules, or a start refuses. The worktree also resets inherited `http.<url>.extraheader` values and ends the credential chain at the Bot helper, so a helper that declines fails the push instead of falling back to the person | `bot_def` in `oe-config.sh` and `babysit_bot` in `common.sh` read it for records; `bot_login`, `bot_identity_apply`, and `bot_require_ready` in `oe-bot.sh` give an agent's worktree its identity and refuse a start that could not hold it; `bot_env` makes the scripts that write to GitHub use a token for it |
+| `skills.bot.helper` | A command that answers `token <owner>/<repo>` with one installation token for that repository, and git's credential helper protocol with `get`; read only from the global config, so a clone cannot name it | `bot_helper` in `skills/orchestrate-epic/scripts/oe-bot.sh` only |
 
 ## Workflow
 
@@ -109,7 +112,8 @@ claude plugin marketplace add ./
 claude plugin install skills@maro114510-agent-skills --scope user
 claude plugin list | grep skills
 
-# Pre-commit hooks for shell scripts and workflows: https://github.com/j178/prek
+# Pre-commit hooks for shell scripts, workflows, and secrets: https://github.com/j178/prek
 brew install j178/tap/prek   # macOS, once
+brew install gitleaks        # the secret hook's scanner, once
 prek install                 # from the repo root
 ```

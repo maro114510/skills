@@ -10,6 +10,7 @@
 # | split-fails | The split fails with the error code this file holds |
 # | process-<pane>.json | What process-info prints for the pane, with : in the ID written as _; without it the pane does not exist |
 # | board.json | When present, a run in a pane makes process-info print this file for that pane, as when the board starts |
+# | slow-shell | With board.json, the number of process-info calls that still print the prompt after a run before the board shows, as with a shell whose startup is slow |
 set -uo pipefail
 
 d="${FAKE_HERDR_DIR}"
@@ -36,11 +37,25 @@ case "${1:-} ${2:-}" in
 "pane process-info")
   [[ "${3:-}" == --pane ]] || error invalid_arguments
   [[ -e "$(pane_file "$4")" ]] || error pane_not_found
+  pending="${d}/pending-${4//:/_}"
+  if [[ -e "${pending}" ]]; then
+    left="$(cat "${pending}")"
+    if ((left <= 0)); then
+      cp "${d}/board.json" "$(pane_file "$4")"
+      rm -f "${pending}"
+    else
+      echo $((left - 1)) >"${pending}"
+    fi
+  fi
   cat "$(pane_file "$4")"
   ;;
 "pane run")
   [[ -e "$(pane_file "$3")" ]] || error pane_not_found
-  [[ ! -e "${d}/board.json" ]] || cp "${d}/board.json" "$(pane_file "$3")"
+  if [[ -e "${d}/board.json" && -e "${d}/slow-shell" ]]; then
+    cp "${d}/slow-shell" "${d}/pending-${3//:/_}"
+  elif [[ -e "${d}/board.json" ]]; then
+    cp "${d}/board.json" "$(pane_file "$3")"
+  fi
   printf '{"result":{"type":"ok"}}\n'
   ;;
 "pane rename")

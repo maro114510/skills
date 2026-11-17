@@ -15,7 +15,8 @@ query($owner: String!, $repo: String!, $num: Int!, $branch: String!, $ref: Strin
         nodes { authorAssociation author { login __typename } body createdAt url }
       }
     }
-    ref(qualifiedName: $ref) { name }
+    # The head the branch has now decides which Owner starts pushed, as oe-starts.jq says.
+    ref(qualifiedName: $ref) { name target { oid } }
     # Only the newest pull request decides the action, and each one more costs about one rate-limit point.
     pullRequests(headRefName: $branch, first: 1, orderBy: {field: CREATED_AT, direction: DESC}) {
       totalCount

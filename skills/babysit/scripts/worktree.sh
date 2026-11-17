@@ -18,6 +18,8 @@ unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE GIT_OBJECT_DIRECTORY G
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source-path=SCRIPTDIR disable=SC1091 # CI runs shellcheck without -x, so it cannot follow this.
 source "${script_dir}/common.sh"
+# shellcheck source-path=SCRIPTDIR disable=SC1091 # CI runs shellcheck without -x, so it cannot follow this.
+source "${script_dir}/../../orchestrate-epic/scripts/oe-bot.sh"
 
 usage() {
   echo "$1" >&2
@@ -88,10 +90,14 @@ if [[ "${cmd}" == remove ]]; then
   exit 0
 fi
 
+# A clone that opted in but cannot act as the Bot refuses before this fetches or writes to GitHub.
+# Removal above needs no credential, so a readiness lost after a drive started never strands the worktree.
+bot_config_ready || fail "the Bot identity is not ready"
+
 # A private ref, so neither FETCH_HEAD nor a branch of the user's changes. Git forbids a ref component that
 # starts with "." or ends in ".lock", and a repository can be named like that (owner/.github), so "." is encoded.
 ref="refs/babysit/${lowered//./%2e}/${pr}"
-git fetch --quiet origin "+refs/heads/${branch}:${ref}" || fail "cannot fetch ${branch} from origin"
+bot_git fetch --quiet origin "+refs/heads/${branch}:${ref}" || fail "cannot fetch ${branch} from origin"
 sha="$(git rev-parse --verify "${ref}^{commit}")" || fail "cannot read the fetched head"
 [[ -z "${expected}" || "${expected}" == "${sha}" ]] || fail "the head moved: origin has ${sha}, expected ${expected}"
 
@@ -103,4 +109,8 @@ else
   mkdir -p "$(dirname "${wt}")" || fail "cannot create the parent of ${wt}"
   git worktree add --quiet --detach "${wt}" "${sha}" || fail "cannot create ${wt}"
 fi
+bot_identity_apply "${wt}" || {
+  git worktree remove --force "${wt}" >/dev/null 2>&1 || true
+  fail "cannot apply the Bot identity to ${wt}"
+}
 jq -nc --arg path "${wt}" --arg sha "${sha}" --arg branch "${branch}" '{path: $path, sha: $sha, branch: $branch}'
