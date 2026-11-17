@@ -1,6 +1,6 @@
 # Change Units
 
-create-github-issues owns this definition, because whoever files the Issues splits work into one Change Unit per Issue. implement reads it only to tell whether a Request needs more than one unit. Other skills reference this file and never restate it.
+create-github-issues owns this definition. Other skills reference this file and never restate it.
 
 A unit is a group of commits that a reviewer verifies as one kind of thing, never a single commit. A test and the code it drives are one unit although their playbook commits them separately.
 
