@@ -10,6 +10,8 @@ setup() {
   oe="${BATS_TEST_DIRNAME}/oe"
   export OE_STATE_DIR="${BATS_TEST_TMPDIR}/state"
   sessions=()
+  # A test sets only the session ID variables it needs, so the caller's environment never reaches the line.
+  unset OE_SESSION_ID CLAUDE_CODE_SESSION_ID CODEX_THREAD_ID DSH_SESSION_ID
 }
 
 teardown() {
@@ -41,6 +43,22 @@ ps_cannot_run() {
 # Prints the token from the output of a successful acquire.
 token_of() {
   printf '%s\n' "$1" | sed -n 's/^token=//p'
+}
+
+# Prints the sessions record of Epic $2 in repository $1.
+sessions_record() {
+  printf '%s/sessions/%s/%s.jsonl' "${OE_STATE_DIR}" "$(printf '%s' "$1" | git hash-object --stdin)" "$2"
+}
+
+# Prints how many lines the sessions record of Epic $2 in repository $1 holds.
+session_lines() {
+  local file
+  file="$(sessions_record "$1" "$2")"
+  if [ -e "${file}" ]; then
+    wc -l <"${file}" | tr -d ' '
+  else
+    printf '0\n'
+  fi
 }
 
 @test "a second session for the same Epic is refused while the first one runs" {
@@ -220,4 +238,17 @@ token_of() {
   *"lock store"*) ;;
   *) return 1 ;;
   esac
+}
+
+@test "a session that takes a free lock appends one line with the time and the checkout" {
+  start_session
+  checkout="$(cd "$(git -C "${BATS_TEST_DIRNAME}" rev-parse --show-toplevel)" && pwd -P)"
+  cd "${BATS_TEST_DIRNAME}"
+
+  OE_NOW=1760000000 OE_SESSION_PID="${session_pid}" run bash "${oe}" lock acquire o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(session_lines o/r 1)" -eq 1 ]
+  [ "$(jq -r .at "$(sessions_record o/r 1)")" = "2025-10-09T08:53:20Z" ]
+  [ "$(jq -r .checkout "$(sessions_record o/r 1)")" = "${checkout}" ]
 }
