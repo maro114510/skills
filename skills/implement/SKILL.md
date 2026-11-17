@@ -141,7 +141,7 @@ Before any repository mutation, present a decision-complete implementation plan 
 - A test strategy mapped to the acceptance criteria
 - Explicit non-goals, risks, and the decision log
 
-Then proceed without waiting for approval, because the caller checks the pushed range, not the plan.
+Then proceed without waiting for approval of the plan: the PR is where the change is reviewed.
 
 If new information, repository drift, or a scope change raises a Phase 2 trigger later, stop and return Questions, leaving the partial work in the worktree.
 
@@ -194,7 +194,7 @@ Route each part of the task in the Phase 3 plan. A playbook, relative to this sk
 Before the first edit, read `references/test-policy.md` and the routed playbook, and put the playbook's steps verbatim at the top of the todo list. Mark a step you skip `skip: <reason>`.
 
 Commit each step with the `commit` skill, giving it the type the playbook names, because it infers `test:` for a test-only diff, any `Removed-Test` trailer, and, when the work traces to an Issue, its number and whether anything is deferred so far, counting units Run One Unit deferred. Never push.
-The `commit` skill never asks, so carry every file it left uncommitted and every `reason:` line it listed into your final report.
+The `commit` skill never asks, so carry every file it left uncommitted and every type it chose without confidence into your final report.
 
 A test that is hard to write is a signal to revisit the design. Touch nothing beyond what the task requires.
 

@@ -72,13 +72,6 @@ Resolve each finding yourself and list it in Step 7:
 - Some changed files look unrelated to the rest, possibly stray edits: unstage them and leave them uncommitted.
 - A confident Conventional Commits type/scope cannot be determined: use the closest type and omit the scope.
 
-Then run the classifier; its header lists the conditions. Pass each critical decision the caller reports from its decision log:
-
-```bash
-bash <skill-dir>/scripts/classify-approval.sh --staged [--require "critical decision: <decision>"]...
-```
-
-Whatever it exits, go to Step 6, and list every printed `reason:` line in Step 7. Approval belongs to the push, through create-pr's range check or the PR review, and a local commit can still be undone before then.
 A failing-test-only change is committed as `test:`.
 
 ## Step 6. Commit
@@ -101,4 +94,4 @@ A merge commit keeps red `test:` commits on the default branch, so bisect with `
 ## Step 7. Report
 
 After every commit, show the commit hash and subject in one short line. Never commit silently.
-Under it, list each file Step 5 left uncommitted and why, each type chosen without confidence, and each `reason:` line from Step 5.
+Under it, list each file Step 5 left uncommitted and why, and each type chosen without confidence.

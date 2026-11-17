@@ -295,7 +295,7 @@ sequenceDiagram
 - An update that fails once, even for a passing cause such as a network error, is not retried on the same head, and the Issue parks 10 minutes later
 - When a commit other than a sibling PR lands on the base branch after verification, nothing is verified again
 - A PR the engineer merges before its branch is updated and verified again lands without being verified against a sibling PR merged before it, as when two sibling PRs merge between two reads
-- Workflows the AI changed run with the repository's secrets
+- Workflows the AI changed run with the repository's secrets on the PR branch before the engineer reviews them, and nothing gates their merge on that review: one person owns this repository and cannot approve their own pull request, and GitHub offers a push ruleset's path restriction only for private and internal repositories
 - oe does not scan for secrets
 - A comment the AI forgot to mark is read as engineer input
 - oe lock works only within one host, so a session for the same Epic on another host lets two agents touch the same branch
