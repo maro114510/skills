@@ -109,12 +109,10 @@ An item is open only if it survives the Phase 1 lookup and its remaining reading
 
 | # | Trigger | Fires when |
 |---|---|---|
-| 1 | Acceptance in doubt | Done cannot be judged because the criteria are missing and cannot be derived from the request's intent, or because they cannot be verified |
+| 1 | Acceptance in doubt | Done cannot be judged because the criteria are missing and cannot be derived from the request's intent, or because they cannot be verified. This includes a criterion that neither a checkout of the repository nor its CI can observe, such as one that needs a deploy or a person; its question carries a drafted Issue for that criterion and, when an Issue backs the request, the edit that moves the criterion there |
 | 2 | Premise in doubt | The request conflicts with what you observed: the bug does not reproduce, the target does not exist or already behaves as desired, the change cannot achieve its stated goal, or the request needs more than one change unit, as Split Check below says |
 | 3 | Sources contradict | The Issue body, comments, Epic, repository instructions, caller prompt, or criteria disagree with each other, and no later statement by the same author resolves it |
 | 4 | Unsettled critical decision | No source settles a decision where a wrong choice could cause a security exposure, data loss or corruption, financial harm, an irreversible change, or a broken public interface. Only an explicit statement or an established repository convention settles one, never your own inference |
-
-A manual check, as references/evidence.md section 4 defines, never fires trigger 1.
 
 Decide everything else yourself. Follow repository conventions, prefer the smallest reversible option within scope, and record the choice in the decision log.
 
@@ -224,7 +222,7 @@ This phase always runs. Phase 2's criteria live in context, and context drifts t
 1. Re-fetch the source: the Issue body, linked spec, and caller's prompt. If it changed since Phase 2, say so first.
 2. Quote each acceptance criterion verbatim, because paraphrasing is where a criterion gets softened. A criterion derived from the request's intent has no source text, so prefix it with `(derived)` and never present it as a quote.
 3. Read `references/evidence.md`, relative to this skill's directory. Classify each criterion, attach evidence tagged `[behavior]` or `[static]` as it defines, and classify the outcome. A behavior criterion needs `[behavior]` evidence. A green CI run is never behavior evidence for a criterion that does not name that check.
-4. Treat a `No evidence` criterion as unsatisfied. Deferring a criterion is the person's call, and surfacing it is yours. A manual check is never deferred.
+4. Treat a `No evidence` criterion, and one whose run observed the opposite of what it names, as unsatisfied. List each in Built with its reason, `no evidence` or `failure observed`, and still return Built, because the caller passes them on to whoever verifies the change. Never report one as satisfied.
 
 ```
 | Criterion (verbatim, or `(derived)`) | Evidence |
@@ -232,10 +230,8 @@ This phase always runs. Phase 2's criteria live in context, and context drifts t
 | <behavior criterion> | `[behavior]` <command or input>; observed <result> |
 | <structure or content criterion> | `[static]` <file:line> |
 | <criterion without evidence> | none |
-| <manual check> | manual |
 
-Deferred, not satisfied: <criterion> -> <what was done instead, and why>
-No evidence: <criterion>
+Unsatisfied: <criterion> -> <reason>
 ```
 
 ---
