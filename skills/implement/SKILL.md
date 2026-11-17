@@ -9,7 +9,7 @@ description: >
   Trigger on requests like
   「これを実装して」「機能を追加して」「バグを修正して」「変更して」「これを作って」
   「リファクタリングして」「対応して」 and similar implementation requests.
-  Builds one Request as one change unit for one PR, and returns Questions asking to split the Issue when it needs more.
+  Builds one Request as one change unit for one PR, and returns Questions asking to split the Issue or request when it needs more.
   Works in a worktree, commits as it goes, and before it returns has a fresh context check that the branch adds nothing the request did not ask for and lacks nothing it asks for,
   then self-reviews the whole branch range on the first pass and only the fix delta on a second.
   Claims an Issue locally first, so a second session handed the same Issue returns Busy instead of duplicating the work.
@@ -110,7 +110,7 @@ An item is open only if it survives the Phase 1 lookup and its remaining reading
 | # | Trigger | Fires when |
 |---|---|---|
 | 1 | Acceptance in doubt | Done cannot be judged because the criteria are missing and cannot be derived from the request's intent, or because they cannot be verified |
-| 2 | Premise in doubt | The request conflicts with what you observed: the bug does not reproduce, the target does not exist or already behaves as desired, the change cannot achieve its stated goal, or the request needs more than one change unit as `<skills-root>/create-github-issues/references/change-units.md` defines it, or a repository rule requires splitting it, in which case the question asks to split the Issue, or the request when it has none. A fix to the unit's own pull request, such as a repair, stays in that unit |
+| 2 | Premise in doubt | The request conflicts with what you observed: the bug does not reproduce, the target does not exist or already behaves as desired, the change cannot achieve its stated goal, or the request needs more than one change unit, as Split Check below says |
 | 3 | Sources contradict | The Issue body, comments, Epic, repository instructions, caller prompt, or criteria disagree with each other, and no later statement by the same author resolves it |
 | 4 | Unsettled critical decision | No source settles a decision where a wrong choice could cause a security exposure, data loss or corruption, financial harm, an irreversible change, or a broken public interface. Only an explicit statement or an established repository convention settles one, never your own inference |
 
@@ -126,6 +126,10 @@ These triggers govern clarification only. Every operational stop elsewhere in th
 
 When a trigger fires, raise every open triggered item before any repository mutation, and return them as Questions says. A later run returns Questions again only when an answer raises a new trigger.
 If the requested change looks unnecessary or its premise wrong, say so candidly in the Questions and let the person decide.
+
+### Split Check
+
+Read `<skills-root>/create-github-issues/references/change-units.md` in full before judging trigger 2. The request needs more than one change unit when that file splits it, or when a repository rule requires a split. Then the question asks to split the Issue, or the request when no Issue backs it. A fix to the unit's own pull request, such as a repair, stays in that unit and never fires this check.
 
 ---
 
