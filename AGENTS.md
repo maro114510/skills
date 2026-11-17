@@ -32,7 +32,7 @@ Repository instructions for coding agents.
 | `cliff.toml` | `git-cliff` config used by `make release` |
 
 `docs/design` holds only Design Docs that describe the current target, as `manage-design-documents` defines them; work the owner decided to build is an Issue.
-Ideas, experiments, and open questions go to [Discussions](https://github.com/maro114510/skills/discussions) as [Discussion #638](https://github.com/maro114510/skills/discussions/638) describes, never to Issues. The repository is public, so a post never carries work context.
+Ideas, experiments, and open questions go to [Discussions](https://github.com/maro114510/skills/discussions) as [Development Flow](#development-flow) describes, never to Issues. The repository is public, so a post never carries work context.
 
 ## Versions and Releases
 
@@ -93,6 +93,57 @@ Skills read them with `git config --get <key>`, so git decides between local and
 | `skills.notify` | A shell command, such as `herdr notification show "$1" --body "$2"`; unset or empty means no notification | `skills/orchestrate-epic/scripts/oe-wait.sh` only; run through `sh -c` with a one-line message as `$1` and a link as `$2` for each item that needs the person |
 | `skills.bot` | The login of the GitHub App bot the agents act as, with or without the `[bot]` suffix; unset means none. A clone that sets it opts in: the worktree an agent gets carries the Bot's git user and credential helper, while the person's own checkout keeps the person's. Its remote and every push URL must be an HTTPS GitHub URL, and neither the clone nor the worktree an agent gets may have submodules, or a start refuses. The worktree also resets inherited `http.<url>.extraheader` values and ends the credential chain at the Bot helper, so a helper that declines fails the push instead of falling back to the person | `bot_def` in `oe-config.sh` and `babysit_bot` in `common.sh` read it for records; `bot_login`, `bot_identity_apply`, and `bot_require_ready` in `oe-bot.sh` give an agent's worktree its identity and refuse a start that could not hold it; `bot_env` makes the scripts that write to GitHub use a token for it |
 | `skills.bot.helper` | A command that answers `token <owner>/<repo>` with one installation token for that repository, and git's credential helper protocol with `get`; read only from the global config, so a clone cannot name it | `bot_helper` in `skills/orchestrate-epic/scripts/oe-bot.sh` only |
+
+## Development Flow
+
+Every harness loads this file, but not every one follows an import from it, so these rules live here and nowhere else.
+
+Route new work by two questions, in order:
+
+1. Is what to do decided? If not, it goes to a Discussion.
+2. Does the change move a boundary, such as a skill contract, user-visible behavior, a safety gate, a git config key, or a data format?
+
+| Decided | Moves a boundary | Path |
+|---|---|---|
+| No | - | A Discussion |
+| Yes | Yes | Intent in a Discussion, the owner's decision, a merged Design Doc, then an Epic driven by oe |
+| Yes | No | An Issue |
+
+- Create an Issue only after the owner wrote that the work will be done; a bug fix, or a fix such as a typo that changes no behavior, still gets an Issue, but needs no decision from the owner
+- Keep at most 5 decided units open at once: an Epic counts as one, a standalone Issue counts as one, and a bug fix or a fix that changes no behavior does not count
+    - A unit counts from when it starts, so a change that moves a boundary counts while its Design Doc is still open
+    - While 5 are open, a newly decided unit waits in its Discussion without counting, and starts when one closes
+- When the owner decides in a conversation and no Discussion holds the work, open one that states the intent and quotes the decision
+- Close anything decided against with the observation that would reopen it
+- Quote the question and the owner's answer behind each decision where it is recorded: the comment that closes a Discussion, and the body of a Design Doc pull request
+
+### Discussions
+
+| Category | Holds |
+|---|---|
+| Ideas | Experiments, evaluations, and research that nobody has decided to build |
+| General | Open questions that need a decision |
+
+- Search Discussions and Issues for the same topic first; comment on an existing Discussion instead of opening a duplicate, and link a related Issue, especially one that scopes the idea out
+- State the evidence behind the post
+- An improvement idea names what in the repository it would let us remove, or says none
+- Write posts and Issues in English
+- Keep general facts, such as error class and status, endpoint, counts, timing, and the skill involved
+- Drop anything that identifies private work: names of private repositories, organizations, and app installations, their PR and Issue numbers, product and domain terms, code, and data
+- When the owner decides to build an idea, start its path from the table above with a link to the Discussion, even if an older Issue for it was closed: a new Issue, or for a change that moves a boundary, a Design Doc pull request. Comment its URL on the Discussion, and close the Discussion when the Issue opens or the Design Doc merges
+- Close a Discussion with the reason that fits, and state that reason in the closing comment
+    - Resolved when the work the owner decided to build has started: its Issue opened or its Design Doc merged
+    - Outdated when the owner decided against it, with the observation that would reopen it
+    - Duplicate when another Discussion already holds it, linking that one
+
+```bash
+# Search
+gh api graphql -f query='query($q:String!){search(type:DISCUSSION,query:$q,first:10){nodes{... on Discussion{number title url}}}}' \
+  -f q='repo:maro114510/skills <words>'
+# Post. <category> is DIC_kwDOR_3Rl84DKbjP for Ideas or DIC_kwDOR_3Rl84DKbjN for General
+gh api graphql -f query='mutation($r:ID!,$c:ID!,$t:String!,$b:String!){createDiscussion(input:{repositoryId:$r,categoryId:$c,title:$t,body:$b}){discussion{url}}}' \
+  -f r=R_kgDOR_3Rlw -f c=<category> -f t='<title>' -F b=@<body-file>
+```
 
 ## Workflow
 

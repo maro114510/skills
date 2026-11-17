@@ -53,7 +53,7 @@ flowchart TB
 |---|---|
 | Intent | What a person wants changed and why. Arrives as conversation, an Issue, or a retrospective finding |
 | Session | An interactive harness session a person runs. The Design and the Epic are agreed in one |
-| Design | The agreed boundary of a change, a Design Doc or ADR. Merging its pull request is the agreement. A change that moves no boundary needs none, and its Epic says so |
+| Design | The agreed boundary of a change, a Design Doc or ADR. Merging its pull request is the agreement. A change that moves no boundary needs none and goes straight to an Issue, as the Development Flow section of AGENTS.md routes it |
 | Epic | A parent Issue grouping the Tickets derived from one Design. It exists only after a person approved its plan in a Session, so its existence is the approval |
 | Ticket | A child Issue of an Epic. One independently verifiable unit of work whose acceptance criteria are split into automated checks, each naming the command that proves it, and manual checks that need a person |
 | Mandate | A Ticket exists under an open Epic that a running Coordinator holds. Covers the Ticket's stated scope only. Wider scope is a new Ticket |
