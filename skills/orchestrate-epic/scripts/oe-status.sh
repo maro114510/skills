@@ -12,8 +12,8 @@
 # - --watch redraws the view every wait_interval seconds until interrupted.
 #   At a terminal it first clears the screen, so nothing the pane's shell printed while it started stays, and shows one line while the first read runs.
 #   A failed read is reported on stderr and retried at the next refresh.
-#   Once a refresh has found a running session holding the Epic's lock, the first refresh that finds none draws the last view and exits 0,
-#   so a board left open after its session ended, crashed or not, stops reading GitHub.
+#   The first refresh that finds no running session holding the Epic's lock draws the last view and exits 0,
+#   so a board left open after its session ended, crashed or not, or started by hand without one, stops reading GitHub.
 # - OE_NOW sets the current time in epoch seconds, and OE_WAIT_INTERVAL the seconds between refreshes, as in oe wait.
 # - OE_STATUS_REFRESHES, for tests, ends --watch after that many refreshes.
 #
@@ -197,15 +197,10 @@ fi
 [[ ! -t 1 ]] || printf '\033[H\033[2J%s\n' "oe status: reading Epic #${epic} of ${repo} ..."
 
 count=0
-seen=0
 while :; do
   # The lock is read before the view, so the last view is drawn after the session ended.
   ended=0
-  if lock_held "${repo}" "${epic}"; then
-    seen=1
-  elif ((seen)); then
-    ended=1
-  fi
+  lock_held "${repo}" "${epic}" || ended=1
   if view="$(render)"; then
     [[ ! -t 1 ]] || printf '\033[H\033[2J'
     printf '%s\n' "${view}"
