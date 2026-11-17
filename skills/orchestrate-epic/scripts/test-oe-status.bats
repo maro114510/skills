@@ -388,6 +388,12 @@ JSON
 }
 JSON
   records 5 claim@07:00 attempt@07:01
+  session="$(
+    sleep 600 >/dev/null 2>&1 3>&- &
+    echo "$!"
+  )"
+  echo "${session}" >"${tmp}/detached-session"
+  OE_SESSION_PID="${session}" bash "${oe}" lock acquire o/r 1 >/dev/null
 
   OE_WAIT_INTERVAL=0 OE_STATUS_REFRESHES=2 run --separate-stderr bash "${oe}" status o/r 1 --watch
 
@@ -449,13 +455,14 @@ EOF
   [ "$(grep -c 'epic=1' "${calls}")" -eq 4 ]
 }
 
-@test "--watch without a session holding the Epic's lock keeps refreshing" {
+@test "--watch without a session holding the Epic's lock at its first refresh shows one view, then exits 0" {
   three_issues
 
   OE_WAIT_INTERVAL=0 OE_STATUS_REFRESHES=3 run --separate-stderr bash "${oe}" status o/r 1 --watch
 
   [ "${status}" -eq 0 ]
-  [ "$(printf '%s\n' "${lines[@]}" | grep -c '^ISSUE ')" -eq 3 ]
+  [ "$(printf '%s\n' "${lines[@]}" | grep -c '^ISSUE ')" -eq 1 ]
+  [ "$(grep -c 'epic=1' "${calls}")" -eq 1 ]
 }
 
 @test "the agent column names the role whose worktree exists while a running session holds the Epic's lock" {
