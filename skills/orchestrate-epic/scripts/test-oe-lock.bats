@@ -252,3 +252,12 @@ session_lines() {
   [ "$(jq -r .at "$(sessions_record o/r 1)")" = "2025-10-09T08:53:20Z" ]
   [ "$(jq -r .checkout "$(sessions_record o/r 1)")" = "${checkout}" ]
 }
+
+@test "the sessions line carries the session ID the harness set" {
+  start_session
+
+  OE_SESSION_ID=harness-1 OE_SESSION_PID="${session_pid}" run bash "${oe}" lock acquire o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(jq -r .session_id "$(sessions_record o/r 1)")" = "harness-1" ]
+}
