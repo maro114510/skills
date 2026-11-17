@@ -424,13 +424,12 @@ notes_sandbox() {
 @test "notes leave out a Back-merge PR merged with a merge commit" {
   notes_sandbox
   git checkout -q main
-  git checkout -q -b back-merge-branch
-  back_merge 1.2.2
+  cut "$(git rev-parse HEAD)" 1.2.2 1
   git checkout -q main
-  git merge -q --no-ff -m "chore: bring v1.2.2 back to main" back-merge-branch
+  git merge -q --no-ff -m "chore: bring v1.2.2 back to main" release-1.2.2
   cut "$(git rev-parse HEAD)" 1.3.0 1
   run --separate-stderr notes_for v1.3.0 v1.2.0
   [ "${status}" -eq 0 ]
   output_lacks "Bring v1.2.2 back to main"
-  output_lacks "Bring release 1.2.2 back to main"
+  output_lacks "Release v1.2.2"
 }

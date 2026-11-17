@@ -12,16 +12,17 @@ plugin=.claude-plugin/plugin.json
 marketplace=.claude-plugin/marketplace.json
 # The ref of the plugin's own entry is the one field besides the version a Bump commit sets; every other field stays.
 # shellcheck disable=SC2016 # $n is a jq variable.
-without_ref='del(.version) | del(.plugins[]? | select(.name == $n) | .source.ref)'
+without_ref='del(.version) | del(.plugins[]? | select(.name == $n) | select(.source | type == "object") | .source.ref)'
 
 fail() {
   echo "$*" >&2
   exit 1
 }
 
-# json_at prints the file $2 as it is at the commit $1, with the filter $3 applied and $n set to $4 when it is given.
+# json_at prints the file $2 as it is at the commit $1, with the filter $3 applied and $n set to the JSON value $4, or null.
+# It fails when git or jq does, so a caller that cannot read a file never counts two unreadable files as equal.
 json_at() {
-  git show "$1:$2" | jq -c ${4:+--arg n "$4"} "$3"
+  git show "$1:$2" | jq -c --argjson n "${4:-null}" "$3"
 }
 
 # normalize_readme prints README.md at the commit $1 with every npx skills tag and APM range replaced by a placeholder.
@@ -32,7 +33,7 @@ normalize_readme() {
 # bump_violation prints why the change from commit $1 to commit $2 is more than the version fields a Bump commit sets,
 # and returns 1; it returns 0 when it is only that.
 bump_violation() {
-  local file name
+  local file name before after
   while IFS= read -r file; do
     case "${file}" in
     "${plugin}" | "${marketplace}" | README.md) ;;
@@ -42,12 +43,31 @@ bump_violation() {
       ;;
     esac
   done < <(git diff --name-only "$1" "$2")
-  if [[ "$(json_at "$1" "${plugin}" 'del(.version)')" != "$(json_at "$2" "${plugin}" 'del(.version)')" ]]; then
+  before="$(json_at "$1" "${plugin}" 'del(.version)')" || {
+    echo "${plugin} cannot be read"
+    return 1
+  }
+  after="$(json_at "$2" "${plugin}" 'del(.version)')" || {
+    echo "${plugin} cannot be read"
+    return 1
+  }
+  if [[ "${before}" != "${after}" ]]; then
     echo "${plugin} changes more than the version"
     return 1
   fi
-  name="$(json_at "$1" "${plugin}" '.name' | tr -d '"')"
-  if [[ "$(json_at "$1" "${marketplace}" "${without_ref}" "${name}")" != "$(json_at "$2" "${marketplace}" "${without_ref}" "${name}")" ]]; then
+  name="$(json_at "$1" "${plugin}" '.name')" || {
+    echo "${plugin} cannot be read"
+    return 1
+  }
+  before="$(json_at "$1" "${marketplace}" "${without_ref}" "${name}")" || {
+    echo "${marketplace} cannot be read"
+    return 1
+  }
+  after="$(json_at "$2" "${marketplace}" "${without_ref}" "${name}")" || {
+    echo "${marketplace} cannot be read"
+    return 1
+  }
+  if [[ "${before}" != "${after}" ]]; then
     echo "${marketplace} changes more than the version and the entry's ref"
     return 1
   fi
@@ -98,7 +118,7 @@ guard() {
 # back_merge_commit succeeds for a commit that moves the plugin manifest's version and nothing else a Bump commit may not,
 # which is what a Back-merge PR adds to main, whatever its subject. A merge commit is judged against its first parent.
 back_merge_commit() {
-  git diff --name-only "$1^1" "$1" | grep -qx "${plugin}" && bump_violation "$1^1" "$1" >/dev/null
+  git diff --name-only "$1^1" "$1" | grep -Fx "${plugin}" >/dev/null && bump_violation "$1^1" "$1" >/dev/null
 }
 
 notes() {
