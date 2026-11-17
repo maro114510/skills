@@ -185,7 +185,7 @@ Route each part of the task in the Phase 3 plan. A playbook, relative to this sk
 
 Before the first edit, read `references/test-policy.md` and the routed playbook, and put the playbook's steps verbatim at the top of the todo list. Mark a step you skip `skip: <reason>`.
 
-Commit each step with the `commit` skill, giving it the type the playbook names, because it infers `test:` for a test-only diff, any `Removed-Test` trailer, and, when the work traces to an Issue, its number and whether anything is deferred so far. Never push.
+Commit each step with the `commit` skill, giving it the type the playbook names, because it infers `test:` for a test-only diff, any `Removed-Test` trailer, and, when the work traces to an Issue, its number. Never push.
 The `commit` skill never asks, so carry every file it left uncommitted and every type it chose without confidence into your final report.
 
 A test that is hard to write is a signal to revisit the design. Touch nothing beyond what the task requires.
@@ -238,9 +238,8 @@ Unsatisfied: <criterion> -> <reason>
 
 ## Phase 7: Finish
 
-1. Commit any uncommitted work with the `commit` skill, so the range holds the whole change. Give it the Issue number and whether anything is deferred, as Phase 5 says. If a commit hook rewrote any file, rerun Phase 6.9 on the committed state.
-2. If Phase 6.9 left anything deferred and a branch commit carries `Closes #<N>`, say so in the report, because create-pr copies that keyword into the PR.
-3. Release the Issue Claim if this run took one.
-4. Return Built: the Phase 6.9 table, the Phase 6.5 outcome with its reviewed HEAD, every commit in `<reviewed-head>..HEAD` as unreviewed, or all of the range when the outcome is `not-run` or `git merge-base --is-ancestor <reviewed-head> HEAD` fails, and every file the `commit` skill left uncommitted with every `reason:` line it listed.
+1. Commit any uncommitted work with the `commit` skill, so the range holds the whole change. Give it the Issue number, as Phase 5 says. If a commit hook rewrote any file, rerun Phase 6.9 on the committed state.
+2. Release the Issue Claim if this run took one.
+3. Return Built: the Phase 6.9 table, the Phase 6.5 outcome with its reviewed HEAD, every commit in `<reviewed-head>..HEAD` as unreviewed, or all of the range when the outcome is `not-run` or `git merge-base --is-ancestor <reviewed-head> HEAD` fails, and every file the `commit` skill left uncommitted with every `reason:` line it listed.
 
 Never push, and never create a PR. The caller checks the range before it publishes anything.
