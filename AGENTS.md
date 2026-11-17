@@ -126,11 +126,11 @@ Route new work by two questions, in order:
 
 - Search Discussions and Issues for the same topic first; comment on an existing Discussion instead of opening a duplicate, and link a related Issue, especially one that scopes the idea out
 - State the evidence behind the post
-- An improvement idea names what it would let us remove
+- An improvement idea names what in the repository it would let us remove, or says none
 - Write posts and Issues in English
 - Keep general facts, such as error class and status, endpoint, counts, timing, and the skill involved
 - Drop anything that identifies private work: names of private repositories, organizations, and app installations, their PR and Issue numbers, product and domain terms, code, and data
-- When the owner decides to build an idea, start its path from the table above with a link to the Discussion, even if an older Issue for it was closed: a new Issue, or for a change that moves a boundary, a Design Doc pull request. Then comment its URL on the Discussion and close it
+- When the owner decides to build an idea, start its path from the table above with a link to the Discussion, even if an older Issue for it was closed: a new Issue, or for a change that moves a boundary, a Design Doc pull request. Comment its URL on the Discussion, and close the Discussion when the Issue opens or the Design Doc merges
 - Close a Discussion with the reason that fits, and state that reason in the closing comment
     - Resolved when the owner decided to build it
     - Outdated when the owner decided against it
