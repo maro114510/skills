@@ -119,11 +119,27 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# Prints the session ID the harness set, or nothing when it set none.
+# The first set among OE_SESSION_ID, CLAUDE_CODE_SESSION_ID, CODEX_THREAD_ID, and DSH_SESSION_ID wins.
+harness_session_id() {
+  local name
+  for name in OE_SESSION_ID CLAUDE_CODE_SESSION_ID CODEX_THREAD_ID DSH_SESSION_ID; do
+    if [[ -n "${!name:-}" ]]; then
+      printf '%s\n' "${!name}"
+      return 0
+    fi
+  done
+}
+
 # Records the agent of this role as running, after every other step, so a failed start leaves no running agent.
+# The record names the session that started the agent, when the harness set one, so a verdict traces to it.
 record_run() {
   local at
   at="$(record_now)" &&
-    records_add "${repo}" "${n}" "$(jq -cn --arg at "${at}" --arg role "${role}" '{kind: "run", at: $at, role: $role}')" ||
+    records_add "${repo}" "${n}" "$(jq -cn --arg at "${at}" --arg role "${role}" \
+      --arg session_id "$(harness_session_id)" \
+      '{kind: "run", at: $at, role: $role}
+        + (if $session_id == "" then {} else {session_id: $session_id} end)')" ||
     exit 1
 }
 
