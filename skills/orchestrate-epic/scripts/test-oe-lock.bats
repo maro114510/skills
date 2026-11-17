@@ -277,3 +277,13 @@ session_lines() {
   [ "${status}" -eq 0 ]
   [ "$(jq -r .session_id "$(sessions_record o/r "${n}")")" = "first" ]
 }
+
+@test "a sessions line for a harness that set no session ID carries none" {
+  start_session
+
+  OE_SESSION_PID="${session_pid}" run bash "${oe}" lock acquire o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(jq -r 'has("session_id")' "$(sessions_record o/r 1)")" = "false" ]
+  [ "$(jq -r '.checkout | length > 0' "$(sessions_record o/r 1)")" = "true" ]
+}
