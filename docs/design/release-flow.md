@@ -14,22 +14,21 @@ Documented installs follow releases, and `main` is the owner's early-access trac
 
 | Concept | Definition |
 |---|---|
-| Early-access track | `main`. The owner installs it without naming a version |
-| Run commit | A commit on `main` the owner has run and chooses to release. It is the parent of its Release tag's commit |
-| Release branch | A branch that starts at the Run commit and holds one Bump commit on top |
-| Bump commit | The only commit a release adds to the Run commit. It sets the new version in both manifests, sets the marketplace entry's `ref` to the new tag, and sets the version in the README's install commands |
+| Early-access track | `main`, which the owner installs without naming a version |
+| Run commit | A commit on `main` the owner has run and chooses to release. It is the parent of its Release tag's commit; for a tag on `main`, the tag's commit itself |
+| Release branch | A branch that starts at the Run commit and holds the Bump commit on top |
+| Bump commit | The one commit a release adds to the Run commit. It sets the new version in both manifests, the marketplace entry's `ref`, and the README's install commands |
 | Release tag | `v<version>` on the Bump commit. Immutable releases keep it on that content |
-| Release notes | Notes the release workflow generates with git-cliff for the commits after the previous release's Run commit, opening with the `BREAKING CHANGE` footer text of each breaking commit among them |
+| Release range | The commits after the previous release's Run commit, up to this release's Run commit. The version bump and the Release notes both count this range |
+| Release notes | Notes the release workflow generates with git-cliff for the Release range, opening with one entry per breaking commit: its `BREAKING CHANGE` footer text, or its subject when it has none |
 | Back-merge PR | The pull request that brings the Bump commit from the Release branch into `main` |
 
-How each documented route names a version:
-
-| Route | Documented install resolves |
-|---|---|
-| APM | The newest release tag within the current major version, through a `#^<major>.0.0` range |
-| GitHub CLI | The latest release, its default |
-| npx skills | The exact release tag, `#v<version>` |
-| Claude Code plugin | The Release tag the marketplace entry's `ref` on `main` names |
+| Route | Documented install resolves | Without a version |
+|---|---|---|
+| APM | The newest Release tag within the current major version, through a `#^<major>.0.0` range | `main` |
+| GitHub CLI | The latest release, its default | The latest release |
+| npx skills | The exact Release tag, `#v<version>` | `main` |
+| Claude Code plugin | The Release tag that the marketplace entry's `ref` on `main` names, so it moves when the Back-merge PR merges | The same; this route has no early-access track |
 
 ## Scenarios
 
@@ -56,15 +55,13 @@ sequenceDiagram
     Main-->>Main: The owner merges it as any other PR
 ```
 
-### Installing
-
-A user other than the owner installs as the README says and gets a release. The owner gets `main` by installing through APM or npx skills without a version; the Claude Code plugin always installs the Release tag its `ref` names. The Claude Code plugin reads its marketplace entry from `main`, so it moves to a new release only when the Back-merge PR merges.
-
 ## Invariants
 
-- The Run commit is reachable from `main`, and the Release tag's commit differs from the Run commit only by the Bump commit. The release workflow refuses a tag that breaks either, in place of today's check that the tag commit itself is reachable from `main`, because a squash or rebase merge of the Back-merge PR never makes it so.
-- The version in both manifests at the Release tag equals the tag without its `v`, and the marketplace entry's `ref` there names that tag, so a plugin version always names the content it installs.
-- The commits a release counts, for its version bump and its notes, start after the previous release's Run commit, not at the previous Release tag, which `main` never contains.
+- The release workflow publishes a tag only when all of these hold:
+    - The Run commit is reachable from `main` and descends from the previous release's Run commit.
+    - The Bump commit changes nothing but the version in both manifests, the marketplace entry's `ref`, and the README's install commands.
+    - Each of those equals the tag, with the manifests omitting its `v`.
+- The version and the marketplace entry's `ref` on `main` never move to an older release: a Back-merge PR that would move them back is not merged.
 
 ## References
 
