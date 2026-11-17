@@ -393,9 +393,9 @@ expect() {
 }
 
 @test "the limit cuts discussions in either flag order and discussionsTotal counts them all" {
+  discussion 3 "C" 2026-11-03T00:00:00Z Ideas
   discussion 1 "A" 2026-11-01T00:00:00Z Ideas
   discussion 2 "B" 2026-11-02T00:00:00Z Ideas
-  discussion 3 "C" 2026-11-03T00:00:00Z Ideas
   run bash "${target}" --limit 2 --discussions
   expect "${status}" 0
   expect "$(field '[.discussions[].number]')" '[1,2]'
