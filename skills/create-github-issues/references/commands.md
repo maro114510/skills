@@ -172,7 +172,7 @@ mutation($epicId: ID!, $tnId: ID!) {
 }'
 ```
 
-Blocked-by sets: each dependent `Tn` or `Tn.m` must list exactly its successful `depends_on` numbers, and each person Issue exactly its successful `blocked_by` numbers; failed IDs are intentionally omitted and reported in Step 6. A person Issue's `parent` must be null; on a mismatch, detach it with `removeSubIssue` as for an extra sub-issue above, without closing it.
+Blocked-by sets: each dependent `Tn` or `Tn.m` must list exactly its successful `depends_on` numbers, and each person Issue exactly its successful `blocked_by` numbers; failed IDs are intentionally omitted and reported in Step 6. A person Issue's `parent` must be null.
 
 ```bash
 gh api graphql -f owner="<owner>" -f name="<name>" -F number=<dependent Tn, Tn.m, or person Issue number> -f query='

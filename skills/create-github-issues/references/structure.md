@@ -20,11 +20,11 @@ SKILL.md Step 2 reads this file in full before it structures any task.
 ## Person Issues
 
 - An implementation Issue, a non-container `Tn` or a `Tn.m`, holds only work and checks observable from a checkout of the repository or from CI, without a human's credentials.
-- Work that needs a person, another machine, a real device, or an environment, such as a deploy and a check in staging, becomes its own person Issue with a temporary ID `P1`, `P2`, ..., instead of an item in a `Tn`. One person Issue holds the source items that wait for the same implementation Issues.
+- Work that needs a person, another machine, a real device, or an environment, such as a deploy and a check in staging, becomes its own person Issue with a temporary ID `P1`, `P2`, ..., instead of an item in a `Tn`.
 - A person Issue is blocked by the implementation Issues it waits for, and is not a sub-issue of the Epic or of any `Tn`. Its `blocked_by` lists those `Tn` or `Tn.m`.
 - Moving a source item into a person Issue is not an addition, and its `blocked_by` edge is not an inferred dependency, so neither needs the additions list.
 - A check of the whole Epic that a person runs may stay in the Epic's Verification instead.
-- No `Tn` depends on a `Pn`, and a `Pn` takes no wave; Step 3 lists each one with the Issues it waits for.
+- Step 3 lists each person Issue with the Issues it waits for, outside the waves.
 
 ## Dependency extraction
 

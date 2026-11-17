@@ -21,7 +21,6 @@ Every `Pn`, as `references/structure.md` § Person Issues defines it:
 
 - Background section: why the work needs a person and which implementation Issues it waits for, named by title.
 - What to do section: the moved source items, verbatim in substance.
-- No Requirements, Specs, Dependencies, or Acceptance Criteria section. The blocked-by relation Step 5 sets records what it waits for.
 
 ## Container `Tn` body
 
@@ -48,7 +47,6 @@ Check the generated bodies mechanically, by re-reading each one against every ch
 
 - Every leaf Issue's (non-container `Tn`, or any `Tn.m`) Requirements / Specs / Verification bullet lists stay within the 5-item cap. The three Step 2 options — split (default), compress (rejected), point (doc-owned) — agree here: an Issue using point still passes this check, because the pointer is a prose line after the bullets, not a bullet, so the Verification list stays at 5 items.
 - Every leaf Issue's Verification is one list with no subheading, and no item in it needs a person, another machine, a real device, or an environment.
-- Every person Issue body has only the template's Background and What to do sections.
 - No Mermaid node label (Step 3 preview, Epic body, or a container `Tn` body) contains a raw `"` — a title with a quote must use `#quot;` instead.
-- Leaf and person Issue bodies never contain a `{{Tn}}` or `{{Tn.m}}` token — that substitution syntax is container-body-only (the Epic for its `Tn` tokens, a container `Tn` for its own `Tn.m` tokens).
+- Leaf bodies never contain a `{{Tn}}` or `{{Tn.m}}` token — that substitution syntax is container-body-only (the Epic for its `Tn` tokens, a container `Tn` for its own `Tn.m` tokens).
 - Collect every `{{Tn}}` token appearing anywhere in the Epic body (diagram/table node labels, dependency-column references, prose) and confirm that set of ids exactly matches the set of `Tn` (leaf and container alike) about to be created — none missing, none referring to a `Tn` that doesn't exist. Separately, for each container `Tn`, collect every `{{Tn.m}}` token in its own body and confirm that set exactly matches the set of its own `Tn.m` grandchildren — none missing, none referring to a different container's child. A given id may legitimately appear more than once within its own scope (e.g. once as its own row, again in another row's dependency column), so check set membership, not occurrence count.
