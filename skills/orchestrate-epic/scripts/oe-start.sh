@@ -121,11 +121,12 @@ trap cleanup EXIT
 
 # Prints the session ID the harness set, or nothing when it set none.
 # The first set among OE_SESSION_ID, CLAUDE_CODE_SESSION_ID, CODEX_THREAD_ID, and DSH_SESSION_ID wins.
+# A value holding a control character reads as empty, so no value that is not one line reaches a record.
 harness_session_id() {
   local name
   for name in OE_SESSION_ID CLAUDE_CODE_SESSION_ID CODEX_THREAD_ID DSH_SESSION_ID; do
     if [[ -n "${!name:-}" ]]; then
-      printf '%s\n' "${!name}"
+      [[ "${!name}" != *[[:cntrl:]]* ]] && printf '%s\n' "${!name}"
       return 0
     fi
   done
