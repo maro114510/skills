@@ -207,7 +207,7 @@ JSON
   [ "${lines[1]}" = "- #5 Close the Issue, reopen the PR, or delete its branch so the AI starts over" ]
   [ "${lines[2]}" = "  https://github.com/o/r/pull/50" ]
   [ "${lines[3]}" = "  why: PR #50 closed without merging" ]
-  [ "${lines[4]}" = "- #6 Review the PR, run its manual checks, and merge it" ]
+  [ "${lines[4]}" = "- #6 Review the PR and merge it" ]
   [ "${lines[5]}" = "  https://github.com/o/r/pull/60" ]
   [ "${lines[6]}" = "  why: success verdict on bbbbbbb" ]
 }
