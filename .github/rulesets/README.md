@@ -15,7 +15,7 @@ bash .github/rulesets/apply.sh maro114510/skills
 
 The script creates each ruleset, or updates the one that carries its name, so that rerunning it after an edit to a file is safe. It needs `gh` authenticated as a repository admin.
 
-## What it enforces
+## What the main ruleset enforces
 
 | Rule | Effect |
 |---|---|

@@ -60,6 +60,13 @@ STUB
   [[ "${output}" == *"boom"* ]]
 }
 
+@test "apply exits 1 and reports the error when the tag ruleset write fails after main's succeeds" {
+  STUB_LIST='[{"id": 42, "name": "Protect main"}]' STUB_FAIL="--method POST" run bash "${apply}" owner/repo
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"updated 42"* ]]
+  [[ "${output}" == *"boom"* ]]
+}
+
 @test "the ruleset targets main only and lets repository admins bypass it" {
   run jq -e '.target == "branch" and .enforcement == "active"
     and .conditions.ref_name.include == ["refs/heads/main"]
@@ -71,6 +78,7 @@ STUB
   run jq -e '.target == "tag" and .enforcement == "active"
     and .conditions.ref_name.include == ["refs/tags/v*"]
     and any(.rules[]; .type == "creation")
+    and (.bypass_actors | length) == 1
     and any(.bypass_actors[]; .actor_type == "RepositoryRole" and .actor_id == 5 and .bypass_mode == "always")' "${tags}"
   [ "${status}" -eq 0 ]
 }
