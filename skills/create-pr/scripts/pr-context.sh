@@ -102,7 +102,8 @@ while IFS= read -r line; do
     echo "ISSUE_LOOKUP_FAILED #${n}: $(tr '\n' ' ' <<<"${view}" | sed 's/[[:space:]]*$//')"
     exit 1
   fi
-  issues+="${line}"$'\t'"${view}"$'\n'
+  # Only the first line, so a line gh adds after the title never splits an issue across lines.
+  issues+="${line}"$'\t'"${view%%$'\n'*}"$'\n'
 done <<<"${refs}"
 
 commits="$(git log --reverse --format='--- %h%n%B' "${remote}..HEAD")" || exit 1

@@ -304,5 +304,7 @@ commit $'feat: a\n\nCloses #5' a
 run
 [[ "${rc}" == 0 && "$(grep '^== ' <<<"${out}" | tail -n 1)" == "== issues" && "$(section issues)" == $'Closes #5\tTitle of 5' ]] && r=0 || r=1
 check "closed issue with checks in Verification: the issues section is the last section" "${r}"
+[[ "${out}" != *"Follow the README"* ]] && r=0 || r=1
+check "closed issue with checks in Verification: no check text appears in the context" "${r}"
 
 exit "${fail}"
