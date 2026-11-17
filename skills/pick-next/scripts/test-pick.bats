@@ -405,6 +405,14 @@ expect() {
   expect "$(field '[.discussions[].number]')" '[3]'
 }
 
+@test "with --discussions, Discussions updated at the same time are listed by the lower number first" {
+  discussion 2 "Second" 2026-11-01T00:00:00Z Ideas
+  discussion 1 "First" 2026-11-01T00:00:00Z Ideas
+  run bash "${target}" --discussions
+  expect "${status}" 0
+  expect "$(field '[.discussions[].number]')" '[1,2]'
+}
+
 @test "without --discussions, Discussions are not read and the output has no discussions group" {
   issue 1 "A"
   discussion 2 "Idea" 2026-11-01T00:00:00Z Ideas
