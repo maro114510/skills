@@ -380,15 +380,15 @@ expect() {
   done
 }
 
-@test "with --discussions, open Discussions are listed most recently updated first with their category and answer state" {
+@test "with --discussions, open Discussions are listed least recently updated first with their category and answer state" {
   discussion 3 "Older idea" 2026-11-01T00:00:00Z Ideas
   discussion 1 "Newest question" 2026-11-05T00:00:00Z Q\&A --answered false
   discussion 2 "Answered question" 2026-11-03T00:00:00Z Q\&A --answered true
   run bash "${target}" --discussions
   expect "${status}" 0
   expect "$(field '[.discussions[] | {kind, number, category, answered, updatedAt}]')" \
-    '[{"kind":"discussion","number":1,"category":"Q&A","answered":false,"updatedAt":"2026-11-05T00:00:00Z"},{"kind":"discussion","number":2,"category":"Q&A","answered":true,"updatedAt":"2026-11-03T00:00:00Z"},{"kind":"discussion","number":3,"category":"Ideas","answered":null,"updatedAt":"2026-11-01T00:00:00Z"}]'
-  expect "$(field '.discussions[0] | {title, url, body}')" '{"title":"Newest question","url":"https://github.com/o/r/discussions/1","body":"Body of Newest question"}'
+    '[{"kind":"discussion","number":3,"category":"Ideas","answered":null,"updatedAt":"2026-11-01T00:00:00Z"},{"kind":"discussion","number":2,"category":"Q&A","answered":true,"updatedAt":"2026-11-03T00:00:00Z"},{"kind":"discussion","number":1,"category":"Q&A","answered":false,"updatedAt":"2026-11-05T00:00:00Z"}]'
+  expect "$(field '.discussions[0] | {title, url, body}')" '{"title":"Older idea","url":"https://github.com/o/r/discussions/3","body":"Body of Older idea"}'
   expect "$(field '.discussionsTotal')" 3
 }
 
@@ -398,11 +398,11 @@ expect() {
   discussion 3 "C" 2026-11-03T00:00:00Z Ideas
   run bash "${target}" --limit 2 --discussions
   expect "${status}" 0
-  expect "$(field '[.discussions[].number]')" '[3,2]'
+  expect "$(field '[.discussions[].number]')" '[1,2]'
   expect "$(field '.discussionsTotal')" 3
   run bash "${target}" --discussions --limit 1
   expect "${status}" 0
-  expect "$(field '[.discussions[].number]')" '[3]'
+  expect "$(field '[.discussions[].number]')" '[1]'
 }
 
 @test "with --discussions, Discussions updated at the same time are listed by the lower number first" {
