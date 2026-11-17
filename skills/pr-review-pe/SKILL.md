@@ -23,7 +23,7 @@ argument-hint: "<pr-number or url>"
 | `references/ai-specific-risks.md` | Step 3 で correctness-reviewer と security-reviewer に読ませる |
 | `references/observability-gap.md` | Step 3 で operational-reviewer に読ませる |
 | `references/existing-pattern-matching.md` | Step 6 の Filter で既存パターン一致の候補を扱うとき |
-| `references/specialist-restart.md` | Step 4 または Step 5 で specialist を再起動するとき |
+| `references/specialist-restart.md` | Step 5 で specialist を再起動するとき |
 
 ## Step 1: PR 特定とメタ取得
 
@@ -148,8 +148,7 @@ specialist 返却を 1 件ずつ surface / mid / deep に分類する。
 - **mid**: 観点単位のリスク (個別 null 漏れ、個別 error 握りつぶし、個別 N+1)。
 - **deep**: 設計層 (責務漏れ、依存方向逆転、Observability Gap、リリース順依存、並行安全性、API 契約破壊)。
 
-deep 候補が 0〜2 件しかない specialist は「go deeper: design-layer の漏れを 2 件追加で出す」プロンプトで再起動する。
-再起動は `references/specialist-restart.md` に従う。
+候補がなくても再起動して指摘を追加させない。指摘なしは有効な結果である。
 
 ## Step 5: Mandatory Pillars 確認
 
@@ -163,8 +162,8 @@ Filter の前に、以下 4 Pillar を specialist 候補から確認する。
 3. **Observability**: 本番で壊れたとき root cause に到達できる metrics / logs / alerts / traces の充足。担当: operational-reviewer。
 4. **Scalability**: N+1・上限なしバルク処理・OOM・タイムアウトを引き起こすパスの充足確認。担当: scalability-reviewer。
 
-Pillar 発見には `[pillar]` マーカーを指摘事項の severity に並記する (`**[must][pillar]**` 形式)。Pillar 発見は Confidence-Low でも Filter で除外しない。同一 Pillar に属する複数発見で修正アクションが同一の改善提案にまとめられる場合は 1 件にまとめること。
-Mandatory Pillars テーブルと指摘事項の双方に記録する (テーブル: 発見要約、指摘事項: `[must][pillar]` 詳細)。
+Pillar 候補にも他の候補と同じ Filter と Quality Gates を適用する。通過した発見には `[pillar]` マーカーを指摘事項の severity に並記し (`**[must][pillar]**` 形式)、同一 Pillar の同一修正アクションは 1 件にまとめる。
+通過した発見を Mandatory Pillars テーブルと指摘事項の双方に記録し、通過した発見のない Pillar は確認した根拠を添えて N/A とする。
 
 ## Step 6: Filter
 
@@ -180,12 +179,12 @@ Mandatory Pillars テーブルと指摘事項の双方に記録する (テーブ
 2. PR description の設計意図と矛盾する指摘も廃棄しない: 3 つの reverse-generated alternative intents (各 1 文) を内部生成し、PR description が選択意図をいずれの代替に対しても正当化できていない場合は `[ask]` でその正当化を求める (出力に代替は列挙しない)。
 3. 引用は diff hunk に限らない: { diff hunk / 関連既存コード / 関連 ADR・RFC / CLAUDE.md・AGENTS.md・プロジェクト規約 / 関連過去 PR } のうち少なくとも 1 件を引用元として持てば候補に残す。
 
-Confidence-Low かつ risk-exception に該当せず Pillar でない候補は除外し、除外件数と理由を False-Negative log として記録する。
+Confidence-Low かつ risk-exception に該当しない候補は除外し、除外件数と理由を False-Negative log として記録する。
 **deep** に分類された候補が除外される場合は、specialist 名・指摘概要（10 語以内）・除外理由を個別に記録し、最終出力の FN log に含める。
 
-### Quality Gates (R-1〜R-3)
+### Quality Gates (R-1〜R-2)
 
-上記 Filter の通過候補に対して、さらに以下の 3 gate を順に適用する。
+上記 Filter の通過候補に対して、さらに以下の 2 gate を順に適用する。
 
 **R-1: Typo Quota** — surface 候補（typo・命名スタイル・段落体裁）は最大 3 件に制限する。
 4 件目以降の surface 候補は出力に含めず FN log に記録する（除外理由: `surface quota 超過`）。
@@ -199,15 +198,8 @@ Confidence-Low かつ risk-exception に該当せず Pillar でない候補は�
 **チェーンの完成基準**: 各ステップは当該指摘に固有の tool 呼び出し結果（Read・Grep・Bash 出力）・diff hunk・またはコードベース引用に紐付けられていなければならない。一般的知識のみで補完されたステップは「根拠なし（evidence-free）」とみなし、そのステップを「不完全」として扱う。
 
 チェーンを 3 ステップ完成させられない候補は FN log に除外する（除外理由: `Why-Chain-3 failure: <不足または evidence-free のステップ名>`）。
-ただし Mandatory Pillar または risk-exception（セキュリティ・データ整合性・API 契約・runtime crash・計算可能なスケーラビリティ後退）に該当する候補はチェーン不完全でも通過させる。
+ただし risk-exception（セキュリティ・データ整合性・API 契約・runtime crash・計算可能なスケーラビリティ後退）に該当する候補はチェーン不完全でも通過させる。
 チェーンの内容は内部処理として保持し、最終出力には露出しない。
-
-**R-3: CRITIC Tool Reference** — mid/deep 候補ごとに per-finding で 2 件以上のツール呼び出しが裏付けとして必要。
-カウント対象: Step 3 以降に当該指摘に固有で実行した Grep / Read / Bash / WebFetch の呼び出し。
-例外: Step 2 の `git blame -L <range> <file>`（指摘のファイル・行範囲に直接対応する場合のみ 1 件としてカウント可）。
-Step 2 の共有収集（`gh pr diff`・`gh pr view --json commits`）はカウント対象外とする。
-裏付け件数が 1 件以下の候補は FN log に除外する（除外理由: `CRITIC: tool-evidence <実件数>/2`）。
-ただし Mandatory Pillar 候補は tool-evidence 1 件でも通過させる（Pillar の完全性を優先）。
 
 ## Step 7: Meta-Review
 
@@ -218,10 +210,9 @@ Step 2 の共有収集（`gh pr diff`・`gh pr view --json commits`）はカウ�
 **メトリクス計算ルール（R-4）**:
 - `T` = 全出力指摘件数（surface + mid/deep 合計）
 - `D` = 出力に含まれる mid/deep 指摘件数（surface を除く）
-- `A` = D のうち per-finding tool call ≥2 件を満たした件数（Pillar bypass で 1 件通過した場合は A に含めない）
-- `B` = D のうち evidence 引用付きの complete chain（全 3 ステップが evidence-grounded）を持つ件数（Pillar bypass でチェーン不完全の場合は B に含めない）
+- `B` = D のうち evidence 引用付きの complete chain（全 3 ステップが evidence-grounded）を持つ件数
 - `C` = 出力に含まれる surface 指摘件数
-- `D=0` の場合（surface のみ）、`tool-evidence` と `why-chain-3` は `N/A` と表示する（0 除算を行わない）
+- `D=0` の場合（surface のみ）、`why-chain-3` は `N/A` と表示する（0 除算を行わない）
 
 ```markdown
 ## PR #NNN レビュー: <タイトル>
@@ -252,8 +243,8 @@ Step 2 の共有収集（`gh pr diff`・`gh pr view --json commits`）はカウ�
 ### 自己検証結果
 起動 specialists: <起動した specialist 名をカンマ区切りで列挙>
 Brainstorm N → Self-Refine M → Filter K → Quality Gates → Meta-Review L 件
-除外: X 件 (うち Confidence-Low 廃棄: Y、risk-exception 経由復活: Z、Why-Chain-3 失敗: W、CRITIC 証拠不足: V、surface quota 超過: U)
-Findings: T (tool-evidence: A/D or N/A, why-chain-3: B/D or N/A, surface: C/3 quota)
+除外: X 件 (うち Confidence-Low 廃棄: Y、risk-exception 経由復活: Z、Why-Chain-3 失敗: W、surface quota 超過: U)
+Findings: T (why-chain-3: B/D or N/A, surface: C/3 quota)
 FN log — deep 除外: <specialist 名 / 指摘概要（10 語以内）/ 除外理由 を改行区切りで列挙。除外なしの場合は「なし」>
 ```
 
