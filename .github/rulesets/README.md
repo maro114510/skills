@@ -22,7 +22,7 @@ The script creates each ruleset, or updates the one that carries its name, so th
 | `pull_request` | A change reaches `main` only through a pull request. No approval is required: one person owns this repository and cannot approve their own pull request, so an approval would only turn every merge into a bypass |
 | `required_status_checks` | The checks below must pass before merge |
 | `deletion`, `non_fast_forward` | `main` cannot be deleted or force-pushed |
-| Bypass | The Repository admin role bypasses every rule, so `make release` can push its release commit |
+| Bypass | The Repository admin role bypasses every rule |
 
 Required checks are only jobs of workflows that run on every pull request. A job of a path-filtered workflow, such as lint-shell, never starts for a pull request that misses its paths, and a required check that never starts stays pending forever. Add a check here only after confirming its workflow has no `paths:` under `on:`.
 

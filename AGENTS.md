@@ -51,13 +51,6 @@ Ideas, experiments, and open questions go to [Discussions](https://github.com/ma
 | Patch | `fix:` `perf:` `refactor:` `docs:` | Fix for ambiguity or a bug in a skill body |
 | None | `ci:` `test:` `chore:` | - |
 
-Baseline tag, required once before the first automated release:
-
-```bash
-git tag -a v0.27.0 -m v0.27.0
-git push origin v0.27.0
-```
-
 ## Skill Format
 
 ```yaml

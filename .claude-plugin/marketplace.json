@@ -12,7 +12,8 @@
       "name": "skills",
       "source": {
         "source": "github",
-        "repo": "maro114510/skills"
+        "repo": "maro114510/skills",
+        "ref": "v1.2.0"
       },
       "description": "Personal skills for Claude Code — pr-review-pe, pr-doc-review-pe, create-pr and more."
     }
