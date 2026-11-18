@@ -1503,6 +1503,105 @@ JSON
   [ "$(action_of 5)" = wait-merge ]
 }
 
+@test "a resolved review-thread comment starts no Owner" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{
+      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
+      "threads": [{"resolved": true, "comments": [
+        {"by": "COLLABORATOR", "at": "07:40", "body": "This leaks the token"}]}]
+    }]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:30
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-merge ]
+}
+
+@test "an outdated review-thread comment starts no Owner" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{
+      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
+      "threads": [{"outdated": true, "comments": [
+        {"by": "COLLABORATOR", "at": "07:40", "body": "This leaks the token"}]}]
+    }]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:30
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-merge ]
+}
+
+@test "a review-thread comment the agents' bot answered starts no Owner" {
+  agent_bot my-bot
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{
+      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
+      "thread_comments": [
+        {"by": "COLLABORATOR", "at": "07:40", "body": "This leaks the token"},
+        {"login": "my-bot", "type": "Bot", "at": "07:50", "body": "Fixed in the latest push."}
+      ]
+    }]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:30
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-merge ]
+}
+
+@test "an engineer's comment after a reply starts an Owner" {
+  agent_bot my-bot
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{
+      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
+      "thread_comments": [
+        {"by": "COLLABORATOR", "at": "07:20", "body": "This leaks the token"},
+        {"login": "my-bot", "type": "Bot", "at": "07:30", "body": "Fixed in the latest push."},
+        {"by": "COLLABORATOR", "at": "07:40", "body": "It still leaks on the error path."}
+      ]
+    }]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:30
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-owner ]
+}
+
 # Bot findings
 
 @test "a Major CodeRabbit finding after the latest attempt gets an Owner that names the bot" {
