@@ -164,8 +164,8 @@ For each Issue, oe ready reads this table from the top and outputs the action of
   - The verdict on the PR's head SHA is a failure
   - Since the latest attempt record, one of these was given
     - An answer to the latest question, by a trusted user's comment or recorded through oe
-    - A Changes requested review
-    - A review-thread comment
+    - A Changes requested review that covers the PR's head SHA
+    - A review-thread comment that no reply answered, in a thread that is unresolved and not outdated
   - A bot finding written since the latest attempt record
 - Bot rounds
   - Each bot gets one round per claim
