@@ -124,6 +124,7 @@ def question_text:
 #   - The read holds only the newest pull request with the branch name, so a newer one from a fork hides the Issue's own.
 # - Engineer input counts once.
 #   - Input before the latest attempt was already handed to that attempt's Owner.
+#   - A Changes requested review counts only on the head it covers, because a review of an older head asks for a change its fix already made.
 # - A head that moved between the reads leaves only its Issue unreadable, and the read goes on with every other Issue.
 #   - A push or a newly opened pull request between the reads is the cause.
 #   - next_action gives that Issue read-again right before row 6, the first row that needs the head.
@@ -197,7 +198,7 @@ def issue_state:
           if $pr.mergeable == "CONFLICTING" then "PR #\($pr.number) conflicts with its base" else empty end,
           if $head.ci == "failed" then "checks failed on \($head.sha): \($head.ci_detail)" else empty end,
           if $head.verdict == "failure" or $head.verdict == "error" then "failure verdict on \($head.sha)" else empty end,
-          if any($pr.reviews.nodes[]?; engineer_input and ($since == null or .submittedAt > $since))
+          if any($pr.reviews.nodes[]?; .commit.oid == $head.oid and engineer_input and ($since == null or .submittedAt > $since))
           then "a trusted Changes requested review" else empty end,
           if any($pr.reviewThreads.nodes[]?.comments.nodes[]?; engineer_input and ($since == null or .createdAt > $since))
           then "a trusted review-thread comment" else empty end,
@@ -241,7 +242,7 @@ def issue_state:
 # - The verdict on the head is a failure
 # - Engineer input arrived after the latest attempt
 #   - An answer to the latest question
-#   - A Changes requested review
+#   - A Changes requested review that covers the head
 #   - A review-thread comment
 # - A listed bot wrote a finding after the latest attempt, its round is unused, and no trusted user approved the head
 # A reason quotes check names and logins from GitHub, so tabs and line breaks in it become spaces and cannot add a field or a line.
