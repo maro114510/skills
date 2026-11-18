@@ -78,7 +78,7 @@ origin_head_of() {
   git -C "${repo}" worktree add -q "${work}/wt" -b feat/issue-7 main
   run bash "${target}" 7 main
   [ "${status}" -eq 20 ]
-  [[ "${output}" == *"worktree=${work}/wt"* ]]
+  [[ "${output}" == *"worktree=$(cd "${work}/wt" && pwd -P)"* ]]
 }
 
 @test "names no worktree when none on this host holds the branch" {
