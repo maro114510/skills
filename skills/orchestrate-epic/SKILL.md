@@ -157,9 +157,8 @@ The harness wakes you when an agent ends or the wait returns, and whichever come
 ## Step 4: End the session
 
 1. Start nothing new, and stop the wait if one is still running, so it never wakes the session after the lock is released. Wait for each agent the latest `running` lines name to end, in Codex with `wait_agent`, then run `oe worktree remove <n>` for it.
-2. When every Issue is `done`, run `oe forget <repo> <epic>`. Report a non-zero exit and go on.
-3. Release the lock: `oe lock release <repo> <epic> <token>`.
-4. Report to the user in Japanese with the format below, from the last `oe ready` output and the agents' final lines. Show first each open question that 3.2 has not shown yet, and record a reply to it as 3.2 says.
+2. Release the lock: `oe lock release <repo> <epic> <token>`.
+3. Report to the user in Japanese with the format below, from the last `oe ready` output and the agents' final lines. Show first each open question that 3.2 has not shown yet, and record a reply to it as 3.2 says.
 
 ```markdown
 ## orchestrate-epic: Epic #<epic> を終了しました

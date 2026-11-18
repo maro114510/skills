@@ -464,7 +464,7 @@ JSON
   [ -z "${output}" ]
 }
 
-@test "oe forget is no longer a subcommand, so it exits 2 and drops no record" {
+@test "the removed forget subcommand exits 2 and drops no record" {
   github <<'JSON'
 {
   "issues": [{"number": 5, "closed": true}]
