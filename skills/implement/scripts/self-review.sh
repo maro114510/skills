@@ -103,13 +103,14 @@ if [[ "${harness}" == opencode ]]; then
   fi
 fi
 
-# DSH resolves `--permission-mode` against the presets the profile defines, and its profile default
-# allows writes, so that flag is what keeps the reviewer read-only. A CLI without it fails closed.
+# A DSH profile can map any preset name to any sandbox, so `--permission-mode read-only` would pin a
+# name and not a sandbox. The review overlays its own preset table instead, and the launcher's --patch
+# is what applies that overlay after every profile layer. A CLI without it fails closed.
 if [[ "${harness}" == dsh ]]; then
-  dsh_help="$(dsh headless --help 2>&1 </dev/null)"
+  dsh_help="$(dsh --help 2>&1 </dev/null)"
   help_rc=$?
-  if ! grep -qE -- "(^|[[:space:]])--permission-mode([[:space:],=]|$)" <<<"${dsh_help}"; then
-    echo "Unsupported DSH CLI: 'dsh headless --help' lists no --permission-mode (a DSH that can pin a read-only preset is required)" >&2
+  if ! grep -qE -- "(^|[[:space:]])--patch([[:space:],=]|$)" <<<"${dsh_help}"; then
+    echo "Unsupported DSH CLI: 'dsh --help' lists no --patch (a DSH that can pin a read-only preset table is required)" >&2
     head -n 5 <<<"${dsh_help}" >&2
     if [[ "${help_rc}" -ne 0 ]]; then echo "REVIEWER_EXIT=${help_rc}"; else echo "REVIEWER_EXIT=unsupported"; fi
     result failed
@@ -119,7 +120,8 @@ fi
 
 out="$(mktemp "${TMPDIR:-/tmp}/self-review.XXXXXX")"
 log="${out}.log"
-trap 'rm -f "${out}" "${log}"' EXIT
+pin="${out}.pin.yml"
+trap 'rm -f "${out}" "${log}" "${pin}"' EXIT
 
 if [[ -n "${range}" ]]; then
   claude_prompt="/code-review ${range}"
@@ -185,11 +187,24 @@ opencode)
     opencode run "${opencode_flags[@]}" "${review_prompt} Run exactly one command per bash call, with no pipes, &&, ;, or redirects such as 2>&1. ${verdict_rule}" </dev/null >"${out}" 2>"${log}"
   ;;
 dsh)
-  # DSH has no built-in review, so it takes the review prompt like OpenCode. Its profile default sandbox
-  # allows writes and its approval policy can be `ask`, so both are pinned here: no file anywhere can be
-  # modified, and an escalation request is rejected instead of waiting for an answer nobody gives. No flag
-  # turns session persistence off, so a review leaves a session behind.
-  dsh headless --permission-mode read-only --approval-policy never "${review_prompt} ${verdict_rule}" </dev/null >"${out}" 2>"${log}"
+  # DSH has no built-in review, so it takes the review prompt like OpenCode. The overlay replaces the
+  # preset table with one that only names a read-only review, and makes it the default, so the session
+  # is confined whatever the profile maps its own names to. `--approval-policy never` keeps an escalation
+  # request from waiting on an answer nobody gives. No flag turns session persistence off, so a review
+  # leaves a session behind.
+  cat >"${pin}" <<'EOF'
+- id: permission
+  name: '@deepseek-ai/dsh-permission-presets'
+  config:
+    presets:
+      self-review-read-only:
+        sandbox: read-only
+        approval: ask
+        name: self-review-read-only
+        description: Review only. No file may be modified and no approval is granted.
+    defaultPreset: self-review-read-only
+EOF
+  dsh headless --patch "${pin}" --approval-policy never "${review_prompt} ${verdict_rule}" </dev/null >"${out}" 2>"${log}"
   ;;
 esac
 reviewer_rc=$?

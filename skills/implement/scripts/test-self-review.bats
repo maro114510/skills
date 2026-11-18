@@ -705,7 +705,7 @@ run_scope_stub() {
 }
 
 @test "dsh uses only flags the installed CLI accepts" {
-  local real help_text
+  local real launcher_help app_help
   real="$(command -v dsh)" || skip "dsh is not installed"
   # shellcheck disable=SC2016 # expanded by the stub, not here
   run_stub "if [ \"\$#\" = 1 ] && [ \"\$1\" = --help ]; then exec '${real}' \"\$@\"; fi
