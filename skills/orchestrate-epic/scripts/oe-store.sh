@@ -19,7 +19,7 @@
 # |---|---|
 # | claim | kind, at |
 # | attempt | kind, at, head, bots |
-# | run | kind, at, role: owner or verifier |
+# | run | kind, at, role: owner or verifier, and session_id: the session that started the agent, when the harness set one |
 # | update | kind, at, head |
 # | verdict | kind, at, sha, state, findings |
 #
