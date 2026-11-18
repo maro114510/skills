@@ -91,26 +91,11 @@ Skills read them with `git config --get <key>`, so git decides between local and
 
 ## Development Flow
 
-Every harness loads this file, but not every one follows an import from it, so these rules live here and nowhere else.
-
-Route new work by two questions, in order:
-
-1. Is what to do decided? If not, it goes to a Discussion.
-2. Does the change move a boundary, such as a skill contract, user-visible behavior, a safety gate, a git config key, or a data format?
-
-| Decided | Moves a boundary | Path |
-|---|---|---|
-| No | - | A Discussion |
-| Yes | Yes | Intent in a Discussion, the owner's decision, a merged Design Doc, then an Epic driven by oe |
-| Yes | No | An Issue |
-
-- Create an Issue only after the owner wrote that the work will be done; a bug fix, or a fix such as a typo that changes no behavior, still gets an Issue, but needs no decision from the owner
-- Keep at most 5 decided units open at once: an Epic counts as one, a standalone Issue counts as one, and a bug fix or a fix that changes no behavior does not count
-    - A unit counts from when it starts, so a change that moves a boundary counts while its Design Doc is still open
-    - While 5 are open, a newly decided unit waits in its Discussion without counting, and starts when one closes
-- When the owner decides in a conversation and no Discussion holds the work, open one that states the intent and quotes the decision
-- Close anything decided against with the observation that would reopen it
-- Quote the question and the owner's answer behind each decision where it is recorded: the comment that closes a Discussion, and the body of a Design Doc pull request
+- Discuss undecided work before filing an implementation Issue. Use an existing Discussion when it holds the question; do not open one just to restate a decision.
+- When work changes a boundary such as user-visible behavior, a skill contract, a safety gate, configuration, or a data format, update the existing Design Doc and get the owner's explicit agreement on the changed boundary before delegating implementation. Merge the design before opening implementation Issues. Record the agreement once where the implementation Issue can link to it. Use a publishable summary, not a transcript.
+- After the owner decides to build, file an Issue with the work and observable acceptance conditions. Use an Epic only when work needs grouping or dependency coordination. Fixes that restore an existing contract and edits that do not change behavior can go straight to an Issue without a new owner decision.
+- Delegate implementation and verification within the agreed boundary. If new behavior, scope, or guarantees are needed, stop the affected work and ask the owner; do not add them to acceptance conditions. Report what was observed and what was not verified on the pull request. A change to the target or conditions that invalidates evidence requires a new check.
+- Keep at most 5 active decided units. An Epic or standalone Issue counts as one, including work that starts with a Design Doc. Bug fixes and edits that do not change behavior do not count. At the cap, keep approved work waiting in its existing record without starting it.
 
 ### Discussions
 
@@ -125,7 +110,7 @@ Route new work by two questions, in order:
 - Write posts and Issues in English
 - Keep general facts, such as error class and status, endpoint, counts, timing, and the skill involved
 - Drop anything that identifies private work: names of private repositories, organizations, and app installations, their PR and Issue numbers, product and domain terms, code, and data
-- When the owner decides to build an idea, start its path from the table above with a link to the Discussion, even if an older Issue for it was closed: a new Issue, or for a change that moves a boundary, a Design Doc pull request. Comment its URL on the Discussion, and close the Discussion when the Issue opens or the Design Doc merges
+- When work from a Discussion starts, link its Issue or Design Doc pull request on the Discussion and close it when the Issue opens or the Design Doc merges.
 - Close a Discussion with the reason that fits, and state that reason in the closing comment
     - Resolved when the work the owner decided to build has started: its Issue opened or its Design Doc merged
     - Outdated when the owner decided against it, with the observation that would reopen it

@@ -7,10 +7,11 @@ The pipeline turns a person's intent into mergeable, verified pull requests with
 ```mermaid
 flowchart LR
   I[Intent] --> F[Frame]
-  F --> D[Design]
-  D --> G1{{Gate: merge the Design}}
-  G1 --> T[Tickets]
-  T --> G2{{Gate: approve the Epic and start its session}}
+  F -->|Boundary changes| D[Design]
+  D --> G1{{Gate: owner agrees and design merges}}
+  G1 --> T[Issues]
+  F -->|No boundary change| T
+  T -->|Grouped into an Epic| G2{{Gate: operator starts its session}}
   G2 --> C[Coordinator]
   C --> O[Owner]
   O --> V[Verifier]
@@ -52,11 +53,11 @@ flowchart TB
 | Concept | Definition |
 |---|---|
 | Intent | What a person wants changed and why. Arrives as conversation, an Issue, or a retrospective finding |
-| Session | An interactive harness session a person runs. The Design and the Epic are agreed in one |
-| Design | The agreed boundary of a change, a Design Doc or ADR. Merging its pull request is the agreement. A change that moves no boundary needs none and goes straight to an Issue, as the Development Flow section of AGENTS.md routes it |
-| Epic | A parent Issue grouping the Tickets derived from one Design. It exists only after a person approved its plan in a Session, so its existence is the approval |
-| Ticket | A child Issue of an Epic. One independently verifiable unit of work whose acceptance criteria each name the command that proves it. Work that needs a person is its own Issue, blocked by the Ticket and outside the Epic |
-| Mandate | A Ticket exists under an open Epic that a running Coordinator holds. Covers the Ticket's stated scope only. Wider scope is a new Ticket |
+| Session | An interactive harness session a person runs |
+| Design | The intended boundary of a change, recorded in a Design Doc when the boundary changes. The owner explicitly agrees to the changed boundary; see Development Flow in AGENTS.md |
+| Epic | A parent Issue grouping work that needs coordination. Its existence grants no authority |
+| Ticket | An independently verifiable Issue. The Coordinator acts on children of the Epic it was started on |
+| Mandate | Authority to work within the agreed scope of a Ticket under an open Epic that a running Coordinator holds. An Issue edit does not extend that authority |
 | Operator | The person who starts a Coordinator on an Epic. Starting it is the only consent to unattended work, and ending it stops new starts |
 | Host-local records | oe's state on the Coordinator's host, as `orchestrate-epic.md` lays it out: one lock per Epic, each Ticket's claim, attempt, and verdict records, and each Epic's board pane and running wait |
 | Coordinator | A Session running the orchestrate-epic skill on one Epic. Takes the Epic's lock, reads the next action of every Ticket from `oe ready`, starts an Owner or Verifier for each action that needs one, up to its limit of agents at once, waits with `oe wait` while nothing it can act on changes, and ends as `orchestrate-epic.md` defines |
@@ -102,15 +103,16 @@ sequenceDiagram
     participant G as GitHub
     P->>S: Intent
     S->>P: Framed problem, options, recommendation
-    P->>S: Chosen direction
-    S->>G: Design pull request
-    P->>G: Merge
-    S->>G: Read the merged Design
-    S->>P: Epic and Ticket plan
-    P->>S: Approve
-    S->>G: Epic and Tickets
-    P->>S: Start a Coordinator on the Epic
-    Note over S,G: Every Ticket has a Mandate
+    P->>S: Decision to build
+    opt The boundary changes
+        S->>G: Design pull request
+        P->>G: Explicit agreement, then merge
+    end
+    S->>G: Issue with the agreed scope and acceptance conditions
+    opt Work needs coordination
+        S->>G: Group Issues into an Epic
+        P->>S: Start a Coordinator on the Epic
+    end
 ```
 
 ### Unattended delivery

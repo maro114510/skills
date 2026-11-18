@@ -10,17 +10,17 @@ argument-hint: "[change or decision to document | document path to review]"
 
 Work in the repository the user names, otherwise the current one. Never commit, push, or open a pull request.
 
-- A Design Doc states what a system or domain is meant to be, implemented or not. It never states how it is built (algorithms, classes, full API or schema, deployment), how it was decided, how far it is implemented, every edge case, coding conventions, or slogans.
+- A Design Doc states the intended design, whether implemented or not. Preserve the intent and decisions needed to understand the design; leave implementation choices that do not change its guarantees to the implementer.
 - An ADR records one consequential decision and why, not the investigation behind it.
 - Never add status, authors, dates, a changelog, an owner, or an approval state to either.
 
 ## 1. Decide
 
-Read the repository instructions, the related Design Docs and ADRs, and the code the request concerns. Then:
+Read the repository instructions, related Design Docs and ADRs, and the relevant code. Then:
 
-- If the request changes the concepts, responsibilities, boundaries, behavior, state, or guarantees of a system or domain, update the Design Doc that covers them. Create one only when none does, never one per feature or Issue.
-- If it makes a choice that has real alternatives and is costly to reverse, write an ADR. If it replaces or retracts an existing ADR, delete that ADR as section 3 says, and list it as an alternative in any new one.
-- Otherwise, as for a routine feature or an implementation edit, write nothing, and say why.
+- If the change revises what a system means, its responsibilities, or what others can rely on, update the Design Doc that owns that boundary. Create one only when none covers a design worth keeping; never one per Issue by default.
+- Write an ADR only when a choice had credible alternatives, is costly to reverse, and its rationale needs more than a short note beside the design. If it replaces or retracts an ADR, follow section 3 and name the prior choice in any replacement.
+- An implementation change within the existing design needs neither unless it independently warrants an ADR. Follow the repository's workflow; do not introduce a PRD or an approval step.
 
 Never change the design to match code or an Issue. Where they differ in what the request concerns, ask which is wrong; report other differences. Code that does not implement the design yet is not a difference.
 
