@@ -139,7 +139,7 @@ render() {
       owner_n=$((owner_n + 1))
       needs+="$(jq -r --arg repo "${repo}" '
         {"wait-answer": "Answer the Owner'\''s question in the session'\''s conversation or with a comment on the Issue",
-          "parked": "Fix it by hand, or delete its branch so the AI starts over",
+          "parked": "Fix it by hand, delete its branch so the AI starts over, or tell the session to continue it",
           "wait-engineer": "Close the Issue, reopen the PR, or delete its branch so the AI starts over",
           "wait-merge": "Review the PR and merge it"}[.action] as $todo
         | (if .action != "wait-answer" and .pr then "pull/\(.pr)" else "issues/\(.number)" end) as $path

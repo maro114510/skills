@@ -5,7 +5,7 @@
 # | Path under the state directory | Holds | Written by |
 # |---|---|---|
 # | locks.git | One ref per Epic that a session holds | oe lock; read by oe status through lock_held |
-# | records/<repo-key>/<issue>.jsonl | One Issue's records, oldest first, one JSON object per line | oe claim, oe attempt, oe start, oe update, oe verdict |
+# | records/<repo-key>/<issue>.jsonl | One Issue's records, oldest first, one JSON object per line | oe claim, oe continue, oe attempt, oe start, oe update, oe verdict |
 # | sessions/<repo-key>/<epic>.jsonl | One line for each time a session took the Epic's lock, oldest first: the time, the checkout, and the session ID when the harness gave one | oe lock, after it takes the lock |
 # | boards/<repo-key>/<epic> | The Herdr pane of the Epic's board and the server it is on, as JSON | oe board, which overwrites it |
 # | waits/<repo-key>/<epic> | The process ID and start time of the Epic's running oe wait | oe wait, which writes it only while no other wait runs and drops it when it ends on its own; oe lock release, and an acquire by another session, stop that process |
@@ -18,6 +18,7 @@
 # | Record | Fields |
 # |---|---|
 # | claim | kind, at |
+# | continue | kind, at, and when the person gave an instruction, instruction and url |
 # | attempt | kind, at, head, bots |
 # | run | kind, at, role: owner or verifier, and session_id: the session that started the agent, when the harness set one |
 # | update | kind, at, head |
@@ -25,6 +26,8 @@
 #
 # - An attempt record is an Owner start. head is the Issue branch's head when it began, absent when the branch did not exist,
 #   and bots names the bots whose findings it repairs. oe-starts.jq reads head to tell whether the start pushed.
+# - A continue record is the person's word, relayed by the session through oe continue, to return a parked Issue to the loop on its branch.
+#   Attempts, starts that pushed nothing, and bot rounds count from the latest claim or continue record, as oe-starts.jq says.
 # - An update record is a branch update oe update asked GitHub for, and head is the Issue branch's head before it.
 #   oe-starts.jq reads it so that the merge is never counted as a push of the Owner start before it.
 # - A run record marks an agent oe start started. oe ready counts the agent as running while the record is no older than

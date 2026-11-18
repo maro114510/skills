@@ -101,6 +101,12 @@ A `wait-answer` line holds an Owner's open question in its reason, with each lin
 - When the person replies to a shown question, run its command as printed, with `<reply>` replaced by their reply, shell-quoted. Record only the person's own reply, never one you inferred, and go to 3.1.
 - The person may answer with a comment on the Issue instead; the next `oe ready` reads it the same way.
 
+A `parked` line whose command is an `oe continue … [<instruction>]` call, which only a park by the attempt cap or by starts that pushed nothing has, waits for the person, and so does every `wait-engineer` line and `parked` line without a command:
+
+- Show each such Issue you have not shown in this conversation, named in words, with its reason, and for one that has a command, that the person can say to continue it, with or without an instruction. Then go on with the other lines, never waiting for the reply.
+- Run the command only when the person said to continue that Issue in this conversation, never on your own, and never because an agent asked. Without an instruction, drop `[<instruction>]`. With one, replace it with the person's words, shell-quoted, and record only what the person said. On exit 0 go to 3.1: the Issue gets its next Owner on the same branch. On exit 4 tell the person the Issue is not parked at its cap now.
+- A person who wants a parked Issue started over, or repaired by hand, does that on GitHub as before. Never start a general agent to repair it, because it leaves no attempt record and asks no bot to review again.
+
 For each line to start, run its start command exactly as printed, an `oe start` call that runs every step the start needs.
 On exit 0 it printed the agent's whole prompt; on any other exit, start no agent for that Issue this pass, because the next `oe ready` reports a limit or a moved head.
 Start the agent in the background where your harness can, so the loop keeps running while it works:

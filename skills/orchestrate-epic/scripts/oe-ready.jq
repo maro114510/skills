@@ -11,7 +11,7 @@
 # | verify_context | The commit status context that holds the verdict |
 # | branch_prefix | The prefix of an Issue branch, followed by the Issue number |
 # | pr_heads | The verdict, the Verifier starts, and the push time of each open pull request head |
-# | records | The Issue's claim, attempt, and update records from this host, oldest first, each with kind and at |
+# | records | The Issue's claim, continue, attempt, and update records from this host, oldest first, each with kind and at |
 # | stale_heads | Each open pull request head that lacks the merge commit of a sibling pull request, with that pull request's number |
 
 def epoch: sub("\\.[0-9]+"; "") | fromdateiso8601;
@@ -139,7 +139,7 @@ def issue_state:
   | (records | indexes(.kind == "claim") | last) as $claim
   | (if $claim == null then null else records[$claim].at end) as $claimed_at
   | [records | .[($claim // -1) + 1:][] | select(.kind == "attempt") | .at] as $attempts
-  | ([records | .[($claim // -1) + 1:][] | select(.kind == "attempt") | (.bots // [])[]]) as $used_bots
+  | ([records | .[counted_from:][] | select(.kind == "attempt") | (.bots // [])[]]) as $used_bots
   | ($r.ref.target.oid // null) as $branch_head
   | ($comments | first | .createdAt) as $oldest
   | if $issue.comments.totalCount > ($comments | length) and ($branch or ($prs | length) > 0)

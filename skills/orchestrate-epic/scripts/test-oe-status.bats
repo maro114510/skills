@@ -180,7 +180,7 @@ JSON
 
   [ "${status}" -eq 0 ]
   [ "${lines[0]}" = "Epic #1: 0 done, 0 in progress, 0 waiting, 1 waiting on you" ]
-  [ "${lines[1]}" = "- #5 Fix it by hand, or delete its branch so the AI starts over" ]
+  [ "${lines[1]}" = "- #5 Fix it by hand, delete its branch so the AI starts over, or tell the session to continue it" ]
   [ "${lines[2]}" = "  https://github.com/o/r/pull/50" ]
   [ "${lines[3]}" = "  why: 3 attempts used; still: failure verdict on bbbbbbb" ]
 }

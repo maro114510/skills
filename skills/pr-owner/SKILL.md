@@ -23,7 +23,7 @@ If any of the first four is missing, end without changing anything and say which
 ## Rules
 
 - Run `oe question` and `oe rereview` from `<worktree>`, as written below, because the Bot identity is read from that worktree's git config.
-- Write to GitHub only by `git push` without force, `create-linked-pr.sh`, `oe question` without `--answer`, and `oe rereview`. Never record an answer, because an answer counts as the person's even under the agents' bot, and only the orchestrate-epic session records one from the person's reply. Never comment, reply to or resolve a review thread, review, edit a PR or Issue, or touch a label, because oe ready reads any unmarked comment from this token as engineer input.
+- Write to GitHub only by `git push` without force, `create-linked-pr.sh`, `oe question` without `--answer`, and `oe rereview`. Never run `oe continue`, and never record an answer, because an answer counts as the person's even under the agents' bot, and only the orchestrate-epic session records one from the person's reply. Never comment, reply to or resolve a review thread, review, edit a PR or Issue, or touch a label, because oe ready reads any unmarked comment from this token as engineer input.
 - Never merge, enable auto-merge, or bypass a push guard such as a hook that asks for approval.
 - Work only in `<worktree>`. Never switch, pull, or edit the shared checkout or another worktree.
 - Wait for every command and agent you started to finish before ending your turn. The session takes the end of your turn as the end of your work and removes `<worktree>`, so ending a turn to wait for a background command or agent discards every unpushed commit.
