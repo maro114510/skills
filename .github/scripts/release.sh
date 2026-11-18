@@ -2,11 +2,15 @@
 # The release workflow's guards and Release notes, as docs/design/release-flow.md defines them.
 # Usage: release.sh guard <tag> <previous-release-tag>
 #        release.sh notes <tag> <previous-release-tag>
+#        release.sh bump <run-commit> <previous-release-tag>
 # Run in a checkout that holds the full history, the tags, and origin/main, with the cliff.toml to use.
-# Exit: 0 every guard holds, or the notes are printed; 1 a guard failed or a command failed, with the reason on stderr; 2 bad usage.
+# Exit: 0 every guard holds, or the notes or the next version are printed; 1 a guard failed or a command failed, with the reason on stderr; 2 bad usage.
 set -uo pipefail
 
 npx_tag='#v[0-9]+\.[0-9]+\.[0-9]+'
+# What triggers a release: a bump type on the subject, or a breaking change.
+bump_subject='^(feat|fix|perf|refactor|docs)(\([^)]+\))?!?: .+|^[a-z]+(\([^)]+\))?!: .+'
+bump_footer='^BREAKING[ -]CHANGE: .+'
 apm_range='#\^[0-9]+\.0\.0'
 plugin=.claude-plugin/plugin.json
 marketplace=.claude-plugin/marketplace.json
@@ -122,25 +126,63 @@ back_merge_commit() {
   git diff --name-only "$1^1" "$1" | grep -Fx "${plugin}" >/dev/null && bump_violation "$1^1" "$1" >/dev/null
 }
 
+# back_merges prints each commit of the range $1..$2 that a Back-merge PR added to main.
+back_merges() {
+  local sha
+  while IFS= read -r sha; do
+    back_merge_commit "${sha}" && echo "${sha}"
+  done < <(git rev-list "$1..$2")
+}
+
 notes() {
   local tag="$1" prev="$2" run sha
   local -a skip=()
   run="$(git rev-parse --verify "refs/tags/${tag}^{commit}^")" || fail "${tag} does not name a commit with a parent"
   while IFS= read -r sha; do
-    back_merge_commit "${sha}" && skip+=(--skip-commit "${sha}")
-  done < <(git rev-list "${prev}..${run}")
+    skip+=(--skip-commit "${sha}")
+  done < <(back_merges "${prev}" "${run}")
   git-cliff --ignore-tags '^v[0-9]' ${skip[@]+"${skip[@]}"} "${prev}..${run}" || fail "git-cliff failed for ${prev}..${run}"
 }
 
+# bump prints the version, without its v, that git-cliff infers for the Release range of the Run commit $1.
+bump() {
+  local run prev="$2" next sha others found=0
+  local -a skip=() skipped=()
+  run="$(git rev-parse --verify "$1^{commit}")" || fail "$1 does not name a commit"
+  # git-cliff counts from the newest tag it finds, which may sit on an unrelated Release branch; the Previous release alone is the base.
+  others="$(git tag --list 'v[0-9]*' | grep -vxF "${prev}" | sed 's/\./\\./g' | paste -sd'|' -)"
+  [[ -z "${others}" ]] || skip+=(--ignore-tags "^(${others})\$")
+  while IFS= read -r sha; do
+    skip+=(--skip-commit "${sha}")
+    skipped+=("${sha}")
+  done < <(back_merges "${prev}" "${run}")
+  # git-cliff bumps the patch version even when only ci:, test:, and chore: commits follow, and those do not trigger a release.
+  while IFS= read -r sha; do
+    [[ " ${skipped[*]-} " == *" ${sha} "* ]] && continue
+    if git log -n 1 --format=%s "${sha}" | grep -Eq "${bump_subject}" || git log -n 1 --format=%B "${sha}" | grep -Eq "${bump_footer}"; then
+      found=1
+    fi
+  done < <(git rev-list "${prev}..${run}")
+  [[ "${found}" -eq 1 ]] || fail "No release bump: no commit in ${prev}..${run} is a feat, fix, perf, refactor, docs, or breaking commit"
+  next="$(git-cliff --bumped-version ${skip[@]+"${skip[@]}"} "${prev}..${run}")" || fail "git-cliff failed for ${prev}..${run}"
+  next="${next#v}"
+  # git-cliff prints the version it started from when no commit in the range bumps it.
+  [[ "${next}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ && "${next}" != "${prev#v}" &&
+    "$(printf '%s\n%s\n' "${prev#v}" "${next}" | sort -V | tail -n 1)" = "${next}" ]] ||
+    fail "No release bump: the commits in ${prev}..${run} infer ${next:-no version}, which is not above ${prev}"
+  echo "${next}"
+}
+
 [[ $# -eq 3 ]] || {
-  echo "Usage: release.sh guard|notes <tag> <previous-release-tag>" >&2
+  echo "Usage: release.sh guard|notes <tag> <previous-release-tag> | bump <run-commit> <previous-release-tag>" >&2
   exit 2
 }
 case "$1" in
 guard) guard "$2" "$3" ;;
 notes) notes "$2" "$3" ;;
+bump) bump "$2" "$3" ;;
 *)
-  echo "Usage: release.sh guard|notes <tag> <previous-release-tag>" >&2
+  echo "Usage: release.sh guard|notes <tag> <previous-release-tag> | bump <run-commit> <previous-release-tag>" >&2
   exit 2
   ;;
 esac

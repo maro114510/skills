@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
-# Tests for the release path: `make release` in a sandbox clone with a bare origin, and the guards and notes of
-# .github/scripts/release.sh, which .github/workflows/release.yml runs, against a sandbox repository.
+# Tests for the release path: `make release` in a sandbox clone with a bare origin, and the guards, notes, and next version
+# of .github/scripts/release.sh, which .github/workflows/release.yml runs, against a sandbox repository.
 # shellcheck disable=SC2030,SC2031 # output_has and output_lacks read ${output} inside the same @test subshell that `run` set it in.
 # shellcheck disable=SC2292 # bats fails a test on a mid-test `[[ ]]` only under bash 4.1+; `[ ]` works on every bash.
 
@@ -10,79 +10,6 @@ setup() {
   root="$(cd "${BATS_TEST_DIRNAME}/.." && pwd)"
   origin="${BATS_TEST_TMPDIR}/origin.git"
   repo="${BATS_TEST_TMPDIR}/repo"
-  stub="${BATS_TEST_TMPDIR}/git-cliff"
-  printf '#!/bin/sh\necho v9.9.9\n' >"${stub}"
-  chmod +x "${stub}"
-}
-
-# sandbox makes $repo on main with the release manifests, a v0.1.0 tag, and one feat commit after it, all pushed to a
-# bare $origin.
-sandbox() {
-  git init -q --bare -b main "${origin}"
-  git init -q -b main "${repo}"
-  cd "${repo}" || return 1
-  git config user.name release
-  git config user.email release@example.invalid
-  git config core.hooksPath "${repo}/.git/hooks"
-  mkdir .claude-plugin
-  printf '{\n  "version": "0.1.0"\n}\n' >.claude-plugin/plugin.json
-  printf '{\n  "version": "0.1.0"\n}\n' >.claude-plugin/marketplace.json
-  cp "${root}/Makefile" Makefile
-  git add -A
-  git commit -q -m "chore: init"
-  git tag -a v0.1.0 -m v0.1.0
-  echo one >feature
-  git add feature
-  git commit -q -m "feat: add feature"
-  git remote add origin "${origin}"
-  git push -q origin main v0.1.0
-}
-
-release() {
-  make release CLAUDE=true GIT_CLIFF="${stub}"
-}
-
-origin_has_tag() {
-  git -C "${origin}" rev-parse -q --verify "refs/tags/v9.9.9" >/dev/null
-}
-
-assert_origin_lacks_tag() {
-  run origin_has_tag
-  [ "${status}" -ne 0 ]
-}
-
-@test "make release publishes main and the tag together when main is up to date" {
-  sandbox
-  run release
-  [ "${status}" -eq 0 ]
-  run origin_has_tag
-  [ "${status}" -eq 0 ]
-  [ "$(git -C "${origin}" rev-parse main)" = "$(git rev-parse HEAD)" ]
-  [ "$(git -C "${origin}" rev-parse 'v9.9.9^{commit}')" = "$(git rev-parse HEAD)" ]
-}
-
-@test "make release publishes neither main nor the tag when local main is behind origin/main" {
-  sandbox
-  git clone -q "${origin}" "${BATS_TEST_TMPDIR}/other"
-  git -C "${BATS_TEST_TMPDIR}/other" -c user.name=o -c user.email=o@example.invalid commit -q --allow-empty -m "fix: ahead"
-  git -C "${BATS_TEST_TMPDIR}/other" push -q origin main
-  ahead="$(git -C "${origin}" rev-parse main)"
-  run release
-  [ "${status}" -ne 0 ]
-  [[ "${output}" == *"[rejected]"* ]]
-  assert_origin_lacks_tag
-  [ "$(git -C "${origin}" rev-parse main)" = "${ahead}" ]
-}
-
-@test "make release creates no tag when git commit fails" {
-  sandbox
-  mkdir -p .git/hooks
-  printf '#!/bin/sh\nexit 1\n' >.git/hooks/pre-commit
-  chmod +x .git/hooks/pre-commit
-  run release
-  [ "${status}" -ne 0 ]
-  [ -z "$(git tag -l v9.9.9)" ]
-  assert_origin_lacks_tag
 }
 
 # Release flow sandbox. main holds the legacy tag v1.2.0, which is its own Run commit, then the Run commit $run and
@@ -460,4 +387,160 @@ notes_sandbox() {
   [ "${status}" -eq 0 ]
   output_lacks "Bring v1.2.2 back to main"
   output_lacks "Release v1.2.2"
+}
+
+# make_release runs the repository's `make release` for the Run commit $1 in the sandbox clone.
+make_release() {
+  make -f "${root}/Makefile" release CLAUDE=true RUN="$1"
+}
+
+origin_has_tag() {
+  git -C "${origin}" rev-parse -q --verify "refs/tags/$1" >/dev/null
+}
+
+assert_origin_lacks_release() {
+  run origin_has_tag v1.3.0
+  [ "${status}" -ne 0 ]
+  [ -z "$(git -C "${origin}" for-each-ref refs/heads/release)" ]
+  [ -z "$(git tag -l v1.3.0)" ]
+  [ -z "$(git branch --list 'release/*')" ]
+}
+
+@test "make release pushes the tag on a Bump commit whose only parent is the named Run commit, and leaves main alone" {
+  flow_sandbox
+  main_before="$(git -C "${origin}" rev-parse main)"
+  run make_release "${run}"
+  [ "${status}" -eq 0 ]
+  [ "$(git -C "${origin}" rev-parse 'v1.3.0^{commit}^')" = "${run}" ]
+  [ "$(git -C "${origin}" rev-list --parents -n 1 v1.3.0 | wc -w)" -eq 2 ]
+  [ "$(git -C "${origin}" rev-parse refs/heads/release/v1.3.0)" = "$(git -C "${origin}" rev-parse 'v1.3.0^{commit}')" ]
+  [ "$(git -C "${origin}" rev-parse main)" = "${main_before}" ]
+  [ "$(git rev-parse main)" = "${main_before}" ]
+}
+
+@test "make release's Bump commit sets exactly the version fields and the release workflow's guards hold for it" {
+  flow_sandbox
+  run make_release "${run}"
+  [ "${status}" -eq 0 ]
+  [ "$(git diff --name-only "${run}" v1.3.0 | sort | tr '\n' ' ')" = ".claude-plugin/marketplace.json .claude-plugin/plugin.json README.md " ]
+  [ "$(git show v1.3.0:.claude-plugin/plugin.json | jq -r .version)" = "1.3.0" ]
+  [ "$(git show v1.3.0:.claude-plugin/marketplace.json | jq -r '.version, .plugins[0].source.ref')" = "$(printf '1.3.0\nv1.3.0')" ]
+  [ "$(git show v1.3.0:README.md)" = "$(printf 'npx skills add o/r#v1.3.0\napm install o/r#^1.0.0\nplain text')" ]
+  run release_guard v1.3.0 v1.2.0
+  [ "${status}" -eq 0 ]
+}
+
+@test "make release moves the APM range on a major release" {
+  flow_sandbox
+  git checkout -q main
+  git commit -q --allow-empty -m "feat!: break the interface"
+  breaking="$(git rev-parse HEAD)"
+  git push -q origin main
+  run make_release "${breaking}"
+  [ "${status}" -eq 0 ]
+  [ "$(git show v2.0.0:README.md | grep -c '#^2.0.0')" -eq 1 ]
+  run release_guard v2.0.0 v1.2.0
+  [ "${status}" -eq 0 ]
+}
+
+@test "make release releases a Run commit that main has moved past" {
+  flow_sandbox
+  [ "$(git rev-parse main)" != "${run}" ]
+  run make_release "${run}"
+  [ "${status}" -eq 0 ]
+  [ "$(git -C "${origin}" rev-parse 'v1.3.0^{commit}^')" = "${run}" ]
+}
+
+@test "make release pushes nothing for a Run commit that origin/main does not reach" {
+  flow_sandbox
+  git checkout -q -b side "${run}"
+  commit_on_main "feat: only on a side branch" side
+  side="$(git rev-parse HEAD)"
+  git checkout -q main
+  run make_release "${side}"
+  [ "${status}" -ne 0 ]
+  output_has "not reachable from origin/main"
+  assert_origin_lacks_release
+}
+
+@test "make release pushes nothing when no commit after the previous release bumps the version" {
+  flow_sandbox
+  git checkout -q main
+  git reset -q --hard v1.2.0
+  commit_on_main "chore: tidy" tidy
+  git push -q -f origin main
+  tidy="$(git rev-parse HEAD)"
+  run make_release "${tidy}"
+  [ "${status}" -ne 0 ]
+  output_has "No release bump"
+  assert_origin_lacks_release
+}
+
+@test "make release pushes nothing when the release workflow's guards would refuse the Bump commit" {
+  flow_sandbox
+  git checkout -q main
+  printf 'no tokens here\n' >README.md
+  git commit -q -am "feat: drop the install tokens"
+  broken="$(git rev-parse HEAD)"
+  git push -q origin main
+  run make_release "${broken}"
+  [ "${status}" -ne 0 ]
+  output_has "README.md names no npx skills tag"
+  assert_origin_lacks_release
+}
+
+@test "make release needs a Run commit" {
+  flow_sandbox
+  run make -f "${root}/Makefile" release CLAUDE=true
+  [ "${status}" -ne 0 ]
+  output_has "make release RUN="
+}
+
+@test "make release leaves the checkout's branch, files, and worktrees as they were" {
+  flow_sandbox
+  git checkout -q -b elsewhere
+  echo dirty >>README.md
+  run make_release "${run}"
+  [ "${status}" -eq 0 ]
+  [ "$(git branch --show-current)" = "elsewhere" ]
+  [ "$(tail -n 1 README.md)" = "dirty" ]
+  [ "$(git worktree list | wc -l)" -eq 1 ]
+}
+
+# bump_for prints the next version for the Run commit $1 against the previous release $2.
+bump_for() {
+  bash "${root}/.github/scripts/release.sh" bump "$@"
+}
+
+@test "bump infers the next version from the commits after the previous release" {
+  flow_sandbox
+  run --separate-stderr bump_for "${run}" v1.2.0
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "1.3.0" ]
+}
+
+@test "bump counts from the previous release even when a newer tag sits on another branch" {
+  flow_sandbox
+  cut "${run}" 1.9.0 1
+  git checkout -q main
+  run --separate-stderr bump_for "${run}" v1.2.0
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "1.3.0" ]
+}
+
+@test "bump leaves out a Back-merge PR" {
+  flow_sandbox
+  git checkout -q main
+  back_merge 1.2.1
+  merged="$(git rev-parse HEAD)"
+  run --separate-stderr bump_for "${merged}" v1.2.0
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "1.3.0" ]
+}
+
+@test "bump refuses a range with nothing that bumps the version" {
+  flow_sandbox
+  run bump_for v1.2.0 v1.2.0
+  [ "${status}" -ne 0 ]
+  output_has "No release bump"
 }
