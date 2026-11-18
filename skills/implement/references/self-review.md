@@ -9,7 +9,7 @@ The code review's first pass covers the full range. A second pass after a fix co
 Run every review in the background through the harness when it can, and wait for it, because one can take ten minutes.
 
 1. Commit any uncommitted work with the `commit` skill as Phase 5 says, so the range holds the whole change. Then refresh the base with `git -C <worktree-path> fetch origin <base-branch>`, because a stale base puts commits already merged into it in the range; `<base-branch>` is Phase 4's base, or the one the caller names.
-2. Identify your harness as `claude`, `codex`, or `opencode` from your system context, never from environment variables. For any other harness, or when its CLI is not on PATH, the outcome is `not-run (<reason>)`: report it.
+2. Identify your harness as `claude`, `codex`, `opencode`, or `dsh` from your system context, never from environment variables. For any other harness, or when its CLI is not on PATH, the outcome is `not-run (<reason>)`: report it.
 3. Run the scope review once. Write the request to a new temporary file outside the worktree, in the requester's own words only: the Issue body and its comments, plus what the caller asks to build or change, without its operating instructions, or the user's request and every answer they gave since. Never add your plan, decision log, or summary, because the reviewer must judge from a blank slate. Then run the script below, act on its exit code as step 5 below says, and delete the file.
 
    ```bash
@@ -38,7 +38,7 @@ Run every review in the background through the harness when it can, and wait for
    | 1 or 4 | `failed`, or `empty` (no output, which is never "no findings") | Show the printed log tail and retry once, through the harness's escalation if a sandbox blocked it. If the retry also fails, `not-run (<cause>)`; if it exits 0 with `status=reviewed`, treat it as a completed review (exit 0 row) |
    | 2 | Unsupported harness, bad path or base, no commits in the range, or a missing or empty request file | `not-run (<printed reason>)` |
    | 3 | Reviewer modified the worktree or moved HEAD | Stop and end the run, showing `git status --short` and `git log --oneline -5`; return no Result |
-   | 5 | `incomplete`: OpenCode output ended without a `REVIEW_VERDICT:` line, so the review never finished | Show the printed output and log tail and retry once, as for exit 1. If the retry also fails, `not-run (incomplete)`; if it exits 0 with `status=reviewed`, treat it as a completed review (exit 0 row) |
+   | 5 | `incomplete`: OpenCode or DSH output ended without a `REVIEW_VERDICT:` line, so the review never finished | Show the printed output and log tail and retry once, as for exit 1. If the retry also fails, `not-run (incomplete)`; if it exits 0 with `status=reviewed`, treat it as a completed review (exit 0 row) |
 
    Only exit 0 with a `SELF_REVIEW status=reviewed` line is a completed review. Exit 0 without that line is `not-run (no result line)`.
 
