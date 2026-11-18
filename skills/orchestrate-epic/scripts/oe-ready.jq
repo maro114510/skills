@@ -113,7 +113,7 @@ def question_text:
 # Whether one review thread still waits for the Owner.
 #
 # - A resolved thread waits for nobody, and so does one whose lines a later push changed, which GitHub marks outdated.
-# - A thread waits while its last comment is the engineer's, and a reply leaves it with nobody to wait for.
+# - A thread waits only while its last comment is engineer input, so a last comment from a bot or an untrusted author asks for nothing.
 # - A comment from before the latest attempt was already handed to that attempt's Owner.
 def thread_waits($since):
   (.isResolved != true)
@@ -138,7 +138,7 @@ def thread_waits($since):
 # - Engineer input counts once.
 #   - Input before the latest attempt was already handed to that attempt's Owner.
 #   - A Changes requested review counts only on the head it covers, because a review of an older head asks for a change its fix already made.
-#   - A review-thread comment counts only while its thread's last comment is the engineer's, in a thread that is unresolved and not outdated.
+#   - A review-thread comment counts only while it is its thread's last comment, in a thread that is unresolved and not outdated.
 # - A head that moved between the reads leaves only its Issue unreadable, and the read goes on with every other Issue.
 #   - A push or a newly opened pull request between the reads is the cause.
 #   - next_action gives that Issue read-again right before row 6, the first row that needs the head.
@@ -257,7 +257,7 @@ def issue_state:
 # - Engineer input arrived after the latest attempt
 #   - An answer to the latest question
 #   - A Changes requested review that covers the head
-#   - A review-thread comment that no reply answered, in a thread that is unresolved and not outdated
+#   - A review-thread comment that is its thread's last comment, in a thread that is unresolved and not outdated
 # - A listed bot wrote a finding after the latest attempt, its round is unused, and no trusted user approved the head
 # A reason quotes check names and logins from GitHub, so tabs and line breaks in it become spaces and cannot add a field or a line.
 def act($action; $reason): "\(.number)\t\($action)\t\($reason | gsub("[\t\r\n]"; " "))";
