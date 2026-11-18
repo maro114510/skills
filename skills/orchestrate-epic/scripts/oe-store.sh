@@ -5,14 +5,14 @@
 # | Path under the state directory | Holds | Written by |
 # |---|---|---|
 # | locks.git | One ref per Epic that a session holds | oe lock; read by oe status through lock_held |
-# | records/<repo-key>/<issue>.jsonl | One Issue's records, oldest first, one JSON object per line | oe claim, oe attempt, oe start, oe update, oe verdict; dropped by oe forget |
+# | records/<repo-key>/<issue>.jsonl | One Issue's records, oldest first, one JSON object per line | oe claim, oe attempt, oe start, oe update, oe verdict |
 # | boards/<repo-key>/<epic> | The Herdr pane of the Epic's board and the server it is on, as JSON | oe board, which overwrites it |
 # | waits/<repo-key>/<epic> | The process ID and start time of the Epic's running oe wait | oe wait, which writes it only while no other wait runs and drops it when it ends on its own; oe lock release, and an acquire by another session, stop that process |
 # | notices/<repo-key>/<epic> | Each item that needed the person at the latest read, with when the person was last notified about it, as tab-separated lines | oe wait, only with git config skills.notify set, which overwrites it |
 #
 # - The state directory is OE_STATE_DIR when set, and orchestrate-epic under XDG_STATE_HOME or ~/.local/state otherwise.
 #   Either default lies outside every checkout, so no agent's worktree ever holds the state.
-# - An Issue has at most one parent Epic, so its records are keyed by repository and Issue, and oe forget drops an Epic's by its child Issues.
+# - An Issue has at most one parent Epic, so its records are keyed by repository and Issue.
 #
 # | Record | Fields |
 # |---|---|
@@ -100,18 +100,6 @@ records_add() {
   rm -f "${tmp}"
   echo "cannot write the record to ${file}" >&2
   return 1
-}
-
-# Drops every record of Issue $2 in repository $1, and the repository's directory once it holds no Issue.
-# Returns 1 with the reason on stderr when the file stays.
-records_drop() {
-  local file
-  file="$(record_path "$1" "$2")" || return 1
-  rm -f "${file}" 2>/dev/null && [[ ! -e "${file}" ]] || {
-    echo "cannot remove ${file}" >&2
-    return 1
-  }
-  rmdir "${file%/*}" 2>/dev/null || true
 }
 
 # The lock store: one ref per Epic, whose blob names the holding session.
