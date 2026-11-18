@@ -10,6 +10,8 @@ setup() {
   oe="${BATS_TEST_DIRNAME}/oe"
   export OE_STATE_DIR="${BATS_TEST_TMPDIR}/state"
   sessions=()
+  # A test sets only the session ID variables it needs, so the caller's environment never reaches the line.
+  unset OE_SESSION_ID CLAUDE_CODE_SESSION_ID CODEX_THREAD_ID DSH_SESSION_ID
 }
 
 teardown() {
@@ -41,6 +43,22 @@ ps_cannot_run() {
 # Prints the token from the output of a successful acquire.
 token_of() {
   printf '%s\n' "$1" | sed -n 's/^token=//p'
+}
+
+# Prints the sessions record of Epic $2 in repository $1.
+sessions_record() {
+  printf '%s/sessions/%s/%s.jsonl' "${OE_STATE_DIR}" "$(printf '%s' "$1" | git hash-object --stdin)" "$2"
+}
+
+# Prints how many lines the sessions record of Epic $2 in repository $1 holds.
+session_lines() {
+  local file
+  file="$(sessions_record "$1" "$2")"
+  if [ -e "${file}" ]; then
+    wc -l <"${file}" | tr -d ' '
+  else
+    printf '0\n'
+  fi
 }
 
 @test "a second session for the same Epic is refused while the first one runs" {
@@ -220,4 +238,100 @@ token_of() {
   *"lock store"*) ;;
   *) return 1 ;;
   esac
+}
+
+@test "a session that takes a free lock appends one line with the time and the checkout" {
+  start_session
+  checkout="$(cd "$(git -C "${BATS_TEST_DIRNAME}" rev-parse --show-toplevel)" && pwd -P)"
+  cd "${BATS_TEST_DIRNAME}"
+
+  OE_NOW=1760000000 OE_SESSION_PID="${session_pid}" run bash "${oe}" lock acquire o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(session_lines o/r 1)" -eq 1 ]
+  [ "$(jq -r .at "$(sessions_record o/r 1)")" = "2025-10-09T08:53:20Z" ]
+  [ "$(jq -r .checkout "$(sessions_record o/r 1)")" = "${checkout}" ]
+}
+
+@test "the sessions line carries the session ID the harness set" {
+  start_session
+
+  OE_SESSION_ID=harness-1 OE_SESSION_PID="${session_pid}" run bash "${oe}" lock acquire o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(jq -r .session_id "$(sessions_record o/r 1)")" = "harness-1" ]
+}
+
+@test "the sessions line reads the first session ID the harness set" {
+  start_session
+  n=1
+  for var in OE_SESSION_ID CLAUDE_CODE_SESSION_ID CODEX_THREAD_ID DSH_SESSION_ID; do
+    OE_SESSION_PID="${session_pid}" run env "${var}=from-${var}" bash "${oe}" lock acquire o/r "${n}"
+    [ "${status}" -eq 0 ]
+    [ "$(jq -r .session_id "$(sessions_record o/r "${n}")")" = "from-${var}" ]
+    n=$((n + 1))
+  done
+  OE_SESSION_PID="${session_pid}" run env OE_SESSION_ID=first CLAUDE_CODE_SESSION_ID=second CODEX_THREAD_ID=third DSH_SESSION_ID=fourth \
+    bash "${oe}" lock acquire o/r "${n}"
+
+  [ "${status}" -eq 0 ]
+  [ "$(jq -r .session_id "$(sessions_record o/r "${n}")")" = "first" ]
+}
+
+@test "a sessions line for a harness that set no session ID carries none" {
+  start_session
+
+  OE_SESSION_PID="${session_pid}" run bash "${oe}" lock acquire o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(jq -r 'has("session_id")' "$(sessions_record o/r 1)")" = "false" ]
+  [ "$(jq -r '.checkout | length > 0' "$(sessions_record o/r 1)")" = "true" ]
+}
+
+@test "a session that takes its own lock again appends no second line" {
+  start_session
+  first="${session_pid}"
+  OE_SESSION_ID=harness-1 OE_SESSION_PID="${first}" run bash "${oe}" lock acquire o/r 1
+  [ "${status}" -eq 0 ]
+  token="$(token_of "${output}")"
+  [ "$(session_lines o/r 1)" -eq 1 ]
+
+  OE_SESSION_ID=harness-1 OE_SESSION_PID="${first}" run bash "${oe}" lock acquire o/r 1 "${token}"
+
+  [ "${status}" -eq 0 ]
+  [ "$(session_lines o/r 1)" -eq 1 ]
+}
+
+@test "a session that takes the lock over from a dead holder appends a second line" {
+  start_session
+  first="${session_pid}"
+  OE_NOW=1760000000 OE_SESSION_ID=first-session OE_SESSION_PID="${first}" run bash "${oe}" lock acquire o/r 1
+  [ "${status}" -eq 0 ]
+  end_session "${first}"
+  start_session
+
+  OE_NOW=1760000100 OE_SESSION_ID=second-session OE_SESSION_PID="${session_pid}" run bash "${oe}" lock acquire o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(session_lines o/r 1)" -eq 2 ]
+  [ "$(jq -r .at "$(sessions_record o/r 1)" | tr '\n' ' ')" = "2025-10-09T08:53:20Z 2025-10-09T08:55:00Z " ]
+  [ "$(jq -r 'select(.at == "2025-10-09T08:55:00Z") | .session_id' "$(sessions_record o/r 1)")" = "second-session" ]
+}
+
+@test "a sessions line that cannot be written warns on stderr and keeps the lock" {
+  mkdir -p "${OE_STATE_DIR}"
+  : >"${OE_STATE_DIR}/sessions"
+  start_session
+
+  OE_SESSION_PID="${session_pid}" run --separate-stderr bash "${oe}" lock acquire o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ -n "$(token_of "${output}")" ]
+  case "${stderr}" in
+  *"sessions"*) ;;
+  *) return 1 ;;
+  esac
+  start_session
+  OE_SESSION_PID="${session_pid}" run bash "${oe}" lock acquire o/r 1
+  [ "${status}" -eq 4 ]
 }
