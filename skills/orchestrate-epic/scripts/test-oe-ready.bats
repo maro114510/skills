@@ -1451,7 +1451,7 @@ JSON
   }]
 }
 JSON
-  records 5 claim@07:00 attempt@07:10 attempt@07:20 attempt@07:30
+  records 5 claim@07:00 attempt@07:10#aaaa attempt@07:20#bbbb attempt@07:30#cccc
 
   run bash "${oe}" ready o/r 1
 
@@ -1549,8 +1549,7 @@ JSON
   [ "$(action_of 5)" = wait-merge ]
 }
 
-@test "a review-thread comment the agents' bot answered starts no Owner" {
-  agent_bot my-bot
+@test "a review-thread comment a later bot reply answers starts no Owner" {
   github <<'JSON'
 {
   "default_branch": {"checks": {"test": "success"}},
@@ -1559,10 +1558,9 @@ JSON
     "branch": true,
     "pull_requests": [{
       "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
-      "thread_comments": [
+      "threads": [{"comments": [
         {"by": "COLLABORATOR", "at": "07:40", "body": "This leaks the token"},
-        {"login": "my-bot", "type": "Bot", "at": "07:50", "body": "Fixed in the latest push."}
-      ]
+        {"login": "coderabbitai", "type": "Bot", "at": "07:50", "body": "Addressed in the latest push."}]}]
     }]
   }]
 }
@@ -1576,7 +1574,6 @@ JSON
 }
 
 @test "an engineer's comment after a reply starts an Owner" {
-  agent_bot my-bot
   github <<'JSON'
 {
   "default_branch": {"checks": {"test": "success"}},
@@ -1585,11 +1582,10 @@ JSON
     "branch": true,
     "pull_requests": [{
       "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
-      "thread_comments": [
+      "threads": [{"comments": [
         {"by": "COLLABORATOR", "at": "07:20", "body": "This leaks the token"},
-        {"login": "my-bot", "type": "Bot", "at": "07:30", "body": "Fixed in the latest push."},
-        {"by": "COLLABORATOR", "at": "07:40", "body": "It still leaks on the error path."}
-      ]
+        {"login": "coderabbitai", "type": "Bot", "at": "07:30", "body": "Addressed in the latest push."},
+        {"by": "COLLABORATOR", "at": "07:40", "body": "It still leaks on the error path."}]}]
     }]
   }]
 }
