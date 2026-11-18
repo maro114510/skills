@@ -26,22 +26,18 @@ ref="refs/heads/${branch}"
 
 git fetch -q origin "${base}" 2>/dev/null || die "Fetching ${base} from origin failed"
 
-# Git reports a push of the commit a branch already points to as up to date, even under a lease that expects the branch
-# absent, so a branch oe claim created at the base head is told apart by reading it first. The lease then makes the push
-# fail when a branch with a different head appears between the read and the push.
-remote_has_branch() {
-  local listed
-  listed="$(git ls-remote --heads origin "${ref}" 2>/dev/null)" || die "Reading ${branch} from origin failed"
-  [[ -n "${listed}" ]]
-}
-
-if ! remote_has_branch; then
-  if git push -q --force-with-lease="${ref}:" origin "FETCH_HEAD:${ref}" 2>/dev/null; then
-    printf 'locked\t%s\n' "${branch}"
-    exit 0
-  fi
-  remote_has_branch || die "Creating ${branch} on origin failed"
+# Only a push that creates the branch counts as taking the Lock. Git reports a push of the commit a branch already
+# points to as up to date and exits 0, so the exit code cannot tell this run from one that created the branch at the
+# same head a moment earlier, as oe claim or a second run does. The porcelain flag `*` marks a created ref.
+pushed="$(git push --porcelain --force-with-lease="${ref}:" origin "FETCH_HEAD:${ref}" 2>/dev/null)"
+if [[ "${pushed}" == *$'\n*\t'* ]]; then
+  printf 'locked\t%s\n' "${branch}"
+  exit 0
 fi
+
+# Not created by this run: tell an existing branch from an unreachable origin or any other cause.
+head_sha="$(git ls-remote --heads origin "${ref}" 2>/dev/null | cut -f1)" || die "Reading ${branch} from origin failed"
+[[ -n "${head_sha}" ]] || die "Creating ${branch} on origin failed"
 
 echo "branch=${branch}"
 worktree="$(git worktree list --porcelain | awk -v ref="${ref}" '
@@ -49,9 +45,11 @@ worktree="$(git worktree list --porcelain | awk -v ref="${ref}" '
   $1 == "branch" && $2 == ref { print path; exit }')"
 [[ -z "${worktree}" ]] || echo "worktree=${worktree}"
 
+# A merged pull request ends the unit only when it merged the branch as it stands now: GitHub keeps a merged pull
+# request under its branch name after the branch is deleted and created again, and that branch is held by a new run.
 # A squash merge leaves the Issue open when the unit did not finish it; the caller decides what comes next.
-merged="$(gh pr list --head "${branch}" --state merged --json number --jq length 2>/dev/null)" || die "Reading pull requests of ${branch} failed"
-if [[ "${merged}" =~ ^[1-9][0-9]*$ ]]; then
+merged="$(gh pr list --head "${branch}" --state merged --json headRefOid --jq '.[].headRefOid' 2>/dev/null)" || die "Reading pull requests of ${branch} failed"
+if grep -qx "${head_sha}" <<<"${merged}"; then
   state="$(gh issue view "${issue}" --json state --jq .state 2>/dev/null)" || die "Reading Issue ${issue} failed"
   [[ "${state}" == OPEN ]] && exit 10
 fi
