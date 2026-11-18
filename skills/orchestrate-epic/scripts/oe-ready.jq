@@ -110,6 +110,19 @@ def question_text:
   | (indexes(test("^\\s*$") | not) | last) as $last
   | if $start == null then "" else .[$start:$last + 1] | join("\n") end;
 
+# Whether one review thread still waits for the Owner.
+#
+# - A resolved thread waits for nobody, and so does one whose lines a later push changed, which GitHub marks outdated.
+# - A thread waits only while its last comment is engineer input, so a last comment from a bot or an untrusted author asks for nothing.
+# - A comment from before the latest attempt was already handed to that attempt's Owner.
+def thread_waits($since):
+  (.isResolved != true)
+  and (.isOutdated != true)
+  and ((.comments.nodes // []) | last as $last
+    | $last != null
+      and ($last | engineer_input)
+      and ($since == null or $last.createdAt > $since));
+
 # Reading one Issue
 #
 # issue_state reduces one Issue response to the facts that next_action decides on.
@@ -124,6 +137,8 @@ def question_text:
 #   - The read holds only the newest pull request with the branch name, so a newer one from a fork hides the Issue's own.
 # - Engineer input counts once.
 #   - Input before the latest attempt was already handed to that attempt's Owner.
+#   - A Changes requested review counts only on the head it covers, because a review of an older head asks for a change its fix already made.
+#   - A review-thread comment counts only while it is its thread's last comment, in a thread that is unresolved and not outdated.
 # - A head that moved between the reads leaves only its Issue unreadable, and the read goes on with every other Issue.
 #   - A push or a newly opened pull request between the reads is the cause.
 #   - next_action gives that Issue read-again right before row 6, the first row that needs the head.
@@ -197,9 +212,9 @@ def issue_state:
           if $pr.mergeable == "CONFLICTING" then "PR #\($pr.number) conflicts with its base" else empty end,
           if $head.ci == "failed" then "checks failed on \($head.sha): \($head.ci_detail)" else empty end,
           if $head.verdict == "failure" or $head.verdict == "error" then "failure verdict on \($head.sha)" else empty end,
-          if any($pr.reviews.nodes[]?; engineer_input and ($since == null or .submittedAt > $since))
+          if any($pr.reviews.nodes[]?; .commit.oid == $head.oid and engineer_input and ($since == null or .submittedAt > $since))
           then "a trusted Changes requested review" else empty end,
-          if any($pr.reviewThreads.nodes[]?.comments.nodes[]?; engineer_input and ($since == null or .createdAt > $since))
+          if any($pr.reviewThreads.nodes[]?; thread_waits($since))
           then "a trusted review-thread comment" else empty end,
           if ($bot_findings | length) > 0
           then ($bot_findings | map("\(.level) finding from \(.login)") | join(", ")) else empty end
@@ -241,8 +256,8 @@ def issue_state:
 # - The verdict on the head is a failure
 # - Engineer input arrived after the latest attempt
 #   - An answer to the latest question
-#   - A Changes requested review
-#   - A review-thread comment
+#   - A Changes requested review that covers the head
+#   - A review-thread comment that is its thread's last comment, in a thread that is unresolved and not outdated
 # - A listed bot wrote a finding after the latest attempt, its round is unused, and no trusted user approved the head
 # A reason quotes check names and logins from GitHub, so tabs and line breaks in it become spaces and cannot add a field or a line.
 def act($action; $reason): "\(.number)\t\($action)\t\($reason | gsub("[\t\r\n]"; " "))";

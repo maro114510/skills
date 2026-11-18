@@ -68,7 +68,7 @@
 # | checks | Check name to result on its head | No checks |
 # | check_runs | Further check runs on its head, each with name, result, suite, started, and optionally the workflow that ran it, so one name can run in several check suites | None |
 # | verdicts | oe/verify states on its head, newest first | None |
-# | reviews | Changes requested reviews, each with by, at, and body | None |
+# | reviews | Changes requested reviews, each with by, at, body, and the sha it reviewed, which defaults to the head the read sees | None |
 # | approvals | Approved reviews, each with by, at, and the sha it approved | None |
 # | thread_comments | Review-thread comments, each with by, at, and body | None |
 # | threads | Whole review threads, each with resolved, outdated, and comments | One thread of thread_comments |
@@ -148,7 +148,7 @@ def pull_request:
     baseRefName: (.base // "main"),
     mergeCommit: (if .merged then {oid: merge_sha} else null end),
     mergeable: (if .conflicting then "CONFLICTING" else "MERGEABLE" end),
-    reviews: {nodes: [.reviews[]? | author + {submittedAt: (.at | time)}]},
+    reviews: {nodes: [.reviews[]? | author + {submittedAt: (.at | time), commit: {oid: (.sha // $sha)}}]},
     approvals: {nodes: [.approvals[]? | {authorAssociation: (.by // "NONE"), commit: {oid: (.sha // $sha)}}]},
     reviewThreads: {totalCount: ((review_threads | length) + (.older_threads // 0)), nodes: review_threads},
     headRef: {target: {oid: $sha, committedDate: (.committed // .opened | time), statusCheckRollup: rollup}}};
