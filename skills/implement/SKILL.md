@@ -12,9 +12,9 @@ description: >
   Builds one Request as one change unit for one PR, and returns Questions asking to split the Issue or request when it needs more.
   Works in a worktree, commits as it goes, and before it returns has a fresh context check that the branch adds nothing the request did not ask for and lacks nothing it asks for,
   then self-reviews the whole branch range on the first pass and only the fix delta on a second.
-  Claims an Issue locally first, so a second session handed the same Issue returns Busy instead of duplicating the work.
+  Locks an Issue by creating its branch `feat/issue-<N>` on origin first, so a second session handed the same Issue returns Busy instead of duplicating the work.
   Behaves the same whoever calls it: it never asks and never waits, and ends by returning Busy, Questions, or Built.
-  Never pushes and does not create a PR; both are the caller's.
+  Never pushes a commit and does not create a PR; both are the caller's. The only thing it writes to origin is the Issue's branch, as the Lock.
 argument-hint: "[description of what to implement]"
 ---
 
@@ -32,14 +32,14 @@ A run behaves the same whoever calls it, a person's session or another skill. It
 
 | Result | When | The message holds |
 |---|---|---|
-| Busy | Another session holds the Issue Claim | The owner lines the script printed |
-| Questions | A Phase 2 trigger fired, or another stop below says to return Questions | Each open question, written as Questions says |
-| Built | Phase 6.9 finished | Phase 7's report |
+| Busy | The Issue's branch already exists on origin | The `branch=` line the script printed, and its `worktree=` line when one exists on this host |
+| Questions | A Phase 2 trigger fired, or another stop below says to return Questions | Each open question, written as Questions says, and the branch and worktree when this run created them |
+| Built | Phase 6.9 finished | Phase 7's report, and the branch and worktree |
 
 Start the message with one line, `IMPLEMENT: busy`, `IMPLEMENT: questions`, or `IMPLEMENT: built`, so a caller reads the Result without parsing the rest.
-Release the Issue Claim before returning Questions or Built, as `references/worktree.md` § Issue Claim says.
+The Lock stays on origin when the run returns, so the caller hands the worktree back in the Request to resume.
 
-The Request is `$ARGUMENTS` with every answer the caller relays from an earlier Questions. It may also name the worktree to work in and the base branch. Work in the named worktree, take no Issue Claim, and skip Phase 4.
+The Request is `$ARGUMENTS` with every answer the caller relays from an earlier Questions. It may also name the worktree to work in and the base branch. Work in the named worktree, take no Lock and create no branch, and skip Phase 4.
 
 ### Questions
 
@@ -50,7 +50,7 @@ A caller that can reach a person shows the Questions to them, and one that canno
 - Offer concrete, mutually exclusive options, put the recommended one first, and state the consequence of each.
 - Never choose the answer for the person.
 
-An operational stop elsewhere in this skill, such as a failed fetch, ends the run with a message stating the state and no Result. Release the Issue Claim first.
+An operational stop elsewhere in this skill, such as a failed fetch, ends the run with a message stating the state and no Result.
 
 ---
 
@@ -60,7 +60,7 @@ Determine the task type from `$ARGUMENTS` and the conversation.
 
 - Record what the user already decided so they never have to repeat it.
 - Defer the playbook choice until the repository is inspected and acceptance criteria exist.
-- Do not mutate repository state in Phases 0 to 3. The exception is the Issue Claim, which `references/worktree.md` § Issue Claim takes when the Request names an Issue and no worktree.
+- Do not mutate repository state in Phases 0 to 3. The exception is the Issue Lock, which `references/worktree.md` § Issue Lock takes when the Request names an Issue and no worktree.
 
 ---
 
@@ -69,7 +69,7 @@ Determine the task type from `$ARGUMENTS` and the conversation.
 Inspect before asking questions.
 
 1. Read repository instructions and the relevant implementation, tests, types, configuration, schemas, documentation, and CI entrypoints.
-2. Inspect Git status, the current branch, remotes, and the remote default branch. Do not switch, pull, stash, or create a worktree.
+2. Inspect Git status, the current branch, remotes, and the remote default branch. Do not switch, pull, stash, or create a worktree other than the Issue Lock's.
 3. Summarize the current observable behavior, established conventions, affected interfaces, and constraints.
 4. Separate facts the repository can establish from genuine product or design decisions. Never ask the user for a fact that available sources can establish safely.
 
@@ -153,7 +153,7 @@ If new information, repository drift, or a scope change raises a Phase 2 trigger
 
 ## Phase 4: Set Up the Worktree
 
-Skip this phase when the Request names the worktree. Otherwise follow `references/worktree.md` § Phase 4.
+Skip this phase when the Request names the worktree or the Issue Lock made one. Otherwise follow `references/worktree.md` § Phase 4.
 
 ---
 
@@ -185,7 +185,7 @@ Route each part of the task in the Phase 3 plan. A playbook, relative to this sk
 
 Before the first edit, read `references/test-policy.md` and the routed playbook, and put the playbook's steps verbatim at the top of the todo list. Mark a step you skip `skip: <reason>`.
 
-Commit each step with the `commit` skill, giving it the type the playbook names, because it infers `test:` for a test-only diff, any `Removed-Test` trailer, and, when the work traces to an Issue, its number. Never push.
+Commit each step with the `commit` skill, giving it the type the playbook names, because it infers `test:` for a test-only diff, any `Removed-Test` trailer, and, when the work traces to an Issue, its number. Never push a commit.
 The `commit` skill never asks, so carry every file it left uncommitted and every type it chose without confidence into your final report.
 
 A test that is hard to write is a signal to revisit the design. Touch nothing beyond what the task requires.
@@ -239,7 +239,6 @@ Unsatisfied: <criterion> -> <reason>
 ## Phase 7: Finish
 
 1. Commit any uncommitted work with the `commit` skill, so the range holds the whole change. Give it the Issue number, as Phase 5 says. If a commit hook rewrote any file, rerun Phase 6.9 on the committed state.
-2. Release the Issue Claim if this run took one.
-3. Return Built: the Phase 6.9 table, the Phase 6.5 outcome with its reviewed HEAD, every commit in `<reviewed-head>..HEAD` as unreviewed, or all of the range when the outcome is `not-run` or `git merge-base --is-ancestor <reviewed-head> HEAD` fails, and every file the `commit` skill left uncommitted with every `reason:` line it listed.
+2. Return Built: the Phase 6.9 table, the Phase 6.5 outcome with its reviewed HEAD, every commit in `<reviewed-head>..HEAD` as unreviewed, or all of the range when the outcome is `not-run` or `git merge-base --is-ancestor <reviewed-head> HEAD` fails, and every file the `commit` skill left uncommitted with every `reason:` line it listed.
 
-Never push, and never create a PR. The caller checks the range before it publishes anything.
+Never push a commit, and never create a PR. The Lock branch on origin is the only remote write. The caller checks the range before it publishes anything.
