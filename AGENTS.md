@@ -40,7 +40,7 @@ Ideas, experiments, and open questions go to [Discussions](https://github.com/ma
 
 - Update both manifests together; updating only one breaks `claude plugin install`
 - Bump versions with the Makefile release targets, never by hand
-- `make release` infers the next SemVer from Conventional Commits via `git-cliff`
+- `make release RUN=<commit>` infers the next SemVer from the Conventional Commits in the Release range via `git-cliff`, adds the Bump commit on a `release/v<version>` branch from the Run commit, and pushes that branch and the tag, never `main`
 - Tags carry the `v` prefix, e.g. `v0.28.0`; manifest versions omit it, e.g. `0.28.0`
 - Workflow actions are commit-pinned; update them with Dependabot only
 
