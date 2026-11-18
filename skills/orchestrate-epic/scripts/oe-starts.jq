@@ -1,7 +1,8 @@
 # Owner starts and whether each pushed, shared by oe ready and oe attempt.
 # A subcommand puts this file in front of its own jq program, and runs the definitions below on an Issue's records, oldest first.
 #
-# - An Owner start is an attempt record after the latest claim record, or any attempt record when there is no claim.
+# - An Owner start is an attempt record after the latest claim or continue record, or any attempt record when there is neither.
+#   oe continue writes a continue record, so the starts and the bot rounds before it no longer count while the branch stays.
 # - Each start records head, the head of the Issue branch when it began; the field is absent when the branch did not exist.
 # - A start pushed when the head it left differs from the one it recorded.
 #   - The head it left is the head of the next record that follows it, an attempt or an update: the next start's recorded head,
@@ -11,10 +12,12 @@
 # - An attempt is a start that pushed.
 # - No agent's report decides it, so a start that ended in a question or in nothing never counts as an attempt.
 
+# Where the records that count begin: just after the latest claim or continue record, or at the first record without either.
+def counted_from: (map(.kind == "claim" or .kind == "continue") | rindex(true)) as $reset | ($reset // -1) + 1;
+
 # Whether each Owner start pushed, oldest first.
 def start_flags($current):
-  (map(.kind == "claim") | rindex(true)) as $claim
-  | .[($claim // -1) + 1:] as $r
+  .[counted_from:] as $r
   | [range(0; $r | length) as $i
       | select($r[$i].kind == "attempt")
       | ([$r[$i + 1:][] | select(.kind == "attempt" or .kind == "update")] | first) as $next

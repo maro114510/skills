@@ -13,6 +13,7 @@
 # | claim | Creates an Issue's branch on origin and records the claim on this host, and assigns the Issue to the gh user |
 # | attempt | Records an Owner attempt on this host before the Owner starts, and refuses one past the cap |
 # | question | Writes an Owner's question on the Issue, or records the person's answer to it |
+# | continue | Returns a parked Issue to the loop on its branch, resetting its attempts and bot rounds, and records an optional instruction on the Issue |
 # | rereview | Asks the bots whose rounds the latest attempt used to review the PR again |
 # | update | Updates an Issue branch with the base branch through GitHub, starting no agent and spending no attempt |
 # | brief | Builds an Owner's or a Verifier's brief, recording each Verifier start on its SHA |
@@ -27,7 +28,7 @@ set -uo pipefail
 dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 case "${1:-}" in
-ready | status | board | wait | start | claim | attempt | question | rereview | update | brief | verdict | records | worktree | lock)
+ready | status | board | wait | start | claim | attempt | question | continue | rereview | update | brief | verdict | records | worktree | lock)
   sub="$1"
   shift
   exec bash "${dir}/oe-${sub}.sh" "$@"
@@ -44,6 +45,7 @@ Usage: oe ready <owner/repo> <epic-number> [--running <issue-number>]... [--fact
        oe attempt <owner/repo> <issue-number>
        oe question <owner/repo> <issue-number> < question
        oe question <owner/repo> <issue-number> --answer <reply>
+       oe continue <owner/repo> <issue-number> [<instruction>]
        oe rereview <owner/repo> <issue-number>
        oe update <owner/repo> <issue-number>
        oe brief owner <owner/repo> <issue-number> <worktree> [<reason>]

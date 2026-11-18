@@ -86,8 +86,7 @@ since="$(jq -r '(map(.kind == "claim") | rindex(true)) as $claim
   | ([.[($claim // -1) + 1:][] | select(.kind == "attempt") | .at] | last)
     // (if $claim == null then "" else .[$claim].at end)' <<<"${records}")" ||
   fail "cannot order the records of Issue #${n}"
-spent="$(jq -c '(map(.kind == "claim") | rindex(true)) as $claim
-  | [.[($claim // -1) + 1:][] | select(.kind == "attempt") | (.bots // [])[]] | unique' <<<"${records}")" ||
+spent="$(jq -c "${starts}"$'\n''[.[counted_from:][] | select(.kind == "attempt") | (.bots // [])[]] | unique' <<<"${records}")" ||
   fail "cannot read the bot rounds of Issue #${n}"
 
 # The record values enter the jq program as JSON literals, so no record can change the program.

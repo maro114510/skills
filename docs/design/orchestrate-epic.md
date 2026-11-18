@@ -47,6 +47,7 @@ oe starts no agent, edits no code, and never merges a PR. Its only writes to a P
 | oe worktree | Creates an agent's worktree outside the shared checkout, on the Issue branch for an Owner and detached at its head for a Verifier, and removes it after the agent ends | A local worktree |
 | oe attempt | Writes an attempt record for each Owner start before it runs, with the Issue branch's head and the bots whose rounds it uses, and refuses a start once 3 attempts are used or the latest 3 starts pushed nothing, counting as Attempts under Decisions says | The record store |
 | oe question | Writes an Owner's question in a fixed format, and records the answer the person gives in the session's conversation | An Issue comment for a question or an answer, and an answer's decision in the Issue body's decisions section |
+| oe continue | Returns an Issue parked by the attempt cap or by starts that pushed nothing to the loop on its branch, when the person said so in the session's conversation. It resets the attempts, the starts in a row that pushed nothing, and the bot rounds, and with an instruction it records the instruction on the Issue as an answer | A continue record, and with an instruction a comment on the Issue |
 | oe rereview | Asks bots to review the PR again | A PR comment |
 | oe update | Updates an Issue branch with the base branch through GitHub when oe ready shows its head lacks a merged sibling PR. It starts no agent and spends no attempt, and records the head it replaced so the merge is never read as an Owner's push | A merge commit on the Issue branch, and an update record |
 | oe verdict | Writes a Verifier's verdict and findings | A commit status on the SHA, and the record store |
@@ -73,6 +74,7 @@ The record store lays out its state as `oe-store.sh` defines.
 - Resolves a bot's review thread to dismiss its finding
 - Stops the session
 - Approves and merges the PR
+- Tells the session in its conversation to continue a parked Issue, with or without an instruction, so the Issue starts again on its branch
 - Deletes a parked Issue's branch so the AI starts it over
 - Deletes the `<!-- automation-owner: orchestrate-epic -->` line from a parked Issue's PR body to hand the PR to another automation
 - Removes or replaces a dependency that was closed as not planned or duplicate
@@ -133,6 +135,7 @@ flowchart TB
   CI -->|"No checks after 10 minutes"| Parked
   Verify -->|"No verdict twice"| Parked
   Parked -->|"Engineer deletes the branch"| Ready
+  Parked -->|"Engineer tells the session to continue"| Repair
   Parked -->|"Engineer merges by hand"| Done
   CI -->|"PR closed without merging"| Engineer["Waiting for an engineer"]
   Verify -->|"PR closed without merging"| Engineer
@@ -284,7 +287,7 @@ sequenceDiagram
 | Failed CI | An Owner fixes the failed check on the same branch and pushes |
 | Sibling merged | Issues A and B both wait for the merge, and the engineer merges A. At the next read, B's head lacks A's squash commit, so oe updates B's branch with the base branch through GitHub. CI and a Verifier run again on the new head, and B waits for the merge again once that head has a success verdict. When the update conflicts, an Owner resolves the conflict as a repair |
 | Bot finding | CodeRabbit reports a Major finding. An Owner checks it in the code, repairs, pushes, and asks CodeRabbit to review again. A Major finding in that re-review goes to the engineer. A Minor finding starts nothing |
-| Reached cap | When a repair signal remains after 3 attempts, the Issue is parked and the Issues that depend on it stop too. The engineer either finishes and merges it by hand, or deletes the branch so the AI starts over |
+| Reached cap | When a repair signal remains after 3 attempts, the Issue is parked and the Issues that depend on it stop too. The engineer finishes and merges it by hand, deletes the branch so the AI starts over, or tells the session to continue it, which resets the count and keeps the branch |
 
 ## Reviewing a run
 
@@ -363,6 +366,7 @@ oe keeps the facts of a run as they are and never scores them. These viewpoints 
 | Board refresh | Every 3 minutes, each refresh reading GitHub through oe ready |
 | Board lifetime | The board stops once the session holding the Epic's lock ends, and leaves its last view. A `--watch` that finds no session holding the lock at its first refresh draws once and stops. A later start reuses its pane when the pane runs the board or sits at its shell's prompt, and never sends input to a pane that runs anything else |
 | Notifications | oe wait calls the command in git config `skills.notify` with a one-line message and a link for each new item that needs the person: a question, a park, an Issue waiting for a person or for the merge, 3 failed reads in a row, and the session's end with its reason. It calls again every hour while the person has not acted. Herdr is one example setting, and no path is Herdr-only. With no command set, oe notifies nobody |
+| Continuing a parked Issue | Only for a park by the attempt cap or by starts that pushed nothing, and only when the person says so in the session's conversation. The session runs oe continue, which writes a continue record, and with an instruction a comment on the Issue that oe ready and the Owner read as an answer. Attempts, starts that pushed nothing, and bot rounds count from that record, so the Issue gets 3 more attempts and each bot a new round, and the branch stays. It writes nothing to GitHub without an instruction. It is refused while attempts remain, so no one lifts a cap that has not been reached. pr-owner and pr-verify never run it, and no agent is started to repair a parked Issue outside pr-owner, because that leaves no attempt record and no re-review request |
 | Answers | The person answers in the session's conversation or with a comment on the Issue. The session records an answer from its conversation through oe, so the next Owner reads it on the Issue |
 | Decisions section | An answer recorded through oe appends its decision to a decisions section of the Issue body. The Verifier reads it with the body, and it takes precedence over the criteria it contradicts |
 | Starting agents | Through oe start, which oe ready prints for each line that starts an agent, because a session that lost the skill to a compaction rebuilt the steps from memory and passed the Epic number as the Issue |
