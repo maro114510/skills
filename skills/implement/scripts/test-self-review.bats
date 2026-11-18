@@ -658,6 +658,13 @@ run_scope_stub() {
   [[ "$(result_line)" == "SELF_REVIEW status=reviewed "*" verdict=none" ]]
 }
 
+@test "dsh REVIEW_VERDICT: findings exits 0 and reports verdict=findings" {
+  # shellcheck disable=SC2016 # expanded by the stub, not here
+  run_stub "$(dsh_stub present 'echo "shared.sh:3 unquoted expansion"; echo "REVIEW_VERDICT: findings"')" '' dsh
+  [ "${status}" -eq 0 ]
+  [[ "$(result_line)" == "SELF_REVIEW status=reviewed "*" verdict=findings" ]]
+}
+
 @test "dsh reviewer writing a file exits 3" {
   # shellcheck disable=SC2016 # expanded by the stub, not here
   run_stub "$(dsh_stub present 'touch pwned.txt')" '' dsh
