@@ -12,19 +12,23 @@ Today, agents take an Issue to a verified PR with TDD, a separate-context self-r
 
 ## Install
 
-Releases and deploys come from `main`.
+Each install below resolves a release the owner has already run, not whatever merged last.
+`main` is the owner's early-access track: the owner runs it before releasing, so it can be ahead of the latest release.
+Leaving the version out of an APM or npx command installs `main`.
 
 ### APM
 
 APM is the recommended route. [APM](https://github.com/microsoft/apm) installs every skill and both agents into Claude Code, Codex, and OpenCode with one command.
 
+It resolves the newest release within the major version its range names.
+
 ```sh
-apm install -g maro114510/skills -t claude,codex,opencode
+apm install -g 'maro114510/skills#^1.0.0' -t claude,codex,opencode
 ```
 
 ### Claude Code plugin
 
-Requires Claude Code 2.1.275 or later.
+Requires Claude Code 2.1.275 or later. It installs the release that the marketplace entry on `main` names.
 
 ```sh
 /plugin install skills --marketplace maro114510/skills
@@ -32,11 +36,15 @@ Requires Claude Code 2.1.275 or later.
 
 ### npx
 
+It installs the exact release tag named below.
+
 ```sh
-npx --yes skills add maro114510/skills --agent claude-code --skill '*' --global --yes
+npx --yes skills add 'maro114510/skills#v1.2.0' --agent claude-code --skill '*' --global --yes
 ```
 
 ### GitHub CLI
+
+It installs the latest release.
 
 ```sh
 gh skill install maro114510/skills --agent claude-code --scope user
