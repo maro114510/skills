@@ -53,16 +53,18 @@ opencode_stub() {
   printf 'if [ "$1 $2" = "run --help" ]; then printf "%s\\n"; exit 0; fi\n%s' "${help}" "$2"
 }
 
-# Prints a stub DSH body that answers \`headless --help\` as DSH $1 would, then runs $2.
-# present lists --permission-mode, which the review pins; absent omits it.
+# Prints a stub DSH body whose launcher and app help answer as DSH $1 would, then runs $2.
+# present lists --patch in the launcher help; no-patch omits it, so the review must fail closed.
 dsh_stub() {
-  local help
+  local launcher app
   case "$1" in
-  present) help='      --permission-mode <preset>  select a configured permission preset for this task' ;;
-  absent) help='      --json                     write newline-delimited run events to stdout' ;;
+  present) launcher='      --patch <path>             extra patch-list overlay applied after the profile layer (repeatable)' ;;
+  no-patch) launcher='      --dump-config              print the composed profile tree and exit' ;;
   esac
+  app='      --approval-policy <policy>  set approval behavior after selecting the permission preset'
   # shellcheck disable=SC2016 # expanded by the stub, not here
-  printf '%s' "if [ \"\$1 \$2\" = \"headless --help\" ]; then echo '${help}'; exit 0; fi
+  printf '%s' "if [ \"\$#\" = 1 ] && [ \"\$1\" = --help ]; then echo '${launcher}'; exit 0; fi
+if [ \"\$1 \$2\" = \"headless --help\" ]; then echo '${app}'; exit 0; fi
 ${2}
 "
 }
@@ -609,12 +611,22 @@ run_scope_stub() {
   # shellcheck disable=SC2016 # expanded by the stub, not here
   run_stub "$(dsh_stub present 'echo "ARGS: $*"; echo "REVIEW_VERDICT: none"')" '' dsh
   [ "${status}" -eq 0 ]
-  grep -qF -- "ARGS: headless --permission-mode read-only --approval-policy never Review the uncommitted changes." <<<"${output}"
+  grep -qE -- "^ARGS: headless --patch [^ ]+ --approval-policy never Review the uncommitted changes\." <<<"${output}"
+  # A preset name is profile-defined, so the review must not select one by name.
+  if grep -qF -- "--permission-mode" <<<"${output}"; then return 1; fi
 }
 
-@test "dsh without --permission-mode fails before the review runs" {
+@test "dsh pins its own read-only preset instead of a profile-defined name" {
   # shellcheck disable=SC2016 # expanded by the stub, not here
-  run_stub "$(dsh_stub absent 'echo "ARGS: $*"')" '' dsh
+  run_stub "$(dsh_stub present 'for a; do [ "${p:-}" = --patch ] && f="$a"; p="$a"; done; cat "$f"; echo "REVIEW_VERDICT: none"')" '' dsh
+  [ "${status}" -eq 0 ]
+  grep -qF -- "sandbox: read-only" <<<"${output}"
+  grep -qF -- "defaultPreset: self-review-read-only" <<<"${output}"
+}
+
+@test "dsh without --patch fails before the review runs" {
+  # shellcheck disable=SC2016 # expanded by the stub, not here
+  run_stub "$(dsh_stub no-patch 'echo "ARGS: $*"')" '' dsh
   [ "${status}" -eq 1 ]
   if grep -qF -- "ARGS:" <<<"${output}"; then return 1; fi
   grep -qF -- "Unsupported DSH CLI" <<<"${output}"
@@ -685,7 +697,7 @@ run_scope_stub() {
   run_scope_stub "$(dsh_stub present 'echo "ARGS: $*"; echo "REVIEW_VERDICT: none"')" dsh \
     "$(request_file 'Add a --dry-run flag to deploy.sh')"
   [ "${status}" -eq 0 ]
-  grep -qF -- "ARGS: headless --permission-mode read-only --approval-policy never" <<<"${output}"
+  grep -qE -- "^ARGS: headless --patch [^ ]+ --approval-policy never" <<<"${output}"
   has_line "Add a --dry-run flag to deploy.sh"
   grep -qF -- "Apply YAGNI ruthlessly" <<<"${output}"
   grep -qF -- "REVIEW_VERDICT: findings" <<<"${output}"
@@ -696,16 +708,20 @@ run_scope_stub() {
   local real help_text
   real="$(command -v dsh)" || skip "dsh is not installed"
   # shellcheck disable=SC2016 # expanded by the stub, not here
-  run_stub "if [ \"\$1 \$2\" = \"headless --help\" ]; then exec '${real}' \"\$@\"; fi
+  run_stub "if [ \"\$#\" = 1 ] && [ \"\$1\" = --help ]; then exec '${real}' \"\$@\"; fi
+if [ \"\$1 \$2\" = \"headless --help\" ]; then exec '${real}' headless --help; fi
 echo \"ARGS: \$*\"
 echo \"REVIEW_VERDICT: none\"" '' dsh
   [ "${status}" -eq 0 ]
-  grep -qF -- "ARGS: headless --permission-mode read-only --approval-policy never" <<<"${output}"
-  help_text="$(dsh headless --help 2>&1)"
-  for arg in --permission-mode --approval-policy; do
-    grep -qE -- "(^|[[:space:]])${arg}([[:space:],=]|$)" <<<"${help_text}" || {
-      printf 'the installed dsh rejects %s\n' "${arg}"
-      return 1
-    }
-  done
+  grep -qE -- "^ARGS: headless --patch [^ ]+ --approval-policy never" <<<"${output}"
+  launcher_help="$(dsh --help 2>&1)"
+  app_help="$(dsh headless --help 2>&1)"
+  grep -qE -- "(^|[[:space:]])--patch([[:space:],=]|$)" <<<"${launcher_help}" || {
+    printf 'the installed dsh lists %s nowhere\n' --patch
+    return 1
+  }
+  grep -qE -- "(^|[[:space:]])--approval-policy([[:space:],=]|$)" <<<"${app_help}" || {
+    printf 'the installed dsh lists %s nowhere\n' --approval-policy
+    return 1
+  }
 }
