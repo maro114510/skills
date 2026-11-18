@@ -74,7 +74,7 @@ If any of the first four is missing, end without changing anything and say which
 5. Read `<skills-root>/implement/SKILL.md` and follow it with `<task>` as its arguments, saying that the worktree is `<worktree>` and the base branch is `<base>`. It returns Busy, Questions, or Built as its first line, `IMPLEMENT: busy`, `IMPLEMENT: questions`, or `IMPLEMENT: built`, and never asks.
    `<task>` is `Implement GitHub Issue #<issue> in <repo>.` for a new task, or `Repair PR #<pr> for GitHub Issue #<issue> in <repo>.` followed by every present item for a repair. Append the answers from step 3 as the user's decisions.
 6. Act on what implement returned:
-   - Busy: push nothing and end with `RESULT: none` naming the owner it printed.
+   - Busy: push nothing and end with `RESULT: none` naming the branch it printed.
    - Questions: write the Questions implement returned with `oe question` as below, push nothing, and end.
    - Neither Result, because implement stopped before committing its work: push nothing and end.
    - Built: go to step 7, even when Built lists `Unsatisfied:` lines, because an unsatisfied criterion is no reason to end without pushing: the Verifier judges it.
