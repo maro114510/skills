@@ -12,9 +12,7 @@ Today, agents take an Issue to a verified PR with TDD, a separate-context self-r
 
 ## Install
 
-Each install below resolves a release the owner has already run, not whatever merged last.
-`main` is the owner's early-access track: the owner runs it before releasing, so it can be ahead of the latest release.
-Leaving the version out of an APM or npx command installs `main`.
+Each install below resolves a release the owner has already run. The owner runs `main`, which can be ahead of the latest release.
 
 ### APM
 
