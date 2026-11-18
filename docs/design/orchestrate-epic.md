@@ -165,7 +165,7 @@ For each Issue, oe ready reads this table from the top and outputs the action of
   - Since the latest attempt record, one of these was given
     - An answer to the latest question, by a trusted user's comment or recorded through oe
     - A Changes requested review that covers the PR's head SHA
-    - A review-thread comment that is its thread's last comment, in a thread that is unresolved and not outdated
+    - A review-thread comment that is engineer input and its thread's last comment, in a thread that is unresolved and not outdated
   - A bot finding written since the latest attempt record
 - Bot rounds
   - Each bot gets one round per claim
