@@ -53,7 +53,21 @@ opencode_stub() {
   printf 'if [ "$1 $2" = "run --help" ]; then printf "%s\\n"; exit 0; fi\n%s' "${help}" "$2"
 }
 
-# Prints the flags in the opencode argv echoed as `ARGS: ...` by the stub, one per line.
+# Prints a stub DSH body that answers \`headless --help\` as DSH $1 would, then runs $2.
+# present lists --permission-mode, which the review pins; absent omits it.
+dsh_stub() {
+  local help
+  case "$1" in
+  present) help='      --permission-mode <preset>  select a configured permission preset for this task' ;;
+  absent) help='      --json                     write newline-delimited run events to stdout' ;;
+  esac
+  # shellcheck disable=SC2016 # expanded by the stub, not here
+  printf '%s' "if [ \"\$1 \$2\" = \"headless --help\" ]; then echo '${help}'; exit 0; fi
+${2}
+"
+}
+
+# Prints the flags in the opencode argv echoed as \`ARGS: ...\` by the stub, one per line.
 argv_flags() {
   local argv arg
   argv="$(sed -n 's/^ARGS: //p' <<<"${output}")"
@@ -585,4 +599,106 @@ run_scope_stub() {
   run bash "${target}" gemini "$(new_repo)"
   [ "${status}" -eq 2 ]
   [ -z "$(result_line)" ]
+}
+
+# DSH runs the review as one headless task. Its profile default allows writes, so the review pins the
+# read-only preset, and a CLI that cannot pin one fails closed. It has no built-in review and ends a
+# turn when a step stops without a tool call, so it takes OpenCode's prompt and verdict line.
+
+@test "dsh runs the review read-only without approval prompts" {
+  # shellcheck disable=SC2016 # expanded by the stub, not here
+  run_stub "$(dsh_stub present 'echo "ARGS: $*"; echo "REVIEW_VERDICT: none"')" '' dsh
+  [ "${status}" -eq 0 ]
+  grep -qF -- "ARGS: headless --permission-mode read-only --approval-policy never Review the uncommitted changes." <<<"${output}"
+}
+
+@test "dsh without --permission-mode fails before the review runs" {
+  # shellcheck disable=SC2016 # expanded by the stub, not here
+  run_stub "$(dsh_stub absent 'echo "ARGS: $*"')" '' dsh
+  [ "${status}" -eq 1 ]
+  if grep -qF -- "ARGS:" <<<"${output}"; then return 1; fi
+  grep -qF -- "Unsupported DSH CLI" <<<"${output}"
+  has_line "REVIEWER_EXIT=unsupported"
+}
+
+@test "missing dsh reports the probe's exit code" {
+  if PATH=/usr/bin:/bin command -v dsh >/dev/null; then skip "dsh is on the system PATH"; fi
+  run env TMPDIR="${work}" PATH=/usr/bin:/bin bash "${target}" dsh "$(new_repo)"
+  [ "${status}" -eq 1 ]
+  has_line "REVIEWER_EXIT=127"
+}
+
+@test "dsh asks the reviewer to end with a verdict line" {
+  # shellcheck disable=SC2016 # expanded by the stub, not here
+  run_stub "$(dsh_stub present 'echo "ARGS: $*"; echo "REVIEW_VERDICT: none"')" '' dsh
+  [ "${status}" -eq 0 ]
+  grep -qF -- "REVIEW_VERDICT: findings" <<<"${output}"
+  grep -qF -- "never end a turn with a progress message" <<<"${output}"
+}
+
+@test "dsh narration without a verdict exits 5 and reports status=incomplete" {
+  # shellcheck disable=SC2016 # expanded by the stub, not here
+  run_stub "$(dsh_stub present 'echo "Diff review done, now checking the tests."; echo "reviewer log line" >&2')" '' dsh
+  [ "${status}" -eq 5 ]
+  has_line "REVIEWER_NO_VERDICT"
+  [[ "$(result_line)" == "SELF_REVIEW status=incomplete "* ]]
+}
+
+@test "dsh verdict followed by more text exits 5" {
+  # shellcheck disable=SC2016 # expanded by the stub, not here
+  run_stub "$(dsh_stub present 'echo "REVIEW_VERDICT: none"; echo "Now checking gofmt."')" '' dsh
+  [ "${status}" -eq 5 ]
+  [[ "$(result_line)" == "SELF_REVIEW status=incomplete "* ]]
+}
+
+@test "dsh REVIEW_VERDICT: none exits 0 and reports verdict=none" {
+  # shellcheck disable=SC2016 # expanded by the stub, not here
+  run_stub "$(dsh_stub present 'echo "REVIEW_VERDICT: none"')" '' dsh
+  [ "${status}" -eq 0 ]
+  [[ "$(result_line)" == "SELF_REVIEW status=reviewed "*" verdict=none" ]]
+}
+
+@test "dsh reviewer writing a file exits 3" {
+  # shellcheck disable=SC2016 # expanded by the stub, not here
+  run_stub "$(dsh_stub present 'touch pwned.txt')" '' dsh
+  [ "${status}" -eq 3 ]
+  has_line "REVIEWER_CHANGED_WORKTREE"
+}
+
+@test "dsh names the committed range in the review message" {
+  # shellcheck disable=SC2016 # expanded by the stub, not here
+  run_range_stub "$(dsh_stub present 'echo "ARGS: $*"; echo "REVIEW_VERDICT: none"')" dsh
+  [ "${status}" -eq 0 ]
+  grep -qF -- "Review the committed changes in ${mb}..HEAD." <<<"${output}"
+  if grep -qF -- "uncommitted" <<<"${output}"; then return 1; fi
+}
+
+@test "dsh scope review keeps the request, the read-only pin, and the verdict line" {
+  # shellcheck disable=SC2016 # expanded by the stub, not here
+  run_scope_stub "$(dsh_stub present 'echo "ARGS: $*"; echo "REVIEW_VERDICT: none"')" dsh \
+    "$(request_file 'Add a --dry-run flag to deploy.sh')"
+  [ "${status}" -eq 0 ]
+  grep -qF -- "ARGS: headless --permission-mode read-only --approval-policy never" <<<"${output}"
+  has_line "Add a --dry-run flag to deploy.sh"
+  grep -qF -- "Apply YAGNI ruthlessly" <<<"${output}"
+  grep -qF -- "REVIEW_VERDICT: findings" <<<"${output}"
+  [[ "$(result_line)" == "SELF_REVIEW status=reviewed range=${mb}..$(git rev-parse HEAD) "*" verdict=none" ]]
+}
+
+@test "dsh uses only flags the installed CLI accepts" {
+  local real help_text
+  real="$(command -v dsh)" || skip "dsh is not installed"
+  # shellcheck disable=SC2016 # expanded by the stub, not here
+  run_stub "if [ \"\$1 \$2\" = \"headless --help\" ]; then exec '${real}' \"\$@\"; fi
+echo \"ARGS: \$*\"
+echo \"REVIEW_VERDICT: none\"" '' dsh
+  [ "${status}" -eq 0 ]
+  grep -qF -- "ARGS: headless --permission-mode read-only --approval-policy never" <<<"${output}"
+  help_text="$(dsh headless --help 2>&1)"
+  for arg in --permission-mode --approval-policy; do
+    grep -qE -- "(^|[[:space:]])${arg}([[:space:],=]|$)" <<<"${help_text}" || {
+      printf 'the installed dsh rejects %s\n' "${arg}"
+      return 1
+    }
+  done
 }
