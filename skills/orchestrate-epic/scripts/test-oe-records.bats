@@ -464,6 +464,24 @@ JSON
   [ -z "${output}" ]
 }
 
+@test "oe forget is no longer a subcommand, so it exits 2 and drops no record" {
+  github <<'JSON'
+{
+  "issues": [{"number": 5, "closed": true}]
+}
+JSON
+  records 5 claim@07:00
+
+  run --separate-stderr bash "${oe}" forget o/r 1
+
+  [ "${status}" -eq 2 ]
+  case "${stderr}" in
+  *"Usage: oe"*) ;;
+  *) return 1 ;;
+  esac
+  [ "$(records_of 5)" = '{"kind":"claim","at":"2027-01-15T07:00:00Z"}' ]
+}
+
 # oe forget
 
 @test "forgetting an Epic whose child Issues are all closed drops their records and keeps every other Issue's" {
