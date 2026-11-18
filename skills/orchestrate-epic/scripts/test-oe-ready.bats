@@ -1409,6 +1409,56 @@ JSON
   [ "$(action_of 5)" = wait-merge ]
 }
 
+@test "a Changes requested review of an older head starts no Owner" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{
+      "number": 50, "opened": "07:00", "pushed": "07:40",
+      "head_sha": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "checks": {"test": "success"}, "verdicts": ["success"],
+      "reviews": [{"by": "MEMBER", "at": "07:20",
+        "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "body": "Rename this"}]
+    }]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:10
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-merge ]
+}
+
+@test "a Changes requested review of an older head does not keep the Issue parked" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{
+      "number": 50, "opened": "07:00", "pushed": "07:40",
+      "head_sha": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "checks": {"test": "success"}, "verdicts": ["success"],
+      "reviews": [{"by": "MEMBER", "at": "07:35",
+        "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "body": "Rename this"}]
+    }]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:10 attempt@07:20 attempt@07:30
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-merge ]
+}
+
 @test "a trusted review-thread comment after the latest attempt gets an Owner" {
   github <<'JSON'
 {
