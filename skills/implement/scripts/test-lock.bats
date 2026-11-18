@@ -17,10 +17,11 @@ setup() {
   git -C "${repo}" remote add origin "${origin}"
   git -C "${repo}" push -q origin main
   cd "${repo}" || return 1
-  # The fake gh answers from files in ${gh_dir}: the number of merged pull requests of the branch, and the Issue's state.
+  # The fake gh answers from files in ${gh_dir}: the head commits of the branch's merged pull requests, one per line,
+  # and the Issue's state.
   gh_dir="${work}/gh"
   mkdir -p "${work}/bin" "${gh_dir}"
-  echo 0 >"${gh_dir}/merged"
+  : >"${gh_dir}/merged"
   echo OPEN >"${gh_dir}/state"
   cat >"${work}/bin/gh" <<'GH'
 #!/usr/bin/env bash
@@ -90,7 +91,7 @@ origin_head_of() {
 
 @test "returns the merged signal when the branch's pull request merged and the Issue is open" {
   branch_on_origin
-  echo 1 >"${gh_dir}/merged"
+  origin_head_of feat/issue-7 >"${gh_dir}/merged"
   run bash "${target}" 7 main
   [ "${status}" -eq 10 ]
   [[ "${output}" == *"branch=feat/issue-7"* ]]
@@ -98,7 +99,7 @@ origin_head_of() {
 
 @test "returns Busy for a merged branch whose Issue is closed" {
   branch_on_origin
-  echo 1 >"${gh_dir}/merged"
+  origin_head_of feat/issue-7 >"${gh_dir}/merged"
   echo CLOSED >"${gh_dir}/state"
   run bash "${target}" 7 main
   [ "${status}" -eq 20 ]
@@ -129,4 +130,28 @@ origin_head_of() {
   [ "${prefix}" = "feat/issue-" ]
   run bash "${target}" 7 main
   [ "${output}" = "locked	${prefix}7" ]
+}
+
+@test "returns Busy when another run creates the branch at the same head after this run read it as absent" {
+  real_git="$(command -v git)"
+  # The other run's push lands between this run's read and its own push.
+  cat >"${work}/bin/git" <<WRAP
+#!/usr/bin/env bash
+if [ "\$1" = push ] && [ ! -e "${work}/raced" ]; then
+  : >"${work}/raced"
+  "${real_git}" push -q origin main:refs/heads/feat/issue-7
+fi
+exec "${real_git}" "\$@"
+WRAP
+  chmod +x "${work}/bin/git"
+  run bash "${target}" 7 main
+  [ "${status}" -eq 20 ]
+  [[ "${output}" == *"branch=feat/issue-7"* ]]
+}
+
+@test "returns Busy for a recreated branch whose name an earlier merged pull request also had" {
+  branch_on_origin
+  echo 1111111111111111111111111111111111111111 >"${gh_dir}/merged"
+  run bash "${target}" 7 main
+  [ "${status}" -eq 20 ]
 }
