@@ -299,7 +299,7 @@ EOF
   git config --global skills.bot.helper bot-helper
   git config --global "http.https://github.com/maro/x.git.extraheader" "Authorization: Basic OWNER"
 
-  run bash -c 'cd "$1" && source "$2" && bot_git fetch --quiet origin "+refs/heads/main:refs/babysit/x"' _ "${clone}" "${script}"
+  run bash -c 'cd "$1" && source "$2" && bot_git fetch --quiet origin "+refs/heads/main:refs/oe/x"' _ "${clone}" "${script}"
   [ "${status}" -ne 0 ]
   [[ "${output}" == *"authorization header"* ]]
 }

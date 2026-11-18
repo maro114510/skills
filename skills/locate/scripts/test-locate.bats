@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 # Tests for locate.sh against a local repository with real worktrees. GitHub is faked: gh is a stub on
-# PATH, and LOCATE_PR_STATE points at a stub that prints babysit's normalized pull request JSON.
+# PATH, and LOCATE_PR_STATE points at a stub that prints pr-state.sh's normalized pull request JSON.
 # shellcheck disable=SC2292 # bats fails a test on a mid-test `[[ ]]` only under bash 4.1+; `[ ]` works on every bash.
 
 setup() {
@@ -28,7 +28,7 @@ worktree_on() {
   git -C "${repo}" worktree add -q -b "$1" "$2"
 }
 
-# Fakes babysit's pr-state.sh: pull request 7 of o/r in state $1 with head branch $2, from a fork when $3 is
+# Fakes pr-state.sh: pull request 7 of o/r in state $1 with head branch $2, from a fork when $3 is
 # true. One review thread is unresolved and one resolved; one check failed, one waits for a required action,
 # one passed, and one is still running.
 pr_state() {

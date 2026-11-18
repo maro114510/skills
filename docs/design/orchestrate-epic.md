@@ -340,7 +340,7 @@ oe keeps the facts of a run as they are and never scores them. These viewpoints 
 | Bot replies | Never count, because anyone can make a bot reply on a public repository |
 | Bot rounds | One per bot per claim, so a bot and the Owner never chase each other and a slower bot still gets its round |
 | Recording a round | oe attempt records it before the Owner starts, so an Owner that ends early cannot restart a chase |
-| Other automations on its PRs | pr-owner writes the line `<!-- automation-owner: orchestrate-epic -->` near the end of each PR body, the owner line that babysit's `pr-state.sh` reads, so babysit neither pushes nor replies there. Its replies would otherwise read as engineer input. oe never reads the line, so deleting it while oe still works on the Issue lets two writers act |
+| Other automations on its PRs | pr-owner writes the line `<!-- automation-owner: orchestrate-epic -->` near the end of each PR body, the owner line that `pr-state.sh` reads, so an automation that honors it neither pushes nor replies there. Its replies would otherwise read as engineer input. oe never reads the line, so deleting it while oe still works on the Issue lets two writers act |
 | Re-review request | One PR comment of `<!-- oe:rereview -->` and `@coderabbitai review` or `@codex review`. The marker keeps it from counting as engineer input |
 | Bot findings after approval | Start nothing, so the AI never pushes onto a head being merged |
 | Attempts | An attempt is an Owner start that pushed: the branch head read later differs from the head the start recorded, and no agent's report decides it. A start without a push spends none, so an outage, a start that finds nothing to change, or a question never spends an attempt |

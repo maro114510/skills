@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Prints one pull request as normalized JSON from GitHub GraphQL, paginated so nothing is truncated.
-# It keeps no state and judges nothing; evaluate.jq does that.
+# It keeps no state and judges nothing.
 # Usage: pr-state.sh <owner/repo> <pr>
 #        pr-state.sh --normalize <file|->   normalize one saved, complete response of the same query
 # Output fields: repo, number, url, state, isDraft, author, viewer, isCrossRepository, baseRef,

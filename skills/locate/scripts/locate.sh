@@ -8,13 +8,13 @@
 #   An Issue adds stateReason.
 # Candidate branches: a pull request's head branch; for an Issue, the branches GitHub links to it in this
 # repository. A fork's branch never matches a worktree here.
-# Pull request state comes from babysit's pr-state.sh, which pages every thread and check; LOCATE_PR_STATE
+# Pull request state comes from pr-state.sh next to this file, which pages every thread and check; LOCATE_PR_STATE
 # overrides its path.
 # Exit: 0 printed, 1 GitHub could not be read, 2 usage error, 3 the URL belongs to another repository than origin.
 set -uo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-pr_state="${LOCATE_PR_STATE:-${script_dir}/../../babysit/scripts/pr-state.sh}"
+pr_state="${LOCATE_PR_STATE:-${script_dir}/pr-state.sh}"
 
 usage() {
   echo "locate: $1" >&2
@@ -49,7 +49,7 @@ if [[ "$(lower "${origin_repo}")" != "$(lower "${repo}")" ]]; then
 fi
 
 if [[ "${kind}" == pull ]]; then
-  [[ -r "${pr_state}" ]] || fail "babysit's pr-state.sh is required at ${pr_state}"
+  [[ -r "${pr_state}" ]] || fail "pr-state.sh is required at ${pr_state}"
   state="$(bash "${pr_state}" "${repo}" "${num}")" || fail "cannot read pull request ${repo}#${num}"
   branches="$(jq -r '.headRef' <<<"${state}")" || fail "unexpected pull request state"
   info="$(jq -c '{kind: "pr", repo, number, url, state, isDraft, isCrossRepository,
