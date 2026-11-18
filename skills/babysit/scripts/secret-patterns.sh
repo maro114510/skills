@@ -1,1 +1,0 @@
-../../shared/secret-patterns.sh

@@ -52,7 +52,6 @@ gh skill install maro114510/skills --all --agent claude-code --scope user
 
 | Skill | Goal |
 |---|---|
-| `babysit` | Drive your own pull request by fixing and pushing CI failures, review feedback, and conflicts, without waking the model until checks, comments, or readiness change; any other pull request gets one state report. |
 | `commit` | Commit the working tree with a Conventional Commits message, leaving suspected secrets out. |
 | `create-github-issues` | Turn a plan or TODO list into an Epic Issue with linked child Issues. |
 | `create-pr` | Create a pull request with a useful description. |
