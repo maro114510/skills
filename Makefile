@@ -15,9 +15,7 @@ help: ## Show available commands.
 next-version: check-version ## Show the next SemVer inferred from Conventional Commits.
 	@last_tag="$$(git describe --tags --match 'v[0-9]*' --abbrev=0 2>/dev/null || true)"; \
 	if [ -z "$$last_tag" ]; then \
-		printf '%s\n' 'No v* release tag found. Create the baseline tag first:'; \
-		printf '%s\n' '  git tag -a v0.27.0 -m v0.27.0'; \
-		printf '%s\n' '  git push origin v0.27.0'; \
+		printf '%s\n' 'No v* release tag found.'; \
 		exit 1; \
 	fi; \
 	range="$$last_tag..HEAD"; \
