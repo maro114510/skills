@@ -5,7 +5,7 @@
 # | Path under the state directory | Holds | Written by |
 # |---|---|---|
 # | locks.git | One ref per Epic that a session holds | oe lock; read by oe status through lock_held |
-# | records/<repo-key>/<issue>.jsonl | One Issue's records, oldest first, one JSON object per line | oe claim, oe attempt, oe start, oe update, oe verdict; dropped by oe forget |
+# | records/<repo-key>/<issue>.jsonl | One Issue's records, oldest first, one JSON object per line | oe claim, oe attempt, oe start, oe update, oe verdict |
 # | sessions/<repo-key>/<epic>.jsonl | One line for each time a session took the Epic's lock, oldest first: the time, the checkout, and the session ID when the harness gave one | oe lock, after it takes the lock |
 # | boards/<repo-key>/<epic> | The Herdr pane of the Epic's board and the server it is on, as JSON | oe board, which overwrites it |
 # | waits/<repo-key>/<epic> | The process ID and start time of the Epic's running oe wait | oe wait, which writes it only while no other wait runs and drops it when it ends on its own; oe lock release, and an acquire by another session, stop that process |
@@ -13,7 +13,7 @@
 #
 # - The state directory is OE_STATE_DIR when set, and orchestrate-epic under XDG_STATE_HOME or ~/.local/state otherwise.
 #   Either default lies outside every checkout, so no agent's worktree ever holds the state.
-# - An Issue has at most one parent Epic, so its records are keyed by repository and Issue, and oe forget drops an Epic's by its child Issues.
+# - An Issue has at most one parent Epic, so its records are keyed by repository and Issue.
 #
 # | Record | Fields |
 # |---|---|
@@ -101,18 +101,6 @@ records_add() {
   rm -f "${tmp}"
   echo "cannot write the record to ${file}" >&2
   return 1
-}
-
-# Drops every record of Issue $2 in repository $1, and the repository's directory once it holds no Issue.
-# Returns 1 with the reason on stderr when the file stays.
-records_drop() {
-  local file
-  file="$(record_path "$1" "$2")" || return 1
-  rm -f "${file}" 2>/dev/null && [[ ! -e "${file}" ]] || {
-    echo "cannot remove ${file}" >&2
-    return 1
-  }
-  rmdir "${file%/*}" 2>/dev/null || true
 }
 
 # Prints the session ID the harness set, or nothing when it set none.

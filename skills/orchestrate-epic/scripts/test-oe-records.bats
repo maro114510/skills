@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# Tests for the oe subcommands that write, read, and drop records: claim, attempt, records, forget, and question.
+# Tests for the oe subcommands that write and read records: claim, attempt, records, and question.
 #
 # - Each test writes the GitHub state it needs as JSON and the host-local records it needs, then runs oe against them.
 # - testdata/fake-gh.sh stands in for gh, answers every read from that state, and applies every write to it.
@@ -464,47 +464,7 @@ JSON
   [ -z "${output}" ]
 }
 
-# oe forget
-
-@test "forgetting an Epic whose child Issues are all closed drops their records and keeps every other Issue's" {
-  github <<'JSON'
-{
-  "issues": [{"number": 5, "closed": true}, {"number": 6, "closed": true}]
-}
-JSON
-  records 5 claim@07:00 attempt@07:01
-  records 6 claim@07:10
-  records 9 claim@07:20
-
-  run bash "${oe}" forget o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ ! -e "$(record_file 5)" ]
-  [ ! -e "$(record_file 6)" ]
-  [ "$(records_of 9)" = '{"kind":"claim","at":"2027-01-15T07:20:00Z"}' ]
-}
-
-@test "forgetting an Epic with an open child Issue exits 4 and drops nothing" {
-  github <<'JSON'
-{
-  "issues": [{"number": 5, "closed": true}, {"number": 6}]
-}
-JSON
-  records 5 claim@07:00
-  records 6 claim@07:10
-
-  run --separate-stderr bash "${oe}" forget o/r 1
-
-  [ "${status}" -eq 4 ]
-  case "${stderr}" in
-  *"#6"*) ;;
-  *) return 1 ;;
-  esac
-  [ "$(records_of 5)" = '{"kind":"claim","at":"2027-01-15T07:00:00Z"}' ]
-  [ "$(records_of 6)" = '{"kind":"claim","at":"2027-01-15T07:10:00Z"}' ]
-}
-
-@test "a failed read of the child Issues drops nothing" {
+@test "oe forget is no longer a subcommand, so it exits 2 and drops no record" {
   github <<'JSON'
 {
   "issues": [{"number": 5, "closed": true}]
@@ -512,9 +472,13 @@ JSON
 JSON
   records 5 claim@07:00
 
-  GH_FAIL=sub_issues run --separate-stderr bash "${oe}" forget o/r 1
+  run --separate-stderr bash "${oe}" forget o/r 1
 
-  [ "${status}" -eq 1 ]
+  [ "${status}" -eq 2 ]
+  case "${stderr}" in
+  *"Usage: oe"*) ;;
+  *) return 1 ;;
+  esac
   [ "$(records_of 5)" = '{"kind":"claim","at":"2027-01-15T07:00:00Z"}' ]
 }
 

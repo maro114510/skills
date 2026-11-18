@@ -14,7 +14,6 @@
 # | ref | Branch name | The head of that branch |
 # | comments | Issue number | The comments on that Issue, oldest first |
 # | issue_rest | Issue number | The REST read of one Issue, with its number and body |
-# | sub_issues | Epic number | The child Issues, each with its number and state |
 # | checks | Commit SHA and cursor, as SHA:CURSOR | The page of checks on that commit after the cursor |
 # | compare | Two commits, as BASE...HEAD | Whether HEAD contains BASE: ahead when it does, and diverged when it does not |
 #
@@ -199,9 +198,6 @@ def issue_rest($n):
   [.issues[] | select(.number == $n)] | first // error("Issue #\($n) not found")
   | {number, body: (.body // "")};
 
-def sub_issues:
-  [.issues[] | {number, state: (if .closed then "closed" else "open" end)}];
-
 # The page of checks after the cursor $after on the pull request head $oid.
 def checks_response($oid; $after):
   ([.issues[].pull_requests[]? | select(read_sha == $oid)] | first // error("unknown commit \($oid)")) as $commit
@@ -228,7 +224,6 @@ $state
   elif $call == "ref" then branch_head($arg)
   elif $call == "comments" then issue_comments($arg | tonumber)
   elif $call == "issue_rest" then issue_rest($arg | tonumber)
-  elif $call == "sub_issues" then sub_issues
   elif $call == "checks" then ($arg | split(":")) as [$oid, $after] | checks_response($oid; $after | tonumber)
   elif $call == "compare" then ($arg | split("...")) as [$base, $head] | compare_response($base; $head)
   else error("unknown call \($call)") end

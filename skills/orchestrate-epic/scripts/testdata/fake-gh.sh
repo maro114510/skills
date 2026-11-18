@@ -27,7 +27,6 @@
 # | api repos/o/r/git/ref/heads/BRANCH | ref BRANCH |
 # | api repos/o/r/issues/N/comments | comments N |
 # | api repos/o/r/issues/N | issue_rest N |
-# | api repos/o/r/issues/N/sub_issues | sub_issues N |
 # | api user | user |
 # | api installation/repositories | installation |
 # | api -X POST repos/o/r/git/refs | the write create_ref |
@@ -156,10 +155,6 @@ graphql)
 */issues/*/comments*)
   n="${path#*/issues/}"
   call=comments arg="${n%%/*}"
-  ;;
-*/issues/*/sub_issues*)
-  n="${path#*/issues/}"
-  call=sub_issues arg="${n%%/*}"
   ;;
 */issues/*) call=issue_rest arg="${path#*/issues/}" ;;
 */compare/*)
