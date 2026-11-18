@@ -45,7 +45,7 @@ npx --yes skills add 'maro114510/skills#v1.2.0' --agent claude-code --skill '*' 
 It installs the latest release.
 
 ```sh
-gh skill install maro114510/skills --agent claude-code --scope user
+gh skill install maro114510/skills --all --agent claude-code --scope user
 ```
 
 ## Skills
