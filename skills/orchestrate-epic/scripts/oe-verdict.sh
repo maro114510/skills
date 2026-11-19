@@ -18,6 +18,9 @@
 # 2. The verify_context status on the SHA.
 #    oe ready reads it as the verdict.
 #
+# A success verdict whose findings hold no `-> [behavior]` or `-> [static]` line is still written as success,
+# and its status description ends with "but nothing was verified". Refusing it would park the Issue.
+#
 # The findings go first, so a verdict never exists without its findings.
 # Findings whose status write failed leave the SHA without a verdict, which oe ready treats as unverified.
 # Nothing goes to a PR or Issue comment.
@@ -95,7 +98,12 @@ record="$(jq -cn --arg at "${at}" --arg sha "${sha}" --arg state "${state}" --ar
 records_add "${repo}" "${n}" "${record}" 2>"${err}" ||
   fail "recording the findings of Issue #${n} failed, so no verdict was written: $(head -n1 "${err}")"
 
+description="Verifier ${state} on PR #${pr}"
+if [[ "${state}" == success ]] && ! grep -Eq -- '->[[:space:]]*\[(behavior|static)\]' <<<"${findings}"; then
+  description="${description}, but nothing was verified"
+fi
+
 gh api -X POST "repos/${repo}/statuses/${sha}" -f state="${state}" -f context="${verify_context}" \
-  -f description="Verifier ${state} on PR #${pr}" --jq '.state' >/dev/null 2>"${err}" ||
+  -f description="${description}" --jq '.state' >/dev/null 2>"${err}" ||
   fail "recorded the findings, but writing the ${verify_context} status on ${sha} failed: $(head -n1 "${err}")"
 printf 'verdict\t%s\t%s\n' "${state}" "${sha}"
