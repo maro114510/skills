@@ -5,7 +5,7 @@ description: >
   Analyzes the diff to infer type, scope, and intent.
   It never asks: it resolves its own findings and reports what it did, excluded, or flagged.
   Called by create-pr and implement when they need to commit changes.
-  Can also be invoked directly with phrases like "commit this," "write a commit message," or "commit these changes."
+  Can also be invoked directly with phrases like "commit this" or "commit these changes."
 argument-hint: "[optional hint, e.g. an issue number or message override]"
 ---
 
