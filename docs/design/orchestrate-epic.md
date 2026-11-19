@@ -40,7 +40,7 @@ oe starts no agent, edits no code, never merges a PR, and never writes to a PR's
 | oe wait | Blocks until oe ready's next actions change, reading GitHub as Polling and Rate limit under Decisions say | nothing |
 | oe hold | Records that an Issue waits on the person, with the reason oe ready gave | An Issue comment |
 | oe brief | Builds the brief handed to an Owner or a Verifier | nothing |
-| oe worktree | Creates an agent's worktree outside the shared checkout, on the Issue branch for an Owner and detached at its head for a Verifier, and removes it after the agent ends | A local worktree |
+| oe worktree | Creates an agent's worktree outside the shared checkout, on the Issue branch for an Owner and detached at its head for a Verifier, and removes it after the agent ends. When origin has no Issue branch, it creates the branch locally from the base branch, and the Owner's first push creates it on origin | A local worktree and branch |
 | oe question | Writes an Owner's question in a fixed format, and records the answer the person gives in the session's conversation | An Issue comment for a question or an answer, and an answer's decision in the Issue body's decisions section |
 | oe verdict | Writes a Verifier's verdict, and its findings when the verdict fails or holds an unconfirmed criterion | A commit status on the SHA, and a PR comment for the findings |
 
@@ -51,7 +51,7 @@ oe starts no agent, edits no code, never merges a PR, and never writes to a PR's
 - Updates a PR's branch with the base branch through GitHub when it needs a merged sibling PR
 - Stops the session
 - Approves and merges the PR
-- Deletes an Issue's branch so the AI starts it over
+- Deletes an Issue's branch and answers its hold in the session, so the AI starts it over
 - Removes or replaces a dependency that was closed as not planned or duplicate
 
 ## Invariants
@@ -85,16 +85,17 @@ flowchart TB
   Blocked -->|"A dependency closed as not planned or duplicate"| Person
   Owner -->|"Question"| Person["Waiting on the person"]
   Owner -->|"Push"| CI["Waiting for CI"]
-  Owner -->|"Marker expires with no push"| Person
+  Owner -->|"Marker expires with no PR push"| Person
   CI -->|"Success"| Verify["Verifier working"]
   CI -->|"Failed check, fewer than 3 failed commits"| Owner
   CI -->|"Failed check on the 3rd failed commit, or no checks after 10 minutes"| Person
   Verify -->|"Success"| Merge["Waiting for the merge"]
   Verify -->|"Failure, or marker expires with no verdict"| Person
-  Merge -->|"Repair signal"| Owner
+  Merge -->|"Repair signal, fewer than 3 failed commits"| Owner
+  Merge -->|"Repair signal on the 3rd failed commit"| Person
   Merge -->|"Engineer merges"| Done["Done"]
   Person -->|"Answer in the session"| Owner
-  Person -->|"Engineer deletes the branch"| Blocked
+  Person -->|"Engineer deletes the branch and answers"| Blocked
 ```
 
 For each Issue, oe ready reads this table from the top and outputs the action of the first row that matches. It never reads the default branch's checks, so a failure on the default branch holds no Issue, and a PR failure the base causes is a failed check like any other. An Issue whose PR moved during the read matches no row: it gets read-again, which starts no agent and keeps the loop running.
@@ -120,9 +121,10 @@ For each Issue, oe ready reads this table from the top and outputs the action of
   - The Issue waits on the person at row 2 until the session records an answer
 - Working marker
   - One hidden line at the end of the Issue body, holding the role, the start time, the SHA for a Verifier, and the session ID only for a person to trace
-  - An Owner's marker gives its result when the branch gets a push or the Issue gets a question after the start time
+  - An Owner's marker gives its result when an open PR from the branch has a head pushed after the start time, or the Issue gets a question after it
   - A Verifier's marker gives its result when its SHA gets a verdict
   - A marker is live until it gives its result or 2 hours pass since its start time, and expired with no result after that
+  - An answer newer than a marker ends it, so the answer starts the next agent instead of holding the Issue again
 - Repair signals
   - No PR exists yet
   - The PR conflicts with the base branch
@@ -203,7 +205,7 @@ sequenceDiagram
 | Signals that start a repair Owner | Only the repair signals above. Plain PR comments and review bots start nothing |
 | A failure verdict | Holds the Issue for the person and never starts an Owner by itself |
 | Repair cap | 3 commits of the PR with a failed check, counted from the latest answer, so the person's answer gives the Issue 3 more |
-| A start with no result | Holds the Issue at once, and never starts the agent again by itself |
+| A start with no result | Holds the Issue when its marker expires with no result, and never starts the agent again by itself |
 | The default branch's checks | oe ready does not read them. A check run by changed paths shows only what the head commit triggered, so a gate on it missed a broken base and held Issues for checks no child PR runs |
 | Waiting | The session waits in oe wait until oe ready's next actions change or an agent it started ends. It ends only when the Epic is done or a person stops it, never after an idle time, failed reads, or every remaining Issue waiting on the person |
 | Agents running at once | 3 Owners and Verifiers combined per session by default, set by the skill's `max-agents` argument |
