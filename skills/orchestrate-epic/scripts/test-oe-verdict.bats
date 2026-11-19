@@ -193,3 +193,58 @@ JSON
   esac
   [ -z "$(verdicts_on "${head_of_pr_15}")" ]
 }
+
+# Prints the description of the newest oe/verify status written on SHA $1.
+description_on() {
+  statuses_on "$1" | jq -r '.[0].description'
+}
+
+@test "a success verdict whose findings hold only manual lines is written as success and says nothing was verified" {
+  pr_15_passed_checks
+
+  run bash "${oe}" verdict o/r 5 "${head_of_pr_15}" success <<<"criterion 1 -> manual: needs a person to look at the screen"
+
+  [ "${status}" -eq 0 ]
+  [ "$(verdicts_on "${head_of_pr_15}")" = success ]
+  [ "$(description_on "${head_of_pr_15}")" = "Verifier success on PR #15, but nothing was verified" ]
+  run bash "${oe}" ready o/r 1
+  [ "$(action_of 5)" = wait-merge ]
+}
+
+@test "a success verdict whose findings hold only none lines is written as success and says nothing was verified" {
+  pr_15_passed_checks
+
+  run bash "${oe}" verdict o/r 5 "${head_of_pr_15}" success <<<"criterion 1 -> none"
+
+  [ "${status}" -eq 0 ]
+  [ "$(verdicts_on "${head_of_pr_15}")" = success ]
+  [ "$(description_on "${head_of_pr_15}")" = "Verifier success on PR #15, but nothing was verified" ]
+}
+
+@test "a success verdict with one behavior line among none lines keeps the plain description" {
+  pr_15_passed_checks
+
+  run bash "${oe}" verdict o/r 5 "${head_of_pr_15}" success <<<"criterion 1 -> none
+criterion 2 -> [behavior] ran it; observed ok"
+
+  [ "${status}" -eq 0 ]
+  [ "$(description_on "${head_of_pr_15}")" = "Verifier success on PR #15" ]
+}
+
+@test "a success verdict with one static line keeps the plain description" {
+  pr_15_passed_checks
+
+  run bash "${oe}" verdict o/r 5 "${head_of_pr_15}" success <<<"criterion 1 -> [static] README.md:18"
+
+  [ "${status}" -eq 0 ]
+  [ "$(description_on "${head_of_pr_15}")" = "Verifier success on PR #15" ]
+}
+
+@test "a failure verdict keeps the plain description whatever lines its findings hold" {
+  pr_15_passed_checks
+
+  run bash "${oe}" verdict o/r 5 "${head_of_pr_15}" failure <<<"criterion 1 -> none"
+
+  [ "${status}" -eq 0 ]
+  [ "$(description_on "${head_of_pr_15}")" = "Verifier failure on PR #15" ]
+}
