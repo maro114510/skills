@@ -120,7 +120,8 @@ Pick the first row whose tools you have, by the tool names and parameters you se
 | Harness | Start an agent | Run the wait |
 |---|---|---|
 | Claude Code: `Agent` tool | `Agent` with `run_in_background: true`. A plugin install registers the agent as `skills:pr-owner` or `skills:pr-verify`; use the bare name when only that resolves | Bash with `run_in_background: true` |
-| OpenCode V2: `subagent` tool | `subagent` with `agent` set to the agent type and `background: true` | `shell` with `background: true` |
+| OpenCode V2: `subagent` tool with an `agent` parameter | `subagent` with `agent` set to the agent type and `background: true` | `shell` with `background: true` |
+| DSH: `subagent` tool without an `agent` parameter | `subagent` with `name` set to `<role>-<n>`, `<role>` being `owner` or `verifier` and `<n>` the Issue number, `description` naming the role and the Issue, and `prompt` set to exactly what `oe start` printed. DSH has no agent types, so the prompt alone defines the agent, and the call returns its name at once while it runs in the background | `bash` with `run_in_background: true` |
 | OpenCode V1: `task` tool with a `background` parameter | `task` with `subagent_type` set to the agent type and `background: true` | Foreground `bash` with `timeout` 720000 |
 | OpenCode V1: `task` tool without `background` | Batch: start all of this pass's agents as `task` calls in one message | Foreground `bash` with `timeout` 720000 |
 | Codex: `spawn_agent` tool | `spawn_agent` with `agent_type` set to the agent type, the prompt as `message`, `task_name` set to `<role>_<n>_<now>` with `<role>` `owner` or `verifier`, and `fork_turns: "none"`, or `fork_context: false` where the tool has that parameter instead | Foreground `exec_command`, then poll its session with empty input, up to 30 seconds a poll, until `oe wait` exits |
