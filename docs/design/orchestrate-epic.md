@@ -12,7 +12,7 @@ Each part does one job and stores no state of its own. State lives on GitHub, ex
 
 | Part | Job | Does not | Uses |
 |---|---|---|---|
-| orchestrate-epic session | Started by a person on one Epic. Takes the Epic's lock with oe lock, gets each Issue's next action from oe ready, starts each agent it needs with the oe start command that oe ready prints, up to its `max-agents` argument at once, waits with oe wait until the next actions change or an agent ends, shows each Owner question in its conversation and records the person's answer through oe, and ends only as Waiting under Decisions says | Merge, enable auto-merge, approve, or close anything. Write to GitHub except through oe. Edit code or touch the shared checkout. Decide a next action other than from oe ready. Ask a person a question of its own | oe, pr-owner, pr-verify |
+| orchestrate-epic session | Started by a person on one Epic. Takes the Epic's lock with oe lock, takes it again on every pass of its loop, gets each Issue's next action from oe ready, starts each agent it needs with the oe start command that oe ready prints, up to its `max-agents` argument at once, waits with oe wait until the next actions change or an agent ends, shows each Owner question in its conversation and records the person's answer through oe, and ends only as Waiting under Decisions says | Merge, enable auto-merge, approve, or close anything. Write to GitHub except through oe. Edit code or touch the shared checkout. Decide a next action other than from oe ready. Ask a person a question of its own | oe, pr-owner, pr-verify |
 
 ### Agents
 
@@ -36,11 +36,11 @@ oe starts no agent, edits no code, and never merges a PR. Its only writes to a P
 | Part | Job | Writes to |
 |---|---|---|
 | Host-local record store | Keeps each Issue's claim, attempt, update, run, and verdict records until oe forget drops them, and each Epic's lock, board pane, and running oe wait, as the layout below says | `$OE_STATE_DIR`, or else `$XDG_STATE_HOME/orchestrate-epic` or `~/.local/state/orchestrate-epic` |
-| oe lock | Refuses a second session for the same Epic on the same host while the first one's process runs | The Epic's ref in the lock store |
+| oe lock | Refuses a second session for the same Epic on the same host while the first one holds the lock, as Lock liveness under Decisions says | The Epic's ref in the lock store |
 | oe ready | Reads GitHub and the record store and prints each Issue's next action, with the oe start command for an action that starts an agent, and names each running agent | nothing |
 | oe start | Runs every step that starts an Owner or a Verifier for one Issue, from oe claim to oe brief, records the agent as running, and prints the agent's prompt | What those steps write, and a run record |
 | oe wait | Blocks until oe ready's next actions change, reading GitHub as Polling and Rate limit under Decisions say, and tells the person as Notifications under Decisions says | The record store, and the configured notification command |
-| oe status | Shows each Issue's step, PR, CI result, verdict and failure reason, attempts, running agent, Wait state, and time in step. `--watch` refreshes it until the session holding the Epic's lock ends | nothing |
+| oe status | Shows each Issue's step, PR, CI result, verdict and failure reason, attempts, running agent, Wait state, and time in step. `--watch` refreshes it until no session holds the Epic's lock | nothing |
 | oe board | Inside Herdr with git config `skills.herdr` true, opens a pane that runs `oe status --watch`, or reuses the Epic's pane from an earlier start | A Herdr pane, and the pane's record on this host |
 | oe brief | Builds the brief handed to an Owner or a Verifier, and records each Verifier start before its brief | A pending verify status on the SHA, for a Verifier |
 | oe claim | Creates the Issue's branch and writes a claim record | A branch on origin and the record store |
@@ -297,6 +297,7 @@ sequenceDiagram
 - oe does not scan for secrets
 - A comment the AI forgot to mark is read as engineer input
 - oe lock works only within one host, so a session for the same Epic on another host lets two agents touch the same branch
+- A session that stops for longer than the lease, such as one waiting on a prompt, loses its lock to the next session for the Epic, and a session that was killed holds the Epic until its lease passes
 - Resuming an Epic on another host, or after losing the record store, resets attempt counts, bot rounds, and findings, and earlier engineer input and bot findings count as repair signals again
 - Records carry the host's clock, so clock skew can misorder them against GitHub events
 - A session killed while its agents run leaves them running, and the next session can start a second agent on the same Issue
@@ -344,12 +345,13 @@ sequenceDiagram
 | The board in Herdr | Opt-in with git config `skills.herdr`, read only inside Herdr, so no other run calls herdr and no Herdr user gets a pane unasked |
 | Board start | oe board types the board command into the pane, and the pane's shell runs it only after its startup files finish, so output they print, such as direnv's "is taking a while" warning, comes before the board. The board clears the screen and shows one line before its first read. When the shell has not finished within `board_start_timeout`, oe board exits 1 saying so and records when it sent the command, and a rerun within 10 minutes waits for that start and types nothing again |
 | Board refresh | Every 3 minutes, each refresh reading GitHub through oe ready |
-| Board lifetime | The board stops once the session holding the Epic's lock ends, and leaves its last view. A `--watch` that finds no session holding the lock at its first refresh draws once and stops. A later start reuses its pane when the pane runs the board or sits at its shell's prompt, and never sends input to a pane that runs anything else |
+| Board lifetime | The board stops once no session holds the Epic's lock, and leaves its last view. A `--watch` that finds no session holding the lock at its first refresh draws once and stops. A later start reuses its pane when the pane runs the board or sits at its shell's prompt, and never sends input to a pane that runs anything else |
 | Notifications | oe wait calls the command in git config `skills.notify` with a one-line message and a link for each new item that needs the person: a question, a park, an Issue waiting for a person or for the merge, 3 failed reads in a row, and the session's end with its reason. It calls again every hour while the person has not acted. Herdr is one example setting, and no path is Herdr-only. With no command set, oe notifies nobody |
 | Answers | The person answers in the session's conversation or with a comment on the Issue. The session records an answer from its conversation through oe, so the next Owner reads it on the Issue |
 | Decisions section | An answer recorded through oe appends its decision to a decisions section of the Issue body. The Verifier reads it with the body, and it takes precedence over the criteria it contradicts |
 | Starting agents | Through oe start, which oe ready prints for each line that starts an agent, because a session that lost the skill to a compaction rebuilt the steps from memory and passed the Epic number as the Issue |
 | Waits per Epic | One on each host. A new oe wait stops no other: while one runs, the new one prints oe ready's output and exits at once, because a stopped wait reached the session as a stray completion, and the running wait already returns once an agent ends or the next actions change. Only oe lock release, or another session taking the lock, stops a wait |
+| Lock liveness | A session holds the Epic's lock for `lock_lease`, 30 minutes, from the latest time it took the lock with its token. It takes the lock again with its token on every pass of its loop, which is shorter than the lease because one oe wait call returns within 9 minutes. A lock whose lease has passed is free. The lock names no process, because a harness may run its sessions inside a shared service that outlives them |
 | Running agents | oe ready finds them in its own records, never from the session, because a session that lost its context forgot the agents it started. An agent runs while the run record oe start wrote is no older than the lock of the running session holding the Epic, and its worktree exists. An earlier session's leftover worktree therefore holds no Issue, and the same session acquiring its lock again keeps its agents |
 | Polling | One light read every 2 minutes. Every child Issue is read only on a change to it, its PR, or its checks, on a merge of a sibling PR, or at a deadline such as a head with no checks for 10 minutes |
 | Open PRs | oe ready reads only the PRs of the child Issues' branches |
