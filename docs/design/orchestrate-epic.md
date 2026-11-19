@@ -129,7 +129,7 @@ For each Issue, oe ready reads this table from the top and outputs the action of
   - No PR exists yet
   - The PR conflicts with the base branch
   - A check on the PR's head SHA failed
-  - Since the latest Owner marker, one of these was given
+  - Since the PR's head was pushed, one of these was given
     - An answer recorded through oe
     - A Changes requested review that covers the PR's head SHA
     - A review-thread comment that is engineer input and its thread's last comment, in a thread that is unresolved and not outdated
@@ -190,7 +190,7 @@ sequenceDiagram
 - A comment the AI forgot to mark is read as engineer input
 - Writing the working marker is not atomic, so two sessions on the same Epic can start two agents on one Issue. One host runs an Epic at a time
 - An agent that ends early without a result holds its Issue until its marker's 2 hours pass
-- An agent that runs longer than 2 hours has its Issue held while it still works
+- An agent that runs longer than 2 hours has its Issue held while it still works, and an answer then starts a second agent beside it. Measured Owner runs took at most 89 minutes
 - When the agents and the person write as one account, a person's push counts as an Owner's result, and a person's comment or review cannot be told from an agent's
 - oe ready reads only the newest PR with an Issue's branch name, so a newer PR from a fork with that name hides the Issue's own PR
 - When GitHub deletes a merged PR's branch while its Issue stays open, the Issue has no PR, and an Owner starts it over on a new branch
