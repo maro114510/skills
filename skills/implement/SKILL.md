@@ -239,6 +239,6 @@ Unsatisfied: <criterion> -> <reason>
 ## Phase 7: Finish
 
 1. Commit any uncommitted work with the `commit` skill, so the range holds the whole change. Give it the Issue number, as Phase 5 says. If a commit hook rewrote any file, rerun Phase 6.9 on the committed state.
-2. Return Built: the Phase 6.9 table, the Phase 6.5 outcome with its reviewed HEAD, every commit in `<reviewed-head>..HEAD` as unreviewed, or all of the range when the outcome is `not-run` or `git merge-base --is-ancestor <reviewed-head> HEAD` fails, and every file the `commit` skill left uncommitted with every `reason:` line it listed.
+2. Return Built: the Phase 6.9 table, the Phase 6.5 outcome with its reviewed HEAD, every commit in `<reviewed-head>..HEAD` as unreviewed, or all of the range when the outcome is `not-run` or `git merge-base --is-ancestor <reviewed-head> HEAD` fails, and every file the `commit` skill left uncommitted.
 
-Never push a commit, and never create a PR. The Lock branch on origin is the only remote write. The caller checks the range before it publishes anything.
+Never push a commit, and never create a PR. The Lock branch on origin is the only remote write. The pull request review is the first review of the range outside this run.

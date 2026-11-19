@@ -89,7 +89,6 @@ EOF
 
 Never pass `--no-verify`.
 If a hook rejects a test-only commit because the test fails, stage the implementation files the caller names, redo Steps 2 to 5, and commit both as one `feat:` or `fix:`; if none are named, leave the test staged and report back.
-A merge commit keeps red `test:` commits on the default branch, so bisect with `git bisect start --first-parent`.
 
 ## Step 7. Report
 
