@@ -9,8 +9,9 @@
 # | max_attempts | Owner starts after the latest claim that pushed, or that pushed nothing in a row, before the Issue parks |
 # | max_verifier_starts | Verifier starts on one commit before the Issue parks |
 # | verify_context | The commit status context that holds the verdict |
+# | branch_prefix | The prefix of an Issue branch, followed by the Issue number |
 # | pr_heads | The verdict, the Verifier starts, and the push time of each open pull request head |
-# | records | The Issue's claim, attempt, and update records from this host, oldest first, each with kind and at |
+# | records | The Issue's claim, continue, attempt, and update records from this host, oldest first, each with kind and at |
 # | stale_heads | Each open pull request head that lacks the merge commit of a sibling pull request, with that pull request's number |
 
 def epoch: sub("\\.[0-9]+"; "") | fromdateiso8601;
@@ -109,6 +110,19 @@ def question_text:
   | (indexes(test("^\\s*$") | not) | last) as $last
   | if $start == null then "" else .[$start:$last + 1] | join("\n") end;
 
+# Whether one review thread still waits for the Owner.
+#
+# - A resolved thread waits for nobody, and so does one whose lines a later push changed, which GitHub marks outdated.
+# - A thread waits only while its last comment is engineer input, so a last comment from a bot or an untrusted author asks for nothing.
+# - A comment from before the latest attempt was already handed to that attempt's Owner.
+def thread_waits($since):
+  (.isResolved != true)
+  and (.isOutdated != true)
+  and ((.comments.nodes // []) | last as $last
+    | $last != null
+      and ($last | engineer_input)
+      and ($since == null or $last.createdAt > $since));
+
 # Reading one Issue
 #
 # issue_state reduces one Issue response to the facts that next_action decides on.
@@ -123,6 +137,8 @@ def question_text:
 #   - The read holds only the newest pull request with the branch name, so a newer one from a fork hides the Issue's own.
 # - Engineer input counts once.
 #   - Input before the latest attempt was already handed to that attempt's Owner.
+#   - A Changes requested review counts only on the head it covers, because a review of an older head asks for a change its fix already made.
+#   - A review-thread comment counts only while it is its thread's last comment, in a thread that is unresolved and not outdated.
 # - A head that moved between the reads leaves only its Issue unreadable, and the read goes on with every other Issue.
 #   - A push or a newly opened pull request between the reads is the cause.
 #   - next_action gives that Issue read-again right before row 6, the first row that needs the head.
@@ -138,7 +154,7 @@ def issue_state:
   | (records | indexes(.kind == "claim") | last) as $claim
   | (if $claim == null then null else records[$claim].at end) as $claimed_at
   | [records | .[($claim // -1) + 1:][] | select(.kind == "attempt") | .at] as $attempts
-  | ([records | .[($claim // -1) + 1:][] | select(.kind == "attempt") | (.bots // [])[]]) as $used_bots
+  | ([records | .[counted_from:][] | select(.kind == "attempt") | (.bots // [])[]]) as $used_bots
   | ($r.ref.target.oid // null) as $branch_head
   | ($comments | first | .createdAt) as $oldest
   | if $issue.comments.totalCount > ($comments | length) and ($branch or ($prs | length) > 0)
@@ -172,6 +188,7 @@ def issue_state:
       number: $issue.number,
       closed: ($issue.state == "CLOSED"),
       branch: $branch,
+      unclaimed: ($branch and $claim == null),
       merged_pr: $merged.number,
       abandoned_pr: (if $branch and $pr.state == "CLOSED" then $pr.number else null end),
       waiting_on: (if $branch then [] else
@@ -195,9 +212,9 @@ def issue_state:
           if $pr.mergeable == "CONFLICTING" then "PR #\($pr.number) conflicts with its base" else empty end,
           if $head.ci == "failed" then "checks failed on \($head.sha): \($head.ci_detail)" else empty end,
           if $head.verdict == "failure" or $head.verdict == "error" then "failure verdict on \($head.sha)" else empty end,
-          if any($pr.reviews.nodes[]?; engineer_input and ($since == null or .submittedAt > $since))
+          if any($pr.reviews.nodes[]?; .commit.oid == $head.oid and engineer_input and ($since == null or .submittedAt > $since))
           then "a trusted Changes requested review" else empty end,
-          if any($pr.reviewThreads.nodes[]?.comments.nodes[]?; engineer_input and ($since == null or .createdAt > $since))
+          if any($pr.reviewThreads.nodes[]?; thread_waits($since))
           then "a trusted review-thread comment" else empty end,
           if ($bot_findings | length) > 0
           then ($bot_findings | map("\(.level) finding from \(.login)") | join(", ")) else empty end
@@ -213,6 +230,7 @@ def issue_state:
 # | 1 | The Issue is closed | done |
 # | 2 | A pull request merged after the latest claim | wait-engineer |
 # | 2 | The branch exists and its pull request closed without merging | wait-engineer |
+# | 2 | The branch exists and has no claim record on this host | wait-engineer |
 # | 3 | No branch, and a dependency is not closed as completed | wait-dependencies |
 # | 4 | No branch, and every dependency is closed as completed | claim |
 # | 5 | The latest question has no answer after it | wait-answer |
@@ -238,8 +256,8 @@ def issue_state:
 # - The verdict on the head is a failure
 # - Engineer input arrived after the latest attempt
 #   - An answer to the latest question
-#   - A Changes requested review
-#   - A review-thread comment
+#   - A Changes requested review that covers the head
+#   - A review-thread comment that is its thread's last comment, in a thread that is unresolved and not outdated
 # - A listed bot wrote a finding after the latest attempt, its round is unused, and no trusted user approved the head
 # A reason quotes check names and logins from GitHub, so tabs and line breaks in it become spaces and cannot add a field or a line.
 def act($action; $reason): "\(.number)\t\($action)\t\($reason | gsub("[\t\r\n]"; " "))";
@@ -247,6 +265,7 @@ def next_action:
   if .closed then act("done"; "closed")
   elif .merged_pr != null then act("wait-engineer"; "PR #\(.merged_pr) merged; the Issue is still open")
   elif .abandoned_pr != null then act("wait-engineer"; "PR #\(.abandoned_pr) closed without merging")
+  elif .unclaimed then act("wait-engineer"; "\(branch_prefix)\(.number) exists with no claim on this host")
   elif .branch | not then
     if (.waiting_on | length) > 0 then act("wait-dependencies"; .waiting_on | join(", "))
     else act("claim"; "every dependency completed") end

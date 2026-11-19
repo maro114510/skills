@@ -18,9 +18,12 @@
 #
 # - Each line holds an Issue number, an action, a reason, and the command that the action runs, separated by tabs.
 #   The command is oe start for an action that starts an agent, oe update for update-branch, which starts none,
-#   and empty for every other action.
-# - A wait-answer line is the exception: its reason holds the open question, with each line break written as \n,
+#   and empty for every other action, except the two lines below.
+# - A wait-answer line holds the open question in its reason, with each line break written as \n,
 #   and its command is the oe question --answer call that records the person's reply, ending in <reply>.
+# - A parked line that the attempt cap or starts without a push caused holds the oe continue call that returns the Issue to the loop,
+#   ending in [<instruction>], which the session drops, or replaces with the person's words, quoted.
+#   No other park gets one, because resetting the count clears no other.
 # - An Issue whose agent runs gets the action running, which no row of the next-action table decides:
 #   its reason names the agent and the oe worktree remove command to run once the agent ends, and its command is empty.
 #   An agent runs while the run record oe start wrote is no older than the lock of the running session holding the Epic,
@@ -116,8 +119,8 @@ bot="$(bot_def)" || usage "Invalid git config skills.bot"
 program() {
   printf 'def now_s: %s; def no_checks_grace: %s; def max_attempts: %s; def max_verifier_starts: %s;\n' \
     "${now}" "${no_checks_grace}" "${max_attempts}" "${max_verifier_starts}"
-  printf 'def verify_context: "%s"; def pr_heads: {%s}; def records: %s; def stale_heads: {%s};\n%s\n%s\n' \
-    "${verify_context}" "${2:-}" "${3:-[]}" "${4:-}" "${bot}"$'\n'"${rules}" "$1"
+  printf 'def verify_context: "%s"; def branch_prefix: "%s"; def pr_heads: {%s}; def records: %s; def stale_heads: {%s};\n%s\n%s\n' \
+    "${verify_context}" "${branch_prefix}" "${2:-}" "${3:-[]}" "${4:-}" "${bot}"$'\n'"${rules}" "$1"
 }
 
 err="$(mktemp)" || fail "mktemp failed"
@@ -182,7 +185,7 @@ shell_quote() {
 
 # Prints out's lines with a fourth field: the oe start command for an action that starts an agent,
 # the oe update command for update-branch, the oe question command that records the person's answer for wait-answer,
-# and nothing otherwise.
+# the oe continue command for a park by the attempt cap or by starts without a push, and nothing otherwise.
 # A start command is complete and quoted, so a session that lost SKILL.md can run it as printed.
 # The answer command ends in <reply>, which the session replaces with the person's reply, quoted.
 with_start() {
@@ -201,6 +204,8 @@ with_start() {
     command="${start:+bash $(shell_quote "${dir}/oe") start ${start}}"
     [[ "${action}" != update-branch ]] || command="bash $(shell_quote "${dir}/oe") update ${repo} ${n}"
     [[ "${action}" != wait-answer ]] || command="bash $(shell_quote "${dir}/oe") question ${repo} ${n} --answer <reply>"
+    [[ "${action}" != parked || ! "${reason}" =~ ^[0-9]+\ (attempts\ used|Owner\ starts\ in\ a\ row\ pushed\ nothing)\; ]] ||
+      command="bash $(shell_quote "${dir}/oe") continue ${repo} ${n} [<instruction>]"
     lines+="$(printf '%s\t%s\t%s\t%s' "${n}" "${action}" "${reason}" "${command}")"$'\n'
   done <<<"$1"
   printf '%s' "${lines}"
@@ -330,11 +335,11 @@ while IFS=$'\t' read -r n sha; do
 done <<<"${pulls}"
 
 # Each Issue, classified by oe-ready.jq.
-# Only the kind, time, bots, and branch head of claim, attempt, and update records decide an action, so verdict findings stay out of the program.
+# Only the kind, time, bots, and branch head of claim, continue, attempt, and update records decide an action, so verdict findings stay out of the program.
 i=0
 for n in ${sorted[@]+"${sorted[@]}"}; do
   issue_records="$(records_read "${repo}" "${n}" 2>"${err}")" || fail "$(head -n1 "${err}")"
-  issue_records="$(jq -c 'map(select(.kind == "claim" or .kind == "attempt" or .kind == "update") | {kind, at, bots, head})' <<<"${issue_records}")" ||
+  issue_records="$(jq -c 'map(select(.kind == "claim" or .kind == "continue" or .kind == "attempt" or .kind == "update") | {kind, at, bots, head})' <<<"${issue_records}")" ||
     fail "records of Issue #${n} unreadable"
   line="$(jq -r "$(program "${entry}" "${pr_heads%,}" "${issue_records}" "${stale_heads%,}")" <<<"${responses[i]}" 2>"${err}")" ||
     fail "Issue #${n} read failed: $(head -n1 "${err}")"

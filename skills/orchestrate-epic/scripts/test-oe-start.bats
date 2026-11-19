@@ -26,6 +26,8 @@ setup() {
   git config --global user.email test@example.com
   git config --global init.defaultBranch main
   unset OE_WORKTREE_ROOT
+  # A test sets only the session ID variables it needs, so the caller's environment never reaches a record.
+  unset OE_SESSION_ID CLAUDE_CODE_SESSION_ID CODEX_THREAD_ID DSH_SESSION_ID
 
   git init -q --bare "${tmp}/origin.git"
   git clone -q "${tmp}/origin.git" "${tmp}/seed" 2>/dev/null
@@ -100,6 +102,50 @@ JSON
 
   [ "${status}" -eq 0 ]
   [ "$(records_of 5 | tail -n1)" = '{"kind":"run","at":"2027-01-15T08:00:00Z","role":"verifier"}' ]
+}
+
+@test "starting an Owner and a Verifier writes the session ID from each harness variable on the run record" {
+  heads=()
+  for n in 6 7 8; do
+    git -C "${tmp}/seed" switch -q --create "feat/issue-${n}" main
+    git -C "${tmp}/seed" commit -q --allow-empty -m "work ${n}"
+    heads[n]="$(git -C "${tmp}/seed" rev-parse HEAD)"
+    git -C "${tmp}/seed" push -q origin "feat/issue-${n}"
+  done
+  jq -n --arg head5 "${head}" --arg head6 "${heads[6]}" --arg head7 "${heads[7]}" --arg head8 "${heads[8]}" '{
+    issues: [
+      {number: 5, branch: true, pull_requests: [{number: 15, head_sha: $head5, opened: "07:10", checks: {test: "success"}}]},
+      {number: 6, branch: true, pull_requests: [{number: 16, head_sha: $head6, opened: "07:10", checks: {test: "success"}}]},
+      {number: 7, branch: true, pull_requests: [{number: 17, head_sha: $head7, opened: "07:10", checks: {test: "success"}}]},
+      {number: 8, branch: true, pull_requests: [{number: 18, head_sha: $head8, opened: "07:10", checks: {test: "success"}}]}
+    ]
+  }' >"${OE_GITHUB}"
+
+  n=5
+  for var in OE_SESSION_ID CLAUDE_CODE_SESSION_ID CODEX_THREAD_ID DSH_SESSION_ID; do
+    env "${var}=from-${var}" bash "${oe}" start owner o/r "${n}" "no PR yet" >/dev/null
+    [ "$(records_of "${n}" | tail -n1 | jq -r .session_id)" = "from-${var}" ]
+
+    env "${var}=from-${var}" bash "${oe}" start verifier o/r "${n}" >/dev/null
+    [ "$(records_of "${n}" | tail -n1 | jq -r .session_id)" = "from-${var}" ]
+    n=$((n + 1))
+  done
+
+  env OE_SESSION_ID=first CLAUDE_CODE_SESSION_ID=second CODEX_THREAD_ID=third DSH_SESSION_ID=fourth \
+    bash "${oe}" start owner o/r 5 "no PR yet" >/dev/null
+  [ "$(records_of 5 | tail -n1 | jq -r .session_id)" = "first" ]
+}
+
+@test "a harness session ID with a control character is left off the run record" {
+  github <<'JSON'
+{"issues": [{"number": 5, "branch": true}]}
+JSON
+  records 5 claim@07:00
+
+  OE_SESSION_ID=$'bad\nid' run --separate-stderr bash "${oe}" start owner o/r 5 "no PR yet"
+
+  [ "${status}" -eq 0 ]
+  [ "$(records_of 5 | tail -n1)" = '{"kind":"run","at":"2027-01-15T08:00:00Z","role":"owner"}' ]
 }
 
 @test "starting an Owner with --claim claims the Issue first" {

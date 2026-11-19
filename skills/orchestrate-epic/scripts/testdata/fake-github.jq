@@ -14,7 +14,6 @@
 # | ref | Branch name | The head of that branch |
 # | comments | Issue number | The comments on that Issue, oldest first |
 # | issue_rest | Issue number | The REST read of one Issue, with its number and body |
-# | sub_issues | Epic number | The child Issues, each with its number and state |
 # | checks | Commit SHA and cursor, as SHA:CURSOR | The page of checks on that commit after the cursor |
 # | compare | Two commits, as BASE...HEAD | Whether HEAD contains BASE: ahead when it does, and diverged when it does not |
 #
@@ -69,7 +68,7 @@
 # | checks | Check name to result on its head | No checks |
 # | check_runs | Further check runs on its head, each with name, result, suite, started, and optionally the workflow that ran it, so one name can run in several check suites | None |
 # | verdicts | oe/verify states on its head, newest first | None |
-# | reviews | Changes requested reviews, each with by, at, and body | None |
+# | reviews | Changes requested reviews, each with by, at, body, and the sha it reviewed, which defaults to the head the read sees | None |
 # | approvals | Approved reviews, each with by, at, and the sha it approved | None |
 # | thread_comments | Review-thread comments, each with by, at, and body | None |
 # | threads | Whole review threads, each with resolved, outdated, and comments | One thread of thread_comments |
@@ -149,7 +148,7 @@ def pull_request:
     baseRefName: (.base // "main"),
     mergeCommit: (if .merged then {oid: merge_sha} else null end),
     mergeable: (if .conflicting then "CONFLICTING" else "MERGEABLE" end),
-    reviews: {nodes: [.reviews[]? | author + {submittedAt: (.at | time)}]},
+    reviews: {nodes: [.reviews[]? | author + {submittedAt: (.at | time), commit: {oid: (.sha // $sha)}}]},
     approvals: {nodes: [.approvals[]? | {authorAssociation: (.by // "NONE"), commit: {oid: (.sha // $sha)}}]},
     reviewThreads: {totalCount: ((review_threads | length) + (.older_threads // 0)), nodes: review_threads},
     headRef: {target: {oid: $sha, committedDate: (.committed // .opened | time), statusCheckRollup: rollup}}};
@@ -199,9 +198,6 @@ def issue_rest($n):
   [.issues[] | select(.number == $n)] | first // error("Issue #\($n) not found")
   | {number, body: (.body // "")};
 
-def sub_issues:
-  [.issues[] | {number, state: (if .closed then "closed" else "open" end)}];
-
 # The page of checks after the cursor $after on the pull request head $oid.
 def checks_response($oid; $after):
   ([.issues[].pull_requests[]? | select(read_sha == $oid)] | first // error("unknown commit \($oid)")) as $commit
@@ -228,7 +224,6 @@ $state
   elif $call == "ref" then branch_head($arg)
   elif $call == "comments" then issue_comments($arg | tonumber)
   elif $call == "issue_rest" then issue_rest($arg | tonumber)
-  elif $call == "sub_issues" then sub_issues
   elif $call == "checks" then ($arg | split(":")) as [$oid, $after] | checks_response($oid; $after | tonumber)
   elif $call == "compare" then ($arg | split("...")) as [$base, $head] | compare_response($base; $head)
   else error("unknown call \($call)") end

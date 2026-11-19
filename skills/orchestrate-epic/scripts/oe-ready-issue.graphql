@@ -31,8 +31,9 @@ query($owner: String!, $repo: String!, $num: Int!, $branch: String!, $ref: Strin
         isCrossRepository
         headRefOid
         mergeable
+        # A Changes requested review starts a repair only while it covers the head, so its commit decides that.
         reviews(last: 100, states: [CHANGES_REQUESTED]) {
-          nodes { authorAssociation body submittedAt }
+          nodes { authorAssociation body submittedAt commit { oid } }
         }
         # An approval of the head starts no repair, so its commit decides which head it covers.
         approvals: reviews(last: 100, states: [APPROVED]) {

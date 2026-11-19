@@ -5,25 +5,29 @@
 # | Path under the state directory | Holds | Written by |
 # |---|---|---|
 # | locks.git | One ref per Epic that a session holds | oe lock; read by oe status through lock_held |
-# | records/<repo-key>/<issue>.jsonl | One Issue's records, oldest first, one JSON object per line | oe claim, oe attempt, oe start, oe update, oe verdict; dropped by oe forget |
+# | records/<repo-key>/<issue>.jsonl | One Issue's records, oldest first, one JSON object per line | oe claim, oe continue, oe attempt, oe start, oe update, oe verdict |
+# | sessions/<repo-key>/<epic>.jsonl | One line for each time a session took the Epic's lock, oldest first: the time, the checkout, and the session ID when the harness gave one | oe lock, after it takes the lock |
 # | boards/<repo-key>/<epic> | The Herdr pane of the Epic's board and the server it is on, as JSON | oe board, which overwrites it |
 # | waits/<repo-key>/<epic> | The process ID and start time of the Epic's running oe wait | oe wait, which writes it only while no other wait runs and drops it when it ends on its own; oe lock release, and an acquire by another session, stop that process |
 # | notices/<repo-key>/<epic> | Each item that needed the person at the latest read, with when the person was last notified about it, as tab-separated lines | oe wait, only with git config skills.notify set, which overwrites it |
 #
 # - The state directory is OE_STATE_DIR when set, and orchestrate-epic under XDG_STATE_HOME or ~/.local/state otherwise.
 #   Either default lies outside every checkout, so no agent's worktree ever holds the state.
-# - An Issue has at most one parent Epic, so its records are keyed by repository and Issue, and oe forget drops an Epic's by its child Issues.
+# - An Issue has at most one parent Epic, so its records are keyed by repository and Issue.
 #
 # | Record | Fields |
 # |---|---|
 # | claim | kind, at |
+# | continue | kind, at, and when the person gave an instruction, instruction and url |
 # | attempt | kind, at, head, bots |
-# | run | kind, at, role: owner or verifier |
+# | run | kind, at, role: owner or verifier, and session_id: the session that started the agent, when the harness set one |
 # | update | kind, at, head |
 # | verdict | kind, at, sha, state, findings |
 #
 # - An attempt record is an Owner start. head is the Issue branch's head when it began, absent when the branch did not exist,
 #   and bots names the bots whose findings it repairs. oe-starts.jq reads head to tell whether the start pushed.
+# - A continue record is the person's word, relayed by the session through oe continue, to return a parked Issue to the loop on its branch.
+#   Attempts, starts that pushed nothing, and bot rounds count from the latest claim or continue record, as oe-starts.jq says.
 # - An update record is a branch update oe update asked GitHub for, and head is the Issue branch's head before it.
 #   oe-starts.jq reads it so that the merge is never counted as a push of the Owner start before it.
 # - A run record marks an agent oe start started. oe ready counts the agent as running while the record is no older than
@@ -102,16 +106,42 @@ records_add() {
   return 1
 }
 
-# Drops every record of Issue $2 in repository $1, and the repository's directory once it holds no Issue.
-# Returns 1 with the reason on stderr when the file stays.
-records_drop() {
-  local file
-  file="$(record_path "$1" "$2")" || return 1
-  rm -f "${file}" 2>/dev/null && [[ ! -e "${file}" ]] || {
-    echo "cannot remove ${file}" >&2
+# Prints the session ID the harness set, or nothing when it set none.
+# The first set among OE_SESSION_ID, CLAUDE_CODE_SESSION_ID, CODEX_THREAD_ID, and DSH_SESSION_ID wins, so every harness is read alike.
+session_id() {
+  local name
+  for name in OE_SESSION_ID CLAUDE_CODE_SESSION_ID CODEX_THREAD_ID DSH_SESSION_ID; do
+    if [[ -n "${!name:-}" ]]; then
+      printf '%s\n' "${!name}"
+      return 0
+    fi
+  done
+}
+
+# Prints the sessions record of Epic $2 in repository $1.
+sessions_path() {
+  local key
+  key="$(repo_key "$1")" || return 1
+  printf '%s/sessions/%s/%s.jsonl' "$(state_dir)" "${key}" "$2"
+}
+
+# Appends the session line $3, a JSON object, to Epic $2 in repository $1.
+# Returns 1 with the reason on stderr, and leaves the file as it was, when the line cannot be written.
+sessions_add() {
+  local file line
+  file="$(sessions_path "$1" "$2")" || return 1
+  line="$(jq -c . <<<"$3" 2>/dev/null)" || {
+    echo "cannot write the sessions line: not a JSON object" >&2
     return 1
   }
-  rmdir "${file%/*}" 2>/dev/null || true
+  mkdir -p "${file%/*}" 2>/dev/null || {
+    echo "cannot create ${file%/*}" >&2
+    return 1
+  }
+  printf '%s\n' "${line}" >>"${file}" 2>/dev/null || {
+    echo "cannot write the sessions record ${file}" >&2
+    return 1
+  }
 }
 
 # The lock store: one ref per Epic, whose blob names the holding session.

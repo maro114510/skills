@@ -52,7 +52,6 @@ It fetches `origin/<base>` and prints everything later steps use. Do not read th
 | `== diff stat`, `== diff` | The stat, and the diff without lockfiles when it fits 20 files and 1,000 lines | 2 |
 | `== template <path>` or `== template none` | The PR template's contents, or none | 3 |
 | `== issues` | `Closes #N` or `Related #N` from the newest commit footer, a tab, and the issue title | 2.1 |
-| `== manual checks` | `#N`, a tab, and one manual check of an issue the branch closes, per line | 3 |
 
 When `== diff` says `omitted`, read only meaningful files with `git diff origin/<base>...HEAD -- <path>...`, skipping generated and vendored code.
 
@@ -66,7 +65,7 @@ Every non-zero exit prints no context and no `Arguments:` line, so write the mes
 | 3 | `CONFLICT #NNN` | Stop and report each issue: an older commit closes the issue that the newest commit marks Related. Never amend, rebase, reset, revert, or commit; the user fixes the history, so the newest commit also closes it or the older one stops closing it |
 | 4 | `ON_BASE_BRANCH` | Stop: a PR cannot target its own branch. Suggest creating a feature branch |
 | 5 | `NO_COMMITS` | Stop and ask whether commits are missing |
-| 6 | `UNCOMMITTED` | Invoke the `commit` skill, then rerun the command once. If it exits 6 again, for example because a suspected secret was excluded, stop and report that |
+| 6 | `UNCOMMITTED` | Invoke the `commit` skill, then rerun the command once. If it exits 6 again, for example because the `commit` skill left an unrelated or stray file uncommitted, stop and report that |
 
 ## Step 2. Analyze the Change
 

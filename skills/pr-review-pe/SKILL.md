@@ -89,14 +89,14 @@ Step 2 で収集したデータを元に、以下のルールを上から順に�
 
 ```bash
 gh api "repos/$REPO_SLUG/pulls/$PR_NUMBER/files" --paginate --jq '.[].filename' \
-  | grep -E '/(auth(entication|orization)?|permissions|crypto|security|jwt|oauth|session)/|package\.json$|go\.mod$|requirements\.txt$|Cargo\.toml$|pyproject\.toml$'
+  | grep -E '(^|/)(auth(entication|orization)?|permissions|crypto|security|jwt|oauth|session)/|package\.json$|go\.mod$|requirements\.txt$|Cargo\.toml$|pyproject\.toml$'
 ```
 
 **operational-reviewer**: マイグレーション・DB 系パス
 
 ```bash
 gh api "repos/$REPO_SLUG/pulls/$PR_NUMBER/files" --paginate --jq '.[].filename' \
-  | grep -E '/(migrations?|db|database)/|_(migration|schema|seed)\.'
+  | grep -E '(^|/)(migrations?|db|database)/|_(migration|schema|seed)\.'
 ```
 
 ### Layer 3 — コンテキスト判断

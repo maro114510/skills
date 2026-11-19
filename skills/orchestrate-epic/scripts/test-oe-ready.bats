@@ -230,7 +230,7 @@ JSON
   [ "$(action_of 5)" = wait-dependencies ]
 }
 
-@test "an Issue whose branch exists without a pull request and without any record on this host is not claimed again and gets an Owner" {
+@test "an Issue whose branch exists without a claim record on this host and without a pull request waits for an engineer instead of getting an Owner" {
   github <<'JSON'
 {
   "default_branch": {"checks": {"test": "success"}},
@@ -240,6 +240,25 @@ JSON
   }]
 }
 JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-engineer ]
+  [ "$(field_of 5 3)" = "feat/issue-5 exists with no claim on this host" ]
+}
+
+@test "an Issue whose branch exists with a claim record on this host and without a pull request gets an Owner" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true
+  }]
+}
+JSON
+  records 5 claim@07:00
 
   run bash "${oe}" ready o/r 1
 
@@ -1390,6 +1409,56 @@ JSON
   [ "$(action_of 5)" = wait-merge ]
 }
 
+@test "a Changes requested review of an older head starts no Owner" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{
+      "number": 50, "opened": "07:00", "pushed": "07:40",
+      "head_sha": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "checks": {"test": "success"}, "verdicts": ["success"],
+      "reviews": [{"by": "MEMBER", "at": "07:20",
+        "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "body": "Rename this"}]
+    }]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:10
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-merge ]
+}
+
+@test "a Changes requested review of an older head does not keep the Issue parked" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{
+      "number": 50, "opened": "07:00", "pushed": "07:40",
+      "head_sha": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "checks": {"test": "success"}, "verdicts": ["success"],
+      "reviews": [{"by": "MEMBER", "at": "07:35",
+        "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "body": "Rename this"}]
+    }]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:10#aaaa attempt@07:20#bbbb attempt@07:30#cccc
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-merge ]
+}
+
 @test "a trusted review-thread comment after the latest attempt gets an Owner" {
   github <<'JSON'
 {
@@ -1432,6 +1501,101 @@ JSON
 
   [ "${status}" -eq 0 ]
   [ "$(action_of 5)" = wait-merge ]
+}
+
+@test "a resolved review-thread comment starts no Owner" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{
+      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
+      "threads": [{"resolved": true, "comments": [
+        {"by": "COLLABORATOR", "at": "07:40", "body": "This leaks the token"}]}]
+    }]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:30
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-merge ]
+}
+
+@test "an outdated review-thread comment starts no Owner" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{
+      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
+      "threads": [{"outdated": true, "comments": [
+        {"by": "COLLABORATOR", "at": "07:40", "body": "This leaks the token"}]}]
+    }]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:30
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-merge ]
+}
+
+@test "a review-thread comment a later bot reply answers starts no Owner" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{
+      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
+      "threads": [{"comments": [
+        {"by": "COLLABORATOR", "at": "07:40", "body": "This leaks the token"},
+        {"login": "coderabbitai", "type": "Bot", "at": "07:50", "body": "Addressed in the latest push."}]}]
+    }]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:30
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-merge ]
+}
+
+@test "an engineer's comment after a reply starts an Owner" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{
+      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
+      "threads": [{"comments": [
+        {"by": "COLLABORATOR", "at": "07:20", "body": "This leaks the token"},
+        {"login": "coderabbitai", "type": "Bot", "at": "07:30", "body": "Addressed in the latest push."},
+        {"by": "COLLABORATOR", "at": "07:40", "body": "It still leaks on the error path."}]}]
+    }]
+  }]
+}
+JSON
+  records 5 claim@07:00 attempt@07:30
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-owner ]
 }
 
 # Bot findings

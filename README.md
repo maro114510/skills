@@ -12,19 +12,21 @@ Today, agents take an Issue to a verified PR with TDD, a separate-context self-r
 
 ## Install
 
-Releases and deploys come from `main`.
+Each install below resolves a release the owner has already run. The owner runs `main`, which can be ahead of the latest release.
 
 ### APM
 
 APM is the recommended route. [APM](https://github.com/microsoft/apm) installs every skill and both agents into Claude Code, Codex, and OpenCode with one command.
 
+It resolves the newest release within the major version its range names.
+
 ```sh
-apm install -g maro114510/skills -t claude,codex,opencode
+apm install -g 'maro114510/skills#^1.0.0' -t claude,codex,opencode
 ```
 
 ### Claude Code plugin
 
-Requires Claude Code 2.1.275 or later.
+Requires Claude Code 2.1.275 or later. It installs the release that the marketplace entry on `main` names.
 
 ```sh
 /plugin install skills --marketplace maro114510/skills
@@ -32,22 +34,25 @@ Requires Claude Code 2.1.275 or later.
 
 ### npx
 
+It installs the exact release tag named below.
+
 ```sh
-npx --yes skills add maro114510/skills --agent claude-code --skill '*' --global --yes
+npx --yes skills add 'maro114510/skills#v1.2.0' --agent claude-code --skill '*' --global --yes
 ```
 
 ### GitHub CLI
 
+It installs the latest release.
+
 ```sh
-gh skill install maro114510/skills --agent claude-code --scope user
+gh skill install maro114510/skills --all --agent claude-code --scope user
 ```
 
 ## Skills
 
 | Skill | Goal |
 |---|---|
-| `babysit` | Drive your own pull request by fixing and pushing CI failures, review feedback, and conflicts, without waking the model until checks, comments, or readiness change; any other pull request gets one state report. |
-| `commit` | Commit the working tree with a Conventional Commits message, leaving suspected secrets out. |
+| `commit` | Commit the working tree with a Conventional Commits message. |
 | `create-github-issues` | Turn a plan or TODO list into an Epic Issue with linked child Issues. |
 | `create-pr` | Create a pull request with a useful description. |
 | `diagram-conventions` | Create or review a diagram in the right type's notation without adding or dropping meaning. |
@@ -77,7 +82,7 @@ APM deploys `agents/` to multiple harnesses.
 | Agent | Started by | Job |
 |---|---|---|
 | `pr-owner` | `orchestrate-epic` | Implement or repair one Issue's PR, or ask a question on the Issue |
-| `pr-verify` | `orchestrate-epic` | Check one PR head SHA against its Issue's automated checks and record the verdict |
+| `pr-verify` | `orchestrate-epic` | Check one PR head SHA against its Issue's acceptance criteria and record the verdict |
 
 | Rule | Detail |
 |---|---|

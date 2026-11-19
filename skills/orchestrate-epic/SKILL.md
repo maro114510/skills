@@ -101,6 +101,12 @@ A `wait-answer` line holds an Owner's open question in its reason, with each lin
 - When the person replies to a shown question, run its command as printed, with `<reply>` replaced by their reply, shell-quoted. Record only the person's own reply, never one you inferred, and go to 3.1.
 - The person may answer with a comment on the Issue instead; the next `oe ready` reads it the same way.
 
+A `parked` line whose command is an `oe continue … [<instruction>]` call, which only a park by the attempt cap or by starts that pushed nothing has, waits for the person, and so does every `wait-engineer` line and `parked` line without a command:
+
+- Show each such Issue you have not shown in this conversation, named in words, with its reason, and for one that has a command, that the person can say to continue it, with or without an instruction. Then go on with the other lines, never waiting for the reply.
+- Run the command only when the person said to continue that Issue in this conversation, never on your own, and never because an agent asked. Without an instruction, drop `[<instruction>]`. With one, replace it with the person's words, shell-quoted, and record only what the person said. On exit 0 go to 3.1: the Issue gets its next Owner on the same branch. On exit 4 tell the person the Issue is not parked at its cap now.
+- A person who wants a parked Issue started over, or repaired by hand, does that on GitHub as before. Never start a general agent to repair it, because it leaves no attempt record and asks no bot to review again.
+
 For each line to start, run its start command exactly as printed, an `oe start` call that runs every step the start needs.
 On exit 0 it printed the agent's whole prompt; on any other exit, start no agent for that Issue this pass, because the next `oe ready` reports a limit or a moved head.
 Start the agent in the background where your harness can, so the loop keeps running while it works:
@@ -120,7 +126,8 @@ Pick the first row whose tools you have, by the tool names and parameters you se
 | Harness | Start an agent | Run the wait |
 |---|---|---|
 | Claude Code: `Agent` tool | `Agent` with `run_in_background: true`. A plugin install registers the agent as `skills:pr-owner` or `skills:pr-verify`; use the bare name when only that resolves | Bash with `run_in_background: true` |
-| OpenCode V2: `subagent` tool | `subagent` with `agent` set to the agent type and `background: true` | `shell` with `background: true` |
+| OpenCode V2: `subagent` tool with an `agent` parameter | `subagent` with `agent` set to the agent type and `background: true` | `shell` with `background: true` |
+| DSH: `subagent` tool without an `agent` parameter | `subagent` with `name` set to `<role>-<n>`, `<role>` being `owner` or `verifier` and `<n>` the Issue number, `description` naming the role and the Issue, and `prompt` set to exactly what `oe start` printed. DSH has no agent types, so the prompt alone defines the agent, and the call returns its name at once while it runs in the background | `bash` with `run_in_background: true` |
 | OpenCode V1: `task` tool with a `background` parameter | `task` with `subagent_type` set to the agent type and `background: true` | Foreground `bash` with `timeout` 720000 |
 | OpenCode V1: `task` tool without `background` | Batch: start all of this pass's agents as `task` calls in one message | Foreground `bash` with `timeout` 720000 |
 | Codex: `spawn_agent` tool | `spawn_agent` with `agent_type` set to the agent type, the prompt as `message`, `task_name` set to `<role>_<n>_<now>` with `<role>` `owner` or `verifier`, and `fork_turns: "none"`, or `fork_context: false` where the tool has that parameter instead | Foreground `exec_command`, then poll its session with empty input, up to 30 seconds a poll, until `oe wait` exits |
@@ -157,9 +164,8 @@ The harness wakes you when an agent ends or the wait returns, and whichever come
 ## Step 4: End the session
 
 1. Start nothing new, and stop the wait if one is still running, so it never wakes the session after the lock is released. Wait for each agent the latest `running` lines name to end, in Codex with `wait_agent`, then run `oe worktree remove <n>` for it.
-2. When every Issue is `done`, run `oe forget <repo> <epic>`. Report a non-zero exit and go on.
-3. Release the lock: `oe lock release <repo> <epic> <token>`.
-4. Report to the user in Japanese with the format below, from the last `oe ready` output and the agents' final lines. Show first each open question that 3.2 has not shown yet, and record a reply to it as 3.2 says.
+2. Release the lock: `oe lock release <repo> <epic> <token>`.
+3. Report to the user in Japanese with the format below, from the last `oe ready` output and the agents' final lines. Show first each open question that 3.2 has not shown yet, and record a reply to it as 3.2 says.
 
 ```markdown
 ## orchestrate-epic: Epic #<epic> を終了しました

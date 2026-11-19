@@ -43,7 +43,7 @@ done
 
 # The owner line is written only into the body of a PR this script creates.
 [[ -n "${owner_id}" && -n "${link_pr}" ]] && usage
-# Same id charset as babysit's pr-state.sh, which reads the line.
+# Same id charset as pr-state.sh in the locate skill, which reads the line.
 [[ -z "${owner_id}" || "${owner_id}" =~ ^[A-Za-z0-9._-]+$ ]] || usage
 
 # --link takes the PR's URL as well as its number; the URL names the repository.
