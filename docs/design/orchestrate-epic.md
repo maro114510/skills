@@ -82,6 +82,7 @@ An Issue moves through the phases in this diagram.
 ```mermaid
 flowchart TB
   Blocked["Waiting on dependencies"] -->|"All dependencies completed"| Owner["Owner working"]
+  Blocked -->|"A dependency closed as not planned or duplicate"| Person
   Owner -->|"Question"| Person["Waiting on the person"]
   Owner -->|"Push"| CI["Waiting for CI"]
   Owner -->|"Marker expires with no push"| Person
@@ -101,21 +102,22 @@ For each Issue, oe ready reads this table from the top and outputs the action of
 | Row | State | Next action |
 |---|---|---|
 | 1 | The Issue is closed | Mark it done |
-| 2 | The latest PR from the branch was closed without merging, or merged with the Issue open | Hold the Issue |
-| 3 | A dependency is not completed | Wait for the dependencies |
-| 4 | A hold or a question is newer than the latest answer | Wait on the person |
-| 5 | The working marker is live | Wait for the agent |
-| 6 | The working marker expired with no result | Hold the Issue |
-| 7 | A repair signal below is present | Hold the Issue when 3 commits of the PR since the latest answer had a failed check. Otherwise start an Owner |
-| 8 | A check on the PR's head SHA is pending, or the SHA has had no checks for less than 10 minutes | Wait for CI |
-| 9 | The PR's head SHA still has no checks after 10 minutes | Hold the Issue |
-| 10 | The PR's head SHA has no verdict | Start a Verifier |
-| 11 | The PR's head SHA has a failure verdict | Hold the Issue |
-| 12 | The PR's head SHA has a success verdict | Wait for an engineer to merge |
+| 2 | A hold or a question is newer than the latest answer | Wait on the person |
+| 3 | The PR was closed without merging, or merged with the Issue open | Hold the Issue |
+| 4 | A dependency was closed as not planned or duplicate | Hold the Issue |
+| 5 | A dependency is not completed | Wait for the dependencies |
+| 6 | The working marker is live | Wait for the agent |
+| 7 | The working marker expired with no result | Hold the Issue |
+| 8 | A repair signal below is present | Hold the Issue when 3 commits of the PR since the latest answer had a failed check. Otherwise start an Owner |
+| 9 | A check on the PR's head SHA is pending, or the SHA has had no checks for less than 10 minutes | Wait for CI |
+| 10 | The PR's head SHA still has no checks after 10 minutes | Hold the Issue |
+| 11 | The PR's head SHA has no verdict | Start a Verifier |
+| 12 | The PR's head SHA has a failure verdict | Hold the Issue |
+| 13 | The PR's head SHA has a success verdict | Wait for an engineer to merge |
 
 - Hold
   - oe hold writes the reason on the Issue, and the session shows it in its conversation and asks the person
-  - The Issue waits on the person at row 4 until the session records an answer
+  - The Issue waits on the person at row 2 until the session records an answer
 - Working marker
   - One hidden line at the end of the Issue body, holding the role, the start time, the SHA for a Verifier, and the session ID only for a person to trace
   - An Owner's marker gives its result when the branch gets a push or the Issue gets a question after the start time
@@ -130,7 +132,7 @@ For each Issue, oe ready reads this table from the top and outputs the action of
     - A Changes requested review that covers the PR's head SHA
     - A review-thread comment that is engineer input and its thread's last comment, in a thread that is unresolved and not outdated
 - Counting
-  - The PR means the latest PR opened from the branch
+  - The PR means the latest PR opened from the branch that is open or whose head is the branch's current head, so a PR left from a branch the engineer deleted is never the PR
   - The verify status that oe writes is never counted as a CI check
 
 ## Worked Examples
@@ -189,6 +191,7 @@ sequenceDiagram
 - An agent that runs longer than 2 hours has its Issue held while it still works
 - When the agents and the person write as one account, a person's push counts as an Owner's result, and a person's comment or review cannot be told from an agent's
 - oe ready reads only the newest PR with an Issue's branch name, so a newer PR from a fork with that name hides the Issue's own PR
+- When GitHub deletes a merged PR's branch while its Issue stays open, the Issue has no PR, and an Owner starts it over on a new branch
 - An agent runs with the session's identity, so it could record an answer through oe, and with it a decision the Verifier follows over the criteria
 - The session is an LLM conversation, so an API outage stops the loop until a person continues it
 
