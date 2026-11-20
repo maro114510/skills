@@ -50,17 +50,20 @@ If any of the first four is missing, end without changing anything and say which
      | Failed checks | `gh pr checks <pr> --repo <repo>`, leaving out the `oe/verify` status, which holds a verdict and is no check, and `gh run view --job <job-id> --repo <repo> --log-failed` for each failed GitHub Actions job |
      | Conflict | `mergeable` is `CONFLICTING` in step 2 |
      | Changes requested reviews | Engineer input in `CHANGES_REQUESTED` reviews from `gh api repos/<repo>/pulls/<pr>/reviews --paginate` whose `commit_id` is the PR's `headRefOid` from step 2 |
-     | Review-thread comments | Every comment of each thread the query below prints that is not resolved, not outdated, and whose last comment is engineer input |
+     | Review-thread comments | Every comment of each thread the query below prints that is not resolved, not outdated, and whose last comment is engineer input posted after the PR's head was pushed |
 
      ```bash
      gh api graphql -F owner=<owner> -F name=<name> -F pr=<pr> -f query='
        query($owner: String!, $name: String!, $pr: Int!) {
-         repository(owner: $owner, name: $name) { pullRequest(number: $pr) { reviewThreads(last: 100) { nodes {
+         repository(owner: $owner, name: $name) { pullRequest(number: $pr) { reviewThreads(last: 100) { totalCount nodes {
            isResolved isOutdated path line
-           comments(last: 20) { nodes { authorAssociation author { login __typename } body createdAt } }
+           comments(last: 20) { totalCount nodes { authorAssociation author { login __typename } body createdAt } }
          } } } }
        }'
      ```
+
+     A `totalCount` above the nodes read is a read cut short, so end without pushing.
+     The head was pushed at the `timestamp` of the first entry whose `after` is `headRefOid` in `gh api 'repos/<repo>/activity?ref=refs/heads/<branch>&per_page=100'`. When no entry has it, take the head commit's `committedDate`.
 
      `<owner>` and `<name>` are the two parts of `<repo>`. A finding from a review bot is no engineer input, so this Owner neither fixes nor answers it.
      If none of these is present and there is no answer, end without pushing, and say so.
@@ -110,6 +113,7 @@ If any of the first four is missing, end without changing anything and say which
    ```
 
    Exit 3 means a link is missing: run it once more with `--repo <repo> --link <url>`. Any other non-zero exit ends the run.
+
 ## Output
 
 End with one line:
