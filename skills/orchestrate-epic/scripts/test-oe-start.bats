@@ -1,15 +1,13 @@
 #!/usr/bin/env bats
-# Tests for oe start, and for the start command oe ready names on each line.
+# Tests for oe start, the working marker it writes, and the start command oe ready names on each line.
 #
 # - Each test writes the GitHub state it needs as JSON, then runs oe against it.
 # - testdata/fake-gh.sh stands in for gh, answers every read from that state, and applies every write to it.
-# - testdata/records.bash writes the host-local records under the test's own OE_STATE_DIR.
 # - A bare origin holds main and feat/issue-5, and the shared checkout is a clone of it, so worktrees are real.
 # shellcheck disable=SC2292 # bats fails a test on a mid-test `[[ ]]` only under bash 4.1+; `[ ]` works on every bash.
 
 setup() {
   bats_require_minimum_version 1.5.0
-  load testdata/records
   export OE_STATE_DIR="${BATS_TEST_TMPDIR}/state"
   oe="${BATS_TEST_DIRNAME}/oe"
   tmp="$(cd "${BATS_TEST_TMPDIR}" && pwd -P)"
@@ -65,11 +63,15 @@ pr_15_passed_checks() {
   }' >"${OE_GITHUB}"
 }
 
-@test "starting an Owner records the attempt, checks out the Issue branch, and prints the Owner's whole prompt" {
+# Prints the working marker lines in Issue 5's body in the saved GitHub state.
+marker_lines() {
+  jq -r '.issues[0].body // ""' "${OE_GITHUB}" | grep '^<!-- oe:working ' || true
+}
+
+@test "starting an Owner checks out the Issue branch, writes the working marker at the end of the body, and prints the whole prompt" {
   github <<'JSON'
-{"issues": [{"number": 5, "branch": true}]}
+{"issues": [{"number": 5, "branch": true, "body": "## Requirements\n\n- Do it."}]}
 JSON
-  records 5 claim@07:00
 
   run --separate-stderr bash "${oe}" start owner o/r 5 "no PR yet"
 
@@ -78,198 +80,14 @@ JSON
   [ "${lines[1]}" = "repo o/r issue 5 base main worktree ${wt} reason no PR yet" ]
   [ "${#lines[@]}" -eq 2 ]
   [ "$(git -C "${wt}" branch --show-current)" = feat/issue-5 ]
-  # The record holds the head the Issue branch has when the Owner starts.
-  [ "$(records_of 5 | jq -c 'select(.kind == "attempt")')" = '{"kind":"attempt","at":"2027-01-15T08:00:00Z","head":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}' ]
+  [ "$(jq -r '.issues[0].body' "${OE_GITHUB}")" = "## Requirements
+
+- Do it.
+
+<!-- oe:working role=owner at=2027-01-15T08:00:00Z -->" ]
 }
 
-@test "a started Owner leaves a run record naming its role" {
-  github <<'JSON'
-{"issues": [{"number": 5, "branch": true}]}
-JSON
-  records 5 claim@07:00
-
-  run --separate-stderr bash "${oe}" start owner o/r 5 "no PR yet"
-
-  [ "${status}" -eq 0 ]
-  [ "$(records_of 5 | tail -n1)" = '{"kind":"run","at":"2027-01-15T08:00:00Z","role":"owner"}' ]
-}
-
-@test "a started Verifier leaves a run record naming its role" {
-  records 5 claim@07:00 attempt@07:01
-  pr_15_passed_checks
-
-  run --separate-stderr bash "${oe}" start verifier o/r 5
-
-  [ "${status}" -eq 0 ]
-  [ "$(records_of 5 | tail -n1)" = '{"kind":"run","at":"2027-01-15T08:00:00Z","role":"verifier"}' ]
-}
-
-@test "starting an Owner and a Verifier writes the session ID from each harness variable on the run record" {
-  heads=()
-  for n in 6 7 8; do
-    git -C "${tmp}/seed" switch -q --create "feat/issue-${n}" main
-    git -C "${tmp}/seed" commit -q --allow-empty -m "work ${n}"
-    heads[n]="$(git -C "${tmp}/seed" rev-parse HEAD)"
-    git -C "${tmp}/seed" push -q origin "feat/issue-${n}"
-  done
-  jq -n --arg head5 "${head}" --arg head6 "${heads[6]}" --arg head7 "${heads[7]}" --arg head8 "${heads[8]}" '{
-    issues: [
-      {number: 5, branch: true, pull_requests: [{number: 15, head_sha: $head5, opened: "07:10", checks: {test: "success"}}]},
-      {number: 6, branch: true, pull_requests: [{number: 16, head_sha: $head6, opened: "07:10", checks: {test: "success"}}]},
-      {number: 7, branch: true, pull_requests: [{number: 17, head_sha: $head7, opened: "07:10", checks: {test: "success"}}]},
-      {number: 8, branch: true, pull_requests: [{number: 18, head_sha: $head8, opened: "07:10", checks: {test: "success"}}]}
-    ]
-  }' >"${OE_GITHUB}"
-
-  n=5
-  for var in OE_SESSION_ID CLAUDE_CODE_SESSION_ID CODEX_THREAD_ID DSH_SESSION_ID; do
-    env "${var}=from-${var}" bash "${oe}" start owner o/r "${n}" "no PR yet" >/dev/null
-    [ "$(records_of "${n}" | tail -n1 | jq -r .session_id)" = "from-${var}" ]
-
-    env "${var}=from-${var}" bash "${oe}" start verifier o/r "${n}" >/dev/null
-    [ "$(records_of "${n}" | tail -n1 | jq -r .session_id)" = "from-${var}" ]
-    n=$((n + 1))
-  done
-
-  env OE_SESSION_ID=first CLAUDE_CODE_SESSION_ID=second CODEX_THREAD_ID=third DSH_SESSION_ID=fourth \
-    bash "${oe}" start owner o/r 5 "no PR yet" >/dev/null
-  [ "$(records_of 5 | tail -n1 | jq -r .session_id)" = "first" ]
-}
-
-@test "a harness session ID with a control character is left off the run record" {
-  github <<'JSON'
-{"issues": [{"number": 5, "branch": true}]}
-JSON
-  records 5 claim@07:00
-
-  OE_SESSION_ID=$'bad\nid' run --separate-stderr bash "${oe}" start owner o/r 5 "no PR yet"
-
-  [ "${status}" -eq 0 ]
-  [ "$(records_of 5 | tail -n1)" = '{"kind":"run","at":"2027-01-15T08:00:00Z","role":"owner"}' ]
-}
-
-@test "starting an Owner with --claim claims the Issue first" {
-  github <<'JSON'
-{"default_branch": {"checks": {"test": "success"}}, "issues": [{"number": 5}]}
-JSON
-
-  run --separate-stderr bash "${oe}" start owner o/r 5 --claim "every dependency completed"
-
-  [ "${status}" -eq 0 ]
-  [ "${lines[0]}" = "${skills}/pr-owner/SKILL.md" ]
-  [ "$(records_of 5 | jq -r .kind | paste -sd, -)" = claim,attempt,run ]
-}
-
-@test "claiming an Issue assigns it to the gh user running oe" {
-  github <<'JSON'
-{"default_branch": {"checks": {"test": "success"}}, "issues": [{"number": 5}]}
-JSON
-
-  run --separate-stderr bash "${oe}" start owner o/r 5 --claim "every dependency completed"
-
-  [ "${status}" -eq 0 ]
-  [ "$(jq -c '.issues[0].assignees' "${OE_GITHUB}")" = '["me"]' ]
-}
-
-@test "a claim whose assignment fails still starts the Owner" {
-  github <<'JSON'
-{"default_branch": {"checks": {"test": "success"}}, "issues": [{"number": 5}]}
-JSON
-
-  GH_FAIL=assignees run --separate-stderr bash "${oe}" start owner o/r 5 --claim "every dependency completed"
-
-  [ "${status}" -eq 0 ]
-  [ "${lines[0]}" = "${skills}/pr-owner/SKILL.md" ]
-  [ "$(records_of 5 | jq -r .kind | paste -sd, -)" = claim,attempt,run ]
-}
-
-@test "a claim made as a GitHub App skips the assignment without a warning" {
-  github <<'JSON'
-{"identity": "app", "default_branch": {"checks": {"test": "success"}}, "issues": [{"number": 5}]}
-JSON
-
-  run --separate-stderr bash "${oe}" claim o/r 5
-
-  [ "${status}" -eq 0 ]
-  [ "$(jq -c '.issues[0].assignees' "${OE_GITHUB}")" = null ]
-  [ -z "${stderr}" ]
-}
-
-@test "a claim whose user read fails for another reason still warns" {
-  github <<'JSON'
-{"default_branch": {"checks": {"test": "success"}}, "issues": [{"number": 5}]}
-JSON
-
-  GH_FAIL="api user" run --separate-stderr bash "${oe}" claim o/r 5
-
-  [ "${status}" -eq 0 ]
-  [ "${stderr}" != "${stderr%WARN: could not assign*}" ]
-}
-
-@test "a claimed Owner's start, read with stderr merged as a harness shows it, holds only the prompt" {
-  github <<'JSON'
-{"default_branch": {"checks": {"test": "success"}}, "issues": [{"number": 5}]}
-JSON
-
-  run bash "${oe}" start owner o/r 5 --claim "every dependency completed"
-
-  [ "${status}" -eq 0 ]
-  [ "${lines[0]}" = "${skills}/pr-owner/SKILL.md" ]
-  [ "${lines[1]}" = "repo o/r issue 5 base main worktree ${wt} reason every dependency completed" ]
-  [ "${#lines[@]}" -eq 2 ]
-}
-
-@test "a Verifier's start, read with stderr merged as a harness shows it, holds only the prompt" {
-  records 5 claim@07:00 attempt@07:01
-  pr_15_passed_checks
-
-  run bash "${oe}" start verifier o/r 5
-
-  [ "${status}" -eq 0 ]
-  [ "${lines[0]}" = "${skills}/pr-verify/SKILL.md" ]
-  [ "${lines[1]}" = "repo o/r issue 5 sha ${head} base main worktree ${wt}" ]
-  [ "${#lines[@]}" -eq 2 ]
-}
-
-@test "a refused claim still says why on stderr" {
-  github <<'JSON'
-{"default_branch": {"checks": {"test": "success"}}, "issues": [{"number": 5, "branch": true}]}
-JSON
-
-  run --separate-stderr bash "${oe}" start owner o/r 5 --claim "every dependency completed"
-
-  [ "${status}" -eq 4 ]
-  [ -n "${stderr}" ]
-}
-
-@test "a claim refused because the branch exists exits 4 and starts nothing" {
-  github <<'JSON'
-{"default_branch": {"checks": {"test": "success"}}, "issues": [{"number": 5, "branch": true}]}
-JSON
-
-  run --separate-stderr bash "${oe}" start owner o/r 5 --claim "every dependency completed"
-
-  [ "${status}" -eq 4 ]
-  [ -z "${output}" ]
-  [ ! -e "${wt}" ]
-  [ -z "$(records_of 5)" ]
-}
-
-@test "an Owner refused at the attempt cap exits 4 and creates no worktree" {
-  github <<'JSON'
-{"issues": [{"number": 5, "branch": true}]}
-JSON
-  records 5 claim@07:00 attempt@07:01#h1 attempt@07:20#h2 attempt@07:40#h3
-
-  run --separate-stderr bash "${oe}" start owner o/r 5 "checks failed"
-
-  [ "${status}" -eq 4 ]
-  [ -z "${output}" ]
-  [ ! -e "${wt}" ]
-}
-
-@test "starting a Verifier detaches the worktree at the PR head, writes the pending status, and prints the Verifier's whole prompt" {
-  records 5 claim@07:00 attempt@07:01
+@test "starting a Verifier writes a marker with the SHA it checks out" {
   pr_15_passed_checks
 
   run --separate-stderr bash "${oe}" start verifier o/r 5
@@ -278,13 +96,103 @@ JSON
   [ "${lines[0]}" = "${skills}/pr-verify/SKILL.md" ]
   [ "${lines[1]}" = "repo o/r issue 5 sha ${head} base main worktree ${wt}" ]
   [ "$(git -C "${wt}" rev-parse HEAD)" = "${head}" ]
-  [ "$(jq -r '.written_statuses[0].state' "${OE_GITHUB}")" = pending ]
+  [ "$(marker_lines)" = "<!-- oe:working role=verifier at=2027-01-15T08:00:00Z sha=${head} -->" ]
 }
 
-@test "a Verifier whose brief is refused exits with the brief's code and removes the worktree it created" {
-  records 5 claim@07:00 attempt@07:01
+@test "a new start replaces the earlier marker and keeps the rest of the body" {
   github <<'JSON'
-{"default_branch": {"checks": {"test": "success"}}, "issues": [{"number": 5, "branch": true}]}
+{"issues": [{"number": 5, "branch": true, "body": "Body.\n\n<!-- oe:working role=owner at=2027-01-15T06:00:00Z -->"}]}
+JSON
+
+  run --separate-stderr bash "${oe}" start owner o/r 5 "no PR yet"
+
+  [ "${status}" -eq 0 ]
+  [ "$(jq -r '.issues[0].body' "${OE_GITHUB}")" = "Body.
+
+<!-- oe:working role=owner at=2027-01-15T08:00:00Z -->" ]
+}
+
+@test "the marker names the session ID from each harness variable, the first set winning" {
+  github <<'JSON'
+{"issues": [{"number": 5, "branch": true}]}
+JSON
+
+  for var in OE_SESSION_ID CLAUDE_CODE_SESSION_ID CODEX_THREAD_ID DSH_SESSION_ID; do
+    env "${var}=from-${var}" bash "${oe}" start owner o/r 5 "no PR yet" >/dev/null
+    [ "$(marker_lines)" = "<!-- oe:working role=owner at=2027-01-15T08:00:00Z session=from-${var} -->" ]
+  done
+
+  env OE_SESSION_ID=first DSH_SESSION_ID=fourth bash "${oe}" start owner o/r 5 "no PR yet" >/dev/null
+  [ "$(marker_lines)" = "<!-- oe:working role=owner at=2027-01-15T08:00:00Z session=first -->" ]
+}
+
+@test "a session ID that could break the marker line is left off" {
+  github <<'JSON'
+{"issues": [{"number": 5, "branch": true}]}
+JSON
+
+  for id in $'bad\nid' 'a b' 'x -->'; do
+    OE_SESSION_ID="${id}" run --separate-stderr bash "${oe}" start owner o/r 5 "no PR yet"
+    [ "${status}" -eq 0 ]
+    [ "$(marker_lines)" = "<!-- oe:working role=owner at=2027-01-15T08:00:00Z -->" ]
+  done
+}
+
+@test "oe ready waits for the agent an Owner start left, until it pushes" {
+  github <<'JSON'
+{"issues": [{"number": 5}]}
+JSON
+
+  run --separate-stderr bash "${oe}" start owner o/r 5 "no PR yet"
+  [ "${status}" -eq 0 ]
+
+  run bash "${oe}" ready o/r 1
+  [ "$(printf '%s\n' "${lines[@]}" | awk -F '\t' '$1 == 5 { print $2 }')" = wait-agent ]
+}
+
+@test "starting an Owner for an Issue whose branch is not on origin creates it locally from the base" {
+  github <<'JSON'
+{"issues": [{"number": 6}]}
+JSON
+
+  run --separate-stderr bash "${oe}" start owner o/r 6 --claim "no PR yet"
+
+  [ "${status}" -eq 0 ]
+  [ "$(git -C "${tmp}/shared-oe/issue-6" branch --show-current)" = feat/issue-6 ]
+  [ "$(git -C "${tmp}/shared-oe/issue-6" rev-parse HEAD)" = "$(git -C "${tmp}/seed" rev-parse main)" ]
+  run git -C "${tmp}/origin.git" rev-parse --verify --quiet refs/heads/feat/issue-6
+  [ "${status}" -ne 0 ]
+}
+
+@test "oe start reads and writes no file under the state directory" {
+  github <<'JSON'
+{"issues": [{"number": 5, "branch": true}]}
+JSON
+  mkdir -p "${OE_STATE_DIR}"
+  chmod 000 "${OE_STATE_DIR}"
+
+  run --separate-stderr bash "${oe}" start owner o/r 5 "no PR yet"
+  chmod 755 "${OE_STATE_DIR}"
+
+  [ "${status}" -eq 0 ]
+  [ -z "$(ls -A "${OE_STATE_DIR}")" ]
+}
+
+@test "a start whose marker write fails exits 1, prints no prompt, and removes the worktree" {
+  github <<'JSON'
+{"issues": [{"number": 5, "branch": true}]}
+JSON
+
+  GH_FAIL="-X PATCH" run --separate-stderr bash "${oe}" start owner o/r 5 "no PR yet"
+
+  [ "${status}" -eq 1 ]
+  [ -z "${output}" ]
+  [ ! -e "${wt}" ]
+}
+
+@test "a Verifier whose brief is refused exits with the brief's code, writes no marker, and removes the worktree it created" {
+  github <<'JSON'
+{"issues": [{"number": 5, "branch": true}]}
 JSON
 
   run --separate-stderr bash "${oe}" start verifier o/r 5
@@ -292,6 +200,7 @@ JSON
   [ "${status}" -eq 4 ]
   [ -z "${output}" ]
   [ ! -e "${wt}" ]
+  [ -z "$(marker_lines)" ]
 }
 
 @test "invalid arguments start nothing" {
@@ -305,48 +214,14 @@ JSON
   [ ! -e "${tmp}/shared-oe" ]
 }
 
-@test "the reason in the start command reads back as the third field" {
-  github <<'JSON'
-{"default_branch": {"checks": {"test": "success"}}, "issues": [{"number": 6}]}
-JSON
-
-  run --separate-stderr bash "${oe}" ready o/r 1
-
-  IFS=$'\t' read -r _ _ reason start <<<"${lines[0]}"
-  eval "set -- ${start#bash }"
-  [ "$1" = "${BATS_TEST_DIRNAME}/oe" ]
-  [ "${*: -1}" = "${reason}" ]
-}
-
-@test "a reason holding a single quote reads back unchanged from the start command" {
-  github <<'JSON'
-{"default_branch": {"checks": {"test": "success"}}, "issues": [{"number": 5, "branch": true, "pull_requests": [{"number": 15, "opened": "07:10", "checks": {"it's": "failure"}}]}]}
-JSON
-  records 5 claim@07:00 attempt@07:01
-
-  run --separate-stderr bash "${oe}" ready o/r 1
-
-  IFS=$'\t' read -r _ action reason start <<<"${lines[0]}"
-  [ "${action}" = start-owner ]
-  case "${reason}" in
-  *"it's"*) ;;
-  *) return 1 ;;
-  esac
-  eval "set -- ${start#bash }"
-  [ "${*: -1}" = "${reason}" ]
-}
-
 @test "each oe ready line names the start command for its action, and leaves it empty for a wait" {
   jq -n --arg sha "${head}" '{
-    default_branch: {checks: {test: "success"}},
     issues: [
       {number: 5, branch: true, pull_requests: [{number: 15, head_sha: $sha, opened: "07:10", checks: {test: "success"}}]},
       {number: 6},
       {number: 7, branch: true, pull_requests: [{number: 17, opened: "07:10", checks: {test: "in_progress"}}]}
     ]
   }' >"${OE_GITHUB}"
-  records 5 claim@07:00 attempt@07:01
-  records 7 claim@07:00 attempt@07:01
 
   run --separate-stderr bash "${oe}" ready o/r 1
 
@@ -355,9 +230,8 @@ JSON
   [ "${n} ${action}" = "5 start-verifier" ]
   [ "${start}" = "bash '${BATS_TEST_DIRNAME}/oe' start verifier o/r 5" ]
   IFS=$'\t' read -r n action reason start <<<"${lines[1]}"
-  [ "${n} ${action}" = "6 claim" ]
-  [ "${start}" = "bash '${BATS_TEST_DIRNAME}/oe' start owner o/r 6 --claim '${reason}'" ]
-  [ "$(eval "printf '%s' ${start#*--claim }")" = "${reason}" ]
+  [ "${n} ${action}" = "6 start-owner" ]
+  [ "${start}" = "bash '${BATS_TEST_DIRNAME}/oe' start owner o/r 6 '${reason}'" ]
   IFS=$'\t' read -r n action _ start <<<"${lines[2]}"
   [ "${n} ${action}" = "7 wait-ci" ]
   [ -z "${start}" ]

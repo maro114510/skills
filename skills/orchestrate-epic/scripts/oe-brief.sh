@@ -14,9 +14,9 @@
 # | Role | Checks | Writes | Prints |
 # |---|---|---|---|
 # | owner | The worktree is on the Issue branch | Nothing | repo, issue, base, worktree, and the reason |
-# | verifier | The worktree HEAD is detached at the head of the Issue branch's open PR, and fewer than max_verifier_starts pending verify statuses are on it | A pending verify_context status on that SHA | repo, issue, sha, base, worktree |
+# | verifier | The worktree HEAD is detached at the head of the Issue branch's open PR | A pending verify_context status on that SHA | repo, issue, sha, base, worktree |
 #
-# - The pending status is the Verifier start that oe ready counts, so a Verifier given a brief is always counted.
+# - The pending status shows on the PR that a Verifier runs; oe ready never reads it.
 # - The status is written before the brief is printed, so a failed write starts no Verifier.
 # - The brief is one line, as pr-owner and pr-verify read it.
 #
@@ -27,7 +27,7 @@
 # | 0 | The brief was printed | verifier: the pending status |
 # | 1 | A GitHub read or write failed | Nothing |
 # | 2 | The arguments are invalid, or the worktree is not in the state the role needs | Nothing |
-# | 4 | verifier: the branch has no open PR, its head is not the worktree HEAD, or the start limit is reached | Nothing |
+# | 4 | verifier: the branch has no open PR, or its head is not the worktree HEAD | Nothing |
 set -uo pipefail
 
 # A repository selected by the caller's environment must never reach these commands.
@@ -98,17 +98,6 @@ head="${found#*$'\t'}"
 
 [[ -n "${pr}" ]] || refuse "${branch} has no open pull request on ${repo}"
 [[ "${head}" == "${sha}" ]] || refuse "PR #${pr} head is ${head}, not the worktree HEAD ${sha}"
-
-starts="$(gh api "repos/${repo}/commits/${sha}/statuses?per_page=100" --paginate \
-  --jq '[.[] | select(.context == "'"${verify_context}"'" and .state == "pending")] | length' 2>"${err}")" ||
-  fail "status read for ${sha} failed: $(head -n1 "${err}")"
-total=0
-while read -r page; do
-  [[ -n "${page}" ]] || continue
-  [[ "${page}" =~ ^[0-9]+$ ]] || fail "status read for ${sha} unreadable"
-  total=$((total + page))
-done <<<"${starts}"
-((total < max_verifier_starts)) || refuse "the Verifier already started ${total} times on ${sha}"
 
 gh api -X POST "repos/${repo}/statuses/${sha}" -f state=pending -f context="${verify_context}" \
   -f description="Verifier started on PR #${pr}" --jq '.state' >/dev/null 2>"${err}" ||

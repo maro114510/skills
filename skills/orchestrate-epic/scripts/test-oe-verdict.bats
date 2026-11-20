@@ -94,7 +94,7 @@ action_of() {
   [ "$(verdicts_on "${head_of_pr_15}")" = success ]
 }
 
-@test "a failure verdict keeps its findings on this host instead of a PR comment, and oe ready starts a repair Owner" {
+@test "a failure verdict keeps its findings on this host instead of a PR comment, and oe ready holds the Issue" {
   pr_15_passed_checks
 
   run bash "${oe}" verdict o/r 5 "${head_of_pr_15}" failure <<<"criterion 2 -> none: no test exercises the timeout"
@@ -107,7 +107,7 @@ action_of() {
 
   run bash "${oe}" ready o/r 1
 
-  [ "$(action_of 5)" = start-owner ]
+  [ "$(action_of 5)" = hold ]
   case "${lines[0]}" in
   *"failure verdict"*) ;;
   *) return 1 ;;

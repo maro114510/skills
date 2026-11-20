@@ -8,14 +8,15 @@
 # | Agents' bot | A Bot author whose login is oe_bot, the login git config skills.bot names |
 # | Record | A comment by a trusted author or the agents' bot whose body starts with the record's marker |
 # | Engineer input | A comment or review by a trusted author, never the agents' bot, whose body does not start with the oe marker prefix |
-# | Answer | Engineer input, or an answer record, which the session writes from the person's reply even under the agents' bot |
+# | Answer | Engineer input after the first hold or question, or an answer record, which the session writes from the person's reply even under the agents' bot |
 #
 # | Record on GitHub | Marker | Written by |
 # |---|---|---|
 # | Question | `<!-- oe:question -->` | oe question |
+# | Hold | `<!-- oe:hold -->` | oe hold, run only by the session |
 # | Answer | `<!-- oe:answer -->` | oe question --answer, run only by the session |
 #
-# Claim, attempt, and verdict records stay on this host, as oe-store.sh describes.
+# The working marker is no comment: oe start writes it in the Issue body, and oe-ready.jq reads it.
 # A marked comment from an older oe is no record, and its marker still keeps it from counting as engineer input.
 # GitHub gives the agents' bot no association, so it counts only for records; a user who takes its login is no Bot.
 def trusted: (.authorAssociation // "") as $a | $a == "OWNER" or $a == "MEMBER" or $a == "COLLABORATOR";

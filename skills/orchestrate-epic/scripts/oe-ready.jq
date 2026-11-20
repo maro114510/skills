@@ -1,18 +1,16 @@
 # The decision logic of oe ready.
 # oe-ready.sh passes every GitHub response through these definitions with gh --jq.
-# oe-ready.sh puts oe-records.jq, oe-bots.jq, oe-starts.jq, and these values in front of this file.
+# oe-ready.sh puts the oe_bot definition, oe-records.jq, and these values in front of this file.
 #
 # | Name | Value |
 # |---|---|
 # | now_s | The current time in epoch seconds |
 # | no_checks_grace | Seconds a commit may go without checks before its CI counts as missing |
-# | max_attempts | Owner starts after the latest claim that pushed, or that pushed nothing in a row, before the Issue parks |
-# | max_verifier_starts | Verifier starts on one commit before the Issue parks |
+# | marker_ttl | Seconds a working marker stays live without a result |
+# | repair_cap | Commits of the PR with a failed check, since the latest answer, that hold the Issue |
 # | verify_context | The commit status context that holds the verdict |
 # | branch_prefix | The prefix of an Issue branch, followed by the Issue number |
-# | pr_heads | The verdict, the Verifier starts, and the push time of each open pull request head |
-# | records | The Issue's claim, continue, attempt, and update records from this host, oldest first, each with kind and at |
-# | stale_heads | Each open pull request head that lacks the merge commit of a sibling pull request, with that pull request's number |
+# | pr_heads | The verdict and the push time of each open pull request head |
 
 def epoch: sub("\\.[0-9]+"; "") | fromdateiso8601;
 
@@ -81,6 +79,17 @@ def ci:
       else {state: "passed", detail: ""} end
     end;
 
+
+# Whether one commit of a pull request had a failed check, from the checks the read holds of it.
+# The read holds the first 100 checks of each earlier commit, enough for the repair cap, which only counts commits.
+def commit_failed:
+  ((.statusCheckRollup.contexts.nodes // [])
+    | map(select(.__typename != "StatusContext" or .context != verify_context))) as $nodes
+  | [$nodes | to_entries[] | .key as $i | .value | {key: check_key($i), value: .}]
+  | group_by(.key) | map(map(.value) | sort_by(check_time) | last)
+  | . as $latest
+  | any(.[]; (superseded($latest) | not) and check_class == "failed");
+
 # Reading the Epic
 #
 # epic_lines prints tab-separated lines for oe-ready.sh.
@@ -110,63 +119,63 @@ def question_text:
   | (indexes(test("^\\s*$") | not) | last) as $last
   | if $start == null then "" else .[$start:$last + 1] | join("\n") end;
 
-# Whether one review thread still waits for the Owner.
+# The working marker oe start writes as the last line of that form in the Issue body, or null.
+# A line that does not hold every field in this form is no marker.
+def marker_pattern:
+  "^<!-- oe:working role=(?<role>owner|verifier) at=(?<at>[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z)( sha=(?<sha>[0-9a-f]{40}))?( session=(?<session>[^ ]+))? -->$";
+def working_marker:
+  [gsub("\r"; "") | split("\n")[] | sub("[ \t]+$"; "") | select(test(marker_pattern)) | capture(marker_pattern)]
+  | last
+  | if . == null or (.role == "verifier" and .sha == null) then null else . end;
+
+# Whether one review thread asks the Owner for a change since the head was pushed at $pushed, epoch seconds.
 #
-# - A resolved thread waits for nobody, and so does one whose lines a later push changed, which GitHub marks outdated.
-# - A thread waits only while its last comment is engineer input, so a last comment from a bot or an untrusted author asks for nothing.
-# - A comment from before the latest attempt was already handed to that attempt's Owner.
-def thread_waits($since):
+# - A resolved thread asks nothing, and so does one whose lines a later push changed, which GitHub marks outdated.
+# - A thread asks only while its last comment is engineer input, so a last comment from a bot or an untrusted author asks nothing.
+def thread_waits($pushed):
   (.isResolved != true)
   and (.isOutdated != true)
   and ((.comments.nodes // []) | last as $last
-    | $last != null
-      and ($last | engineer_input)
-      and ($since == null or $last.createdAt > $since));
+    | $last != null and ($last | engineer_input) and (($last.createdAt | epoch) > $pushed));
 
 # Reading one Issue
 #
 # issue_state reduces one Issue response to the facts that next_action decides on.
 #
-# - Only records and questions after the latest claim count.
-#   - Claim and attempt records are ordered by their place in the record file, because a claim and its first attempt can share a timestamp.
-#   - A question, an answer, or a review counts as after a record by comparing its GitHub time with the record's at.
-#   - Everything counts when there is no claim.
-# - A read cut short by GitHub fails only when the comments it left out may come after the latest claim.
-# - The pull request is the newest one opened from the Issue's branch after the latest claim.
+# - A wait is a hold or a question record, and an answer is an answer record, or engineer input after the first wait.
+# - A read cut short by GitHub fails when the Issue has a branch or a pull request and the comments it holds show no wait and no answer,
+#   because an older one could still decide the Issue.
+# - The PR is the newest pull request opened from the Issue's branch that is open or whose head is the branch's current head.
 #   - A pull request from a fork never counts.
-#   - The read holds only the newest pull request with the branch name, so a newer one from a fork hides the Issue's own.
-# - Engineer input counts once.
-#   - Input before the latest attempt was already handed to that attempt's Owner.
-#   - A Changes requested review counts only on the head it covers, because a review of an older head asks for a change its fix already made.
-#   - A review-thread comment counts only while it is its thread's last comment, in a thread that is unresolved and not outdated.
+#   - A PR left from a branch the engineer deleted is never the PR, so an Owner starts the Issue over.
 # - A head that moved between the reads leaves only its Issue unreadable, and the read goes on with every other Issue.
-#   - A push or a newly opened pull request between the reads is the cause.
-#   - next_action gives that Issue read-again right before row 6, the first row that needs the head.
-#   - A head unreadable for any other reason still fails the read when the action depends on it.
-# - A bot finding is a repair signal only while its bot's round is unused, and only when a trusted user has not approved the head.
-# - An attempt is an Owner start that pushed, as oe-starts.jq says, judged by the head the Issue read returns for the branch.
+#   - next_action gives that Issue read-again right before the working marker, the first row that needs the head.
+# - The working marker gives its result, ends, stays live, or expires:
+#   - An Owner's gives its result when the PR is open with a head pushed after its start, or a question came after its start.
+#   - A Verifier's gives its result when its SHA has a verdict.
+#   - An answer newer than its start ends it, so the answer starts the next agent.
+#   - It stays live until marker_ttl passes since its start, and expires with no result after that.
+# - Repair signals count only engineer input and answers since the PR's head was pushed.
+# - The repair cap counts the PR's commits with a failed check that were committed after the latest answer.
 def issue_state:
   .data.repository as $r
   | ($r.issue // error("Issue not found")) as $issue
   | ($issue.comments.nodes // error("comments unreadable")) as $comments
   | ($r.ref != null) as $branch
-  | [($r.pullRequests.nodes // error("pull requests unreadable"))[] | select(.isCrossRepository == false)] as $prs
-  | (records | indexes(.kind == "claim") | last) as $claim
-  | (if $claim == null then null else records[$claim].at end) as $claimed_at
-  | [records | .[($claim // -1) + 1:][] | select(.kind == "attempt") | .at] as $attempts
-  | ([records | .[counted_from:][] | select(.kind == "attempt") | (.bots // [])[]]) as $used_bots
   | ($r.ref.target.oid // null) as $branch_head
-  | ($comments | first | .createdAt) as $oldest
+  | [($r.pullRequests.nodes // error("pull requests unreadable"))[] | select(.isCrossRepository == false)] as $prs
+  | ([$prs[] | select(.state == "OPEN" or ($branch_head != null and .headRefOid == $branch_head))] | first) as $pr
+  | ($comments | indexes(record("question") or record("hold"))) as $waits
+  | ($waits | first) as $first_wait
+  | [range(0; $comments | length) | . as $i
+      | select($comments[$i] | record("answer") or ($first_wait != null and $i > $first_wait and engineer_input))] as $answers
   | if $issue.comments.totalCount > ($comments | length) and ($branch or ($prs | length) > 0)
-      and ($claimed_at == null or $oldest == null or $oldest >= $claimed_at)
-    then error("Issue #\($issue.number) has over \($comments | length) comments, and the read does not reach back to its latest claim")
+      and ($waits | length) == 0 and ($answers | length) == 0
+    then error("Issue #\($issue.number) has over \($comments | length) comments, and the read holds no hold, question, or answer")
     else . end
-  | ($comments | indexes(record("question") and ($claimed_at == null or .createdAt >= $claimed_at)) | last) as $question
-  | ($attempts | last // $claimed_at) as $since
-  | ($comments | indexes(answer) | map(select(. > ($question // infinite)))) as $answers
-  | (if any($answers[]; $comments[.].createdAt > ($since // "")) then ["an answer to the question"] else [] end) as $answered
-  | ([$prs[] | select($claimed_at == null or .createdAt >= $claimed_at)] | first) as $pr
-  | ([$prs[] | select(.mergedAt != null and ($claimed_at == null or .mergedAt >= $claimed_at))] | first) as $merged
+  | ($waits | last) as $wait
+  | ($answers | last) as $answer
+  | (if $answer == null then null else $comments[$answer].createdAt | epoch end) as $answered_at
   | (if $branch and $pr.state == "OPEN" then try (
       ($pr.headRef.target // error("PR #\($pr.number) head unreadable")) as $target
       | if $target.oid != $pr.headRefOid then error("PR #\($pr.number) head changed during the read") else . end
@@ -175,49 +184,52 @@ def issue_state:
         then error("PR #\($pr.number) has more review threads than one read holds") else . end
       | ($target | ci) as $ci
       | ($facts.pushed // ($target.committedDate | epoch)) as $pushed
-      | {sha: $target.oid[0:7], ci: $ci.state, ci_detail: $ci.detail, verdict: $facts.verdict, starts: $facts.starts,
-          oid: $target.oid, pushed: $pushed, age: (now_s - $pushed), lacks: stale_heads[$target.oid],
-          updated: ([records | .[($claim // -1) + 1:][] | select(.kind == "update" and .head == $target.oid) | .at]
-            | last | if . == null then null else epoch end)}
+      | {sha: $target.oid[0:7], oid: $target.oid, ci: $ci.state, ci_detail: $ci.detail, verdict: $facts.verdict,
+          pushed: $pushed, age: (now_s - $pushed)}
     ) catch {unreadable: .}
     else null end) as $head
-  | (if $head == null or $head.unreadable != null then []
-     else [$pr.reviewThreads.nodes[] | bot_finding($since; $used_bots; bot_approved(($pr.approvals.nodes // []); $head.oid))]
-     end) as $bot_findings
+  | ($issue.body // "" | working_marker) as $marker
+  | (if $marker == null then null
+     else ($marker.at | epoch) as $started
+     | (if $marker.role == "owner" then
+          ($head != null and $head.unreadable == null and $head.pushed > $started)
+          or any($comments[]; record("question") and (.createdAt | epoch) > $started)
+        else ((pr_heads[$marker.sha].verdict // "none") | . == "success" or . == "failure" or . == "error") end) as $result
+     | if $answered_at != null and $answered_at > $started then null
+       elif $result then null
+       elif now_s - $started < marker_ttl then {state: "live", role: $marker.role, at: $marker.at}
+       else {state: "expired", role: $marker.role, at: $marker.at} end
+     end) as $working
+  | ($issue.blockedBy
+      | if (.nodes | type) != "array" or .totalCount > (.nodes | length)
+        then error("Issue #\($issue.number) dependencies unreadable") else .nodes end) as $dependencies
   | {
       number: $issue.number,
       closed: ($issue.state == "CLOSED"),
-      branch: $branch,
-      unclaimed: ($branch and $claim == null),
-      merged_pr: $merged.number,
-      abandoned_pr: (if $branch and $pr.state == "CLOSED" then $pr.number else null end),
-      waiting_on: (if $branch then [] else
-        $issue.blockedBy
-        | if (.nodes | type) != "array" or .totalCount > (.nodes | length)
-          then error("Issue #\($issue.number) dependencies unreadable") else .nodes end
-        | map(select(.state != "CLOSED" or .stateReason != "COMPLETED")
-            | "#\(.number) " + (if .state == "OPEN" then "open" else "closed as \(.stateReason // "unknown")" end))
-      end),
-      question_open: ($question != null and ($answers | length) == 0),
-      question: (if $question == null then null else $comments[$question] | {url, text: (.body | question_text)} end),
-      attempts: (records | attempts_used($branch_head)),
-      idle_starts: (records | starts_without_push($branch_head)),
-      since: $since,
-      question_at: (if $question == null then null else $comments[$question].createdAt end),
+      wait: (if $wait == null or ($answer != null and $answer > $wait) then null
+        else $comments[$wait] | {kind: (if record("hold") then "hold" else "question" end), url, text: (.body | question_text),
+          at: .createdAt} end),
       pr: $pr.number,
+      pr_closed: ($pr.state == "CLOSED"),
+      pr_merged: ($pr.state == "MERGED"),
+      dropped: [$dependencies[] | select(.state == "CLOSED" and (.stateReason == "NOT_PLANNED" or .stateReason == "DUPLICATE"))
+        | "dependency #\(.number) closed as \(.stateReason | ascii_downcase)"],
+      waiting_on: [$dependencies[] | select(.state != "CLOSED") | "#\(.number) open"],
       head: $head,
-      repairs: (if $pr == null then $answered + ["no PR yet"]
+      working: $working,
+      failed_commits: (if $head == null or $head.unreadable != null then 0
+        else [$pr.commits.nodes[]?.commit | select($answered_at == null or (.committedDate | epoch) > $answered_at) | select(commit_failed)]
+          | length end),
+      repairs: (if $pr == null then ["no PR yet"]
         elif $head == null or $head.unreadable != null then []
-        else $answered + [
+        else [
           if $pr.mergeable == "CONFLICTING" then "PR #\($pr.number) conflicts with its base" else empty end,
           if $head.ci == "failed" then "checks failed on \($head.sha): \($head.ci_detail)" else empty end,
-          if $head.verdict == "failure" or $head.verdict == "error" then "failure verdict on \($head.sha)" else empty end,
-          if any($pr.reviews.nodes[]?; .commit.oid == $head.oid and engineer_input and ($since == null or .submittedAt > $since))
+          if $answered_at != null and $answered_at > $head.pushed then "an answer since the head's push" else empty end,
+          if any($pr.reviews.nodes[]?; .commit.oid == $head.oid and engineer_input and ((.submittedAt | epoch) > $head.pushed))
           then "a trusted Changes requested review" else empty end,
-          if any($pr.reviewThreads.nodes[]?; thread_waits($since))
-          then "a trusted review-thread comment" else empty end,
-          if ($bot_findings | length) > 0
-          then ($bot_findings | map("\(.level) finding from \(.login)") | join(", ")) else empty end
+          if any($pr.reviewThreads.nodes[]?; thread_waits($head.pushed))
+          then "a trusted review-thread comment" else empty end
         ] end)
     };
 
@@ -228,70 +240,50 @@ def issue_state:
 # | Row | When | Action |
 # |---|---|---|
 # | 1 | The Issue is closed | done |
-# | 2 | A pull request merged after the latest claim | wait-engineer |
-# | 2 | The branch exists and its pull request closed without merging | wait-engineer |
-# | 2 | The branch exists and has no claim record on this host | wait-engineer |
-# | 3 | No branch, and a dependency is not closed as completed | wait-dependencies |
-# | 4 | No branch, and every dependency is closed as completed | claim |
-# | 5 | The latest question has no answer after it | wait-answer |
-# | 6 | The head moved during the read | read-again |
-# | 6 | A repair signal is present, and fewer than max_attempts attempts were used, and the latest starts did not all push nothing | start-owner |
-# | 6 | A repair signal is present, and max_attempts attempts were used | parked |
-# | 6 | A repair signal is present, and the latest max_attempts Owner starts pushed nothing | parked |
-# | 7 | A check on the head is pending | wait-ci |
-# | 7 | The head has no checks, and no_checks_grace has not passed since its push | wait-ci |
-# | 8 | The head has no checks, and no_checks_grace has passed since its push | parked |
-# | 9 | The head lacks a sibling's merge commit, and an update on it was requested less than no_checks_grace ago | wait-update |
-# | 9 | The head lacks a sibling's merge commit, and an update on it was requested no_checks_grace ago or earlier | parked |
-# | 9 | The head lacks a sibling's merge commit, and no update on it was requested | update-branch |
-# | 10 | The head has no verdict, and the Verifier started max_verifier_starts times | parked |
-# | 10 | The head has no verdict, and the Verifier started fewer times | start-verifier |
-# | 11 | The head has a success verdict | wait-merge |
+# | 2 | A hold or a question is newer than the latest answer | wait-answer |
+# | 3 | The PR was closed without merging, or merged with the Issue open | hold |
+# | 4 | A dependency was closed as not planned or duplicate | hold |
+# | 5 | A dependency is not completed | wait-dependencies |
+# | - | The PR's head moved during the read | read-again |
+# | 6 | The working marker is live | wait-agent |
+# | 7 | The working marker expired with no result | hold |
+# | 8 | A repair signal is present, and repair_cap commits of the PR since the latest answer had a failed check | hold |
+# | 8 | A repair signal is present otherwise | start-owner |
+# | 9 | A check on the head is pending, or the head has had no checks for less than no_checks_grace | wait-ci |
+# | 10 | The head still has no checks after no_checks_grace | hold |
+# | 11 | The head has no verdict | start-verifier |
+# | 12 | The head has a failure verdict | hold |
+# | 13 | The head has a success verdict | wait-merge |
 #
-# Repair signals
-#
-# - No pull request exists yet
-# - The pull request conflicts with its base
-# - A check on the head failed
-# - The verdict on the head is a failure
-# - Engineer input arrived after the latest attempt
-#   - An answer to the latest question
-#   - A Changes requested review that covers the head
-#   - A review-thread comment that is its thread's last comment, in a thread that is unresolved and not outdated
-# - A listed bot wrote a finding after the latest attempt, its round is unused, and no trusted user approved the head
 # A reason quotes check names and logins from GitHub, so tabs and line breaks in it become spaces and cannot add a field or a line.
 def act($action; $reason): "\(.number)\t\($action)\t\($reason | gsub("[\t\r\n]"; " "))";
+def agent($role): if $role == "owner" then "pr-owner" else "pr-verify" end;
 def next_action:
   if .closed then act("done"; "closed")
-  elif .merged_pr != null then act("wait-engineer"; "PR #\(.merged_pr) merged; the Issue is still open")
-  elif .abandoned_pr != null then act("wait-engineer"; "PR #\(.abandoned_pr) closed without merging")
-  elif .unclaimed then act("wait-engineer"; "\(branch_prefix)\(.number) exists with no claim on this host")
-  elif .branch | not then
-    if (.waiting_on | length) > 0 then act("wait-dependencies"; .waiting_on | join(", "))
-    else act("claim"; "every dependency completed") end
-  elif .question_open then
-    act("wait-answer"; "question \(.question.url) has no answer yet:\n\(.question.text)" | gsub("\r?\n"; "\\n"))
+  elif .wait != null then
+    act("wait-answer"; "\(.wait.kind) \(.wait.url) has no answer yet:\n\(.wait.text)" | gsub("\r?\n"; "\\n"))
+  elif .pr_closed then act("hold"; "PR #\(.pr) was closed without merging")
+  elif .pr_merged then act("hold"; "PR #\(.pr) merged; the Issue is still open")
+  elif (.dropped | length) > 0 then act("hold"; .dropped | join("; "))
+  elif (.waiting_on | length) > 0 then act("wait-dependencies"; .waiting_on | join(", "))
   elif .head.unreadable != null then
     if .head.unreadable | test("changed during the read$") then act("read-again"; "\(.head.unreadable); read again at the next pass")
     else error(.head.unreadable) end
+  elif .working.state == "live" then act("wait-agent"; "\(agent(.working.role)) started at \(.working.at)")
+  elif .working.state == "expired" then
+    act("hold"; "\(agent(.working.role)) started at \(.working.at) and gave no result within \(marker_ttl / 3600) hours")
   elif (.repairs | length) > 0 then
     (.repairs | join("; ")) as $why
-    | if .attempts >= max_attempts then act("parked"; "\(.attempts) attempts used; still: \($why)")
-      elif .idle_starts >= max_attempts then act("parked"; "\(.idle_starts) Owner starts in a row pushed nothing; still: \($why)")
-      else act("start-owner"; "attempt \(.attempts + 1) of \(max_attempts): \($why)") end
+    | if .failed_commits >= repair_cap
+      then act("hold"; "\(.failed_commits) commits of PR #\(.pr) had a failed check since the latest answer; still: \($why)")
+      else act("start-owner"; $why) end
   elif .head.ci == "pending" then act("wait-ci"; "checks pending on \(.head.sha): \(.head.ci_detail)")
   elif .head.ci == "none" and .head.age < no_checks_grace then
     act("wait-ci"; "no checks yet on \(.head.sha), \(.head.age)s after its push")
-  elif .head.ci == "none" then act("parked"; "no checks on \(.head.sha) \(.head.age)s after its push")
-  elif .head.lacks != null and .head.updated != null and now_s - .head.updated < no_checks_grace then
-    act("wait-update"; "update of \(.head.sha) requested \(now_s - .head.updated)s ago; waiting for its new head")
-  elif .head.lacks != null and .head.updated != null then
-    act("parked"; "\(.head.sha) still lacks sibling PR #\(.head.lacks) \(now_s - .head.updated)s after its update was requested; oe update shows why")
-  elif .head.lacks != null then act("update-branch"; "\(.head.sha) lacks sibling PR #\(.head.lacks), merged into the base branch")
-  elif .head.verdict != "success" and .head.starts >= max_verifier_starts then
-    act("parked"; "Verifier started \(.head.starts) times on \(.head.sha) without a verdict")
-  elif .head.verdict != "success" then act("start-verifier"; "checks passed on \(.head.sha)")
-  else act("wait-merge"; "success verdict on \(.head.sha)") end;
+  elif .head.ci == "none" then act("hold"; "no checks on \(.head.sha) \(.head.age)s after its push")
+  elif .head.verdict == "failure" or .head.verdict == "error" then act("hold"; "failure verdict on \(.head.sha)")
+  elif .head.verdict == "success" then act("wait-merge"; "success verdict on \(.head.sha)")
+  else act("start-verifier"; "checks passed on \(.head.sha)") end;
 
 # A closed Issue is done before anything else is read, so a busy closed Issue never fails the read.
 def classify:
@@ -305,29 +297,26 @@ def classify:
 # | Field | Holds |
 # |---|---|
 # | number, action, reason | The Issue number, and the action and reason classify gives |
-# | pr | The pull request opened from the branch after the latest claim, or null |
-# | head | The full SHA of that pull request's open head, or null |
+# | pr | The PR, or null |
+# | head | The full SHA of the PR's open head, or null |
 # | ci, verdict | The CI state and the oe/verify state of that head, or null |
-# | starts | Verifier starts on that head, or null |
-# | attempts | Owner starts after the latest claim that pushed, or null for a closed Issue |
+# | starts, attempts | Always null, because nothing on GitHub counts them |
 # | started | Epoch seconds when the Issue entered its step, or null when no read shows it |
 #
 # | Action | Started at |
 # |---|---|
-# | wait-answer | The latest question |
-# | wait-ci, update-branch, start-verifier, wait-merge | The push of the head |
-# | wait-update | The update request on the head |
-# | start-owner, parked | The latest attempt, or the latest claim without one |
+# | wait-answer | The latest hold or question |
+# | wait-ci, start-verifier, wait-merge | The push of the head |
+# | wait-agent | The start in the working marker |
 # | Any other | null |
 def facts:
   if .data.repository.issue.state == "CLOSED" then .data.repository.issue | {number, action: "done", reason: "closed"}
   else issue_state
     | (next_action | split("\t")) as [$n, $action, $reason]
-    | {number, action: $action, reason: $reason, pr, head: .head.oid, ci: .head.ci, verdict: .head.verdict, starts: .head.starts, attempts,
+    | {number, action: $action, reason: $reason, pr, head: .head.oid, ci: .head.ci, verdict: .head.verdict, starts: null, attempts: null,
         started: (
-          if $action == "wait-answer" then .question_at | epoch
-          elif $action == "wait-update" then .head.updated
-          elif $action == "wait-ci" or $action == "update-branch" or $action == "start-verifier" or $action == "wait-merge" then .head.pushed
-          elif $action == "start-owner" or $action == "parked" then .since // null | if . then epoch else null end
+          if $action == "wait-answer" then .wait.at | epoch
+          elif $action == "wait-ci" or $action == "start-verifier" or $action == "wait-merge" then .head.pushed
+          elif $action == "wait-agent" then .working.at | epoch
           else null end)}
   end;

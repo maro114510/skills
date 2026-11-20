@@ -40,13 +40,13 @@
 # |---|---|---|
 # | number | The Issue number | Required |
 # | closed | Whether the Issue is closed as completed | false |
-# | body | The Issue body | Empty |
+# | body | The Issue body, where oe start writes its working marker | Empty |
 # | blocked_by | Dependencies, each with a number and a state of open, completed, or not_planned | None |
 # | branch | Whether the branch feat/issue-N exists | false |
 # | branch_sha | The head of the branch feat/issue-N | The head of the newest pull request, or else the default branch head |
 # | assignees | Logins oe assigned to the Issue | None |
 # | comments | Issue comments, oldest first, each with by, at, body, and optionally login and type, as thread comments hold them | None |
-# | pull_requests | Pull requests opened from the branch; the Issue read returns only the newest, as its query asks | None |
+# | pull_requests | Pull requests opened from the branch; the Issue read returns the newest 5, as its query asks | None |
 # | older_comments | How many older comments GitHub leaves out of the read | 0 |
 # | older_pull_requests | How many older pull requests GitHub leaves out of the read | 0 |
 #
@@ -65,6 +65,7 @@
 # | pushed | When its head was pushed | Same as opened |
 # | pushed_during_read | Whether a new head arrived after the pull request list was read | false |
 # | committed | The commit time of its head | Same as opened |
+# | commits | Earlier commits of the pull request, oldest first, each with sha, committed, and optionally checks | None |
 # | checks | Check name to result on its head | No checks |
 # | check_runs | Further check runs on its head, each with name, result, suite, started, and optionally the workflow that ran it, so one name can run in several check suites | None |
 # | verdicts | oe/verify states on its head, newest first | None |
@@ -151,12 +152,15 @@ def pull_request:
     reviews: {nodes: [.reviews[]? | author + {submittedAt: (.at | time), commit: {oid: (.sha // $sha)}}]},
     approvals: {nodes: [.approvals[]? | {authorAssociation: (.by // "NONE"), commit: {oid: (.sha // $sha)}}]},
     reviewThreads: {totalCount: ((review_threads | length) + (.older_threads // 0)), nodes: review_threads},
+    commits: {nodes: [(.commits[]? | {commit: {oid: .sha, committedDate: (.committed | time), statusCheckRollup: rollup}}),
+      {commit: {oid: $sha, committedDate: (.committed // .opened | time), statusCheckRollup: rollup}}]},
     headRef: {target: {oid: $sha, committedDate: (.committed // .opened | time), statusCheckRollup: rollup}}};
 
 def issue_response($n):
   (.issues[] | select(.number == $n)) as $i
   | {data: {repository: {
       issue: {number: $n,
+        body: ($i.body // ""),
         state: (if $i.closed then "CLOSED" else "OPEN" end),
         stateReason: (if $i.closed then "COMPLETED" else null end),
         blockedBy: {totalCount: ($i.blocked_by // [] | length), nodes: [$i.blocked_by[]? | {number,
@@ -167,7 +171,7 @@ def issue_response($n):
             url: "https://github.com/o/r/issues/\($n)#issuecomment-\($c + 1)",
             author: {login: (.login // ""), __typename: (.type // "User")}}]}},
       ref: (if $i.branch then {name: "feat/issue-\($n)", target: {oid: ($i.branch_sha // ([$i.pull_requests // [] | sort_by(.opened) | reverse | .[0] | select(. != null) | read_sha] | first) // default_sha)}} else null end),
-      pullRequests: {totalCount: (($i.pull_requests // [] | length) + ($i.older_pull_requests // 0)), nodes: [$i.pull_requests // [] | sort_by(.opened) | reverse | .[0:1][] | pull_request]}}}};
+      pullRequests: {totalCount: (($i.pull_requests // [] | length) + ($i.older_pull_requests // 0)), nodes: [$i.pull_requests // [] | sort_by(.opened) | reverse | .[0:5][] | pull_request]}}}};
 
 def open_pull_requests:
   [.issues[] | .number as $n | .pull_requests[]? | select((.state // "open") == "open")

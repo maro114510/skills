@@ -14,7 +14,7 @@
 #
 # | Subcommand | Does |
 # |---|---|
-# | add | Fetches the Issue branch from origin and checks it out in a fresh worktree tracking it, then prints the path |
+# | add | Fetches the Issue branch from origin and checks it out in a fresh worktree tracking it, then prints the path. When origin has no Issue branch, it creates the branch locally from origin's default branch, and the Owner's first push creates it on origin |
 # | add --detach | Fetches the Issue branch the same way and checks out its head detached, for a Verifier, then prints the path |
 # | remove | Removes the worktree and the local Issue branch, discarding unpushed work |
 #
@@ -26,7 +26,7 @@
 # | Code | Meaning |
 # |---|---|
 # | 0 | Done |
-# | 1 | Git failed, the branch is not on origin, or the path holds something oe did not create |
+# | 1 | Git failed, the branch is not on origin for add --detach, or the path holds something oe did not create |
 # | 2 | The arguments are invalid, or this is not a Git repository |
 set -uo pipefail
 
@@ -98,16 +98,33 @@ tracking="refs/remotes/origin/${branch}"
 # A clone that opted in but cannot act as the Bot refuses here, before a fetch could use the
 # person's credential.
 bot_config_ready || exit 1
-bot_git fetch --quiet origin "+refs/heads/${branch}:${tracking}" || fail "cannot fetch ${branch} from origin"
-git rev-parse --verify --quiet "${tracking}^{commit}" >/dev/null || fail "cannot read the fetched ${branch}"
+# ls-remote exits 2 only when origin answered and holds no such branch, so a failed read is never taken for a missing branch.
+bot_git ls-remote --quiet --exit-code --heads origin "refs/heads/${branch}" >/dev/null
+case $? in
+0) start="origin/${branch}" ;;
+2)
+  ((! detach)) || fail "${branch} is not on origin, so there is no head to check out"
+  base="$(bot_git ls-remote --quiet --symref origin HEAD | sed -n 's|^ref: refs/heads/\([^	]*\)	HEAD$|\1|p')"
+  [[ -n "${base}" ]] || fail "cannot read the default branch of origin"
+  tracking="refs/remotes/origin/${base}"
+  start=""
+  ;;
+*) fail "cannot read ${branch} on origin" ;;
+esac
+fetched="${tracking#refs/remotes/origin/}"
+bot_git fetch --quiet origin "+refs/heads/${fetched}:${tracking}" || fail "cannot fetch ${fetched} from origin"
+git rev-parse --verify --quiet "${tracking}^{commit}" >/dev/null || fail "cannot read the fetched ${fetched}"
 
 remove_worktree
 mkdir -p "${root}" || fail "cannot create ${root}"
 if ((detach)); then
   git worktree add --quiet --detach "${wt}" "${tracking}" || fail "cannot create ${wt} at the head of ${branch}"
-else
-  git worktree add --quiet --track -B "${branch}" "${wt}" "origin/${branch}" ||
+elif [[ -n "${start}" ]]; then
+  git worktree add --quiet --track -B "${branch}" "${wt}" "${start}" ||
     fail "cannot create ${wt} on ${branch}"
+else
+  git worktree add --quiet --no-track -B "${branch}" "${wt}" "${tracking}" ||
+    fail "cannot create ${wt} on ${branch} from ${fetched}"
 fi
 bot_identity_apply "${wt}" || {
   git worktree remove --force "${wt}" >/dev/null 2>&1 || true

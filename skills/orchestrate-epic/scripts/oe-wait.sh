@@ -9,8 +9,8 @@
 #
 #   oe wait <owner/repo> <epic-number> [--running <issue-number>]... [--max-agents <n>] [--timeout <seconds>] [--idle-since <epoch>]
 #
-# - --running is accepted and ignored, so a caller written for it still runs: the agents running are oe ready's running lines,
-#   so an agent that ends during a wait changes its Issue's line and returns that wait.
+# - --running is accepted and ignored, so a caller written for it still runs: the agents running are oe ready's wait-agent lines,
+#   so an agent that pushes, asks, or gives a verdict during a wait changes its Issue's line and returns that wait.
 # - --max-agents is how many agents the session can run at once, 3 by default as in the skill.
 #   The session passes its running count after a start failed, so the failed Issue does not end the wait at once.
 # - --timeout bounds this call, wait_timeout seconds by default.
@@ -28,7 +28,7 @@
 # The first oe ready run that succeeds is the baseline, and every later run is compared with it.
 # A baseline that already holds an Issue to start ends the wait at once while fewer than --max-agents agents run,
 # because no later run would show it as a change.
-# A baseline that holds an update-branch ends it at once whatever the agents run, because the update starts no agent.
+# A baseline that holds a hold ends it at once whatever the agents run, because the session must record the hold and show it to the person.
 # Only each line's Issue number and action are compared, because a reason carries the seconds since a push,
 # which differ on every run while nothing the session can act on has changed.
 #
@@ -41,8 +41,7 @@
 # | Item | When | Link |
 # |---|---|---|
 # | A question | An Issue's action is wait-answer | The Issue |
-# | A park | An Issue's action is parked | The Issue |
-# | An Issue waiting for a person | An Issue's action is wait-engineer | The Issue |
+# | A hold | An Issue's action is hold | The Issue |
 # | An Issue waiting for a merge | An Issue's action is wait-merge | The Issue |
 # | Failed reads | notify_failed_reads oe ready runs in a row failed to read GitHub | The Epic |
 # | The session's end | Every Issue is done, or oe ready failed with an error other than a failed read, which ends the session | The Epic |
@@ -194,8 +193,7 @@ waiting_items() {
   while IFS=$'\t' read -r n action reason _; do
     case "${action}" in
     wait-answer) message="Issue #${n} in ${repo} has a question for you" ;;
-    parked) message="Issue #${n} in ${repo} is parked: ${reason}" ;;
-    wait-engineer) message="Issue #${n} in ${repo} waits for you: ${reason}" ;;
+    hold) message="Issue #${n} in ${repo} waits for you: ${reason}" ;;
     wait-merge) message="Issue #${n} in ${repo} waits for your merge: ${reason}" ;;
     *) continue ;;
     esac
@@ -270,12 +268,13 @@ actions() {
 
 # Succeeds when a line of $current has an action that starts an agent and fewer than max_agents agents run, so the session can start it now.
 # The action decides, not a non-empty fourth field, because a wait-answer line carries an answer command there and starts nothing.
-# An update-branch line is always startable, because oe update starts no agent and the cap counts agents.
+# A hold line is always actionable, because oe hold starts no agent and the cap counts agents.
+# The agents running are the wait-agent lines, whose working marker is live.
 startable() {
   local agents
-  agents="$(cut -f2 <<<"${current}" | grep -cx running)"
-  cut -f2 <<<"${current}" | grep -qx update-branch ||
-    { ((agents < max_agents)) && cut -f2 <<<"${current}" | grep -qxE 'claim|start-owner|start-verifier'; }
+  agents="$(cut -f2 <<<"${current}" | grep -cx wait-agent)"
+  cut -f2 <<<"${current}" | grep -qx hold ||
+    { ((agents < max_agents)) && cut -f2 <<<"${current}" | grep -qxE 'start-owner|start-verifier'; }
 }
 
 current=""

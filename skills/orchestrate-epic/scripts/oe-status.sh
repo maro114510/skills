@@ -24,7 +24,7 @@
 # | Count | Steps |
 # |---|---|
 # | done | done |
-# | waiting on you | wait-answer, parked, wait-engineer, wait-merge |
+# | waiting on you | wait-answer, hold, wait-merge |
 # | waiting | wait-dependencies |
 # | in progress | Any other, running included |
 #
@@ -43,10 +43,10 @@
 # | PR | The pull request opened from its branch after the latest claim |
 # | CI | The CI state of that pull request's open head |
 # | VERDICT | The oe/verify state on that head |
-# | ATTEMPTS | Owner starts since the latest claim that pushed, out of max_attempts |
+# | ATTEMPTS | Always -, because nothing on GitHub counts Owner starts |
 # | AGENT | owner or verifier while a running session holds the Epic's lock and that agent's worktree exists |
 # | SINCE | Time since the Issue entered its step, as facts in oe-ready.jq defines it |
-# | REASON | For a running Owner, the attempts used; for a running Verifier, its start out of the cap; else oe ready's reason for the step |
+# | REASON | For a running agent, its role and the head it runs on; else oe ready's reason for the step |
 #
 # - Under the table, each Issue whose head has a failure verdict shows that verdict's findings, one line each.
 #
@@ -127,20 +127,18 @@ render() {
     agent="$(agent_of "${n}")"
     # A running agent's own start is already recorded, so oe ready's next action would describe the start after it.
     if [[ "${agent}" != - && "$(jq -r .action <<<"${line}")" != "done" ]]; then
-      line="$(jq -c --arg agent "${agent}" --argjson max "${max_attempts}" --argjson vmax "${max_verifier_starts}" '
+      line="$(jq -c --arg agent "${agent}" '
         .action = "running"
-        | .reason = (if $agent == "owner" then "Owner runs; \(.attempts // 0) of \($max) attempts used"
-            else "Verifier start \(.starts // 0) of \($vmax) on \((.head // "")[0:7])" end)' <<<"${line}")" || return 1
+        | .reason = (if $agent == "owner" then "Owner runs" else "Verifier runs on \((.head // "")[0:7])" end)' <<<"${line}")" || return 1
     fi
     action="$(jq -r .action <<<"${line}")" || return 1
     case "${action}" in
     done) done_n=$((done_n + 1)) ;;
-    wait-answer | parked | wait-engineer | wait-merge)
+    wait-answer | hold | wait-merge)
       owner_n=$((owner_n + 1))
       needs+="$(jq -r --arg repo "${repo}" '
-        {"wait-answer": "Answer the Owner'\''s question in the session'\''s conversation or with a comment on the Issue",
-          "parked": "Fix it by hand, delete its branch so the AI starts over, or tell the session to continue it",
-          "wait-engineer": "Close the Issue, reopen the PR, or delete its branch so the AI starts over",
+        {"wait-answer": "Answer the hold or the Owner'\''s question in the session'\''s conversation",
+          "hold": "Answer in the session'\''s conversation once the session records the hold",
           "wait-merge": "Review the PR and merge it"}[.action] as $todo
         | (if .action != "wait-answer" and .pr then "pull/\(.pr)" else "issues/\(.number)" end) as $path
         | "- #\(.number) \($todo)\n  https://github.com/\($repo)/\($path)\n  why: \(.reason)"' \
@@ -152,10 +150,10 @@ render() {
     started="$(jq -r '.started // empty' <<<"${line}")" || return 1
     since=-
     [[ -z "${started}" ]] || since="$(duration "$((now - started))")"
-    rows+="$(jq -r --arg agent "${agent}" --arg since "${since}" --argjson max "${max_attempts}" \
+    rows+="$(jq -r --arg agent "${agent}" --arg since "${since}" \
       '["#\(.number)", .action, (if .pr then "#\(.pr)" else "-" end), (.ci // "-"),
         (if .verdict == null or .verdict == "none" then "-" else .verdict end),
-        (if .attempts == null then "-" else "\(.attempts)/\($max)" end), $agent, $since, .reason] | join("\t")' \
+        "-", $agent, $since, .reason] | join("\t")' \
       <<<"${line}")"$'\n' || return 1
     if [[ "$(jq -r '.verdict == "failure"' <<<"${line}")" == true ]]; then
       head="$(jq -r .head <<<"${line}")"

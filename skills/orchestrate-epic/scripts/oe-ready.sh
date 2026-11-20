@@ -2,14 +2,14 @@
 # oe ready
 #
 # Prints the next action of every child Issue of an Epic.
-# It reads GitHub through gh and the record store that oe-store.sh defines, and writes nothing anywhere.
+# It reads GitHub only, through gh, and writes nothing anywhere.
 # The actions follow the next-action table in docs/design/orchestrate-epic.md.
 #
 # Usage
 #
 #   oe ready <owner/repo> <epic-number> [--running <issue-number>]... [--facts]
 #
-# - --running is accepted and ignored, so a caller written for it still runs: oe finds the running agents in its own records.
+# - --running is accepted and ignored, so a caller written for it still runs: the working marker in each Issue body shows a running agent.
 # - --facts, for oe status, prints each line as the JSON object that facts in oe-ready.jq describes.
 #   It changes only the format: the same reads run, and the same action is decided.
 # - OE_NOW sets the current time in epoch seconds.
@@ -17,17 +17,9 @@
 # Output
 #
 # - Each line holds an Issue number, an action, a reason, and the command that the action runs, separated by tabs.
-#   The command is oe start for an action that starts an agent, oe update for update-branch, which starts none,
-#   and empty for every other action, except the two lines below.
-# - A wait-answer line holds the open question in its reason, with each line break written as \n,
+#   The command is oe start for an action that starts an agent, oe hold for hold, and empty for every other action, except the one below.
+# - A wait-answer line holds the open hold or question in its reason, with each line break written as \n,
 #   and its command is the oe question --answer call that records the person's reply, ending in <reply>.
-# - A parked line that the attempt cap or starts without a push caused holds the oe continue call that returns the Issue to the loop,
-#   ending in [<instruction>], which the session drops, or replaces with the person's words, quoted.
-#   No other park gets one, because resetting the count clears no other.
-# - An Issue whose agent runs gets the action running, which no row of the next-action table decides:
-#   its reason names the agent and the oe worktree remove command to run once the agent ends, and its command is empty.
-#   An agent runs while the run record oe start wrote is no older than the lock of the running session holding the Epic,
-#   and the agent's worktree under worktree_root exists. --facts leaves this out, because oe status finds the agents itself.
 # - Lines are sorted by Issue number.
 # - oe-ready.jq lists every action and the row it comes from.
 #
@@ -36,7 +28,7 @@
 # | Code | Meaning | Output |
 # |---|---|---|
 # | 0 | Every Issue was classified | One line per Issue |
-# | 1 | A GitHub read or the record store read failed | Nothing |
+# | 1 | A GitHub read failed | Nothing |
 # | 2 | The arguments, or git config skills.bot, are invalid | Nothing |
 #
 # Files
@@ -47,21 +39,16 @@
 # | oe-ready-issue.graphql | The read of one Issue |
 # | oe-ready-checks.graphql | One more page of checks on a commit |
 # | oe-ready.jq | Every rule that turns a response into an action |
-# | oe-bots.jq | The review bots whose findings start a repair, and how a finding is read |
-# | oe-records.jq | Which comments count as questions and as engineer input |
-# | oe-starts.jq | Which Owner starts pushed and count as attempts |
+# | oe-records.jq | Which comments count as holds, questions, answers, and engineer input |
 # | oe-config.sh | The limits and names shared with oe's writers |
-# | oe-store.sh | Where each Issue's claim and attempt records live on this host |
 #
 # Reads, in order
 #
 # 1. The Epic read gives the default branch name and the child Issues.
 # 2. The open pull request list gives the head of each Issue branch.
-# 3. Commit statuses give the verdict on each head and the number of Verifier starts.
+# 3. Commit statuses give the verdict on each head.
 # 4. Repository activity gives the push time of each head.
-# 5. One read per Issue, with its claim and attempt records from this host, gives everything else.
-# 6. One compare per listed head, when another Issue's pull request merged into the default branch,
-#    gives whether the head contains that merge.
+# 5. One read per Issue gives everything else, the working marker in its body included.
 #
 # Read 5 holds 100 checks of a commit, and one more read per page gives the rest.
 # No read covers the default branch's checks, so its state never decides an action.
@@ -70,8 +57,6 @@ set -uo pipefail
 dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source-path=SCRIPTDIR
 source "${dir}/oe-config.sh"
-# shellcheck source-path=SCRIPTDIR
-source "${dir}/oe-store.sh"
 
 usage() {
   echo "$1" >&2
@@ -108,19 +93,16 @@ epic_query="$(<"${dir}/oe-ready-epic.graphql")" || fail "cannot read oe-ready-ep
 issue_query="$(<"${dir}/oe-ready-issue.graphql")" || fail "cannot read oe-ready-issue.graphql"
 checks_query="$(<"${dir}/oe-ready-checks.graphql")" || fail "cannot read oe-ready-checks.graphql"
 trust="$(<"${dir}/oe-records.jq")" || fail "cannot read oe-records.jq"
-bots="$(<"${dir}/oe-bots.jq")" || fail "cannot read oe-bots.jq"
-starts="$(<"${dir}/oe-starts.jq")" || fail "cannot read oe-starts.jq"
 rules="$(<"${dir}/oe-ready.jq")" || fail "cannot read oe-ready.jq"
-rules="${trust}"$'\n'"${bots}"$'\n'"${starts}"$'\n'"${rules}"
+rules="${trust}"$'\n'"${rules}"
 bot="$(bot_def)" || usage "Invalid git config skills.bot"
 
-# Prints the jq program that runs the entry point $1 of oe-ready.jq,
-# with pr_heads set to $2, records to the JSON array $3, and stale_heads to $4.
+# Prints the jq program that runs the entry point $1 of oe-ready.jq, with pr_heads set to $2.
 program() {
-  printf 'def now_s: %s; def no_checks_grace: %s; def max_attempts: %s; def max_verifier_starts: %s;\n' \
-    "${now}" "${no_checks_grace}" "${max_attempts}" "${max_verifier_starts}"
-  printf 'def verify_context: "%s"; def branch_prefix: "%s"; def pr_heads: {%s}; def records: %s; def stale_heads: {%s};\n%s\n%s\n' \
-    "${verify_context}" "${branch_prefix}" "${2:-}" "${3:-[]}" "${4:-}" "${bot}"$'\n'"${rules}" "$1"
+  printf 'def now_s: %s; def no_checks_grace: %s; def marker_ttl: %s; def repair_cap: %s;\n' \
+    "${now}" "${no_checks_grace}" "${marker_ttl}" "${repair_cap}"
+  printf 'def verify_context: "%s"; def branch_prefix: "%s"; def pr_heads: {%s};\n%s\n%s\n' \
+    "${verify_context}" "${branch_prefix}" "${2:-}" "${bot}"$'\n'"${rules}" "$1"
 }
 
 err="$(mktemp)" || fail "mktemp failed"
@@ -184,76 +166,34 @@ shell_quote() {
 }
 
 # Prints out's lines with a fourth field: the oe start command for an action that starts an agent,
-# the oe update command for update-branch, the oe question command that records the person's answer for wait-answer,
-# the oe continue command for a park by the attempt cap or by starts without a push, and nothing otherwise.
-# A start command is complete and quoted, so a session that lost SKILL.md can run it as printed.
+# the oe hold command for hold, the oe question command that records the person's answer for wait-answer, and nothing otherwise.
+# A command is complete and quoted, so a session that lost SKILL.md can run it as printed.
 # The answer command ends in <reply>, which the session replaces with the person's reply, quoted.
-with_start() {
-  local n action reason start command lines=""
+with_commands() {
+  local n action reason command lines=""
   while IFS=$'\t' read -r n action reason; do
     [[ -n "${n}" ]] || continue
-    # A start command runs as printed, so a line that is not exactly what classify writes fails the read instead.
+    # A command runs as printed, so a line that is not exactly what classify writes fails the read instead.
     [[ "${n}" =~ ^[1-9][0-9]*$ && "${action}" =~ ^[a-z-]+$ && "${reason}" != *$'\t'* ]] ||
       fail "unexpected line for Issue ${n}"
     case "${action}" in
-    claim) start="owner ${repo} ${n} --claim $(shell_quote "${reason}")" ;;
-    start-owner) start="owner ${repo} ${n} $(shell_quote "${reason}")" ;;
-    start-verifier) start="verifier ${repo} ${n}" ;;
-    *) start="" ;;
+    start-owner) command="bash $(shell_quote "${dir}/oe") start owner ${repo} ${n} $(shell_quote "${reason}")" ;;
+    start-verifier) command="bash $(shell_quote "${dir}/oe") start verifier ${repo} ${n}" ;;
+    hold) command="bash $(shell_quote "${dir}/oe") hold ${repo} ${n} $(shell_quote "${reason}")" ;;
+    wait-answer) command="bash $(shell_quote "${dir}/oe") question ${repo} ${n} --answer <reply>" ;;
+    *) command="" ;;
     esac
-    command="${start:+bash $(shell_quote "${dir}/oe") start ${start}}"
-    [[ "${action}" != update-branch ]] || command="bash $(shell_quote "${dir}/oe") update ${repo} ${n}"
-    [[ "${action}" != wait-answer ]] || command="bash $(shell_quote "${dir}/oe") question ${repo} ${n} --answer <reply>"
-    [[ "${action}" != parked || ! "${reason}" =~ ^[0-9]+\ (attempts\ used|Owner\ starts\ in\ a\ row\ pushed\ nothing)\; ]] ||
-      command="bash $(shell_quote "${dir}/oe") continue ${repo} ${n} [<instruction>]"
     lines+="$(printf '%s\t%s\t%s\t%s' "${n}" "${action}" "${reason}" "${command}")"$'\n'
   done <<<"$1"
   printf '%s' "${lines}"
 }
 
-# The running agents, found as the header says, only when a running session holds the Epic's lock.
-held_since=""
-agent_root=""
-if [[ "${entry}" == classify ]] && held_since="$(lock_started "${repo}" "${epic}")" && agent_root="$(worktree_root)"; then
-  agent_root="$(cd "${agent_root}" 2>/dev/null && pwd -P)" || agent_root=""
-fi
-
-# Prints the agent type that runs for Issue $1, pr-owner or pr-verify, or nothing when none runs.
-agent_of() {
-  local wt="${agent_root}/issue-$1" issue_records role
-  [[ -n "${held_since}" && -n "${agent_root}" ]] || return 0
-  [[ "$(git -C "${wt}" rev-parse --show-toplevel 2>/dev/null)" == "${wt}" ]] || return 0
-  issue_records="$(records_read "${repo}" "$1" 2>"${err}")" || fail "$(head -n1 "${err}")"
-  role="$(jq -r --arg since "${held_since}" \
-    '[.[] | select(.kind == "run")] | last | select(. != null and .at >= $since) | .role' <<<"${issue_records}")" ||
-    fail "records of Issue #$1 unreadable"
-  case "${role}" in
-  "") ;;
-  owner) printf pr-owner ;;
-  verifier) printf pr-verify ;;
-  *) fail "unknown agent role in the records of Issue #$1: ${role}" ;;
-  esac
-}
-
 sorted=()
-running_lines=""
 if [[ ${#issues[@]} -gt 0 ]]; then
   while read -r n; do
-    agent="$(agent_of "${n}")" || exit 1
-    if [[ -n "${agent}" ]]; then
-      running_lines+="${n}"$'\t'running$'\t'"${agent} runs; once it ends, run: bash $(shell_quote "${dir}/oe") worktree remove ${n}"$'\n'
-    else
-      sorted+=("${n}")
-    fi
+    sorted+=("${n}")
   done < <(printf '%s\n' "${issues[@]}" | sort -n -u)
 fi
-
-# Prints the classified lines $1 with the running agents' lines, sorted by Issue number, each with its command.
-print_lines() {
-  with_start "$(printf '%s%s' "$1" "${running_lines}" | sort -t $'\t' -k1,1n)"
-}
-
-out=""
 
 # Read 2: the head of each open Issue branch in this repository.
 pulls="$(gh api "repos/${repo}/pulls?state=open&per_page=100" --paginate --jq '.[]
@@ -263,9 +203,7 @@ pulls="$(gh api "repos/${repo}/pulls?state=open&per_page=100" --paginate --jq '.
   fail "pull request list read failed: $(head -n1 "${err}")"
 
 # Reads 3 and 4 for each head.
-#
-# - Statuses come newest first, so the first verdict status is the current verdict.
-# - oe writes a pending verdict before every Verifier start, so pending statuses count the starts.
+# Statuses come newest first, so the first verdict status that is not pending is the current verdict.
 pr_heads=""
 while IFS=$'\t' read -r n sha; do
   [[ -n "${n}" ]] || continue
@@ -275,79 +213,30 @@ while IFS=$'\t' read -r n sha; do
     --jq '.[] | select(.context == "'"${verify_context}"'") | .state' 2>"${err}")" ||
     fail "status read for ${sha} failed: $(head -n1 "${err}")"
   verdict=none
-  starts=0
-  first=1
   while read -r state; do
     [[ -n "${state}" ]] || continue
     [[ "${state}" =~ ^(pending|success|failure|error)$ ]] || fail "unknown status state on ${sha}: ${state}"
-    if ((first)); then
-      verdict="${state}"
-      first=0
-    fi
-    [[ "${state}" != pending ]] || starts=$((starts + 1))
+    [[ "${state}" != pending ]] || continue
+    verdict="${state}"
+    break
   done <<<"${states}"
   pushed="$(pushed_at "${branch_prefix}${n}" "${sha}")" || exit 1
-  pr_heads+="\"${sha}\": {verdict: \"${verdict}\", starts: ${starts}, pushed: ${pushed:-null}},"
+  pr_heads+="\"${sha}\": {verdict: \"${verdict}\", pushed: ${pushed:-null}},"
 done <<<"${pulls}"
 
-# Read 5: each Issue.
-responses=()
+# Read 5: each Issue, classified by oe-ready.jq.
+out=""
 for n in ${sorted[@]+"${sorted[@]}"}; do
   response="$(gh api graphql -f query="${issue_query}" -F owner="${repo%/*}" -F repo="${repo#*/}" -F num="${n}" \
     -f branch="${branch_prefix}${n}" -f ref="refs/heads/${branch_prefix}${n}" 2>"${err}")" ||
     fail "Issue #${n} read failed: $(head -n1 "${err}")"
   response="$(all_checks "${response}")" || exit 1
-  responses+=("${response}")
-done
-
-# Sibling pull requests: each Issue's newest pull request, when it merged into the default branch, oldest merge first.
-# Every merge commit lands on the default branch, so a head that contains the newest one contains every earlier one.
-siblings=""
-for response in ${responses[@]+"${responses[@]}"}; do
-  siblings+="$(jq -r --arg base "${default_name}" '.data.repository as $r
-    | ($r.pullRequests.nodes // [])[0]
-    | select(. != null and .mergedAt != null and .isCrossRepository == false and .baseRefName == $base and .mergeCommit.oid != null)
-    | "\(.mergedAt)\t\($r.issue.number)\t\(.number)\t\(.mergeCommit.oid)"' <<<"${response}" 2>"${err}")" ||
-    fail "merged pull request unreadable: $(head -n1 "${err}")"
-  siblings+=$'\n'
-done
-siblings="$(sort <<<"${siblings}")"
-
-# Read 6: whether each listed head contains the newest merge commit of a sibling of its Issue.
-# compare reports ahead or identical when the head contains it, and behind or diverged when it does not.
-stale_heads=""
-while IFS=$'\t' read -r n sha; do
-  [[ -n "${n}" && " ${sorted[*]-} " == *" ${n} "* ]] || continue
-  newest=""
-  while IFS=$'\t' read -r _ sibling_issue sibling_pr merge; do
-    [[ -n "${sibling_issue}" && "${sibling_issue}" != "${n}" ]] || continue
-    [[ "${sibling_pr}" =~ ^[1-9][0-9]*$ && "${merge}" =~ ^[0-9a-f]{40}$ ]] || fail "merged pull request unreadable"
-    newest="${sibling_pr} ${merge}"
-  done <<<"${siblings}"
-  [[ -n "${newest}" ]] || continue
-  compared="$(gh api "repos/${repo}/compare/${newest#* }...${sha}?per_page=1" --jq .status 2>"${err}")" ||
-    fail "compare of ${sha} with ${newest#* } failed: $(head -n1 "${err}")"
-  case "${compared}" in
-  ahead | identical) ;;
-  behind | diverged) stale_heads+="\"${sha}\": ${newest%% *}," ;;
-  *) fail "unknown compare status of ${sha}: ${compared}" ;;
-  esac
-done <<<"${pulls}"
-
-# Each Issue, classified by oe-ready.jq.
-# Only the kind, time, bots, and branch head of claim, continue, attempt, and update records decide an action, so verdict findings stay out of the program.
-i=0
-for n in ${sorted[@]+"${sorted[@]}"}; do
-  issue_records="$(records_read "${repo}" "${n}" 2>"${err}")" || fail "$(head -n1 "${err}")"
-  issue_records="$(jq -c 'map(select(.kind == "claim" or .kind == "continue" or .kind == "attempt" or .kind == "update") | {kind, at, bots, head})' <<<"${issue_records}")" ||
-    fail "records of Issue #${n} unreadable"
-  line="$(jq -r "$(program "${entry}" "${pr_heads%,}" "${issue_records}" "${stale_heads%,}")" <<<"${responses[i]}" 2>"${err}")" ||
+  line="$(jq -r "$(program "${entry}" "${pr_heads%,}")" <<<"${response}" 2>"${err}")" ||
     fail "Issue #${n} read failed: $(head -n1 "${err}")"
   out+="${line}"$'\n'
-  i=$((i + 1))
 done
 if [[ "${entry}" == classify ]]; then
-  print_lines "${out}"
+  with_commands "$(printf '%s' "${out}" | sort -t $'\t' -k1,1n)"
 else
   printf '%s' "${out}"
 fi

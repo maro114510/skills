@@ -62,19 +62,44 @@ snapshot() {
   [ "$(snapshot)" = "${before}" ]
 }
 
-@test "an Issue whose branch is not on origin gets no worktree" {
+@test "an Issue whose branch is not on origin gets the branch created locally from the base, and origin stays without it" {
   before="$(snapshot)"
+  base_head="$(git -C "${tmp}/seed" rev-parse main)"
 
   run --separate-stderr bash "${oe}" worktree add 6
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "${tmp}/shared-oe/issue-6" ]
+  [ "$(git -C "${output}" branch --show-current)" = feat/issue-6 ]
+  [ "$(git -C "${output}" rev-parse HEAD)" = "${base_head}" ]
+  run git -C "${tmp}/origin.git" rev-parse --verify --quiet refs/heads/feat/issue-6
+  [ "${status}" -ne 0 ]
+  [ "$(snapshot)" = "${before}" ]
+}
+
+@test "a Verifier worktree for an Issue whose branch is not on origin is refused and creates nothing" {
+  before="$(snapshot)"
+
+  run --separate-stderr bash "${oe}" worktree add 6 --detach
 
   [ "${status}" -eq 1 ]
   case "${stderr}" in
   *"feat/issue-6"*) ;;
   *) return 1 ;;
   esac
-  [ "$(git -C "${shared}" worktree list --porcelain | grep -c '^worktree ')" -eq 1 ]
   [ ! -e "${tmp}/shared-oe/issue-6" ]
   [ "$(snapshot)" = "${before}" ]
+}
+
+@test "an origin that cannot be read creates no worktree and no branch" {
+  git -C "${shared}" remote set-url origin "${tmp}/missing.git"
+
+  run --separate-stderr bash "${oe}" worktree add 6
+
+  [ "${status}" -eq 1 ]
+  [ ! -e "${tmp}/shared-oe/issue-6" ]
+  run git -C "${shared}" rev-parse --verify --quiet refs/heads/feat/issue-6
+  [ "${status}" -ne 0 ]
 }
 
 @test "a leftover Issue worktree is replaced by a fresh one at the origin head, discarding its unpushed work" {

@@ -12,7 +12,6 @@
 setup() {
   bats_require_minimum_version 1.5.0
   load testdata/records
-  load testdata/agents
   export OE_STATE_DIR="${BATS_TEST_TMPDIR}/state"
   oe="${BATS_TEST_DIRNAME}/oe"
   mkdir -p "${BATS_TEST_TMPDIR}/bin"
@@ -47,6 +46,12 @@ notification_count() {
 # Saves the GitHub state from stdin.
 github() {
   cat >"${OE_GITHUB}"
+}
+
+# Leaves an Owner running on Issue $1 the way oe start leaves it: a working marker started at 07:30 at the end of its body.
+agent_runs() {
+  jq --argjson n "$1" '.issues |= map(if .number == $n then .body = "<!-- oe:working role=owner at=2027-01-15T07:30:00Z -->" else . end)' \
+    "${OE_GITHUB}" >"${OE_GITHUB}.new" && mv "${OE_GITHUB}.new" "${OE_GITHUB}"
 }
 
 # Saves, from stdin, the state that replaces the current one at the second poll.
@@ -185,7 +190,7 @@ JSON
   [ "$(action_of 5)" = start-owner ]
 }
 
-# Saves a state where Issue 5 has no branch yet and nothing blocks its claim.
+# Saves a state where Issue 5 has no branch yet and nothing blocks it.
 issue_5_ready_to_claim() {
   github <<'JSON'
 {
@@ -201,10 +206,10 @@ JSON
   run bash "${oe}" wait o/r 1 --timeout 2
 
   [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = claim ]
+  [ "$(action_of 5)" = start-owner ]
 }
 
-# Saves a state where Issue 5 has no branch yet and nothing blocks its claim, and Issues 6 to 8 have no branch either.
+# Saves a state where Issue 5 has no branch yet and nothing blocks it, and Issues 6 to 8 have no branch either.
 issues_5_to_8_ready_to_claim() {
   github <<'JSON'
 {
@@ -216,14 +221,13 @@ JSON
 
 @test "with as many agents running as --max-agents allows, an Issue to start at the first read keeps the wait running until the timeout" {
   issues_5_to_8_ready_to_claim
-  session_holds_lock
-  agent_runs 6 owner
-  agent_runs 7 verifier
+  agent_runs 6
+  agent_runs 7
 
   run bash "${oe}" wait o/r 1 --max-agents 2 --timeout 1
 
   [ "${status}" -eq 5 ]
-  [ "$(action_of 5)" = claim ]
+  [ "$(action_of 5)" = start-owner ]
 }
 
 @test "with --max-agents 0, as after a start that failed with no agent running, an Issue to start at the first read keeps the wait running until the timeout" {
@@ -232,85 +236,53 @@ JSON
   run bash "${oe}" wait o/r 1 --max-agents 0 --timeout 1
 
   [ "${status}" -eq 5 ]
-  [ "$(action_of 5)" = claim ]
+  [ "$(action_of 5)" = start-owner ]
 }
 
 @test "without --max-agents, three running agents keep an Issue to start from ending the wait, as the skill's default of three agents" {
   issues_5_to_8_ready_to_claim
-  session_holds_lock
-  agent_runs 6 owner
-  agent_runs 7 owner
-  agent_runs 8 verifier
+  agent_runs 6
+  agent_runs 7
+  agent_runs 8
 
   run bash "${oe}" wait o/r 1 --timeout 1
 
   [ "${status}" -eq 5 ]
 }
 
-@test "running agents counted from oe's own records, below --max-agents, let an Issue to start at the first read return the wait at once" {
+@test "running agents counted from the working markers on GitHub, below --max-agents, let an Issue to start at the first read return the wait at once" {
   issues_5_to_8_ready_to_claim
-  session_holds_lock
-  agent_runs 6 owner
+  agent_runs 6
 
   run bash "${oe}" wait o/r 1 --max-agents 2 --timeout 1
 
   [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = claim ]
-  [ "$(action_of 6)" = running ]
+  [ "$(action_of 5)" = start-owner ]
+  [ "$(action_of 6)" = wait-agent ]
 }
 
-@test "a first read that holds an update-branch returns at once even with every agent slot taken, because the update starts no agent" {
-  jq -n '{
-    default_branch: {checks: {test: "success"}},
-    issues: [
-      {number: 4, closed: true, pull_requests: [{number: 40, state: "merged", opened: "07:05", merged: "07:30"}]},
-      {number: 5, branch: true, pull_requests: [{number: 50, opened: "07:10", checks: {test: "success"}, missing_merges: [40]}]}
-    ]
-  }' >"${OE_GITHUB}"
-  records 5 claim@07:00 attempt@07:01
+@test "a first read that holds a hold returns at once even with every agent slot taken, because the hold starts no agent" {
+  github <<'JSON'
+{"issues": [{"number": 5, "branch": true, "pull_requests": [{"number": 50, "state": "closed", "opened": "07:10"}]}]}
+JSON
 
   run bash "${oe}" wait o/r 1 --max-agents 0 --timeout 1
 
   [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = update-branch ]
+  [ "$(action_of 5)" = hold ]
 }
 
-@test "a first read whose update was already requested on the head waits for a change instead of returning at once" {
-  jq -n '{
-    default_branch: {checks: {test: "success"}},
-    issues: [
-      {number: 4, closed: true, pull_requests: [{number: 40, state: "merged", opened: "07:05", merged: "07:30"}]},
-      {number: 5, branch: true, pull_requests: [{number: 50, opened: "07:10", checks: {test: "success"}, missing_merges: [40]}]}
-    ]
-  }' >"${OE_GITHUB}"
-  records 5 claim@07:00 attempt@07:01 "update@07:55#$(printf 'b%.0s' {1..38})50"
+@test "an agent that pushes during a wait makes that wait return with the Issue's new action" {
+  github <<'JSON'
+{"issues": [{"number": 5}]}
+JSON
+  agent_runs 5
+  github_at_second_poll <<'JSON'
+{"issues": [{"number": 5, "branch": true, "body": "<!-- oe:working role=owner at=2027-01-15T07:30:00Z -->",
+  "pull_requests": [{"number": 15, "opened": "07:50", "checks": {"test": "in_progress"}}]}]}
+JSON
 
-  run bash "${oe}" wait o/r 1 --max-agents 0 --timeout 1
-
-  [ "${status}" -eq 5 ]
-  [ "$(action_of 5)" = wait-update ]
-}
-
-# Ends the agent on Issue $1 once oe wait has finished its first poll, within about thirty seconds.
-# The fake gh counts Epic reads only under GH_FAIL_EPIC_READ, so the test sets it to a read that never comes.
-ends_after_first_poll() {
-  local _
-  for _ in $(seq 300); do
-    if [ "$(cat "${OE_GITHUB}.epic-reads" 2>/dev/null || echo 0)" -ge 2 ]; then
-      agent_ends "$1"
-      return 0
-    fi
-    sleep 0.1
-  done
-}
-
-@test "an agent that ends during a wait makes that wait return with the Issue's new action" {
-  pr_15_checks_running
-  session_holds_lock
-  agent_runs 5 owner
-  ends_after_first_poll 5 3>&- &
-
-  GH_FAIL_EPIC_READ=1000 OE_WAIT_INTERVAL=1 run --separate-stderr bash "${oe}" wait o/r 1 --timeout 30
+  run --separate-stderr bash "${oe}" wait o/r 1 --timeout 30
 
   [ "${status}" -eq 0 ]
   [ "$(action_of 5)" = wait-ci ]
@@ -323,7 +295,7 @@ ends_after_first_poll() {
   GH_FAIL_EPIC_READ=1 OE_WAIT_INTERVAL="${interval}" run --separate-stderr bash "${oe}" wait o/r 1 --timeout 60
 
   [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = claim ]
+  [ "$(action_of 5)" = start-owner ]
   failed_read="$(sed -n 1p "${OE_GITHUB}.epic-read-times")"
   next_read="$(sed -n 2p "${OE_GITHUB}.epic-read-times")"
   [ "$((next_read - failed_read))" -ge "${interval}" ]
@@ -363,7 +335,7 @@ utc_time() {
   GH_RATE_LIMIT_UNTIL="${reset_in_two_seconds}" run --separate-stderr bash "${oe}" wait o/r 1 --timeout 60
 
   [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = claim ]
+  [ "$(action_of 5)" = start-owner ]
   [ "$(date +%s)" -ge "${reset_in_two_seconds}" ]
   case "${stderr}" in
   *"$(utc_time "${reset_in_two_seconds}")"*) ;;
@@ -410,7 +382,7 @@ JSON
   run bash "${oe}" wait o/r 1 --timeout 1
 
   [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = claim ]
+  [ "$(action_of 5)" = start-owner ]
 }
 
 @test "an agent cap written with a leading zero is refused" {
@@ -441,7 +413,6 @@ background_wait() {
 
 # Stops every wait a test started, with its process tree, so a failed test leaves none running.
 teardown() {
-  stop_sessions
   [ -e "${BATS_TEST_TMPDIR}/waits" ] || return 0
   while read -r pid; do
     pkill -P "${pid}" 2>/dev/null || true
@@ -596,7 +567,7 @@ recorded() {
   [ "$(cat "${notified}")" = $'Issue #5 in o/r has a question for you\thttps://github.com/o/r/issues/5' ]
 }
 
-@test "a parked Issue calls the notification command once, with the park's reason and the Issue's link" {
+@test "a held Issue calls the notification command once, with the hold's reason and the Issue's link" {
   notification_command
   records 5 claim@07:00 attempt@07:01
   github <<'JSON'
@@ -612,15 +583,15 @@ JSON
 
   run bash "${oe}" wait o/r 1 --timeout 1
 
-  [ "${status}" -eq 5 ]
+  [ "${status}" -eq 0 ]
   [ "$(notification_count)" -eq 1 ]
   case "$(cat "${notified}")" in
-  "Issue #5 in o/r is parked: no checks on "*$'\thttps://github.com/o/r/issues/5') ;;
+  "Issue #5 in o/r waits for you: no checks on "*$'\thttps://github.com/o/r/issues/5') ;;
   *) return 1 ;;
   esac
 }
 
-@test "an Issue waiting for a person calls the notification command once, with the reason and the Issue's link" {
+@test "a held Issue whose PR merged calls the notification command once, with the reason and the Issue's link" {
   notification_command
   records 5 claim@07:00
   github <<'JSON'
@@ -628,6 +599,7 @@ JSON
   "default_branch": {"checks": {"test": "success"}},
   "issues": [{
     "number": 5,
+    "branch": true,
     "pull_requests": [{"number": 50, "state": "merged", "opened": "07:10", "merged": "07:40"}]
   }]
 }
@@ -635,7 +607,7 @@ JSON
 
   run bash "${oe}" wait o/r 1 --timeout 1
 
-  [ "${status}" -eq 5 ]
+  [ "${status}" -eq 0 ]
   [ "$(cat "${notified}")" = $'Issue #5 in o/r waits for you: PR #50 merged; the Issue is still open\thttps://github.com/o/r/issues/5' ]
 }
 
