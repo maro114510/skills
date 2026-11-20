@@ -257,3 +257,38 @@ opencode_stub() {
   grep -qxF -- "--permission-mode" "${args_file}"
   [ "$(grep -A1 -xF -- "--permission-mode" "${args_file}" | tail -n 1)" = "plan" ]
 }
+
+# Prints a stub DSH body whose launcher help lists --patch only when $1 is present, then runs $2.
+dsh_stub() {
+  local help='      --dump-config   print the composed profile tree and exit'
+  [ "$1" = present ] && help='      --patch <path>  extra patch-list overlay applied after the profile layer'
+  # shellcheck disable=SC2016 # expanded by the stub, not here
+  printf 'if [ "$#" = 1 ] && [ "$1" = --help ]; then printf "%s\\n"; exit 0; fi\n%s' "${help}" "$2"
+}
+
+@test "dsh runs headless with a read-only pin and no approval prompts, reading the task from stdin" {
+  # shellcheck disable=SC2016 # expanded by the stub, not here
+  harness dsh "$(dsh_stub present 'for a; do [ "${p:-}" = --patch ] && cp "$a" "'"${BATS_TEST_TMPDIR}"'/pin"; p="$a"; done; '"${reply}")"
+  describe dsh "${note}"
+  [ "${status}" -eq 0 ]
+  [ "${lines[0]}" = "PR_TITLE: fix(report): stop false positives" ]
+  [ "${lines[5]}" = "DESCRIBE status=written head=${head_sha}" ]
+  [ "$(sed -n 1p "${args_file}")" = "headless" ]
+  grep -qxF -- "--patch" "${args_file}"
+  [ "$(grep -A1 -xF -- "--approval-policy" "${args_file}" | tail -n 1)" = "never" ]
+  [ "$(tail -n 1 "${args_file}")" = "-" ]
+  if grep -qF -- "--permission-mode" "${args_file}"; then return 1; fi
+  grep -qF -- "sandbox: read-only" "${BATS_TEST_TMPDIR}/pin"
+  grep -qF -- "defaultPreset: describe-read-only" "${BATS_TEST_TMPDIR}/pin"
+  grep -qxF "CONTEXT-SENTINEL" "${stdin_file}"
+  grep -qF "## Step 2. Analyze the Change" "${stdin_file}"
+}
+
+@test "dsh without --patch exits 2 before the session runs" {
+  # shellcheck disable=SC2016 # expanded by the stub, not here
+  harness dsh "$(dsh_stub absent 'touch "'"${BATS_TEST_TMPDIR}"'/ran"; '"${reply}")"
+  describe dsh "${note}"
+  [ "${status}" -eq 2 ]
+  has_line "Unsupported DSH CLI: 'dsh --help' lists no --patch (a DSH that can pin a read-only preset table is required)"
+  [ ! -e "${BATS_TEST_TMPDIR}/ran" ]
+}

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Asks a fresh, read-only session of the given harness to write the PR title and description.
-# Usage: describe.sh <claude|codex|opencode> <note-file> [<argument tokens>]
+# Usage: describe.sh <claude|codex|opencode|dsh> <note-file> [<argument tokens>]
 # Run it in the worktree. It reruns pr-context.sh with the argument tokens, and hands the session that
 # output, the note, and the writing rules: SKILL.md Steps 2, 3.1, 3.2, and 4, and references/description.md.
 # Exit: 0 written, 1 failed, including pr-context.sh and a reply without a title and body,
-# 2 usage error or a missing or empty note, 3 session changed the worktree or HEAD, which wins over 1.
+# 2 usage error, a missing or empty note, or a DSH whose --help lists no --patch, 3 session changed the worktree or HEAD, which wins over 1.
 # Output on exit 0:
 #   PR_TITLE: <title>
 #   PR_BODY_BEGIN
@@ -22,7 +22,7 @@ note_file="${2:-}"
 [[ $# -ge 2 ]] && shift 2
 
 case "${harness}" in
-claude | codex | opencode) ;;
+claude | codex | opencode | dsh) ;;
 *)
   echo "Unsupported harness: ${harness:-<none>}" >&2
   exit 2
@@ -34,6 +34,16 @@ note="$(cat -- "${note_file}" 2>/dev/null)"
   echo "Missing or empty note file: ${note_file:-<none>}" >&2
   exit 2
 }
+
+# A DSH profile can map any preset name to any sandbox, so the session overlays its own preset table, as in
+# self-review.sh, and the launcher's --patch applies it after every profile layer. A CLI without it fails closed.
+if [[ "${harness}" == dsh ]]; then
+  dsh_help="$(dsh --help 2>&1 </dev/null)"
+  if ! grep -qE -- "(^|[[:space:]])--patch([[:space:],=]|$)" <<<"${dsh_help}"; then
+    echo "Unsupported DSH CLI: 'dsh --help' lists no --patch (a DSH that can pin a read-only preset table is required)" >&2
+    exit 2
+  fi
+fi
 
 context="$(bash "${script_dir}/pr-context.sh" "$@" 2>&1)"
 context_rc=$?
@@ -82,7 +92,8 @@ fi
 input="$(mktemp "${TMPDIR:-/tmp}/describe.XXXXXX")"
 out="${input}.out"
 log="${input}.log"
-trap 'rm -f "${input}" "${out}" "${log}"' EXIT
+pin="${input}.pin.yml"
+trap 'rm -f "${input}" "${out}" "${log}" "${pin}"' EXIT
 cat >"${input}" <<EOF
 <rules>
 ${rules}
@@ -119,6 +130,26 @@ opencode)
     "rg*--hostname-bin*":"deny",
     "*--output*":"deny","*>*":"deny"}}}' \
     opencode run --standalone --file "${input}" "${prompt} Run exactly one command per bash call, with no pipes, &&, ;, or redirects such as 2>&1." </dev/null >"${out}" 2>"${log}"
+  ;;
+dsh)
+  # The same overlay as self-review.sh, which explains it: only a read-only preset is named and made the
+  # default. `-` reads the task from stdin, which cannot also carry an argument, so the prompt goes first.
+  cat >"${pin}" <<'EOF'
+- id: permission
+  name: '@deepseek-ai/dsh-permission-presets'
+  config:
+    presets:
+      describe-read-only:
+        sandbox: read-only
+        approval: ask
+        name: describe-read-only
+        description: Writing a PR description only. No file may be modified and no approval is granted.
+    defaultPreset: describe-read-only
+EOF
+  {
+    printf '%s\n\n' "${prompt}"
+    cat "${input}"
+  } | dsh headless --patch "${pin}" --approval-policy never - >"${out}" 2>"${log}"
   ;;
 esac
 session_rc=$?
