@@ -1296,3 +1296,18 @@ JSON
   [ "${status}" -eq 2 ]
   [ -z "${output}" ]
 }
+# Reads of one Issue each
+
+@test "a closed Issue is done without a read of its own, while an open Issue beside it is read" {
+  github <<'JSON'
+{"issues": [{"number": 5, "closed": true}, {"number": 6}]}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "${#lines[@]}" -eq 2 ]
+  [ "$(action_of 5)" = "done" ]
+  [ "$(field_of 5 3)" = closed ]
+  [ "$(cat "${OE_GITHUB}.issue-reads")" = 6 ]
+}

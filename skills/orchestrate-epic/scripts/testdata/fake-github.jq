@@ -5,6 +5,7 @@
 # |---|---|---|
 # | epic | none | The Epic read |
 # | issue | Issue number | The read of one Issue |
+# | head | Pull request number | The light read of one open pull request: its update time, mergeability, review threads, and the checks on its head |
 # | pulls | none | The open pull request list |
 # | statuses | Commit SHA | The commit statuses on that commit, newest first |
 # | activity | Branch name | The pushes to that branch |
@@ -40,6 +41,7 @@
 # |---|---|---|
 # | number | The Issue number | Required |
 # | closed | Whether the Issue is closed as completed | false |
+# | updated | When the Issue last changed, as the Epic read shows it | The latest comment, or 07:00 |
 # | body | The Issue body, where oe start writes its working marker | Empty |
 # | blocked_by | Dependencies, each with a number and a state of open, completed, or not_planned | None |
 # | branch | Whether the branch feat/issue-N exists | false |
@@ -68,6 +70,7 @@
 # | commits | Earlier commits of the pull request, oldest first, each with sha, committed, and optionally checks | None |
 # | checks | Check name to result on its head | No checks |
 # | check_runs | Further check runs on its head, each with name, result, suite, started, and optionally the workflow that ran it, so one name can run in several check suites | None |
+# | updated | When it last changed, as the head read shows it | The latest of its times and comments |
 # | verdicts | oe/verify states on its head, newest first | None |
 # | reviews | Changes requested reviews, each with by, at, body, and the sha it reviewed, which defaults to the head the read sees | None |
 # | approvals | Approved reviews, each with by, at, and the sha it approved | None |
@@ -111,12 +114,21 @@ def contexts_page($after):
   end;
 def rollup: rollup_nodes | contexts_page(0);
 
+# When GitHub shows an Issue as changed: a comment moves it, as it does on GitHub.
+def issue_updated: .updated // ([.comments[]?.at] + ["07:00"] | max);
+
+def blocked_by($i):
+  {totalCount: ($i.blocked_by // [] | length), nodes: [$i.blocked_by[]? | {number,
+    state: (if .state == "open" then "OPEN" else "CLOSED" end),
+    stateReason: (if .state == "open" then null else (.state | ascii_upcase) end)}]};
+
 def epic_response:
   {data: {repository: {
       nameWithOwner: "o/r",
       defaultBranchRef: {name: "main"},
       issue: {subIssues: {totalCount: (.issues | length),
-        nodes: [.issues[] | {number, state: (if .closed then "CLOSED" else "OPEN" end),
+        nodes: [.issues[] | . as $i | {number, state: (if .closed then "CLOSED" else "OPEN" end),
+          updatedAt: (issue_updated | time), blockedBy: blocked_by($i),
           repository: {nameWithOwner: "o/r"}}]}}}}};
 
 # The head the Issue read sees, which differs from the listed head after a push during the read.
@@ -163,15 +175,33 @@ def issue_response($n):
         body: ($i.body // ""),
         state: (if $i.closed then "CLOSED" else "OPEN" end),
         stateReason: (if $i.closed then "COMPLETED" else null end),
-        blockedBy: {totalCount: ($i.blocked_by // [] | length), nodes: [$i.blocked_by[]? | {number,
-          state: (if .state == "open" then "OPEN" else "CLOSED" end),
-          stateReason: (if .state == "open" then null else (.state | ascii_upcase) end)}]},
+        blockedBy: blocked_by($i),
         comments: {totalCount: (($i.comments // [] | length) + ($i.older_comments // 0)),
           nodes: [$i.comments // [] | to_entries[] | .key as $c | .value | author + {createdAt: (.at | time),
             url: "https://github.com/o/r/issues/\($n)#issuecomment-\($c + 1)",
             author: {login: (.login // ""), __typename: (.type // "User")}}]}},
       ref: (if $i.branch then {name: "feat/issue-\($n)", target: {oid: ($i.branch_sha // ([$i.pull_requests // [] | sort_by(.opened) | reverse | .[0] | select(. != null) | read_sha] | first) // default_sha)}} else null end),
       pullRequests: {totalCount: (($i.pull_requests // [] | length) + ($i.older_pull_requests // 0)), nodes: [$i.pull_requests // [] | sort_by(.opened) | reverse | .[0:5][] | pull_request]}}}};
+
+# The state of a head's checks, as GitHub reduces them: a failure wins over a running check.
+def rollup_state:
+  rollup_nodes as $nodes
+  | if $nodes == null then null
+    else {state: (if any($nodes[]; (.conclusion // .state) | IN("FAILURE", "CANCELLED", "ERROR")) then "FAILURE"
+      elif any($nodes[]; .status == "IN_PROGRESS" or .state == "PENDING") then "PENDING"
+      else "SUCCESS" end)} end;
+
+# When a pull request last changed: a push or a comment moves it, as it does on GitHub.
+def pr_updated:
+  .updated // ([.opened, .pushed, .committed, (.comments[]?.at), (.reviews[]?.at), (.thread_comments[]?.at),
+    (.threads[]?.comments[]?.at)] | map(select(. != null)) | max);
+
+def head_response($n):
+  ([.issues[].pull_requests[]? | select(.number == $n)] | first // error("unknown pull request \($n)")) as $pr
+  | {data: {repository: {pullRequest: ($pr | {updatedAt: (pr_updated | time),
+      mergeable: (if .conflicting then "CONFLICTING" else "MERGEABLE" end),
+      reviewThreads: {nodes: [review_threads[] | {isResolved, isOutdated}]},
+      commits: {nodes: [{commit: {statusCheckRollup: rollup_state}}]}})}}};
 
 def open_pull_requests:
   [.issues[] | .number as $n | .pull_requests[]? | select((.state // "open") == "open")
@@ -216,6 +246,7 @@ def compare_response($base; $head):
 $state
 | if $call == "epic" then epic_response
   elif $call == "issue" then issue_response($arg | tonumber)
+  elif $call == "head" then head_response($arg | tonumber)
   elif $call == "pulls" then open_pull_requests
   elif $call == "statuses" then statuses($arg)
   elif $call == "activity" then pushes($arg)

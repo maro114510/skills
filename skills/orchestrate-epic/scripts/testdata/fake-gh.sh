@@ -12,12 +12,17 @@
 #   It also appends each Epic read's epoch second to $OE_GITHUB.epic-read-times, one line per read.
 # - GH_RATE_LIMIT_UNTIL=EPOCH makes every GraphQL call fail as GitHub does with an exhausted bucket until that real epoch second.
 #   api rate_limit then reports the GraphQL bucket empty until that second, and full after it.
+# - Each Epic read appends a line to $OE_GITHUB.polls, and each read of one Issue appends its number to $OE_GITHUB.issue-reads,
+#   so a test counts the polls and the reads that they make.
+# - OE_CLOCK names a file of epoch seconds, which a test's date shim prints, and each Epic read adds OE_CLOCK_STEP seconds to it,
+#   so time passes between two polls at a point the test controls.
 #
 # | gh call | Answered as |
 # |---|---|
 # | api rate_limit | the buckets, as GH_RATE_LIMIT_UNTIL says |
 # | api graphql with the Epic query | epic |
 # | api graphql with the checks page query, oid=SHA, and after=CURSOR | checks SHA:CURSOR |
+# | api graphql with the pull request query, number=N | head N |
 # | api graphql with num=N | issue N |
 # | api repos/o/r/pulls | pulls |
 # | api repos/o/r/commits/SHA/statuses | statuses SHA |
@@ -122,6 +127,8 @@ case "${path}" in
 graphql)
   if [[ "${query}" == *subIssues* ]]; then
     call=epic arg=""
+    echo epic >>"${OE_GITHUB}.polls"
+    [[ -z "${OE_CLOCK:-}" ]] || echo $(($(cat "${OE_CLOCK}") + ${OE_CLOCK_STEP:-0})) >"${OE_CLOCK}"
     if [[ -n "${GH_FAIL_EPIC_READ:-}" ]]; then
       epic_reads=$(($(cat "${OE_GITHUB}.epic-reads" 2>/dev/null || echo 0) + 1))
       echo "${epic_reads}" >"${OE_GITHUB}.epic-reads"
@@ -138,8 +145,11 @@ graphql)
     fi
   elif [[ "${query}" == *"object(oid"* ]]; then
     call=checks arg="$(jq -r '"\(.oid):\(.after)"' <<<"${fields}")"
+  elif [[ "${query}" == *"pullRequest(number"* ]]; then
+    call=head arg="$(jq -r '.number' <<<"${fields}")"
   else
     call=issue arg="${num}"
+    echo "${num}" >>"${OE_GITHUB}.issue-reads"
   fi
   ;;
 */pulls\?*) call=pulls arg="" ;;
