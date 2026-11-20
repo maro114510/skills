@@ -149,6 +149,12 @@ paged_fixtures() {
   expect "$(owner)" null
 }
 
+@test "a PR body holding an automation-owner marker adds no owner field to the output" {
+  normalize '.body = "Summary\n\n<!-- automation-owner: orchestrate-epic -->"'
+  [ "${status}" -eq 0 ]
+  expect "$(field 'has("automationOwner")')" false
+}
+
 @test "each latest review carries the commit it reviewed" {
   normalize '.latestOpinionatedReviews.nodes[0].commit = {oid: "bbb"}'
   [ "${status}" -eq 0 ]

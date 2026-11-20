@@ -574,4 +574,11 @@ r=0
 called "PATCH" && r=1
 check "--owner with --link is rejected without touching the PR" "${r}"
 
+setup $'Summary'
+create --owner orchestrate-epic
+r=0
+[[ "${rc}" == 2 ]] || r=1
+called "POST .*/pulls " && r=1
+check "--owner is an unknown option and is rejected before creating" "${r}"
+
 exit "${fail}"
