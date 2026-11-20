@@ -5,6 +5,8 @@
 setup() {
   bats_require_minimum_version 1.5.0
   oe="${BATS_TEST_DIRNAME}/oe"
+  export GIT_CONFIG_GLOBAL="${BATS_TEST_TMPDIR}/gitconfig"
+  export GIT_CONFIG_NOSYSTEM=1
   cd "${BATS_TEST_TMPDIR}" || return 1
 }
 

@@ -3,7 +3,7 @@
 #
 # - Each test writes the GitHub state it needs as JSON, then runs oe against it.
 # - testdata/fake-gh.sh stands in for gh, answers every read from that state, and applies every write to it.
-# - git config skills.lang sets the reader's language, through the environment, so the user's config never leaks in.
+# - git config skills.lang sets the reader's language through the environment, which also beats the clone's own config; GIT_CONFIG_GLOBAL and GIT_CONFIG_NOSYSTEM keep the user's and the system's config out.
 # - Every comment oe writes is by the OWNER at 08:00, and every test runs at 08:00.
 # shellcheck disable=SC2292 # bats fails a test on a mid-test `[[ ]]` only under bash 4.1+; `[ ]` works on every bash.
 
@@ -18,6 +18,8 @@ setup() {
   export OE_GITHUB="${BATS_TEST_TMPDIR}/github.json"
   # 2027-01-15 08:00 UTC
   export OE_NOW=1800000000
+  export GIT_CONFIG_GLOBAL="${BATS_TEST_TMPDIR}/gitconfig"
+  export GIT_CONFIG_NOSYSTEM=1
   export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=skills.lang GIT_CONFIG_VALUE_0=en
   printf '%s\n' '{"default_branch": {"checks": {"test": "success"}}, "issues": [{"number": 5, "branch": true}]}' >"${OE_GITHUB}"
 }
