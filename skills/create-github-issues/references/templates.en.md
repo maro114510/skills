@@ -48,8 +48,6 @@ In any Mermaid node label, a double quote in a title must be written as `#quot;`
 
 (Only if applicable: **Epic split suggestion**: The dependency graph splits into independent groups and the count is large, so <proposed split> as separate Epics could also work instead of one Epic. Proceed with a single Epic anyway?)
 
-(Only when Step 1.5 changed a merged design doc/implementation plan: **Document currently out of sync**: <document> no longer matches the clarified answers. T<doc> (Wave 1 / Depends on: none) updates it to match, and every Tn whose content the answers changed depends on it — directly or transitively, as stated on each Tn's dependency line.)
-
 ### Dependency preview (temporary IDs; real Issue numbers are assigned after creation)
 
 ```mermaid
@@ -86,8 +84,6 @@ flowchart LR
 - Specs: none
 - Target state: <one line>
 - Verification: <bullet>
-
-When this Tn's content changed because Step 1.5 changed a merged document, write its heading's dependency part in full as "Depends on: T<doc>, directly" or "Depends on: T<via>, transitively on T<doc>" instead of the plain "Depends on: ..." — the summary must approve which of the two applies.
 
 Only when a Tn was promoted to a container, show it in this shape instead — Requirements/Specs/Verification live only on the Tn.m side.
 
@@ -233,7 +229,7 @@ Both a non-container `Tn` (leaf) and a `Tn.m` (grandchild) use this shape.
 
 ## Dependencies
 
-{Name each dependency by its title, never by its temporary `Tn` id, which readers never see. For a `Tn`: "Can start after <title> is done. See the Epic for the full dependency picture." / For a `Tn.m`: "Can start after <title> is done. See the parent Issue for the full dependency picture within it." or "None (can start in parallel)". Don't write step-by-step reasoning or detail here. When this Tn's content changed because Step 1.5 changed a merged document, state instead whether it depends on the doc-update task directly ("Can start after the doc-update task <doc-update title> is done, which it depends on directly") or transitively ("Can start after <title> is done, which in turn depends on the doc-update task <doc-update title>, so it depends on it transitively"), keeping the "See the Epic" sentence.}
+{Name each dependency by its title, never by its temporary `Tn` id, which readers never see. For a `Tn`: "Can start after <title> is done. See the Epic for the full dependency picture." / For a `Tn.m`: "Can start after <title> is done. See the parent Issue for the full dependency picture within it." or "None (can start in parallel)". Don't write step-by-step reasoning or detail here.}
 
 ## Acceptance Criteria
 
@@ -344,5 +340,4 @@ The Epic body's dependency diagram (or table), and any container Tn's own depend
 - <title>: <the error gh printed>. <Issues that should depend on it, by number> are not blocked by it. Create it by hand with parent #<Epic or container> and blocked-by <its own dependencies, by number>, add it as blocked-by to those Issues, and replace its "(creation failed)" in the Epic body with its number.
 - For a failed person Issue instead: <title>: <the error gh printed>. Create it by hand with no parent and blocked-by <the Issues it waits for, by number>.)
 
-(Only when a doc-update dependency was wired transitively: <Tn(s)> depend on the doc-update Tn transitively via <Tvia> — they are not directly blocked by it. This ordering is intentional; do not "fix" it by adding or removing edges.)
 ````
