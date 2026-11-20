@@ -18,6 +18,8 @@ setup() {
   export OE_GITHUB="${BATS_TEST_TMPDIR}/github.json"
   # 2027-01-15 08:00 UTC
   export OE_NOW=1800000000
+  export GIT_CONFIG_GLOBAL="${BATS_TEST_TMPDIR}/gitconfig"
+  export GIT_CONFIG_NOSYSTEM=1
   export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=skills.lang GIT_CONFIG_VALUE_0=en
   printf '%s\n' '{"default_branch": {"checks": {"test": "success"}}, "issues": [{"number": 5, "branch": true}]}' >"${OE_GITHUB}"
 }

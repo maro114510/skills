@@ -13,6 +13,8 @@ setup() {
   mkdir -p "${BATS_TEST_TMPDIR}/bin"
   printf '#!/usr/bin/env bash\nexec bash "%s/testdata/fake-gh.sh" "$@"\n' "${BATS_TEST_DIRNAME}" >"${BATS_TEST_TMPDIR}/bin/gh"
   chmod +x "${BATS_TEST_TMPDIR}/bin/gh"
+  export GIT_CONFIG_GLOBAL="${BATS_TEST_TMPDIR}/gitconfig"
+  export GIT_CONFIG_NOSYSTEM=1
   export PATH="${BATS_TEST_TMPDIR}/bin:${PATH}"
   export OE_GITHUB="${BATS_TEST_TMPDIR}/github.json"
   printf '%s\n' '{"issues": [{"number": 5, "branch": true}]}' >"${OE_GITHUB}"

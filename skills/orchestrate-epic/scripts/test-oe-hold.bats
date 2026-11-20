@@ -16,6 +16,8 @@ setup() {
   export OE_STATE_DIR="${BATS_TEST_TMPDIR}/state"
   # 2027-01-15 08:00 UTC
   export OE_NOW=1800000000
+  export GIT_CONFIG_GLOBAL="${BATS_TEST_TMPDIR}/gitconfig"
+  export GIT_CONFIG_NOSYSTEM=1
   export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=skills.lang GIT_CONFIG_VALUE_0=en
   printf '%s\n' '{"issues": [{"number": 5, "branch": true, "pull_requests": [{"number": 50, "state": "closed", "opened": "07:10"}]}]}' >"${OE_GITHUB}"
 }

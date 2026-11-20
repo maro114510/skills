@@ -18,6 +18,8 @@ setup() {
   export OE_GITHUB="${BATS_TEST_TMPDIR}/github.json"
   # 2027-01-15 08:00 UTC
   export OE_NOW=1800000000
+  export GIT_CONFIG_GLOBAL="${BATS_TEST_TMPDIR}/gitconfig"
+  export GIT_CONFIG_NOSYSTEM=1
   head_of_pr_15=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb15
 }
 
