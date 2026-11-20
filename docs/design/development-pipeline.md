@@ -34,11 +34,12 @@ This document designs the stages and gates around the Coordinator. `orchestrate-
 
 ```mermaid
 flowchart TB
-  Intent --> Design
-  Design -->|merged| Epic
-  Epic -->|approved| Ticket
+  Intent -->|boundary unchanged| Ticket
+  Intent -->|boundary changes| Design
+  Design -->|merged| Ticket
+  Epic -->|groups when work needs coordination| Ticket
   Ticket --> Mandate
-  Operator -->|starts on an Epic| Coordinator
+  Operator -->|starts on an Epic, the only consent| Coordinator
   Records[Host-local records] --> Coordinator
   Mandate --> Coordinator
   Coordinator -->|through its harness| Owner
