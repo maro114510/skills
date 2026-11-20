@@ -6,21 +6,21 @@ Write each question as `references/question.md` says, and start its decision lin
 
 End the message with these lines:
 
-```
+````
 すべての質問に回答してから Issue 作成を続行します。
 仕様が未確定のまま進める場合は「とりあえず作って」と返信してください（[要確認] タグを付与して進みます）。
-```
+````
 
 ## Step 1.5: Warning Format
 
 Output this when the user instructs to proceed with unresolved items:
 
-```
+````
 [!] 以下の仕様は未確定のまま Issue を作成します。Issue 本文の該当箇所に [要確認] タグを付与します。
 
 - <未確定項目1>
 - <未確定項目2>
-```
+````
 
 ## Step 3: Summary Format
 
@@ -32,7 +32,7 @@ Use the same 12-task threshold as the Epic body template below: Mermaid for 12 o
 
 In any Mermaid node label, a double quote in a title must be written as `#quot;` — never a raw `"` or a backslash-escaped `\"` (backslash escaping breaks rendering).
 
-```
+````
 ## 作成する Issue の構成
 
 ### Epic（親 Issue）
@@ -52,7 +52,7 @@ In any Mermaid node label, a double quote in a title must be written as `#quot;`
 
 ### 依存関係プレビュー（仮ID、実 Issue 番号は作成後に確定）
 
-​```mermaid
+```mermaid
 flowchart LR
   subgraph Wave1[Wave 1: 並列着手可]
     T1["T1: <タイトル>"]
@@ -61,7 +61,7 @@ flowchart LR
     T2["T2: <タイトル>"]
   end
   T1 --> T2
-​```
+```
 
 （13タスク以上の場合は、上記グラフの代わりに以下の表を使う）
 
@@ -119,7 +119,7 @@ Step 1.5 で統合済み文書が変更され、この Tn の内容が変わっ�
 追加案は、返信で「A1 を採用」のように名前を挙げたものだけを含めます。追加案を挙げない承認では、どの追加案も含めません。
 「作成してください」と返信すると、このまま Step 4（本文生成）→ 作成まで直接進みます。作成前に Issue 本文の全文を確認したい場合は「ドラフトを見せて」と伝えてください。
 追加・削除・タイトル修正・依存関係の修正・要件仕様の修正があれば教えてください。
-```
+````
 
 ## Epic body (Step 4)
 
@@ -127,7 +127,7 @@ Use the Mermaid variant when there are 12 or fewer child Issues; otherwise use t
 
 ### Mermaid variant (≤12 child Issues)
 
-```markdown
+````markdown
 ## 背景
 
 {The context that created this Epic — specific details from the conversation}
@@ -146,7 +146,7 @@ Use the Mermaid variant when there are 12 or fewer child Issues; otherwise use t
 
 ## 依存関係と並列実行計画
 
-​```mermaid
+```mermaid
 flowchart LR
   subgraph Wave1[Wave 1: 並列着手可]
     T1["{{T1}} <タイトル>"]
@@ -155,7 +155,7 @@ flowchart LR
     T2["{{T2}} <タイトル>"]
   end
   T1 --> T2
-​```
+```
 
 ## 受け入れ条件
 
@@ -164,13 +164,13 @@ flowchart LR
 
 ### 検証方法
 {How to confirm completion — E2E or integration checks, including any check of the whole Epic that a person runs}
-```
+````
 
 ### Table variant (>12 child Issues)
 
 Replace the `## 依存関係と並列実行計画` section with:
 
-```markdown
+````markdown
 ## 依存関係と並列実行計画
 
 子 Issue 数が多いため、グラフではなく表で示す。同じ Wave 内は並列着手可能。
@@ -180,13 +180,13 @@ Replace the `## 依存関係と並列実行計画` section with:
 | 1 | {{T1}} | <タイトル> | なし |
 | 1 | {{T4}} | <タイトル> | なし |
 | 2 | {{T2}} | <タイトル> | {{T1}} |
-```
+````
 
 ## Container Tn body (Step 4)
 
 Step 2 で `Tn` がコンテナに昇格した場合のみ使う。要件・仕様・受け入れ条件は持たず、Epic 本文と同じ形で自分の孫 `Tn.m` だけを扱う縮小版。孫が12件以下なら Mermaid、それを超えるなら表を使う — 実際にはまず起きないが、閾値は Epic と揃える。
 
-```markdown
+````markdown
 ## 背景
 
 {このテーマが独立したまとまりとして必要な理由 — 元の Tn のスコープとの関係を1〜2文で}
@@ -198,7 +198,7 @@ Step 2 で `Tn` がコンテナに昇格した場合のみ使う。要件・仕�
 
 ## 依存関係と実行計画
 
-​```mermaid
+```mermaid
 flowchart LR
   subgraph Wave1[Wave 1: 並列着手可]
     T1_1["{{T1.1}} <タイトル>"]
@@ -207,8 +207,8 @@ flowchart LR
     T1_2["{{T1.2}} <タイトル>"]
   end
   T1_1 --> T1_2
-​```
 ```
+````
 
 要件・仕様・検証方法セクションはここには書かない — それらは各 `Tn.m` 本文にのみ書く。依存図はこのコンテナ配下の孫だけを示し、他の `Tn` の孫とは混ぜない。
 
@@ -216,7 +216,7 @@ flowchart LR
 
 コンテナでない `Tn`（リーフ）と `Tn.m`（孫）の両方がこの形を使う。
 
-```markdown
+````markdown
 ## 背景
 
 {Why this task is needed, how it connects to the Epic — 1〜3文}
@@ -245,7 +245,7 @@ flowchart LR
 - {Check observable from a checkout or CI: assert what, run which command}
 
 {Up to 5 bullets. If it takes more than 5 to cover the real scenarios, that's a signal this Issue should be split — see Step 2 — unless an upstream authoritative document owns the full list: then keep 5 bullets chosen by failure mode rather than happy path, and add one prose line after the bullets (never a sixth bullet) pointing to that document as the authoritative full list. The pointer option is unavailable when no such document exists.}
-```
+````
 
 **Banned in every section above:** lettered step sequences (`a→b→c→d`), pseudocode, function signatures, multi-level nested bullets. If a task genuinely needs that much detail to specify, split it into more child Issues, or add a single line linking to an existing design doc — never restate the doc inline.
 
@@ -253,7 +253,7 @@ flowchart LR
 
 すべての `Pn` がこの形を使う。Epic のサブ Issue にはせず、Step 5 で blocked-by 関係を設定する。
 
-```markdown
+````markdown
 ## 背景
 
 {Why this verification needs a person, such as a real device no CI runner has, and the titles of the implementation Issues it waits for — 1〜2文}
@@ -261,13 +261,13 @@ flowchart LR
 ## やること
 
 - {Manual verification the plan explicitly requires, such as a check on a real device; never a deployment or other operational work}
-```
+````
 
 ## Step 4.5: Body Review Format
 
 Only used when the user explicitly asked to see the full draft (see Step 4.5 in SKILL.md). Show all Issue bodies in the following format and ask for approval:
 
-```markdown
+````markdown
 ## Issue 本文レビュー
 
 `{{Tn}}` と `{{Tn.m}}` は仮のプレースホルダーです。`{{Tn}}` は子 Issue 作成後に実際の Issue 番号（例: #123）へ置換されて Epic に反映され、`{{Tn.m}}` は孫 Issue 作成後にコンテナ化された Tn 本文へ同様に反映されます。
@@ -312,11 +312,11 @@ Only used when the user explicitly asked to see the full draft (see Step 4.5 in 
 
 上記内容で Issue を作成します。Epic を先に作成し、Tn はその番号を親として順に作成し、コンテナ化された Tn がある場合はその番号を親として孫 Issue を作成し、最後に人が行う Issue を親なしで、待つ Issue にブロックされる形で作成するため、作成順は Epic → Tn → Tn.m → 人が行う Issue になります。
 修正があれば箇所を指定して教えてください。問題なければ「作成してください」と返信してください。
-```
+````
 
 ## Step 6: Completion Report
 
-```
+````
 ## 作成完了
 
 ### Epic
@@ -345,4 +345,4 @@ Epic 本文の依存関係図（または表）とコンテナ化されたTn本�
 - 人が行う Issue の場合は代わりに: <タイトル>: <gh が出力したエラー>。親なし、blocked-by <待つ Issue の番号> で手動作成してください。）
 
 （文書更新 Tn への依存を推移的に配線した場合のみ: <Tn群> は文書更新 Tn に直接ブロックされておらず、<Tvia> を介して推移的に依存しています。この順序は意図的なものです。エッジの追加/削除で"修正"しないでください。）
-```
+````

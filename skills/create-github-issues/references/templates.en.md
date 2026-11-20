@@ -6,21 +6,21 @@ Write each question as `references/question.md` says, and start its decision lin
 
 End the message with these lines:
 
-```
+````
 I'll continue creating Issues once all questions are answered.
 If you want to proceed with the specification still undecided, reply "proceed anyway" (I'll add a [NEEDS CONFIRMATION] tag and continue).
-```
+````
 
 ## Step 1.5: Warning Format
 
 Output this when the user instructs to proceed with unresolved items:
 
-```
+````
 [!] The following specifications are still undecided; Issues will be created anyway. The relevant sections in the Issue bodies will be tagged [NEEDS CONFIRMATION].
 
 - <Undecided item 1>
 - <Undecided item 2>
-```
+````
 
 ## Step 3: Summary Format
 
@@ -32,7 +32,7 @@ Use the same 12-task threshold as the Epic body template below: Mermaid for 12 o
 
 In any Mermaid node label, a double quote in a title must be written as `#quot;` — never a raw `"` or a backslash-escaped `\"` (backslash escaping breaks rendering).
 
-```
+````
 ## Issue structure to be created
 
 ### Epic (parent Issue)
@@ -52,7 +52,7 @@ In any Mermaid node label, a double quote in a title must be written as `#quot;`
 
 ### Dependency preview (temporary IDs; real Issue numbers are assigned after creation)
 
-​```mermaid
+```mermaid
 flowchart LR
   subgraph Wave1[Wave 1: can start in parallel]
     T1["T1: <title>"]
@@ -61,7 +61,7 @@ flowchart LR
     T2["T2: <title>"]
   end
   T1 --> T2
-​```
+```
 
 (For 13 or more tasks, use the table below instead of the graph above)
 
@@ -119,7 +119,7 @@ OK to proceed to writing the Issue bodies with this structure, dependencies, req
 Additions are included only when your reply names them, such as "include A1". An approval that names no addition includes none of them.
 Reply "create them" to go straight from here through Step 4 (body generation) to creation. If you want to see the full Issue body text before creation, say "show me the draft" instead.
 Let me know if anything needs to be added, removed, retitled, or corrected (dependencies, requirements, specs).
-```
+````
 
 ## Epic body (Step 4)
 
@@ -127,7 +127,7 @@ Use the Mermaid variant when there are 12 or fewer child Issues; otherwise use t
 
 ### Mermaid variant (≤12 child Issues)
 
-```markdown
+````markdown
 ## Background
 
 {The context that created this Epic — specific details from the conversation}
@@ -146,7 +146,7 @@ Use the Mermaid variant when there are 12 or fewer child Issues; otherwise use t
 
 ## Dependencies & Parallel Execution Plan
 
-​```mermaid
+```mermaid
 flowchart LR
   subgraph Wave1[Wave 1: can start in parallel]
     T1["{{T1}} <title>"]
@@ -155,7 +155,7 @@ flowchart LR
     T2["{{T2}} <title>"]
   end
   T1 --> T2
-​```
+```
 
 ## Acceptance Criteria
 
@@ -164,13 +164,13 @@ flowchart LR
 
 ### Verification
 {How to confirm completion — E2E or integration checks, including any check of the whole Epic that a person runs}
-```
+````
 
 ### Table variant (>12 child Issues)
 
 Replace the `## Dependencies & Parallel Execution Plan` section with:
 
-```markdown
+````markdown
 ## Dependencies & Parallel Execution Plan
 
 There are many child Issues, so this is shown as a table instead of a graph. Issues in the same Wave can be worked on in parallel.
@@ -180,13 +180,13 @@ There are many child Issues, so this is shown as a table instead of a graph. Iss
 | 1 | {{T1}} | <title> | none |
 | 1 | {{T4}} | <title> | none |
 | 2 | {{T2}} | <title> | {{T1}} |
-```
+````
 
 ## Container Tn body (Step 4)
 
 Use only when Step 2 promoted a `Tn` to a container. It has no Requirements, Specs, or Acceptance Criteria — a scaled-down version of the Epic shape covering only its own grandchildren `Tn.m`. Mermaid for 12 or fewer grandchildren; past that, the table — rarely reached in practice, but the same threshold as the Epic.
 
-```markdown
+````markdown
 ## Background
 
 {Why this theme needs to be its own grouping — its relation to the original Tn's scope, in 1-2 sentences}
@@ -198,7 +198,7 @@ Use only when Step 2 promoted a `Tn` to a container. It has no Requirements, Spe
 
 ## Dependencies & Execution Plan
 
-​```mermaid
+```mermaid
 flowchart LR
   subgraph Wave1[Wave 1: can start in parallel]
     T1_1["{{T1.1}} <title>"]
@@ -207,8 +207,8 @@ flowchart LR
     T1_2["{{T1.2}} <title>"]
   end
   T1_1 --> T1_2
-​```
 ```
+````
 
 No Requirements / Specs / Verification section here — those live only on each `Tn.m` body. The diagram shows only this container's own grandchildren, never mixed with another `Tn`'s.
 
@@ -216,7 +216,7 @@ No Requirements / Specs / Verification section here — those live only on each 
 
 Both a non-container `Tn` (leaf) and a `Tn.m` (grandchild) use this shape.
 
-```markdown
+````markdown
 ## Background
 
 {Why this task is needed, how it connects to the Epic — 1-3 sentences}
@@ -245,7 +245,7 @@ Both a non-container `Tn` (leaf) and a `Tn.m` (grandchild) use this shape.
 - {Check observable from a checkout or CI: assert what, run which command}
 
 {Up to 5 bullets. If it takes more than 5 to cover the real scenarios, that's a signal this Issue should be split — see Step 2 — unless an upstream authoritative document owns the full list: then keep 5 bullets chosen by failure mode rather than happy path, and add one prose line after the bullets (never a sixth bullet) pointing to that document as the authoritative full list. The pointer option is unavailable when no such document exists.}
-```
+````
 
 **Banned in every section above:** lettered step sequences (`a→b→c→d`), pseudocode, function signatures, multi-level nested bullets. If a task genuinely needs that much detail to specify, split it into more child Issues, or add a single line linking to an existing design doc — never restate the doc inline.
 
@@ -253,7 +253,7 @@ Both a non-container `Tn` (leaf) and a `Tn.m` (grandchild) use this shape.
 
 Every `Pn` uses this shape. It is not a sub-issue of the Epic; Step 5 sets its blocked-by relations.
 
-```markdown
+````markdown
 ## Background
 
 {Why this verification needs a person, such as a real device no CI runner has, and the titles of the implementation Issues it waits for — 1-2 sentences}
@@ -261,13 +261,13 @@ Every `Pn` uses this shape. It is not a sub-issue of the Epic; Step 5 sets its b
 ## What to do
 
 - {Manual verification the plan explicitly requires, such as a check on a real device; never a deployment or other operational work}
-```
+````
 
 ## Step 4.5: Body Review Format
 
 Only used when the user explicitly asked to see the full draft (see Step 4.5 in SKILL.md). Show all Issue bodies in the following format and ask for approval:
 
-```markdown
+````markdown
 ## Issue Body Review
 
 `{{Tn}}` and `{{Tn.m}}` are temporary placeholders. `{{Tn}}` is replaced with the real Issue number (e.g. #123) in the Epic once the Tn Issues are created; `{{Tn.m}}` is replaced the same way in a container Tn's own body once its grandchildren are created.
@@ -312,11 +312,11 @@ Only show the following when a person Issue exists.
 
 I'll create the Issues above. The Epic is created first, then each Tn with the Epic's number as its parent, then — for any container Tn — its Tn.m grandchildren with that Tn's number as their parent, then each person Issue with no parent, blocked by the Issues it waits for, so the creation order is Epic → Tn → Tn.m → person Issue.
 Let me know which part needs changes. If everything looks good, reply "create them".
-```
+````
 
 ## Step 6: Completion Report
 
-```
+````
 ## Created
 
 ### Epic
@@ -345,4 +345,4 @@ The Epic body's dependency diagram (or table), and any container Tn's own depend
 - For a failed person Issue instead: <title>: <the error gh printed>. Create it by hand with no parent and blocked-by <the Issues it waits for, by number>.)
 
 (Only when a doc-update dependency was wired transitively: <Tn(s)> depend on the doc-update Tn transitively via <Tvia> — they are not directly blocked by it. This ordering is intentional; do not "fix" it by adding or removing edges.)
-```
+````
