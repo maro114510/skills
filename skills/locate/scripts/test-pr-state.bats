@@ -43,11 +43,6 @@ field() {
   jq -r "$1" <<<"${output}"
 }
 
-# Prints automationOwner, or absent when the output has no such key.
-owner() {
-  field 'if has("automationOwner") then .automationOwner else "absent" end'
-}
-
 expect() {
   if [ "$1" != "$2" ]; then
     echo "expected [$2], got [$1]; output: ${output}" >&2
@@ -123,30 +118,10 @@ paged_fixtures() {
   expect "$(field '.reviews[0].state')" APPROVED
 }
 
-@test "a body line holding only an automation-owner marker names the automation that owns the PR" {
-  normalize '.body = "Summary\n\n<!-- automation-owner: orchestrate-epic -->\nOwned by orchestrate-epic."'
+@test "the normalized output holds exactly the documented fields" {
+  normalize
   [ "${status}" -eq 0 ]
-  expect "$(owner)" orchestrate-epic
-}
-
-@test "a marker on a line the web editor ended with CRLF still names the owner" {
-  normalize '.body = "Summary\r\n  <!--automation-owner:my-bot.v2-->  \r\nmore"'
-  expect "$(owner)" my-bot.v2
-}
-
-@test "a PR without a body or without the marker has no owner" {
-  normalize '.body = null'
-  [ "${status}" -eq 0 ]
-  expect "$(owner)" null
-  normalize '.body = "Summary only"'
-  expect "$(owner)" null
-}
-
-@test "a marker inside prose, or one without a valid id, names no owner" {
-  normalize '.body = "Add the line <!-- automation-owner: orchestrate-epic --> to opt out."'
-  expect "$(owner)" null
-  normalize '.body = "<!-- automation-owner: -->\n<!-- automation-owner: two words -->"'
-  expect "$(owner)" null
+  expect "$(field 'keys | join(",")')" "author,baseRef,checks,comments,head,headRef,isCrossRepository,isDraft,latestReviews,mergeStateStatus,mergeable,number,repo,reviewDecision,reviewRequests,reviews,state,threads,url,viewer"
 }
 
 @test "each latest review carries the commit it reviewed" {
