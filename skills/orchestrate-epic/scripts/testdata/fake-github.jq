@@ -16,9 +16,13 @@
 # | comments | Issue number | The comments on that Issue, oldest first |
 # | issue_rest | Issue number | The REST read of one Issue, with its number and body |
 # | checks | Commit SHA and cursor, as SHA:CURSOR | The page of checks on that commit after the cursor |
+# | commits | Pull request number and cursor, as N:CURSOR | The page of 50 commits of that pull request before the cursor |
 # | compare | Two commits, as BASE...HEAD | Whether HEAD contains BASE: ahead when it does, and diverged when it does not |
 #
 # Checks come 100 to a page, in every read that holds them.
+# The Issue read holds the last 20 commits of each pull request, and a page of commits holds 50.
+# $commit_pages tells whether the query selects the total and the next page of the checks of each commit, as fake-gh.sh decides.
+# A query that does not select them gets neither, as on GitHub.
 #
 # The state
 #
@@ -134,6 +138,23 @@ def epic_response:
 # The head the Issue read sees, which differs from the listed head after a push during the read.
 def read_sha: if .pushed_during_read then "c" * 40 else pr_sha end;
 
+def commit_rollup:
+  rollup | if . != null and ($commit_pages | not) then del(.contexts.totalCount, .contexts.pageInfo) else . end;
+
+# The commits of a pull request, oldest first, the head last.
+def pr_commit_nodes:
+  read_sha as $sha
+  | [(.commits[]? | {commit: {oid: .sha, committedDate: (.committed | time), statusCheckRollup: commit_rollup}}),
+      {commit: {oid: $sha, committedDate: (.committed // .opened | time), statusCheckRollup: commit_rollup}}];
+
+# The commits GitHub returns for last: $size and before: the position $before, or from the end when it is null.
+# The cursor is the position of the first commit returned.
+def commits_page($size; $before):
+  length as $n
+  | ($before // $n) as $end
+  | ([$end - $size, 0] | max) as $start
+  | {pageInfo: {hasPreviousPage: ($start > 0), startCursor: "\($start)"}, nodes: .[$start:$end]};
+
 # A review-thread comment as the Issue read returns it, with the Bot type a listed bot carries.
 def thread_comment:
   {authorAssociation: (.by // "NONE"), author: {login: (.login // ""), __typename: (.type // "User")},
@@ -164,8 +185,7 @@ def pull_request:
     reviews: {nodes: [.reviews[]? | author + {submittedAt: (.at | time), commit: {oid: (.sha // $sha)}}]},
     approvals: {nodes: [.approvals[]? | {authorAssociation: (.by // "NONE"), commit: {oid: (.sha // $sha)}}]},
     reviewThreads: {totalCount: ((review_threads | length) + (.older_threads // 0)), nodes: review_threads},
-    commits: {nodes: [(.commits[]? | {commit: {oid: .sha, committedDate: (.committed | time), statusCheckRollup: rollup}}),
-      {commit: {oid: $sha, committedDate: (.committed // .opened | time), statusCheckRollup: rollup}}]},
+    commits: (pr_commit_nodes | commits_page(20; null)),
     headRef: {target: {oid: $sha, committedDate: (.committed // .opened | time), statusCheckRollup: rollup}}};
 
 def issue_response($n):
@@ -234,8 +254,13 @@ def issue_rest($n):
 
 # The page of checks after the cursor $after on the pull request head $oid.
 def checks_response($oid; $after):
-  ([.issues[].pull_requests[]? | select(read_sha == $oid)] | first // error("unknown commit \($oid)")) as $commit
+  ([.issues[].pull_requests[]? | select(read_sha == $oid), (.commits[]? | select(.sha == $oid))] | first // error("unknown commit \($oid)")) as $commit
   | {data: {repository: {object: {oid: $oid, statusCheckRollup: ($commit | rollup_nodes | contexts_page($after))}}}};
+
+# The page of commits before the cursor $before on the pull request numbered $n.
+def commits_response($n; $before):
+  ([.issues[].pull_requests[]? | select(.number == $n)] | first // error("unknown pull request \($n)")) as $pr
+  | {data: {repository: {pullRequest: {commits: ($pr | pr_commit_nodes | commits_page(50; $before))}}}};
 
 # Whether the head $head contains the merge commit $base, as GitHub's compare status says.
 def compare_response($base; $head):
@@ -259,6 +284,7 @@ $state
   elif $call == "ref" then branch_head($arg)
   elif $call == "comments" then issue_comments($arg | tonumber)
   elif $call == "issue_rest" then issue_rest($arg | tonumber)
+  elif $call == "commits" then ($arg | split(":")) as [$n, $before] | commits_response($n | tonumber; $before | tonumber)
   elif $call == "checks" then ($arg | split(":")) as [$oid, $after] | checks_response($oid; $after | tonumber)
   elif $call == "compare" then ($arg | split("...")) as [$base, $head] | compare_response($base; $head)
   else error("unknown call \($call)") end
