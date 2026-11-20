@@ -1038,6 +1038,42 @@ JSON
   [ -z "${output}" ]
 }
 
+# Puts a gh in front of the fake one that answers every commits page query with the output of $1, and passes the rest on.
+page_answer() {
+  printf '#!/usr/bin/env bash\ncase "$*" in *before=*) %s; exit 0 ;; esac\nexec bash "%s/testdata/fake-gh.sh" "$@"\n' \
+    "$1" "${BATS_TEST_DIRNAME}" >"${BATS_TEST_TMPDIR}/bin/gh"
+}
+
+@test "an earlier page of commits that comes back empty exits non-zero and prints nothing" {
+  github <<JSON
+{"issues": [{"number": 5, "branch": true, "pull_requests": [{
+  "number": 50, "opened": "00:30", "committed": "07:50", "conflicting": true, "checks": {"test": "success"},
+  "commits": $(earlier_commits 20 3)
+}]}]}
+JSON
+  page_answer 'echo null'
+
+  run --separate-stderr bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 1 ]
+  [ -z "${output}" ]
+}
+
+@test "an earlier page of commits that does not move back stops the read instead of repeating it" {
+  github <<JSON
+{"issues": [{"number": 5, "branch": true, "pull_requests": [{
+  "number": 50, "opened": "00:30", "committed": "07:50", "conflicting": true, "checks": {"test": "success"},
+  "commits": $(earlier_commits 20 3)
+}]}]}
+JSON
+  page_answer 'echo "{\"nodes\":[],\"pageInfo\":{\"hasPreviousPage\":true,\"startCursor\":\"1\"}}"'
+
+  run --separate-stderr perl -e 'alarm 20; exec @ARGV' bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 1 ]
+  [ -z "${output}" ]
+}
+
 @test "an earlier commit whose only failed check is the 101st counts as a commit with a failed check" {
   github <<JSON
 {"issues": [{"number": 5, "branch": true, "pull_requests": [{

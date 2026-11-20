@@ -135,6 +135,10 @@ all_commits() {
     page="$(gh api graphql -f query="${commits_query}" -F owner="${repo%/*}" -F repo="${repo#*/}" \
       -F number="${number}" -f before="${cursor}" --jq '.data.repository.pullRequest.commits' 2>"${err}")" ||
       fail "commits read on PR #${number} failed: $(head -n1 "${err}")"
+    # A page that is not a list of commits, or that does not move back from the cursor, would end or repeat the read on part of the commits.
+    jq -e --arg cursor "${cursor}" '(.nodes | type) == "array" and (.pageInfo.hasPreviousPage | type) == "boolean"
+      and (.pageInfo.hasPreviousPage == false or ((.pageInfo.startCursor | type) == "string" and .pageInfo.startCursor != $cursor))' \
+      <<<"${page}" >/dev/null 2>&1 || fail "commits page on PR #${number} unreadable"
     response="$(jq -c --argjson at "${at}" --argjson page "${page:-null}" '
       setpath($at + ["commits"];
         getpath($at).commits
