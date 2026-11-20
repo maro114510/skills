@@ -73,7 +73,6 @@ fail() {
 repo="$1"
 epic="$2"
 shift 2
-entry=classify
 while [[ $# -gt 0 ]]; do
   [[ "$1" == --running && "${2:-}" =~ ^[1-9][0-9]*$ ]] || usage "Expected --running <issue-number>, got: $*"
   shift 2
@@ -224,12 +223,8 @@ for n in ${sorted[@]+"${sorted[@]}"}; do
     -f branch="${branch_prefix}${n}" -f ref="refs/heads/${branch_prefix}${n}" 2>"${err}")" ||
     fail "Issue #${n} read failed: $(head -n1 "${err}")"
   response="$(all_checks "${response}")" || exit 1
-  line="$(jq -r "$(program "${entry}" "${pr_heads%,}")" <<<"${response}" 2>"${err}")" ||
+  line="$(jq -r "$(program classify "${pr_heads%,}")" <<<"${response}" 2>"${err}")" ||
     fail "Issue #${n} read failed: $(head -n1 "${err}")"
   out+="${line}"$'\n'
 done
-if [[ "${entry}" == classify ]]; then
-  with_commands "$(printf '%s' "${out}" | sort -t $'\t' -k1,1n)"
-else
-  printf '%s' "${out}"
-fi
+with_commands "$(printf '%s' "${out}" | sort -t $'\t' -k1,1n)"
