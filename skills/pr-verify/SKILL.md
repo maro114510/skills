@@ -42,8 +42,16 @@ If any of the five is missing, end without a verdict and say which.
 
    The body's `Decisions` or `決定事項` section, which only oe writes from the engineer's answers, overrides every criterion it contradicts, and a later decision overrides an earlier one. Judge such a criterion as the decision changed it, and quote it on its line as `<criterion>; per decision: <the decision's answer>`.
 3. Find what changed with `git -C <worktree> diff "$(git -C <worktree> merge-base origin/<base> HEAD)"`. If it fails, end without a verdict.
-4. Read `<skills-root>/implement/references/evidence.md` and gather evidence for each check to judge in the worktree as it defines. Write one line per check in its section 5 form. For a check with no evidence, write `-> none: <the evidence that would settle it>`. Put an input too long for its line after all check lines.
-5. Decide the verdict. It is `success` only when every judged check is evidenced, including when the list is empty. Otherwise it is `failure`. A behavior check that nothing available can exercise, such as a UI no tool can drive, has no evidence, so it makes the verdict `failure`.
+4. Read `<skills-root>/implement/references/evidence.md` and gather evidence for each check to judge in the worktree as it defines. Write one line per check:
+
+   | The check | Line |
+   |---|---|
+   | Evidenced as holding | Its evidence.md section 5 form |
+   | Observed not to hold, by a run or a read that evidence.md accepts for its kind | `<check> -> failed: <command or file:line>; observed <result>` |
+   | Not observed either way, such as a UI no tool can drive or a check that needs a deploy or a person | `<check> -> unconfirmed: <the evidence that would settle it>` |
+
+   Put an input too long for its line after all check lines.
+5. Decide the verdict. It is `failure` only when at least one check has a `-> failed:` line. Otherwise it is `success`, including when the list is empty or some checks are unconfirmed. `oe verdict` posts the findings on the PR for a failure or an unconfirmed check, so the person reads each one.
 6. Confirm `git -C <worktree> rev-parse HEAD` still prints `<sha>`. Create a unique temporary file outside `<worktree>` with `mktemp`, then use your file-writing tool to write the step 4 lines into it. Never put findings in shell command text, including a heredoc, `echo`, or `printf`: findings may name paths the harness denies in shell commands.
 
    Record the verdict by redirecting that file into stdin; `<findings-file>` is the temporary file's path:
