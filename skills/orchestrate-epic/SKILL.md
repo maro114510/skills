@@ -76,7 +76,7 @@ Everything else is read again from GitHub on every pass.
 bash <skill-dir>/scripts/oe ready <repo> <epic>
 ```
 
-oe finds the running agents in its own records. Act on the exit code:
+The agents running are the `wait-agent` lines, whose working marker in the Issue body is live. Act on the exit code:
 
 | Exit | Action |
 |---|---|
@@ -90,12 +90,13 @@ Any other output keeps the loop running, even when every remaining Issue waits o
 ### 3.2 Start agents
 
 Each line holds an Issue number, an action, a reason, and a start command, separated by tabs.
-Take the lines whose action is `start-verifier`, then `start-owner`, then `claim`, and start one agent per line while fewer than `max-agents` agents run, counting each `running` line and each agent started in this pass.
+Take the lines whose action is `start-verifier`, then `start-owner`, then `claim`, and start one agent per line while fewer than `max-agents` agents run, counting each `wait-agent` line and each agent started in this pass.
 An `update-branch` line starts no agent and counts against no cap: run its command as printed, an `oe update` call, in every pass that shows one, then go to 3.1 once all of this pass's commands have run. On exit 4 or 1 go on, because the next `oe ready` reports a conflict as a repair, reads again, or gives `wait-update` until the head moves and parks the Issue when it has not moved after 10 minutes, so a failed update is never run again on the same head.
+A `hold` line starts no agent and counts against no cap: run its command as printed, an `oe hold` call that writes the reason on the Issue, then go to 3.1 once all of this pass's commands have run, where the Issue's `wait-answer` line shows the hold. On a non-zero exit, show the Issue, named in words, with its reason and the error, and go on, because the next pass prints the hold again.
 Every other action starts no agent: `done`, `parked`, and each `wait-*` wait for CI, an answer, a dependency, or an engineer, and `read-again` marks an Issue whose PR moved during the read, which the next pass classifies.
-A `running` line names the agent that runs for the Issue, and its reason holds the command to run once that agent ends, never before.
+A `wait-agent` line names the agent that runs for the Issue and when it started.
 
-A `wait-answer` line holds an Owner's open question in its reason, with each line break written as `\n`, and an `oe question … --answer <reply>` command in place of a start command:
+A `wait-answer` line holds an open hold or an Owner's open question in its reason, with each line break written as `\n`, and an `oe question … --answer <reply>` command in place of a start command:
 
 - Show each question you have not shown in this conversation, as text with its line breaks restored, the Issue named in words, and a note that the person can answer by an option's letter or in their own words. Then go on with the other lines, never waiting for the reply.
 - When the person replies to a shown question, run its command as printed, with `<reply>` replaced by their reply, shell-quoted. Record only the person's own reply, never one you inferred, and go to 3.1.
@@ -155,7 +156,7 @@ The harness wakes you when an agent ends or the wait returns, and whichever come
 
 | Wake | Action |
 |---|---|
-| An agent ended | Run the command its Issue's `running` line names, `oe worktree remove <n>`, and go to 3.1. Its final line goes into the summary only |
+| An agent ended | Run `oe worktree remove <n>` for its Issue, and go to 3.1. Its final line goes into the summary only |
 | The wait exited 0 or 5 | Go to 3.1 |
 | The wait exited 1 | Every read failed until its timeout: go to 3.1 |
 | The wait exited 6 | A wait for this Epic already runs and wakes you once the next actions change: end your turn, or in Codex go back to polling that wait |
@@ -163,7 +164,7 @@ The harness wakes you when an agent ends or the wait returns, and whichever come
 
 ## Step 4: End the session
 
-1. Start nothing new, and stop the wait if one is still running, so it never wakes the session after the lock is released. Wait for each agent the latest `running` lines name to end, in Codex with `wait_agent`, then run `oe worktree remove <n>` for it.
+1. Start nothing new, and stop the wait if one is still running, so it never wakes the session after the lock is released. Wait for each agent the latest `wait-agent` lines name to end, in Codex with `wait_agent`, then run `oe worktree remove <n>` for it.
 2. Release the lock: `oe lock release <repo> <epic> <token>`.
 3. Report to the user in Japanese with the format below, from the last `oe ready` output and the agents' final lines. Show first each open question that 3.2 has not shown yet, and record a reply to it as 3.2 says.
 
