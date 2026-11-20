@@ -140,6 +140,6 @@ sequenceDiagram
 
 ## References
 
-- `orchestrate-epic.md` for pr-owner, which calls implement with a worktree, oe claim, which creates the same branch name, and pr-verify, which applies the same Evidence rules to the Issue's own criteria
+- `orchestrate-epic.md` for pr-owner, which calls implement with a worktree, oe worktree, which creates the same branch name, and pr-verify, which applies the same Evidence rules to the Issue's own criteria
 - `development-pipeline.md` for where implementation sits in the pipeline
 - `skill-evaluation.md` for the paired comparison a change to the skill passes before adoption

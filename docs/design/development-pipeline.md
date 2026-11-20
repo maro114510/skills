@@ -76,9 +76,9 @@ flowchart TB
 |---|---|---|
 | `answer` | Wait for the answer | Reply to the Question or the hold in the Coordinator's conversation |
 | `merge` | Wait for an engineer to merge | Review and merge, or let repository automation merge |
-| `restart` | Hold the Issue | Delete the branch and answer the hold so the Coordinator starts over, or finish and merge by hand |
-| `dependency` | Hold the Issue, with a dependency closed as not planned or duplicate | Replace or remove the dependency |
-| `issue` | Hold the Issue, with the pull request closed unmerged or merged while the Ticket stays open | Close the Ticket or delete the branch |
+| `restart` | Hold the Issue at row 7, 8, 10, or 12 of `orchestrate-epic.md` | Delete the branch and answer the hold so the Coordinator starts over, or finish and merge by hand |
+| `dependency` | Hold the Issue at row 4 of `orchestrate-epic.md`, with a dependency closed as not planned or duplicate | Replace or remove the dependency |
+| `issue` | Hold the Issue at row 3 of `orchestrate-epic.md`, with the pull request closed unmerged or merged while the Ticket stays open | Close the Ticket, or delete the branch and answer the hold |
 
 The Harnesses table of the orchestrate-epic skill maps each need below onto one harness.
 
