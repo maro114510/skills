@@ -10,7 +10,7 @@
 # | verify_context | oe/verify | The commit status context that holds the verdict |
 # | branch_prefix | feat/issue- | The prefix of an Issue branch, followed by the Issue number |
 # | wait_timeout | 540 | Seconds one oe wait call waits for oe ready's output to change, under the 10-minute limit Claude Code puts on a background command |
-# | wait_interval | 60 | Seconds between two oe ready runs inside oe wait |
+# | wait_interval | 120 | Seconds between two oe ready runs inside oe wait |
 #
 # oe-records.jq defines which comments count as records when oe reads them.
 # shellcheck disable=SC2034 # The sourcing subcommand reads these.
@@ -20,7 +20,7 @@ repair_cap=3
 verify_context=oe/verify
 branch_prefix=feat/issue-
 wait_timeout=540
-wait_interval=60
+wait_interval=120
 
 # Prints the marker that starts the body of a record of kind $1, such as hold.
 # It must equal marker($kind) in oe-records.jq, which reads what this writes.

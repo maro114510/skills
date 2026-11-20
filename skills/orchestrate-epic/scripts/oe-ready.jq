@@ -109,6 +109,14 @@ def epic_lines:
         then error("child Issue #\(.number) is in \(.repository.nameWithOwner), not \($r.nameWithOwner)")
         else "issue\t\(.number)\t\(.state)" end);
 
+# The facts of each child Issue that the Epic read holds, keyed by Issue number.
+# oe-ready.sh compares them with the previous run's to tell whether an open Issue changed.
+def epic_facts:
+  .data.repository.issue.subIssues.nodes
+  | map({key: (.number | tostring),
+      value: {state, updatedAt, blocked_by: [.blockedBy.totalCount, (.blockedBy.nodes[]? | [.number, .state, .stateReason])]}})
+  | from_entries;
+
 # The question a question record's body asks, without the marker, the heading, and the closing part after the last `---` line, that oe question wraps it in.
 def question_text:
   gsub("\r"; "") | split("\n")
@@ -283,6 +291,18 @@ def next_action:
   elif .head.verdict == "failure" or .head.verdict == "error" then act("hold"; "failure verdict on \(.head.sha)")
   elif .head.verdict == "success" then act("wait-merge"; "success verdict on \(.head.sha)")
   else act("start-verifier"; "checks passed on \(.head.sha)") end;
+
+# The epoch second from which what classify decided for an Issue can differ with no change on GitHub, or null when no clock decides it.
+# - A head that moved during the read is read again at the next run.
+# - A live working marker expires marker_ttl seconds after its start.
+# - A head with no checks holds no_checks_grace seconds after its push.
+def next_deadline:
+  issue_state as $s
+  | [ if $s.head != null and $s.head.unreadable != null then now_s else empty end,
+      if $s.working.state == "live" then (($s.working.at | epoch) + marker_ttl) else empty end,
+      if $s.head != null and $s.head.unreadable == null and $s.head.ci == "none" and $s.head.age < no_checks_grace
+      then $s.head.pushed + no_checks_grace else empty end ]
+  | min;
 
 # A closed Issue is done before anything else is read, so a busy closed Issue never fails the read.
 def classify:

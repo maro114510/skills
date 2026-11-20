@@ -18,6 +18,9 @@
 # - OE_NOW sets the current time in epoch seconds, as in oe ready.
 # - OE_WAIT_INTERVAL sets the seconds between two polls, wait_interval by default.
 #
+# The polls of one call share a cache that oe ready keeps, so an open Issue is read again only when oe ready's header says it changed.
+# The cache lives in a temporary directory that the call removes when it ends.
+#
 # A failed oe ready run ends nothing: the next run comes one poll interval later.
 # The exception is a failure with the GraphQL rate limit exhausted, which another job on the same account can cause at any time:
 # oe wait then shows the reset time on stderr and polls again at that time, or at the deadline when that comes first.
@@ -97,6 +100,8 @@ utc_time() {
 }
 
 rate_reset=0
+cache="$(mktemp -d)" || usage "mktemp failed"
+trap 'rm -rf "${cache}"' EXIT
 
 # Sets rate_reset to the epoch second at which the exhausted GraphQL bucket refills, and shows it, or to 0 when the bucket is not exhausted.
 # A failed rate_limit read leaves it 0, so the failure is treated like any other.
@@ -125,7 +130,7 @@ pause() {
 # oe ready's own stderr names the failed read.
 poll() {
   local out rc
-  out="$(bash "${dir}/oe-ready.sh" "${repo}" "${epic}")" && rc=0 || rc=$?
+  out="$(OE_READY_CACHE="${cache}" bash "${dir}/oe-ready.sh" "${repo}" "${epic}")" && rc=0 || rc=$?
   rate_reset=0
   if ((rc == 1)); then
     check_rate_limit
