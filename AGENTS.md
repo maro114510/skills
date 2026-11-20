@@ -21,7 +21,7 @@ Repository instructions for coding agents.
 | `skills/<skill-name>/SKILL.md` | Frontmatter and prompt body of one skill |
 | `skills/<skill-name>/references/` | Optional large static documents the prompt pulls in |
 | `agents/<agent-name>.md` | Portable subagent that APM deploys; only `name`, `description`, and `mode: subagent` frontmatter, and listed in `tests/validate-apm.sh` |
-| `skills/orchestrate-epic/scripts/oe` | Shell helpers that read and write orchestrate-epic's state on GitHub and in host-local records, laid out in `oe-store.sh`; each `oe-<subcommand>.sh` header documents one subcommand |
+| `skills/orchestrate-epic/scripts/oe` | Shell helpers that read and write orchestrate-epic's state on GitHub; each `oe-<subcommand>.sh` header documents one subcommand |
 | `skills/orchestrate-epic/scripts/oe-bot.sh` | The Bot identity an agent's worktree carries when its clone sets `skills.bot`, and the token the scripts that write to GitHub take from it |
 | `skills/**/*.bats` | Script tests that `.github/workflows/lint-shell.yml` runs |
 | `docs/design/orchestrate-epic.md` | The orchestrate-epic Design Doc that oe and the agents implement |
@@ -83,8 +83,6 @@ Skills read them with `git config --get <key>`, so git decides between local and
 | git config key | Values | Resolved by |
 |---|---|---|
 | `skills.lang` | `ja`, `en` | `skills/create-pr/scripts/lang.sh` only; its header holds the precedence, and skills call it instead of restating it |
-| `skills.herdr` | `true`, `false`; unset means `false` | `skills/orchestrate-epic/scripts/oe-board.sh` only, and only inside Herdr; `true` opens the Epic's board pane |
-| `skills.notify` | A shell command, such as `herdr notification show "$1" --body "$2"`; unset or empty means no notification | `skills/orchestrate-epic/scripts/oe-wait.sh` only; run through `sh -c` with a one-line message as `$1` and a link as `$2` for each item that needs the person |
 | `skills.bot` | The login of the GitHub App bot the agents act as, with or without the `[bot]` suffix; unset means none. A clone that sets it opts in: the worktree an agent gets carries the Bot's git user and credential helper, while the person's own checkout keeps the person's. Its remote and every push URL must be an HTTPS GitHub URL, and neither the clone nor the worktree an agent gets may have submodules, or a start refuses. The worktree also resets inherited `http.<url>.extraheader` values and ends the credential chain at the Bot helper, so a helper that declines fails the push instead of falling back to the person | `bot_def` in `oe-config.sh` reads it for records; `bot_login`, `bot_identity_apply`, and `bot_require_ready` in `oe-bot.sh` give an agent's worktree its identity and refuse a start that could not hold it; `bot_env` makes the scripts that write to GitHub use a token for it |
 | `skills.bot.helper` | A command that answers `token <owner>/<repo>` with one installation token for that repository, and git's credential helper protocol with `get`; read only from the global config, so a clone cannot name it | `bot_helper` in `skills/orchestrate-epic/scripts/oe-bot.sh` only |
 
