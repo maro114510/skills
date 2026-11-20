@@ -77,30 +77,18 @@ action_of() {
   [ "$(verify_statuses_on "${head}")" = pending ]
 }
 
-@test "a second Verifier brief on the same head reaches the start limit, and oe ready parks the Issue" {
+@test "a third Verifier brief on the same head is not refused, and oe ready still starts a Verifier on it" {
   detached_worktree
   pr_15_passed_checks_at "${head}"
-  run --separate-stderr bash "${oe}" brief verifier o/r 5 "${wt}"
-  [ "${status}" -eq 0 ]
+  bash "${oe}" brief verifier o/r 5 "${wt}" >/dev/null
+  bash "${oe}" brief verifier o/r 5 "${wt}" >/dev/null
 
   run --separate-stderr bash "${oe}" brief verifier o/r 5 "${wt}"
+
   [ "${status}" -eq 0 ]
+  [ "$(verify_statuses_on "${head}" | wc -l | tr -d ' ')" -eq 3 ]
   run bash "${oe}" ready o/r 1
-
-  [ "$(action_of 5)" = parked ]
-}
-
-@test "a Verifier brief past the start limit is refused and writes nothing" {
-  detached_worktree
-  pr_15_passed_checks_at "${head}"
-  run --separate-stderr bash "${oe}" brief verifier o/r 5 "${wt}"
-  run --separate-stderr bash "${oe}" brief verifier o/r 5 "${wt}"
-
-  run --separate-stderr bash "${oe}" brief verifier o/r 5 "${wt}"
-
-  [ "${status}" -eq 4 ]
-  [ -z "${output}" ]
-  [ "$(verify_statuses_on "${head}" | wc -l | tr -d ' ')" -eq 2 ]
+  [ "$(action_of 5)" = start-verifier ]
 }
 
 @test "a Verifier brief whose worktree head is not the PR head is refused and writes nothing" {

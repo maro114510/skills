@@ -1,11 +1,13 @@
 # The read of one child Issue in oe ready.
-# It returns the Issue, its dependencies, its latest comments, its branch, and the newest pull request opened from that branch.
+# It returns the Issue with its body, its dependencies, its latest comments, its branch, and the newest pull request opened from that branch.
 query($owner: String!, $repo: String!, $num: Int!, $branch: String!, $ref: String!) {
   repository(owner: $owner, name: $repo) {
     issue(number: $num) {
       number
       state
       stateReason
+      # The working marker oe start writes lives in the body.
+      body
       blockedBy(first: 100) {
         totalCount
         nodes { number state stateReason }
@@ -17,8 +19,9 @@ query($owner: String!, $repo: String!, $num: Int!, $branch: String!, $ref: Strin
     }
     # The head the branch has now decides which Owner starts pushed, as oe-starts.jq says.
     ref(qualifiedName: $ref) { name target { oid } }
-    # Only the newest pull request decides the action, and each one more costs about one rate-limit point.
-    pullRequests(headRefName: $branch, first: 1, orderBy: {field: CREATED_AT, direction: DESC}) {
+    # The PR is the newest one that is open or whose head is the branch's head, so a few newer closed ones may come first.
+    # Each one more costs about one rate-limit point.
+    pullRequests(headRefName: $branch, first: 5, orderBy: {field: CREATED_AT, direction: DESC}) {
       totalCount
       nodes {
         number
@@ -47,6 +50,24 @@ query($owner: String!, $repo: String!, $num: Int!, $branch: String!, $ref: Strin
             # Only a thread's first comment says who opened it, and a reply never counts as a finding.
             root: comments(first: 1) { nodes { author { login __typename } body createdAt } }
             comments(last: 20) { nodes { authorAssociation body createdAt } }
+          }
+        }
+        # The repair cap counts the latest commits with a failed check.
+        commits(last: 20) {
+          nodes {
+            commit {
+              oid
+              committedDate
+              statusCheckRollup {
+                contexts(first: 100) {
+                  nodes {
+                    __typename
+                    ... on CheckRun { name status conclusion startedAt checkSuite { databaseId workflowRun { workflow { databaseId } } } }
+                    ... on StatusContext { context state createdAt }
+                  }
+                }
+              }
+            }
           }
         }
         headRef { target { ... on Commit { ...HeadChecks } } }

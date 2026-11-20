@@ -101,7 +101,7 @@ state_files() {
   [ "$(verdicts_on "${head_of_pr_15}")" = success ]
 }
 
-@test "a failure verdict posts its findings as one marked PR comment and writes nothing on this host" {
+@test "a failure verdict posts its findings as one marked PR comment and writes nothing on this host, and oe ready holds the Issue" {
   pr_15_passed_checks
   before="$(state_files)"
 
@@ -127,7 +127,7 @@ state_files() {
 
   run bash "${oe}" ready o/r 1
 
-  [ "$(action_of 5)" = start-owner ]
+  [ "$(action_of 5)" = hold ]
   case "${lines[0]}" in
   *"failure verdict"*) ;;
   *) return 1 ;;

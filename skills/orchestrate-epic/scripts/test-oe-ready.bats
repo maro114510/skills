@@ -1,17 +1,15 @@
 #!/usr/bin/env bats
 # Tests for oe ready.
 #
-# - Each test writes the GitHub state it needs as JSON and the host-local records it needs, then runs oe ready against them.
+# - Each test writes the GitHub state it needs as JSON, then runs oe ready against it.
 # - testdata/fake-gh.sh stands in for gh and answers every read from that state.
 # - testdata/fake-github.jq lists every field of the state and its default.
-# - testdata/records.bash writes the host-local records under the test's own OE_STATE_DIR.
-# - Every test runs at 08:00 on the same day.
+# - The tests are grouped by the row of the next-action table in docs/design/orchestrate-epic.md that they cover.
+# - Every test runs at 08:00 on the same day, so a working marker started at 06:00 or earlier has expired.
 # shellcheck disable=SC2292 # bats fails a test on a mid-test `[[ ]]` only under bash 4.1+; `[ ]` works on every bash.
 
 setup() {
   bats_require_minimum_version 1.5.0
-  load testdata/records
-  load testdata/agents
   export OE_STATE_DIR="${BATS_TEST_TMPDIR}/state"
   oe="${BATS_TEST_DIRNAME}/oe"
   mkdir -p "${BATS_TEST_TMPDIR}/bin"
@@ -22,10 +20,8 @@ setup() {
   unset OE_WORKTREE_ROOT
   # 2027-01-15 08:00 UTC
   export OE_NOW=1800000000
-}
-
-teardown() {
-  stop_sessions
+  # The head SHA fake-github.jq gives PR 50.
+  pr50="$(printf 'b%.0s' {1..38})50"
 }
 
 # Saves the GitHub state from stdin.
@@ -36,6 +32,13 @@ github() {
 # Configures $1 as the agents' bot, through the git config skills.bot that oe reads.
 agent_bot() {
   export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=skills.bot GIT_CONFIG_VALUE_0="$1"
+}
+
+# Prints, as a JSON string, an Issue body that ends in the working marker of role $1 started at $2, HH:MM, with the SHA $3 for a Verifier.
+marker_body() {
+  local sha=""
+  [ -z "${3:-}" ] || sha=" sha=$3"
+  printf 'Some work.\n\n<!-- oe:working role=%s at=2027-01-15T%s:00Z%s session=s1 -->' "$1" "$2" "${sha}" | jq -Rs .
 }
 
 # Prints the action that oe ready gave the Issue numbered $1.
@@ -52,27 +55,40 @@ field_of() {
   printf '%s\n' "${lines[@]}" | awk -F '\t' -v n="$1" -v f="$2" '$1 == n { print $f }'
 }
 
-# Default branch gate
+# Source of truth
 
-@test "a default branch head with no checks eleven minutes after its push holds nothing and ends nothing" {
+@test "oe ready reads no file under the state directory" {
+  mkdir -p "${OE_STATE_DIR}/records"
+  echo 'not json' >"${OE_STATE_DIR}/records/garbage.jsonl"
+  chmod 000 "${OE_STATE_DIR}"
   github <<'JSON'
-{
-  "default_branch": {"pushed": "07:49"},
-  "issues": [{"number": 5}]
+{"issues": [{"number": 5, "branch": true, "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}}]}]}
+JSON
+
+  run --separate-stderr bash "${oe}" ready o/r 1
+  chmod 755 "${OE_STATE_DIR}"
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-verifier ]
 }
+
+@test "Issues come in number order" {
+  github <<'JSON'
+{"issues": [{"number": 7}, {"number": 5}, {"number": 6}]}
 JSON
 
   run bash "${oe}" ready o/r 1
 
   [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = claim ]
+  [ "${#lines[@]}" -eq 3 ]
+  [ "${lines[0]%%$'\t'*}" = 5 ]
+  [ "${lines[1]%%$'\t'*}" = 6 ]
+  [ "${lines[2]%%$'\t'*}" = 7 ]
 }
 
 @test "a failed check on the default branch head gives each Issue the action it gets without it" {
   github <<'JSON'
-{
-  "issues": [{"number": 5, "closed": true}, {"number": 6}, {"number": 7, "blocked_by": [{"number": 6, "state": "open"}]}]
-}
+{"issues": [{"number": 5, "closed": true}, {"number": 6}, {"number": 7, "blocked_by": [{"number": 6, "state": "open"}]}]}
 JSON
   run bash "${oe}" ready o/r 1
   [ "${status}" -eq 0 ]
@@ -88,53 +104,12 @@ JSON
 
   [ "${status}" -eq 0 ]
   [ "${output}" = "${without}" ]
-  [ "$(action_of 5)" = "done" ]
-  [ "$(action_of 6)" = claim ]
-  [ "$(action_of 7)" = wait-dependencies ]
 }
-
-@test "a running check on the default branch head still lets an Issue with completed dependencies be claimed" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "in_progress"}},
-  "issues": [{"number": 5}]
-}
-JSON
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = claim ]
-}
-
-@test "a failure oe/verify status on the default branch head does not count as a failed check" {
-  github <<'JSON'
-{
-  "default_branch": {"statuses": {"oe/verify": "failure"}},
-  "issues": [{"number": 5}]
-}
-JSON
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = claim ]
-}
-
-# Failed reads
 
 @test "every failed GitHub read exits non-zero and prints nothing" {
   github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}}]
-  }]
-}
+{"issues": [{"number": 5, "branch": true, "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}}]}]}
 JSON
-  records 5 claim@07:00 attempt@07:01
   run bash "${oe}" ready o/r 1
   [ "${status}" -eq 0 ]
   [ "$(action_of 5)" = start-verifier ]
@@ -148,49 +123,11 @@ JSON
   done
 }
 
-@test "an unreadable record file fails the read and prints nothing" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{"number": 5, "branch": true}]
-}
-JSON
-  records 5 claim@07:00
-  echo 'not json' >>"$(record_file 5)"
-
-  run --separate-stderr bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 1 ]
-  [ -z "${output}" ]
-  case "${stderr}" in
-  *"record"*) ;;
-  *) return 1 ;;
-  esac
-}
-
-# Before the claim
-
-@test "an Issue with no branch and every dependency completed is claimed" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{"number": 5, "blocked_by": [{"number": 3, "state": "completed"}]}]
-}
-JSON
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "${#lines[@]}" -eq 1 ]
-  [ "$(action_of 5)" = claim ]
-}
+# Row 1: the Issue is closed
 
 @test "a closed Issue is done" {
   github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{"number": 5, "closed": true}]
-}
+{"issues": [{"number": 5, "closed": true}]}
 JSON
 
   run bash "${oe}" ready o/r 1
@@ -199,876 +136,88 @@ JSON
   [ "$(action_of 5)" = "done" ]
 }
 
-@test "an Issue with one open dependency is not ready" {
+@test "a closed Issue with more comments than one read holds is done" {
   github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "blocked_by": [{"number": 3, "state": "completed"}, {"number": 4, "state": "open"}]
-  }]
-}
+{"issues": [{"number": 5, "closed": true, "branch": true, "older_comments": 150}]}
 JSON
 
   run bash "${oe}" ready o/r 1
 
   [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = wait-dependencies ]
+  [ "$(action_of 5)" = "done" ]
 }
 
-@test "an Issue whose dependency closed as not planned waits instead of being claimed" {
+# Row 2: a hold or a question is newer than the latest answer
+
+@test "the line of an Issue with an open question holds the question and the command that records its answer" {
   github <<'JSON'
 {
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{"number": 5, "blocked_by": [{"number": 4, "state": "not_planned"}]}]
-}
-JSON
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = wait-dependencies ]
-}
-
-@test "an Issue whose branch exists without a claim record on this host and without a pull request waits for an engineer instead of getting an Owner" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true
-  }]
-}
-JSON
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = wait-engineer ]
-  [ "$(field_of 5 3)" = "feat/issue-5 exists with no claim on this host" ]
-}
-
-@test "an Issue whose branch exists with a claim record on this host and without a pull request gets an Owner" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true
-  }]
-}
-JSON
-  records 5 claim@07:00
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = start-owner ]
-}
-
-@test "an open Issue whose pull request merged after the latest claim waits for an engineer" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "pull_requests": [{"number": 50, "state": "merged", "opened": "07:10", "merged": "07:40"}]
-  }]
-}
-JSON
-  records 5 claim@07:00
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = wait-engineer ]
-}
-
-@test "a pull request merged before the latest claim does not hold a restarted Issue" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "pull_requests": [{"number": 50, "state": "merged", "opened": "07:10", "merged": "07:40"}]
-  }]
-}
-JSON
-  records 5 claim@07:50
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = claim ]
-}
-
-@test "an Issue whose branch exists and whose pull request closed without merging waits for an engineer" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "pull_requests": [{"number": 50, "state": "closed", "opened": "07:10"}]
-  }]
-}
-JSON
-  records 5 claim@07:00
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = wait-engineer ]
-}
-
-@test "a merged pull request from a fork with the Issue's branch name is ignored" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "pull_requests": [{"number": 50, "state": "merged", "opened": "07:10", "merged": "07:40", "from_fork": true}]
-  }]
-}
-JSON
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = claim ]
-}
-
-@test "Issues come in number order" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{"number": 7}, {"number": 5}, {"number": 6}]
-}
-JSON
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "${#lines[@]}" -eq 3 ]
-  [ "${lines[0]%%$'\t'*}" = 5 ]
-  [ "${lines[1]%%$'\t'*}" = 6 ]
-  [ "${lines[2]%%$'\t'*}" = 7 ]
-}
-
-# Running agents
-
-# Saves a state where Issues 5 and 6 have no branch yet and nothing blocks their claim.
-issues_5_and_6_ready_to_claim() {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{"number": 5}, {"number": 6}]
-}
-JSON
-}
-
-@test "an Issue whose agent oe start left running is named as running, with the command to run once it ends, without --running" {
-  issues_5_and_6_ready_to_claim
-  session_holds_lock
-  agent_runs 6 owner
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "${#lines[@]}" -eq 2 ]
-  [ "$(action_of 5)" = claim ]
-  [ "$(action_of 6)" = running ]
-  [ "$(field_of 6 3)" = "pr-owner runs; once it ends, run: bash '${BATS_TEST_DIRNAME}/oe' worktree remove 6" ]
-  [ -z "$(field_of 6 4)" ]
-}
-
-@test "a running Verifier is named as pr-verify" {
-  issues_5_and_6_ready_to_claim
-  session_holds_lock
-  agent_runs 6 verifier
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 6)" = running ]
-  case "$(field_of 6 3)" in
-  "pr-verify runs;"*) ;;
-  *) return 1 ;;
-  esac
-}
-
-@test "an Issue whose agent ended and had its worktree removed gets its own next action again" {
-  issues_5_and_6_ready_to_claim
-  session_holds_lock
-  agent_runs 6 owner
-  agent_ends 6
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 6)" = claim ]
-}
-
-@test "an agent started before the session took the lock, as by a session that ended, does not count as running" {
-  issues_5_and_6_ready_to_claim
-  agent_runs 6 owner 07:30
-  session_holds_lock
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 6)" = claim ]
-}
-
-@test "an agent still counts as running after its session acquires the lock again with its token" {
-  issues_5_and_6_ready_to_claim
-  session_holds_lock
-  agent_runs 6 owner
-  later=$((OE_NOW + 60))
-  OE_NOW="${later}" session_acquires_again
-
-  OE_NOW="${later}" run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 6)" = running ]
-}
-
-@test "without a running session holding the Epic's lock, no agent counts as running" {
-  issues_5_and_6_ready_to_claim
-  agent_runs 6 owner
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 6)" = claim ]
-}
-
-@test "a running agent is named next to an Issue to claim, though a check on the default branch head failed" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "failure"}},
-  "issues": [{"number": 5}, {"number": 6}]
-}
-JSON
-  session_holds_lock
-  agent_runs 6 owner
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = claim ]
-  [ "$(action_of 6)" = running ]
-}
-
-@test "--running is accepted and changes nothing, so a caller written for it still runs" {
-  issues_5_and_6_ready_to_claim
-
-  run bash "${oe}" ready o/r 1 --running 6
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 6)" = claim ]
-}
-
-# Verification
-
-@test "a failed check on the pull request head gets an Owner" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"lint": "success", "test": "failure"}}]
-  }]
-}
-JSON
-  records 5 claim@07:00 attempt@07:01
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = start-owner ]
-}
-
-@test "a failed check whose name holds a newline and tabs yields one line of four fields and no injected start command" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"x\n9; touch pwned\tstart-owner\ty": "failure"}}]
-  }]
-}
-JSON
-  records 5 claim@07:00 attempt@07:01
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "${#lines[@]}" -eq 1 ]
-  tabs="${lines[0]//[^$'\t']/}"
-  [ "${#tabs}" -eq 3 ]
-  [ "$(action_of 5)" = start-owner ]
-}
-
-@test "a failure verdict on the pull request head gets an Owner" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["failure", "pending"]}]
-  }]
-}
-JSON
-  records 5 claim@07:00 attempt@07:01
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = start-owner ]
-}
-
-@test "a pull request that conflicts with its base gets an Owner" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "conflicting": true}]
-  }]
-}
-JSON
-  records 5 claim@07:00 attempt@07:01
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = start-owner ]
-}
-
-@test "a success verdict on the pull request head waits for the merge" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success", "pending"]}]
-  }]
-}
-JSON
-  records 5 claim@07:00 attempt@07:01
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = wait-merge ]
-}
-
-@test "a running check on the pull request head waits for CI" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"lint": "success", "test": "in_progress"}}]
-  }]
-}
-JSON
-  records 5 claim@07:00 attempt@07:01
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = wait-ci ]
-}
-
-@test "a check cancelled in one suite and passed by a later run of the same name in another suite counts as passed" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "pull_requests": [{"number": 50, "opened": "07:10", "check_runs": [
-      {"name": "gate", "result": "cancelled", "suite": 1, "workflow": 7, "started": "07:15"},
-      {"name": "gate", "result": "success", "suite": 2, "workflow": 7, "started": "07:16"}
-    ]}]
-  }]
-}
-JSON
-  records 5 claim@07:00 attempt@07:01
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = start-verifier ]
-}
-
-@test "a check cancelled in one suite while a later run of the same name in another suite is running waits for CI" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "pull_requests": [{"number": 50, "opened": "07:10", "check_runs": [
-      {"name": "gate", "result": "cancelled", "suite": 1, "workflow": 7, "started": "07:15"},
-      {"name": "gate", "result": "in_progress", "suite": 2, "workflow": 7, "started": "07:16"}
-    ]}]
-  }]
-}
-JSON
-  records 5 claim@07:00 attempt@07:01
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = wait-ci ]
-}
-
-@test "a cancelled check with no later run of the same name gets an Owner" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "pull_requests": [{"number": 50, "opened": "07:10", "check_runs": [
-      {"name": "gate", "result": "cancelled", "suite": 2, "workflow": 7, "started": "07:16"},
-      {"name": "lint", "result": "success", "suite": 1, "started": "07:17"}
-    ]}]
-  }]
-}
-JSON
-  records 5 claim@07:00 attempt@07:01
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = start-owner ]
-}
-
-@test "a check cancelled after an earlier run of the same name passed in another suite gets an Owner" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "pull_requests": [{"number": 50, "opened": "07:10", "check_runs": [
-      {"name": "gate", "result": "success", "suite": 1, "workflow": 7, "started": "07:15"},
-      {"name": "gate", "result": "cancelled", "suite": 2, "workflow": 7, "started": "07:16"}
-    ]}]
-  }]
-}
-JSON
-  records 5 claim@07:00 attempt@07:01
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = start-owner ]
-}
-
-@test "a check cancelled in one workflow and passed by a later run of the same name from another workflow gets an Owner" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "pull_requests": [{"number": 50, "opened": "07:10", "check_runs": [
-      {"name": "gate", "result": "cancelled", "suite": 1, "workflow": 7, "started": "07:15"},
-      {"name": "gate", "result": "success", "suite": 2, "workflow": 8, "started": "07:16"}
-    ]}]
-  }]
-}
-JSON
-  records 5 claim@07:00 attempt@07:01
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = start-owner ]
-}
-
-@test "a pull request head pushed five minutes ago with no checks waits for CI, even when committed long before" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "pull_requests": [{"number": 50, "opened": "07:10", "committed": "06:00", "pushed": "07:55"}]
-  }]
-}
-JSON
-  records 5 claim@07:00 attempt@07:01
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = wait-ci ]
-}
-
-@test "a pull request head with no checks ten minutes after its push is parked" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "pull_requests": [{"number": 50, "opened": "07:10", "pushed": "07:40"}]
-  }]
-}
-JSON
-  records 5 claim@07:00 attempt@07:01
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = parked ]
-}
-
-@test "a Verifier that ended once without a verdict is started again" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["pending"]}]
-  }]
-}
-JSON
-  records 5 claim@07:00 attempt@07:01
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = start-verifier ]
-}
-
-@test "a Verifier that ended twice without a verdict parks the Issue" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["pending", "pending"]}]
-  }]
-}
-JSON
-  records 5 claim@07:00 attempt@07:01
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = parked ]
-}
-
-# Sibling pull requests
-
-# Saves a state where Issue 4's PR 40 merged into main at 07:30, and Issue 5's open PR 50 passed its checks
-# with a verdict of $1, none for no verdict, and a head that lacks the merges in the JSON array $2.
-sibling_merged() {
-  jq -n --arg verdict "$1" --argjson missing "$2" '{
-    default_branch: {checks: {test: "success"}},
-    issues: [
-      {number: 4, closed: true, pull_requests: [{number: 40, state: "merged", opened: "07:05", merged: "07:30"}]},
-      {number: 5, branch: true, pull_requests: [{number: 50, opened: "07:10", checks: {test: "success"},
-        verdicts: (if $verdict == "none" then [] else [$verdict] end), missing_merges: $missing}]}
-    ]
-  }' >"${OE_GITHUB}"
-  records 5 claim@07:00 attempt@07:01
-}
-
-@test "a head that passed its checks and lacks a merged sibling pull request gets an update that starts no agent instead of a Verifier" {
-  sibling_merged none '[40]'
-
-  run --separate-stderr bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = update-branch ]
-  IFS=$'\t' read -r _ _ reason command <<<"${lines[1]}"
-  [ "${command}" = "bash '${oe}' update o/r 5" ]
-  case "${reason}" in
-  *"#40"*) ;;
-  *) return 1 ;;
-  esac
-  case "${command}" in
-  *" start "*) return 1 ;;
-  *) ;;
-  esac
-}
-
-@test "a head with a success verdict that lacks a merged sibling pull request gets an update instead of the merge" {
-  sibling_merged success '[40]'
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = update-branch ]
-}
-
-@test "running the command of an update-branch line leaves the attempt count unchanged and gives the new head the actions of any new head" {
-  sibling_merged success '[40]'
-  facts_of_5() { bash "${oe}" ready o/r 1 --facts | jq -r 'select(.number == 5) | '"$1"; }
-  before="$(facts_of_5 .attempts)"
-  [ "${before}" = 1 ]
-  run bash "${oe}" ready o/r 1
-  [ "$(action_of 5)" = update-branch ]
-  command="$(field_of 5 4)"
-
-  run --separate-stderr bash -c "${command}"
-  [ "${status}" -eq 0 ]
-
-  [ "$(facts_of_5 .attempts)" = "${before}" ]
-  [ "$(facts_of_5 .action)" = wait-ci ]
-  [ "$(facts_of_5 .head)" != "$(printf 'b%.0s' {1..38})50" ]
-
-  jq '.issues[1].pull_requests[0].checks = {test: "success"}' "${OE_GITHUB}" >"${OE_GITHUB}.new" && mv "${OE_GITHUB}.new" "${OE_GITHUB}"
-  run bash "${oe}" ready o/r 1
-  [ "$(action_of 5)" = start-verifier ]
-}
-
-@test "a head whose update was requested less than 10 minutes ago waits for its new head instead of updating again" {
-  sibling_merged success '[40]'
-  records 5 "update@07:55#$(printf 'b%.0s' {1..38})50"
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = wait-update ]
-  [ -z "$(field_of 5 4)" ]
-}
-
-@test "a head that still lacks the merged sibling 10 minutes after its update was requested is parked" {
-  sibling_merged success '[40]'
-  records 5 "update@07:50#$(printf 'b%.0s' {1..38})50"
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = parked ]
-  case "$(field_of 5 3)" in
-  *"oe update"*) ;;
-  *) return 1 ;;
-  esac
-}
-
-@test "an update requested on an earlier head does not hold back the update of the current head" {
-  sibling_merged success '[40]'
-  records 5 "update@07:50#$(printf 'a%.0s' {1..40})"
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = update-branch ]
-}
-
-@test "a head that conflicts with the base gives start-owner with the conflict as its reason, not an update" {
-  sibling_merged success '[40]'
-  jq '.issues[1].pull_requests[0].conflicting = true' "${OE_GITHUB}" >"${OE_GITHUB}.new" && mv "${OE_GITHUB}.new" "${OE_GITHUB}"
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = start-owner ]
-  case "$(field_of 5 3)" in
-  *"conflicts with its base"*) ;;
-  *) return 1 ;;
-  esac
-}
-
-@test "a head that contains the merged sibling pull request is verified, and one with a success verdict waits for the merge" {
-  sibling_merged none '[]'
-  run bash "${oe}" ready o/r 1
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = start-verifier ]
-
-  sibling_merged success '[]'
-  run bash "${oe}" ready o/r 1
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = wait-merge ]
-}
-
-@test "a pull request merged into a branch other than the default branch is no sibling" {
-  sibling_merged none '[40]'
-  jq '.issues[0].pull_requests[0].base = "release"' "${OE_GITHUB}" >"${OE_GITHUB}.new" && mv "${OE_GITHUB}.new" "${OE_GITHUB}"
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = start-verifier ]
-}
-
-@test "a failed read of whether a head contains a merged sibling exits non-zero and prints nothing" {
-  sibling_merged none '[40]'
-
-  GH_FAIL=/compare run --separate-stderr bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 1 ]
-  [ -z "${output}" ]
-}
-
-# Attempts
-
-@test "three Owner starts that each moved the branch head park an Issue that still needs repair" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["failure"]}]
-  }]
-}
-JSON
-  # Each start recorded a head the next start, or the branch now, no longer has.
-  records 5 claim@07:00 attempt@07:01#h1 attempt@07:20#h2 attempt@07:40#h3
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = parked ]
-  [ "$(field_of 5 3)" = "3 attempts used; still: failure verdict on bbbbbbb" ]
-}
-
-@test "one Owner start that left the branch head unchanged leaves the attempt count unchanged" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["failure"]}]
-  }]
-}
-JSON
-  records 5 claim@07:00 attempt@07:01#bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb50
-
-  run bash "${oe}" ready o/r 1 --facts
-
-  [ "${status}" -eq 0 ]
-  [ "$(jq -r .attempts <<<"${output}")" = 0 ]
-  [ "$(jq -r .action <<<"${output}")" = start-owner ]
-}
-
-@test "a start that moved the head counts, whichever start comes after it" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["failure"]}]
-  }]
-}
-JSON
-  # The first start pushed, the second left the head at what the third recorded, and the third left the branch as it is now.
-  records 5 claim@07:00 attempt@07:01#h1 attempt@07:20#h2 attempt@07:40#h2
-
-  run bash "${oe}" ready o/r 1 --facts
-
-  [ "${status}" -eq 0 ]
-  [ "$(jq -r .attempts <<<"${output}")" = 2 ]
-}
-
-@test "three Owner starts in a row that left the branch head unchanged park the Issue, with a reason saying nothing was pushed" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["failure"]}]
-  }]
-}
-JSON
-  # Each start recorded the head the branch still has.
-  records 5 claim@07:00 attempt@07:01#bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb50 attempt@07:20#bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb50 attempt@07:40#bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb50
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = parked ]
-  [ "$(field_of 5 3)" = "3 Owner starts in a row pushed nothing; still: failure verdict on bbbbbbb" ]
-}
-
-@test "two Owner starts in a row that left the branch head unchanged still start another Owner" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["failure"]}]
-  }]
-}
-JSON
-  records 5 claim@07:00 attempt@07:01#bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb50 attempt@07:20#bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb50
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = start-owner ]
-  [ "$(field_of 5 3)" = "attempt 1 of 3: failure verdict on bbbbbbb" ]
-}
-
-@test "attempts before the latest claim do not count toward the cap" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["failure"]}]
-  }]
-}
-JSON
-  records 5 claim@06:00 attempt@06:01 attempt@06:20 attempt@06:40 claim@07:00 attempt@07:00
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = start-owner ]
-}
-
-# Engineer input
-
-@test "a question with no later comment waits for the answer" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
   "issues": [{
     "number": 5,
     "branch": true,
     "comments": [
-      {"by": "OWNER", "at": "07:10", "body": "<!-- oe:question -->\nWhich option?"}
+      {"by": "OWNER", "at": "07:10", "body": "<!-- oe:question -->\n### Question from the orchestrate-epic agent working on this Issue\n\nDecision: Which option?\n\nOptions:\n- A. Keep it\n  - No work.\n\n---\nAnswer in the session's conversation."}
     ]
   }]
 }
 JSON
-  records 5 claim@07:00 attempt@07:01
+
+  run --separate-stderr bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  IFS=$'\t' read -r n action reason command <<<"${lines[0]}"
+  [ "${n}" = 5 ]
+  [ "${action}" = wait-answer ]
+  [ "${reason}" = 'question https://github.com/o/r/issues/5#issuecomment-1 has no answer yet:\nDecision: Which option?\n\nOptions:\n- A. Keep it\n  - No work.' ]
+  [ "${command}" = "bash '${oe}' question o/r 5 --answer <reply>" ]
+}
+
+@test "a hold with no later answer waits on the person and names the hold's reason" {
+  github <<'JSON'
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "OWNER", "at": "07:10", "body": "<!-- oe:hold -->\n### The orchestrate-epic session holds this Issue for the person\n\nPR #50 was closed without merging\n\n---\nAnswer in the session's conversation."}
+    ],
+    "pull_requests": [{"number": 50, "state": "closed", "opened": "07:00"}]
+  }]
+}
+JSON
+
+  run --separate-stderr bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-answer ]
+  [ "$(field_of 5 3)" = 'hold https://github.com/o/r/issues/5#issuecomment-1 has no answer yet:\nPR #50 was closed without merging' ]
+  [ "$(field_of 5 4)" = "bash '${oe}' question o/r 5 --answer <reply>" ]
+}
+
+@test "a hold answered through oe no longer waits, and the answer starts an Owner" {
+  github <<'JSON'
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "OWNER", "at": "07:30", "body": "<!-- oe:hold -->\nfailure verdict on bbbbbbb"},
+      {"by": "OWNER", "at": "07:40", "body": "<!-- oe:answer -->\nRetry with a smaller batch"}
+    ],
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["failure"]}]
+  }]
+}
+JSON
 
   run bash "${oe}" ready o/r 1
 
   [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = wait-answer ]
+  [ "$(action_of 5)" = start-owner ]
 }
 
 @test "a marked or untrusted comment after a question does not answer it" {
   github <<'JSON'
 {
-  "default_branch": {"checks": {"test": "success"}},
   "issues": [{
     "number": 5,
     "branch": true,
@@ -1081,7 +230,6 @@ JSON
   }]
 }
 JSON
-  records 5 claim@07:00 attempt@07:01
 
   run bash "${oe}" ready o/r 1
 
@@ -1089,82 +237,35 @@ JSON
   [ "$(action_of 5)" = wait-answer ]
 }
 
-@test "an unmarked trusted answer after the latest attempt gets an Owner, even on a verified pull request" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "comments": [
-      {"by": "OWNER", "at": "07:10", "body": "<!-- oe:question -->\nWhich option?"},
-      {"by": "MEMBER", "at": "07:20", "body": "Use option A"}
-    ],
-    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"]}]
-  }]
-}
-JSON
-  records 5 claim@07:00 attempt@07:01
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = start-owner ]
-}
-
-@test "an answer given as a comment gets an Owner and leaves the Issue body unchanged" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "body": "## Acceptance Criteria\n\n- The export retries once.",
-    "comments": [
-      {"by": "OWNER", "at": "07:10", "body": "<!-- oe:question -->\nDecision: Which option?"},
-      {"by": "MEMBER", "at": "07:20", "body": "Use option A"}
-    ]
-  }]
-}
-JSON
-  records 5 claim@07:00 attempt@07:01
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = start-owner ]
-  [ "$(jq -r '.issues[0].body' "${OE_GITHUB}")" = "## Acceptance Criteria
-
-- The export retries once." ]
-}
-
-@test "a question record from the configured bot, which GitHub gives no association, waits for the answer" {
+@test "a question from the configured bot waits for the answer, and an answer it records through oe ends the wait" {
   agent_bot agent-app
   github <<'JSON'
 {
-  "default_branch": {"checks": {"test": "success"}},
   "issues": [{
     "number": 5,
     "branch": true,
     "comments": [
       {"by": "NONE", "login": "agent-app", "type": "Bot", "at": "07:10", "body": "<!-- oe:question -->\nWhich option?"}
-    ]
+    ],
+    "pull_requests": [{"number": 50, "opened": "07:00", "checks": {"test": "success"}, "verdicts": ["success"]}]
   }]
 }
 JSON
-  records 5 claim@07:00 attempt@07:01
+  run bash "${oe}" ready o/r 1
+  [ "$(action_of 5)" = wait-answer ]
 
+  jq '.issues[0].comments += [{"by": "NONE", "login": "agent-app", "type": "Bot", "at": "07:20", "body": "<!-- oe:answer -->\nA. Use option A"}]' \
+    "${OE_GITHUB}" >"${OE_GITHUB}.new" && mv "${OE_GITHUB}.new" "${OE_GITHUB}"
   run bash "${oe}" ready o/r 1
 
   [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = wait-answer ]
+  [ "$(action_of 5)" = start-owner ]
 }
 
 @test "a comment from the configured bot that is no record does not answer its question" {
   agent_bot agent-app
   github <<'JSON'
 {
-  "default_branch": {"checks": {"test": "success"}},
   "issues": [{
     "number": 5,
     "branch": true,
@@ -1175,7 +276,6 @@ JSON
   }]
 }
 JSON
-  records 5 claim@07:00 attempt@07:01
 
   run bash "${oe}" ready o/r 1
 
@@ -1183,59 +283,10 @@ JSON
   [ "$(action_of 5)" = wait-answer ]
 }
 
-@test "a trusted person's comment answers a question from the configured bot" {
-  agent_bot agent-app
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "comments": [
-      {"by": "NONE", "login": "agent-app", "type": "Bot", "at": "07:10", "body": "<!-- oe:question -->\nWhich option?"},
-      {"by": "OWNER", "login": "owner", "at": "07:20", "body": "Use option A"}
-    ],
-    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"]}]
-  }]
-}
-JSON
-  records 5 claim@07:00 attempt@07:01
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = start-owner ]
-}
-
-@test "an answer recorded through oe under the configured bot is read as the engineer's answer" {
-  agent_bot agent-app
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "comments": [
-      {"by": "NONE", "login": "agent-app", "type": "Bot", "at": "07:10", "body": "<!-- oe:question -->\nWhich option?"},
-      {"by": "NONE", "login": "agent-app", "type": "Bot", "at": "07:20", "body": "<!-- oe:answer -->\nA. Use option A"}
-    ],
-    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"]}]
-  }]
-}
-JSON
-  records 5 claim@07:00 attempt@07:01
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = start-owner ]
-}
-
 @test "an answer-shaped comment from another bot or an untrusted user does not answer the question" {
   agent_bot agent-app
   github <<'JSON'
 {
-  "default_branch": {"checks": {"test": "success"}},
   "issues": [{
     "number": 5,
     "branch": true,
@@ -1248,7 +299,6 @@ JSON
   }]
 }
 JSON
-  records 5 claim@07:00 attempt@07:01
 
   run bash "${oe}" ready o/r 1
 
@@ -1256,50 +306,21 @@ JSON
   [ "$(action_of 5)" = wait-answer ]
 }
 
-@test "the line of an Issue with an open question holds the question and the command that records its answer" {
+@test "a hold or question from another bot, or from a user with the configured bot's login, is ignored" {
+  agent_bot agent-app
   github <<'JSON'
 {
-  "default_branch": {"checks": {"test": "success"}},
   "issues": [{
     "number": 5,
     "branch": true,
     "comments": [
-      {"by": "OWNER", "at": "07:10", "body": "<!-- oe:question -->\n### Question from the orchestrate-epic agent working on this Issue\n\nDecision: Which option?\n\nOptions:\n- A. Keep it\n  - No work.\n\n---\nAnswer in the session's conversation."}
-    ]
+      {"by": "NONE", "login": "renovate", "type": "Bot", "at": "07:10", "body": "<!-- oe:question -->\nWhich option?"},
+      {"by": "NONE", "login": "agent-app", "type": "User", "at": "07:11", "body": "<!-- oe:hold -->\nHold it"}
+    ],
+    "pull_requests": [{"number": 50, "opened": "07:00", "checks": {"test": "success"}, "verdicts": ["success"]}]
   }]
 }
 JSON
-  records 5 claim@07:00 attempt@07:01
-
-  run --separate-stderr bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  IFS=$'\t' read -r n action reason command <<<"${lines[0]}"
-  [ "${n}" = 5 ]
-  [ "${action}" = wait-answer ]
-  [ "${reason}" = 'question https://github.com/o/r/issues/5#issuecomment-1 has no answer yet:\nDecision: Which option?\n\nOptions:\n- A. Keep it\n  - No work.' ]
-  [ "${command}" = "bash '${oe}' question o/r 5 --answer <reply>" ]
-}
-
-@test "a question-shaped comment from another bot, or from a user with the configured bot's login, is ignored" {
-  agent_bot agent-app
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [
-    {
-      "number": 5,
-      "branch": true,
-      "comments": [
-        {"by": "NONE", "login": "renovate", "type": "Bot", "at": "07:10", "body": "<!-- oe:question -->\nWhich option?"},
-        {"by": "NONE", "login": "agent-app", "type": "User", "at": "07:11", "body": "<!-- oe:question -->\nWhich option?"}
-      ],
-      "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"]}]
-    }
-  ]
-}
-JSON
-  records 5 claim@07:00 attempt@07:01
 
   run bash "${oe}" ready o/r 1
 
@@ -1311,18 +332,16 @@ JSON
   export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
   github <<'JSON'
 {
-  "default_branch": {"checks": {"test": "success"}},
   "issues": [{
     "number": 5,
     "branch": true,
     "comments": [
       {"by": "NONE", "login": "agent-app", "type": "Bot", "at": "07:10", "body": "<!-- oe:question -->\nWhich option?"}
     ],
-    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"]}]
+    "pull_requests": [{"number": 50, "opened": "07:00", "checks": {"test": "success"}, "verdicts": ["success"]}]
   }]
 }
 JSON
-  records 5 claim@07:00 attempt@07:01
 
   run bash "${oe}" ready o/r 1
 
@@ -1333,7 +352,7 @@ JSON
 @test "an invalid configured bot login fails the read" {
   agent_bot 'bad"login'
   github <<'JSON'
-{"default_branch": {"checks": {"test": "success"}}, "issues": [{"number": 5}]}
+{"issues": [{"number": 5}]}
 JSON
 
   run bash "${oe}" ready o/r 1
@@ -1342,543 +361,17 @@ JSON
   [ "${output}" != "${output#*skills.bot}" ]
 }
 
-@test "an answer that an earlier attempt already took does not start another Owner" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "comments": [
-      {"by": "OWNER", "at": "07:02", "body": "<!-- oe:question -->\nWhich option?"},
-      {"by": "MEMBER", "at": "07:03", "body": "Use option A"}
-    ],
-    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"]}]
-  }]
-}
-JSON
-  records 5 claim@07:00 attempt@07:01 attempt@07:04
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = wait-merge ]
-}
-
-@test "a trusted Changes requested review after the latest attempt gets an Owner" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "pull_requests": [{
-      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
-      "reviews": [{"by": "MEMBER", "at": "07:40", "body": "Rename this"}]
-    }]
-  }]
-}
-JSON
-  records 5 claim@07:00 attempt@07:30
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = start-owner ]
-}
-
-@test "a Changes requested review before the latest attempt does not start another Owner" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "pull_requests": [{
-      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
-      "reviews": [{"by": "MEMBER", "at": "07:20", "body": "Rename this"}]
-    }]
-  }]
-}
-JSON
-  records 5 claim@07:00 attempt@07:30
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = wait-merge ]
-}
-
-@test "a Changes requested review of an older head starts no Owner" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "pull_requests": [{
-      "number": 50, "opened": "07:00", "pushed": "07:40",
-      "head_sha": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-      "checks": {"test": "success"}, "verdicts": ["success"],
-      "reviews": [{"by": "MEMBER", "at": "07:20",
-        "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "body": "Rename this"}]
-    }]
-  }]
-}
-JSON
-  records 5 claim@07:00 attempt@07:10
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = wait-merge ]
-}
-
-@test "a Changes requested review of an older head does not keep the Issue parked" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "pull_requests": [{
-      "number": 50, "opened": "07:00", "pushed": "07:40",
-      "head_sha": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-      "checks": {"test": "success"}, "verdicts": ["success"],
-      "reviews": [{"by": "MEMBER", "at": "07:35",
-        "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "body": "Rename this"}]
-    }]
-  }]
-}
-JSON
-  records 5 claim@07:00 attempt@07:10#aaaa attempt@07:20#bbbb attempt@07:30#cccc
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = wait-merge ]
-}
-
-@test "a trusted review-thread comment after the latest attempt gets an Owner" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "pull_requests": [{
-      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
-      "thread_comments": [{"by": "COLLABORATOR", "at": "07:40", "body": "This leaks the token"}]
-    }]
-  }]
-}
-JSON
-  records 5 claim@07:00 attempt@07:30
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = start-owner ]
-}
-
-@test "an untrusted review-thread comment does not start an Owner" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "pull_requests": [{
-      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
-      "thread_comments": [{"by": "NONE", "at": "07:40", "body": "This leaks the token"}]
-    }]
-  }]
-}
-JSON
-  records 5 claim@07:00 attempt@07:30
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = wait-merge ]
-}
-
-@test "a resolved review-thread comment starts no Owner" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "pull_requests": [{
-      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
-      "threads": [{"resolved": true, "comments": [
-        {"by": "COLLABORATOR", "at": "07:40", "body": "This leaks the token"}]}]
-    }]
-  }]
-}
-JSON
-  records 5 claim@07:00 attempt@07:30
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = wait-merge ]
-}
-
-@test "an outdated review-thread comment starts no Owner" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "pull_requests": [{
-      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
-      "threads": [{"outdated": true, "comments": [
-        {"by": "COLLABORATOR", "at": "07:40", "body": "This leaks the token"}]}]
-    }]
-  }]
-}
-JSON
-  records 5 claim@07:00 attempt@07:30
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = wait-merge ]
-}
-
-@test "a review-thread comment a later bot reply answers starts no Owner" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "pull_requests": [{
-      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
-      "threads": [{"comments": [
-        {"by": "COLLABORATOR", "at": "07:40", "body": "This leaks the token"},
-        {"login": "coderabbitai", "type": "Bot", "at": "07:50", "body": "Addressed in the latest push."}]}]
-    }]
-  }]
-}
-JSON
-  records 5 claim@07:00 attempt@07:30
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = wait-merge ]
-}
-
-@test "an engineer's comment after a reply starts an Owner" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "pull_requests": [{
-      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
-      "threads": [{"comments": [
-        {"by": "COLLABORATOR", "at": "07:20", "body": "This leaks the token"},
-        {"login": "coderabbitai", "type": "Bot", "at": "07:30", "body": "Addressed in the latest push."},
-        {"by": "COLLABORATOR", "at": "07:40", "body": "It still leaks on the error path."}]}]
-    }]
-  }]
-}
-JSON
-  records 5 claim@07:00 attempt@07:30
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = start-owner ]
-}
-
-# Bot findings
-
-@test "a Major CodeRabbit finding after the latest attempt gets an Owner that names the bot" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "pull_requests": [{
-      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
-      "threads": [{"comments": [{"login": "coderabbitai", "type": "Bot", "at": "07:40",
-        "body": "This is a Major finding: `brew install chezmoi` runs before `brew` is on PATH."}]}]
-    }]
-  }]
-}
-JSON
-  records 5 claim@07:00 attempt@07:30
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = start-owner ]
-  case "${lines[0]}" in
-  *"coderabbitai"*) ;;
-  *) return 1 ;;
-  esac
-}
-
-@test "a P1 Codex finding after the latest attempt gets an Owner" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "pull_requests": [{
-      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
-      "threads": [{"comments": [{"login": "chatgpt-codex-connector", "type": "Bot", "at": "07:40",
-        "body": "P1: the retry count is off by one."}]}]
-    }]
-  }]
-}
-JSON
-  records 5 claim@07:00 attempt@07:30
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = start-owner ]
-}
-
-@test "a Minor CodeRabbit finding starts nothing" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "pull_requests": [{
-      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
-      "threads": [{"comments": [{"login": "coderabbitai", "type": "Bot", "at": "07:40",
-        "body": "Minor: prefer a shorter name here."}]}]
-    }]
-  }]
-}
-JSON
-  records 5 claim@07:00 attempt@07:30
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = wait-merge ]
-}
-
-@test "a Major finding from a bot that is not listed starts nothing" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "pull_requests": [{
-      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
-      "threads": [{"comments": [{"login": "stylebot", "type": "Bot", "at": "07:40", "body": "Major: rename this."}]}]
-    }]
-  }]
-}
-JSON
-  records 5 claim@07:00 attempt@07:30
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = wait-merge ]
-}
-
-@test "a Major finding in a reply to a trusted thread starts nothing" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "pull_requests": [{
-      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
-      "threads": [{"comments": [
-        {"by": "MEMBER", "at": "07:30", "body": "Is this safe?"},
-        {"login": "coderabbitai", "type": "Bot", "at": "07:40", "body": "Major: no, it is not."}
-      ]}]
-    }]
-  }]
-}
-JSON
-  records 5 claim@07:00 attempt@07:30
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = wait-merge ]
-}
-
-@test "a resolved Major finding starts nothing" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "pull_requests": [{
-      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
-      "threads": [{"resolved": true, "comments": [{"login": "coderabbitai", "type": "Bot", "at": "07:40",
-        "body": "Major: fix this."}]}]
-    }]
-  }]
-}
-JSON
-  records 5 claim@07:00 attempt@07:30
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = wait-merge ]
-}
-
-@test "an outdated Major finding starts nothing" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "pull_requests": [{
-      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
-      "threads": [{"outdated": true, "comments": [{"login": "coderabbitai", "type": "Bot", "at": "07:40",
-        "body": "Major: fix this."}]}]
-    }]
-  }]
-}
-JSON
-  records 5 claim@07:00 attempt@07:30
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = wait-merge ]
-}
-
-@test "a Major finding on a head a trusted user approved starts nothing" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "pull_requests": [{
-      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
-      "approvals": [{"by": "MEMBER", "at": "07:50"}],
-      "threads": [{"comments": [{"login": "coderabbitai", "type": "Bot", "at": "07:40",
-        "body": "Major: fix this."}]}]
-    }]
-  }]
-}
-JSON
-  records 5 claim@07:00 attempt@07:30
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = wait-merge ]
-}
-
-@test "a Major finding from before the latest attempt starts nothing" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "pull_requests": [{
-      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
-      "threads": [{"comments": [{"login": "coderabbitai", "type": "Bot", "at": "07:20",
-        "body": "Major: fix this."}]}]
-    }]
-  }]
-}
-JSON
-  records 5 claim@07:00 attempt@07:30
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = wait-merge ]
-}
-
-@test "a Major finding from a bot whose round is used starts nothing" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "pull_requests": [{
-      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
-      "threads": [{"comments": [{"login": "coderabbitai", "type": "Bot", "at": "07:40",
-        "body": "Major: fix this."}]}]
-    }]
-  }]
-}
-JSON
-  records 5 claim@07:00
-  printf '%s\n' '{"kind":"attempt","at":"2027-01-15T07:30:00Z","bots":["coderabbitai"]}' >>"$(record_file 5)"
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = wait-merge ]
-}
-
-@test "a bot round recorded before the latest claim does not count against the new claim" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "pull_requests": [{
-      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
-      "threads": [{"comments": [{"login": "coderabbitai", "type": "Bot", "at": "07:40",
-        "body": "Major: fix this."}]}]
-    }]
-  }]
-}
-JSON
-  records 5 claim@06:00
-  printf '%s\n' '{"kind":"attempt","at":"2027-01-15T06:30:00Z","bots":["coderabbitai"]}' >>"$(record_file 5)"
-  records 5 claim@07:00 attempt@07:30
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = start-owner ]
-}
-
-# A push during the read
-
 @test "a push during the read does not hide a pending question" {
   github <<'JSON'
 {
-  "default_branch": {"checks": {"test": "success"}},
   "issues": [{
     "number": 5,
     "branch": true,
-    "comments": [
-      {"by": "OWNER", "at": "07:30", "body": "<!-- oe:question -->\nWhich option?"}
-    ],
+    "comments": [{"by": "OWNER", "at": "07:30", "body": "<!-- oe:question -->\nWhich option?"}],
     "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "pushed_during_read": true}]
   }]
 }
 JSON
-  records 5 claim@07:00 attempt@07:01
 
   run bash "${oe}" ready o/r 1
 
@@ -1886,60 +379,10 @@ JSON
   [ "$(action_of 5)" = wait-answer ]
 }
 
-@test "a push during the read leaves only its Issue to be read again" {
+@test "more comments than one read holds fail the read when the read comments hold no hold, question, or answer" {
   github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [
-    {
-      "number": 5,
-      "branch": true,
-      "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "pushed_during_read": true}]
-    },
-    {"number": 6}
-  ]
-}
+{"issues": [{"number": 5, "branch": true, "comments": [{"by": "NONE", "at": "07:10", "body": "Any news?"}], "older_comments": 150}]}
 JSON
-  records 5 claim@07:00 attempt@07:01
-
-  run --separate-stderr bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = read-again ]
-  [ -z "$(field_of 5 4)" ]
-  [ "$(action_of 6)" = claim ]
-}
-
-# Reads that GitHub cuts short
-
-@test "a closed Issue with more comments than one read holds is done" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{"number": 5, "closed": true, "branch": true, "older_comments": 150}]
-}
-JSON
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = "done" ]
-}
-
-@test "more review threads than one read holds fail the read instead of missing engineer input" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "pull_requests": [{
-      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"], "older_threads": 100
-    }]
-  }]
-}
-JSON
-  records 5 claim@07:00 attempt@07:30
 
   run --separate-stderr bash "${oe}" ready o/r 1
 
@@ -1947,50 +390,9 @@ JSON
   [ -z "${output}" ]
 }
 
-@test "older pull requests left out of the read do not fail it, and the newest one decides the action" {
+@test "more comments than one read holds do not fail the read when the read comments hold a question" {
   github <<'JSON'
 {
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "pull_requests": [{"number": 15, "opened": "07:10", "checks": {"test": "success"}}],
-    "older_pull_requests": 100
-  }]
-}
-JSON
-  records 5 claim@07:00 attempt@07:01
-
-  run --separate-stderr bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = start-verifier ]
-}
-
-@test "more comments than one read holds fail the read when the claim is older than every comment read" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "comments": [{"by": "MEMBER", "at": "07:10", "body": "Looks fine"}],
-    "older_comments": 150
-  }]
-}
-JSON
-  records 5 claim@07:00 attempt@07:01
-
-  run --separate-stderr bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 1 ]
-  [ -z "${output}" ]
-}
-
-@test "more comments than one read holds do not fail the read when every comment since the claim was read" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
   "issues": [{
     "number": 5,
     "branch": true,
@@ -2002,12 +404,729 @@ JSON
   }]
 }
 JSON
-  records 5 claim@07:10 attempt@07:11
 
   run --separate-stderr bash "${oe}" ready o/r 1
 
   [ "${status}" -eq 0 ]
   [ "$(action_of 5)" = wait-answer ]
+}
+
+# Row 3: the PR was closed without merging, or merged with the Issue open
+
+@test "an Issue whose PR was closed without merging is held, with the command that records the hold" {
+  github <<'JSON'
+{"issues": [{"number": 5, "branch": true, "pull_requests": [{"number": 50, "state": "closed", "opened": "07:10"}]}]}
+JSON
+
+  run --separate-stderr bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = hold ]
+  [ "$(field_of 5 3)" = "PR #50 was closed without merging" ]
+  [ "$(field_of 5 4)" = "bash '${oe}' hold o/r 5 'PR #50 was closed without merging'" ]
+}
+
+@test "an open Issue whose PR merged at the branch's current head is held" {
+  github <<'JSON'
+{"issues": [{"number": 5, "branch": true, "pull_requests": [{"number": 50, "state": "merged", "opened": "07:10", "merged": "07:40"}]}]}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = hold ]
+  [ "$(field_of 5 3)" = "PR #50 merged; the Issue is still open" ]
+}
+
+@test "a merged PR whose branch the engineer deleted is not the PR, so an Owner starts over" {
+  github <<'JSON'
+{"issues": [{"number": 5, "pull_requests": [{"number": 50, "state": "merged", "opened": "07:10", "merged": "07:40"}]}]}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-owner ]
+  [ "$(field_of 5 3)" = "no PR yet" ]
+}
+
+@test "a closed PR whose head is not the branch's current head is not the PR" {
+  github <<'JSON'
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "branch_sha": "cccccccccccccccccccccccccccccccccccccccc",
+    "pull_requests": [{"number": 50, "state": "closed", "opened": "07:10"}]
+  }]
+}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-owner ]
+}
+
+@test "an open PR is the PR even when a newer PR from the branch was closed at another head" {
+  github <<JSON
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "branch_sha": "${pr50}",
+    "pull_requests": [
+      {"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"]},
+      {"number": 51, "state": "closed", "opened": "07:20"}
+    ]
+  }]
+}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-merge ]
+}
+
+@test "a merged PR from a fork with the Issue's branch name is ignored" {
+  github <<'JSON'
+{"issues": [{"number": 5, "pull_requests": [{"number": 50, "state": "merged", "opened": "07:10", "merged": "07:40", "from_fork": true}]}]}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-owner ]
+}
+
+# Rows 4 and 5: dependencies
+
+@test "an Issue whose dependency closed as not planned or duplicate is held" {
+  github <<'JSON'
+{
+  "issues": [
+    {"number": 5, "blocked_by": [{"number": 3, "state": "completed"}, {"number": 4, "state": "not_planned"}]},
+    {"number": 6, "blocked_by": [{"number": 4, "state": "duplicate"}]}
+  ]
+}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = hold ]
+  [ "$(field_of 5 3)" = "dependency #4 closed as not_planned" ]
+  [ "$(action_of 6)" = hold ]
+}
+
+@test "an Issue with one open dependency waits for its dependencies" {
+  github <<'JSON'
+{"issues": [{"number": 5, "blocked_by": [{"number": 3, "state": "completed"}, {"number": 4, "state": "open"}]}]}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-dependencies ]
+  [ "$(field_of 5 3)" = "#4 open" ]
+  [ -z "$(field_of 5 4)" ]
+}
+
+@test "an Issue with no branch and every dependency completed gets an Owner with the command that starts it" {
+  github <<'JSON'
+{"issues": [{"number": 5, "blocked_by": [{"number": 3, "state": "completed"}]}]}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "${#lines[@]}" -eq 1 ]
+  [ "$(action_of 5)" = start-owner ]
+  [ "$(field_of 5 4)" = "bash '${oe}' start owner o/r 5 'no PR yet'" ]
+}
+
+# Rows 6 and 7: the working marker
+
+@test "an Owner's marker started an hour ago, with no push or question since, waits for the agent" {
+  github <<JSON
+{"issues": [{"number": 5, "body": $(marker_body owner 07:00)}]}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-agent ]
+  [ -z "$(field_of 5 4)" ]
+}
+
+@test "a Verifier's marker on the head with no verdict yet waits for the agent" {
+  github <<JSON
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "body": $(marker_body verifier 07:30 "${pr50}"),
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}}]
+  }]
+}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-agent ]
+}
+
+@test "an Owner's marker whose PR head was pushed after it has its result, so CI decides" {
+  github <<JSON
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "body": $(marker_body owner 07:00),
+    "pull_requests": [{"number": 50, "opened": "07:30", "checks": {"test": "in_progress"}}]
+  }]
+}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-ci ]
+}
+
+@test "an Owner's marker whose PR head was pushed before it has no result yet" {
+  github <<JSON
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "body": $(marker_body owner 07:30),
+    "comments": [
+      {"by": "OWNER", "at": "07:15", "body": "<!-- oe:hold -->\nchecks failed"},
+      {"by": "OWNER", "at": "07:20", "body": "<!-- oe:answer -->\nFix the test"}
+    ],
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "failure"}}]
+  }]
+}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-agent ]
+}
+
+@test "a Verifier's marker whose SHA got a verdict has its result" {
+  github <<JSON
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "body": $(marker_body verifier 07:30 "${pr50}"),
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"]}]
+  }]
+}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-merge ]
+}
+
+@test "an answer newer than a live marker ends it, so the answer starts the next agent" {
+  github <<JSON
+{
+  "issues": [{
+    "number": 5,
+    "body": $(marker_body owner 07:30),
+    "comments": [
+      {"by": "OWNER", "at": "07:10", "body": "<!-- oe:hold -->\nno result"},
+      {"by": "OWNER", "at": "07:40", "body": "<!-- oe:answer -->\nTry again"}
+    ]
+  }]
+}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-owner ]
+}
+
+@test "an Owner's marker two hours old with no push or question is held as expired" {
+  github <<JSON
+{"issues": [{"number": 5, "body": $(marker_body owner 06:00)}]}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = hold ]
+  [ "$(field_of 5 3)" = "pr-owner started at 2027-01-15T06:00:00Z and gave no result within 2 hours" ]
+}
+
+@test "a Verifier's marker two hours old with no verdict is held as expired" {
+  github <<JSON
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "body": $(marker_body verifier 05:50 "${pr50}"),
+    "pull_requests": [{"number": 50, "opened": "05:40", "checks": {"test": "success"}}]
+  }]
+}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = hold ]
+}
+
+@test "a malformed marker line is no marker" {
+  github <<'JSON'
+{"issues": [{"number": 5, "body": "Work.\n\n<!-- oe:working role=owner at=yesterday -->"}]}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-owner ]
+}
+
+# Row 8: repair signals and the repair cap
+
+@test "a failed check on the PR head gets an Owner" {
+  github <<'JSON'
+{"issues": [{"number": 5, "branch": true, "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"lint": "success", "test": "failure"}}]}]}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-owner ]
+  [ "$(field_of 5 3)" = "checks failed on bbbbbbb: test" ]
+}
+
+@test "a PR that conflicts with its base gets an Owner" {
+  github <<'JSON'
+{"issues": [{"number": 5, "branch": true, "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "conflicting": true}]}]}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-owner ]
+  [ "$(field_of 5 3)" = "PR #50 conflicts with its base" ]
+}
+
+@test "a trusted Changes requested review of the head after its push gets an Owner" {
+  github <<'JSON'
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{
+      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
+      "reviews": [{"by": "MEMBER", "at": "07:40", "body": "Rename this"}]
+    }]
+  }]
+}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-owner ]
+}
+
+@test "a Changes requested review of an older head starts no Owner" {
+  github <<'JSON'
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{
+      "number": 50, "opened": "07:00", "pushed": "07:40",
+      "head_sha": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "checks": {"test": "success"}, "verdicts": ["success"],
+      "reviews": [{"by": "MEMBER", "at": "07:20", "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "body": "Rename this"}]
+    }]
+  }]
+}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-merge ]
+}
+
+@test "a trusted review-thread comment after the head's push gets an Owner" {
+  github <<'JSON'
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{
+      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
+      "thread_comments": [{"by": "COLLABORATOR", "at": "07:40", "body": "This leaks the token"}]
+    }]
+  }]
+}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-owner ]
+}
+
+@test "a review-thread comment from before the head's push starts no Owner" {
+  github <<'JSON'
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{
+      "number": 50, "opened": "07:10", "pushed": "07:50", "checks": {"test": "success"}, "verdicts": ["success"],
+      "thread_comments": [{"by": "COLLABORATOR", "at": "07:40", "body": "This leaks the token"}]
+    }]
+  }]
+}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-merge ]
+}
+
+@test "untrusted, resolved, outdated, or bot-answered review threads start no Owner" {
+  github <<'JSON'
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{
+      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
+      "threads": [
+        {"comments": [{"by": "NONE", "at": "07:40", "body": "This leaks the token"}]},
+        {"resolved": true, "comments": [{"by": "COLLABORATOR", "at": "07:40", "body": "This leaks the token"}]},
+        {"outdated": true, "comments": [{"by": "COLLABORATOR", "at": "07:40", "body": "This leaks the token"}]},
+        {"comments": [
+          {"by": "COLLABORATOR", "at": "07:40", "body": "This leaks the token"},
+          {"login": "coderabbitai", "type": "Bot", "at": "07:50", "body": "Addressed in the latest push."}]}
+      ]
+    }]
+  }]
+}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-merge ]
+}
+
+@test "a review bot's finding starts no Owner" {
+  github <<'JSON'
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{
+      "number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"],
+      "threads": [{"comments": [{"login": "coderabbitai", "type": "Bot", "at": "07:40", "body": "_Potential issue_ | Major\nThis leaks."}]}]
+    }]
+  }]
+}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-merge ]
+}
+
+@test "a trusted comment on the Issue with no hold or question before it starts no Owner" {
+  github <<'JSON'
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [{"by": "OWNER", "at": "07:40", "body": "Looks good so far"}],
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"]}]
+  }]
+}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-merge ]
+}
+
+@test "an answer from before the head's push starts no Owner" {
+  github <<'JSON'
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "OWNER", "at": "07:02", "body": "<!-- oe:question -->\nWhich option?"},
+      {"by": "MEMBER", "at": "07:03", "body": "Use option A"}
+    ],
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"]}]
+  }]
+}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-merge ]
+}
+
+@test "a trusted comment answering a question after the head's push gets an Owner" {
+  github <<'JSON'
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "OWNER", "at": "07:30", "body": "<!-- oe:question -->\nWhich option?"},
+      {"by": "MEMBER", "at": "07:40", "body": "Use option A"}
+    ],
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"]}]
+  }]
+}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-owner ]
+}
+
+@test "the third commit of the PR with a failed check holds the Issue" {
+  github <<'JSON'
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{
+      "number": 50, "opened": "07:00", "committed": "07:40", "checks": {"test": "failure"},
+      "commits": [
+        {"sha": "1111111111111111111111111111111111111111", "committed": "07:10", "checks": {"test": "failure"}},
+        {"sha": "2222222222222222222222222222222222222222", "committed": "07:20", "checks": {"test": "success"}},
+        {"sha": "3333333333333333333333333333333333333333", "committed": "07:30", "checks": {"lint": "failure"}}
+      ]
+    }]
+  }]
+}
+JSON
+
+  run --separate-stderr bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = hold ]
+  [ "$(field_of 5 3)" = "3 commits of PR #50 had a failed check since the latest answer; still: checks failed on bbbbbbb: test" ]
+}
+
+@test "two commits of the PR with a failed check still get an Owner" {
+  github <<'JSON'
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{
+      "number": 50, "opened": "07:00", "committed": "07:40", "checks": {"test": "failure"},
+      "commits": [{"sha": "1111111111111111111111111111111111111111", "committed": "07:10", "checks": {"test": "failure"}}]
+    }]
+  }]
+}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-owner ]
+}
+
+@test "commits with a failed check before the latest answer do not count toward the cap" {
+  github <<'JSON'
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "OWNER", "at": "07:30", "body": "<!-- oe:hold -->\n3 commits failed"},
+      {"by": "OWNER", "at": "07:35", "body": "<!-- oe:answer -->\nKeep going"}
+    ],
+    "pull_requests": [{
+      "number": 50, "opened": "07:00", "committed": "07:50", "pushed": "07:50", "checks": {"test": "failure"},
+      "commits": [
+        {"sha": "1111111111111111111111111111111111111111", "committed": "07:10", "checks": {"test": "failure"}},
+        {"sha": "2222222222222222222222222222222222222222", "committed": "07:20", "checks": {"test": "failure"}}
+      ]
+    }]
+  }]
+}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-owner ]
+}
+
+@test "a failed check whose name holds a newline and tabs yields one line of four fields and no injected command" {
+  github <<'JSON'
+{"issues": [{"number": 5, "branch": true, "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"x\n9; touch pwned\tstart-owner\ty": "failure"}}]}]}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "${#lines[@]}" -eq 1 ]
+  tabs="${lines[0]//[^$'\t']/}"
+  [ "${#tabs}" -eq 3 ]
+  [ "$(action_of 5)" = start-owner ]
+}
+
+@test "a reason holding a single quote reads back unchanged from the start command" {
+  github <<'JSON'
+{"issues": [{"number": 5, "branch": true, "pull_requests": [{"number": 15, "opened": "07:10", "checks": {"it's": "failure"}}]}]}
+JSON
+
+  run --separate-stderr bash "${oe}" ready o/r 1
+
+  IFS=$'\t' read -r _ action reason start <<<"${lines[0]}"
+  [ "${action}" = start-owner ]
+  [ "${reason}" != "${reason#*it\'s}" ]
+  eval "set -- ${start#bash }"
+  [ "$1" = "${oe}" ]
+  [ "${*: -1}" = "${reason}" ]
+}
+
+# Rows 9 and 10: CI on the head
+
+@test "a running check on the PR head waits for CI" {
+  github <<'JSON'
+{"issues": [{"number": 5, "branch": true, "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"lint": "success", "test": "in_progress"}}]}]}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-ci ]
+}
+
+@test "a PR head pushed five minutes ago with no checks waits for CI, even when committed long before" {
+  github <<'JSON'
+{"issues": [{"number": 5, "branch": true, "pull_requests": [{"number": 50, "opened": "07:10", "committed": "06:00", "pushed": "07:55"}]}]}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-ci ]
+}
+
+@test "a PR head with no checks ten minutes after its push is held" {
+  github <<'JSON'
+{"issues": [{"number": 5, "branch": true, "pull_requests": [{"number": 50, "opened": "07:10", "pushed": "07:40"}]}]}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = hold ]
+  [ "$(field_of 5 3)" = "no checks on bbbbbbb 1200s after its push" ]
+}
+
+@test "a check cancelled in one suite and passed by a later run of the same name in another suite counts as passed" {
+  github <<'JSON'
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{"number": 50, "opened": "07:10", "check_runs": [
+      {"name": "gate", "result": "cancelled", "suite": 1, "workflow": 7, "started": "07:15"},
+      {"name": "gate", "result": "success", "suite": 2, "workflow": 7, "started": "07:16"}
+    ]}]
+  }]
+}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-verifier ]
+}
+
+@test "a check cancelled in one suite while a later run of the same name in another suite is running waits for CI" {
+  github <<'JSON'
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{"number": 50, "opened": "07:10", "check_runs": [
+      {"name": "gate", "result": "cancelled", "suite": 1, "workflow": 7, "started": "07:15"},
+      {"name": "gate", "result": "in_progress", "suite": 2, "workflow": 7, "started": "07:16"}
+    ]}]
+  }]
+}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-ci ]
+}
+
+@test "a cancelled check with no later run of the same name gets an Owner" {
+  github <<'JSON'
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{"number": 50, "opened": "07:10", "check_runs": [
+      {"name": "gate", "result": "cancelled", "suite": 2, "workflow": 7, "started": "07:16"},
+      {"name": "lint", "result": "success", "suite": 1, "started": "07:17"}
+    ]}]
+  }]
+}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-owner ]
+}
+
+@test "a check cancelled in one workflow and passed by a later run of the same name from another workflow gets an Owner" {
+  github <<'JSON'
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{"number": 50, "opened": "07:10", "check_runs": [
+      {"name": "gate", "result": "cancelled", "suite": 1, "workflow": 7, "started": "07:15"},
+      {"name": "gate", "result": "success", "suite": 2, "workflow": 8, "started": "07:16"}
+    ]}]
+  }]
+}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-owner ]
 }
 
 # Prints 150 checks named check-1 to check-150, which GitHub returns over two pages.
@@ -2016,18 +1135,10 @@ checks_150() {
   jq -nc --arg last "$1" '[range(1; 150) | {key: "check-\(.)", value: "success"}] + [{key: "check-150", value: $last}] | from_entries'
 }
 
-@test "a pending check on the second page of a pull request head with 150 checks waits for CI" {
+@test "a pending check on the second page of a PR head with 150 checks waits for CI" {
   github <<JSON
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "pull_requests": [{"number": 50, "opened": "07:10", "checks": $(checks_150 in_progress)}]
-  }]
-}
+{"issues": [{"number": 5, "branch": true, "pull_requests": [{"number": 50, "opened": "07:10", "checks": $(checks_150 in_progress)}]}]}
 JSON
-  records 5 claim@07:00 attempt@07:01
 
   run --separate-stderr bash "${oe}" ready o/r 1
 
@@ -2035,79 +1146,22 @@ JSON
   [ "$(action_of 5)" = wait-ci ]
 }
 
-@test "150 passed checks over two pages on a pull request head start the Verifier without a truncation error" {
+@test "a failed check on the second page of a PR head with 150 checks gets an Owner that names it" {
   github <<JSON
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "pull_requests": [{"number": 50, "opened": "07:10", "checks": $(checks_150 success)}]
-  }]
-}
+{"issues": [{"number": 5, "branch": true, "pull_requests": [{"number": 50, "opened": "07:10", "checks": $(checks_150 failure)}]}]}
 JSON
-  records 5 claim@07:00 attempt@07:01
-
-  run --separate-stderr bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = start-verifier ]
-  case "${stderr}" in
-  *"checks truncated"*) return 1 ;;
-  *) ;;
-  esac
-}
-
-@test "a failed check on the second page of a pull request head with 150 checks gets an Owner that names it" {
-  github <<JSON
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "pull_requests": [{"number": 50, "opened": "07:10", "checks": $(checks_150 failure)}]
-  }]
-}
-JSON
-  records 5 claim@07:00 attempt@07:01
 
   run --separate-stderr bash "${oe}" ready o/r 1
 
   [ "${status}" -eq 0 ]
   [ "$(action_of 5)" = start-owner ]
-  IFS=$'\t' read -r _ _ reason _ <<<"${lines[0]}"
-  case "${reason}" in
-  *"checks failed on "*": check-150") ;;
-  *) return 1 ;;
-  esac
-}
-
-@test "a failed check on the second page of a default branch head with 150 checks holds no Issue" {
-  github <<JSON
-{
-  "default_branch": {"checks": $(checks_150 failure)},
-  "issues": [{"number": 5}]
-}
-JSON
-
-  run --separate-stderr bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = claim ]
+  [ "$(field_of 5 3)" = "checks failed on bbbbbbb: check-150" ]
 }
 
 @test "a failed read of the second page of checks exits non-zero and prints nothing" {
   github <<JSON
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "pull_requests": [{"number": 50, "opened": "07:10", "checks": $(checks_150 success)}]
-  }]
-}
+{"issues": [{"number": 5, "branch": true, "pull_requests": [{"number": 50, "opened": "07:10", "checks": $(checks_150 success)}]}]}
 JSON
-  records 5 claim@07:00 attempt@07:01
 
   GH_FAIL="after=" run --separate-stderr bash "${oe}" ready o/r 1
 
@@ -2115,21 +1169,119 @@ JSON
   [ -z "${output}" ]
 }
 
-@test "a question from before the latest claim does not hold a restarted Issue" {
+# Rows 11 to 13: the verdict on the head
+
+@test "a head that passed its checks with no verdict gets a Verifier with the command that starts it" {
   github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{
-    "number": 5,
-    "branch": true,
-    "comments": [{"by": "OWNER", "at": "06:30", "body": "<!-- oe:question -->\nWhich option?"}]
-  }]
-}
+{"issues": [{"number": 5, "branch": true, "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}}]}]}
 JSON
-  records 5 claim@06:00 attempt@06:01 claim@07:00
 
   run bash "${oe}" ready o/r 1
 
   [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = start-owner ]
+  [ "$(action_of 5)" = start-verifier ]
+  [ "$(field_of 5 4)" = "bash '${oe}' start verifier o/r 5" ]
+}
+
+@test "pending verify statuses on the head are no verdict, so the head still gets a Verifier" {
+  github <<'JSON'
+{"issues": [{"number": 5, "branch": true, "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["pending", "pending", "pending"]}]}]}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-verifier ]
+}
+
+@test "a failure verdict on the head holds the Issue" {
+  github <<'JSON'
+{"issues": [{"number": 5, "branch": true, "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["failure", "pending"]}]}]}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = hold ]
+  [ "$(field_of 5 3)" = "failure verdict on bbbbbbb" ]
+}
+
+@test "a success verdict on the head waits for the merge" {
+  github <<'JSON'
+{"issues": [{"number": 5, "branch": true, "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success", "pending"]}]}]}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-merge ]
+}
+
+@test "a head that lacks a merged sibling PR is verified, since the engineer updates the branch" {
+  github <<'JSON'
+{
+  "issues": [
+    {"number": 4, "closed": true, "pull_requests": [{"number": 40, "state": "merged", "opened": "07:05", "merged": "07:30"}]},
+    {"number": 5, "branch": true, "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "missing_merges": [40]}]}
+  ]
+}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-verifier ]
+}
+
+# A PR that moved during the read, and reads GitHub cuts short
+
+@test "a push during the read leaves only its Issue to be read again" {
+  github <<'JSON'
+{
+  "issues": [
+    {"number": 5, "branch": true, "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "pushed_during_read": true}]},
+    {"number": 6}
+  ]
+}
+JSON
+
+  run --separate-stderr bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = read-again ]
+  [ -z "$(field_of 5 4)" ]
+  [ "$(action_of 6)" = start-owner ]
+}
+
+@test "more review threads than one read holds fail the read instead of missing engineer input" {
+  github <<'JSON'
+{"issues": [{"number": 5, "branch": true, "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["success"], "older_threads": 100}]}]}
+JSON
+
+  run --separate-stderr bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 1 ]
+  [ -z "${output}" ]
+}
+
+@test "older PRs left out of the read do not fail it, and the newest one decides the action" {
+  github <<'JSON'
+{"issues": [{"number": 5, "branch": true, "pull_requests": [{"number": 15, "opened": "07:10", "checks": {"test": "success"}}], "older_pull_requests": 100}]}
+JSON
+
+  run --separate-stderr bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-verifier ]
+}
+
+@test "--running is accepted and changes nothing, so a caller written for it still runs" {
+  github <<'JSON'
+{"issues": [{"number": 5}, {"number": 6}]}
+JSON
+
+  run bash "${oe}" ready o/r 1 --running 6
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 6)" = start-owner ]
 }

@@ -158,13 +158,13 @@ JSON
 
   [ "${status}" -eq 0 ]
   [ "${lines[0]}" = "Epic #1: 0 done, 0 in progress, 0 waiting, 1 waiting on you" ]
-  [ "${lines[1]}" = "- #5 Answer the Owner's question in the session's conversation or with a comment on the Issue" ]
+  [ "${lines[1]}" = "- #5 Answer the hold or the Owner's question in the session's conversation" ]
   [ "${lines[2]}" = "  https://github.com/o/r/issues/5" ]
   [ "${lines[3]}" = '  why: question https://github.com/o/r/issues/5#issuecomment-1 has no answer yet:\nWhich option?' ]
   printf '%s\n' "${lines[4]}" | grep -q '^ISSUE  *STEP '
 }
 
-@test "a parked Issue with a PR shows under the first line with the action, the PR's URL, and why it stopped" {
+@test "a held Issue with a PR shows under the first line with the action, the PR's URL, and why it stopped" {
   github <<'JSON'
 {
   "default_branch": {"checks": {"test": "success"}},
@@ -174,18 +174,17 @@ JSON
   ]
 }
 JSON
-  records 5 claim@07:00 attempt@07:01#h1 attempt@07:20#h2 attempt@07:40#h3
 
   run --separate-stderr bash "${oe}" status o/r 1
 
   [ "${status}" -eq 0 ]
   [ "${lines[0]}" = "Epic #1: 0 done, 0 in progress, 0 waiting, 1 waiting on you" ]
-  [ "${lines[1]}" = "- #5 Fix it by hand, delete its branch so the AI starts over, or tell the session to continue it" ]
+  [ "${lines[1]}" = "- #5 Answer in the session's conversation once the session records the hold" ]
   [ "${lines[2]}" = "  https://github.com/o/r/pull/50" ]
-  [ "${lines[3]}" = "  why: 3 attempts used; still: failure verdict on bbbbbbb" ]
+  [ "${lines[3]}" = "  why: failure verdict on bbbbbbb" ]
 }
 
-@test "an Issue waiting for an engineer or for the merge shows under the first line, in Issue order" {
+@test "a held Issue and an Issue waiting for the merge show under the first line, in Issue order" {
   github <<'JSON'
 {
   "default_branch": {"checks": {"test": "success"}},
@@ -204,15 +203,15 @@ JSON
 
   [ "${status}" -eq 0 ]
   [ "${lines[0]}" = "Epic #1: 0 done, 0 in progress, 0 waiting, 2 waiting on you" ]
-  [ "${lines[1]}" = "- #5 Close the Issue, reopen the PR, or delete its branch so the AI starts over" ]
+  [ "${lines[1]}" = "- #5 Answer in the session's conversation once the session records the hold" ]
   [ "${lines[2]}" = "  https://github.com/o/r/pull/50" ]
-  [ "${lines[3]}" = "  why: PR #50 closed without merging" ]
+  [ "${lines[3]}" = "  why: PR #50 was closed without merging" ]
   [ "${lines[4]}" = "- #6 Review the PR and merge it" ]
   [ "${lines[5]}" = "  https://github.com/o/r/pull/60" ]
   [ "${lines[6]}" = "  why: success verdict on bbbbbbb" ]
 }
 
-@test "an Issue whose Owner runs shows that Owner and the attempts used instead of the next action, and counts in progress" {
+@test "an Issue whose Owner runs shows that Owner instead of the next action, and counts in progress" {
   github <<'JSON'
 {
   "default_branch": {"checks": {"test": "success"}},
@@ -228,12 +227,12 @@ JSON
   [ "${status}" -eq 0 ]
   [ "${lines[0]}" = "Epic #1: 0 done, 1 in progress, 0 waiting, 0 waiting on you" ]
   [ "$(column_of 5 2)" = running ]
-  [ "$(column_of 5 6)" = 0/3 ]
+  [ "$(column_of 5 6)" = - ]
   [ "$(column_of 5 7)" = owner ]
-  [ "$(column_of 5 9)" = "Owner runs; 0 of 3 attempts used" ]
+  [ "$(column_of 5 9)" = "Owner runs" ]
 }
 
-@test "an Issue whose Verifier runs its last start shows that Verifier and its start, not a park waiting on the owner" {
+@test "an Issue whose Verifier runs shows that Verifier and its head, not a step waiting on the owner" {
   github <<'JSON'
 {
   "default_branch": {"checks": {"test": "success"}},
@@ -250,10 +249,10 @@ JSON
   [ "${lines[0]}" = "Epic #1: 0 done, 1 in progress, 0 waiting, 0 waiting on you" ]
   [ "$(column_of 5 2)" = running ]
   [ "$(column_of 5 7)" = verifier ]
-  [ "$(column_of 5 9)" = "Verifier start 2 of 2 on bbbbbbb" ]
+  [ "$(column_of 5 9)" = "Verifier runs on bbbbbbb" ]
 }
 
-@test "every Issue shows its step, PR, CI result, verdict, attempts, agent, time in step, and reason" {
+@test "every Issue shows its step, PR, CI result, verdict, agent, time in step, and reason, and no attempt count" {
   three_issues
 
   run --separate-stderr bash "${oe}" status o/r 1
@@ -261,21 +260,20 @@ JSON
   [ "${status}" -eq 0 ]
   printf '%s\n' "${lines[@]}" | grep -q '^ISSUE  *STEP  *PR  *CI  *VERDICT  *ATTEMPTS  *AGENT  *SINCE  *REASON$'
 
-  [ "$(column_of 5 2)" = start-owner ]
+  [ "$(column_of 5 2)" = hold ]
   [ "$(column_of 5 3)" = "#50" ]
   [ "$(column_of 5 4)" = passed ]
   [ "$(column_of 5 5)" = failure ]
-  [ "$(column_of 5 6)" = 1/3 ]
+  [ "$(column_of 5 6)" = - ]
   [ "$(column_of 5 7)" = - ]
-  # start-owner counts from the latest attempt, at 07:01.
-  [ "$(column_of 5 8)" = 59m ]
-  [ "$(column_of 5 9)" = "attempt 2 of 3: failure verdict on bbbbbbb" ]
+  [ "$(column_of 5 8)" = - ]
+  [ "$(column_of 5 9)" = "failure verdict on bbbbbbb" ]
 
   [ "$(column_of 6 2)" = wait-ci ]
   [ "$(column_of 6 3)" = "#60" ]
   [ "$(column_of 6 4)" = pending ]
   [ "$(column_of 6 5)" = - ]
-  [ "$(column_of 6 6)" = 1/3 ]
+  [ "$(column_of 6 6)" = - ]
   [ "$(column_of 6 7)" = - ]
   # wait-ci counts from the push of the head, at 07:10.
   [ "$(column_of 6 8)" = 50m ]
@@ -285,7 +283,7 @@ JSON
   [ "$(column_of 7 3)" = - ]
   [ "$(column_of 7 4)" = - ]
   [ "$(column_of 7 5)" = - ]
-  [ "$(column_of 7 6)" = 0/3 ]
+  [ "$(column_of 7 6)" = - ]
   [ "$(column_of 7 7)" = - ]
   [ "$(column_of 7 8)" = - ]
   [ "$(column_of 7 9)" = "#5 open" ]
@@ -336,7 +334,7 @@ JSON
   [ "$(column_of 6 8)" = 45m ]
 }
 
-@test "a head that gets a branch update is in progress, waits on nobody, and counts from its push" {
+@test "a head that lacks a merged sibling waits for the merge like any other head, and counts from its push" {
   github <<'JSON'
 {
   "default_branch": {"checks": {"test": "success"}},
@@ -353,9 +351,8 @@ JSON
   run --separate-stderr bash "${oe}" status o/r 1
 
   [ "${status}" -eq 0 ]
-  [ "${lines[0]}" = "Epic #1: 1 done, 1 in progress, 0 waiting, 0 waiting on you" ]
-  [ "${lines[1]}" = "Nothing waits on you." ]
-  [ "$(column_of 5 2)" = update-branch ]
+  [ "${lines[0]}" = "Epic #1: 1 done, 0 in progress, 0 waiting, 1 waiting on you" ]
+  [ "$(column_of 5 2)" = wait-merge ]
   [ "$(column_of 5 8)" = 40m ]
 }
 
@@ -553,7 +550,7 @@ JSON
 
   [ "${status}" -eq 0 ]
   [ "$(column_of 5 2)" = read-again ]
-  [ "$(column_of 6 2)" = claim ]
+  [ "$(column_of 6 2)" = start-owner ]
 }
 
 @test "a failed check on the default branch does not change the step of any Issue" {
@@ -571,7 +568,7 @@ JSON
 
   [ "${status}" -eq 0 ]
   [ "$(column_of 5 2)" = read-again ]
-  [ "$(column_of 6 2)" = claim ]
+  [ "$(column_of 6 2)" = start-owner ]
 }
 
 @test "a default branch head with no checks past the grace shows each Issue's step and no end line" {
@@ -585,7 +582,7 @@ JSON
   run --separate-stderr bash "${oe}" status o/r 1
 
   [ "${status}" -eq 0 ]
-  [ "$(column_of 5 2)" = claim ]
+  [ "$(column_of 5 2)" = start-owner ]
   [ "$(printf '%s\n' "${lines[@]}" | grep -c '^end:')" -eq 0 ]
 }
 

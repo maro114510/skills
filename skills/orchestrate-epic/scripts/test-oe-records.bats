@@ -109,27 +109,6 @@ JSON
   [ -z "$(records_of 5)" ]
 }
 
-@test "after a claim, oe ready starts the first Owner attempt even when an earlier claim used every attempt" {
-  github <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{"number": 5}]
-}
-JSON
-  records 5 claim@06:00 attempt@06:01 attempt@06:02 attempt@06:03
-  run bash "${oe}" claim o/r 5
-  [ "${status}" -eq 0 ]
-
-  run bash "${oe}" ready o/r 1
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of 5)" = start-owner ]
-  case "${lines[0]}" in
-  *"attempt 1 of 3"*) ;;
-  *) return 1 ;;
-  esac
-}
-
 @test "without OE_STATE_DIR, a claim records under XDG_STATE_HOME and leaves the checkout it runs in unchanged" {
   github <<'JSON'
 {

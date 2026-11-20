@@ -67,29 +67,6 @@ comment_count() {
   jq '.issues[0].comments // [] | length' "${OE_GITHUB}"
 }
 
-@test "an Issue parked at the attempt cap starts an Owner on the same branch after continue" {
-  github_with_failure
-  attempt_cap
-  [ "$(action_of_5)" = parked ]
-
-  run bash "${oe}" continue o/r 5
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of_5)" = start-owner ]
-  [ "$(jq -r '.issues[0].branch' "${OE_GITHUB}")" = true ]
-}
-
-@test "an Issue parked by starts without a push starts an Owner on the same branch after continue" {
-  github_with_failure
-  starts_without_push
-  [ "$(action_of_5)" = parked ]
-
-  run bash "${oe}" continue o/r 5
-
-  [ "${status}" -eq 0 ]
-  [ "$(action_of_5)" = start-owner ]
-}
-
 @test "continue without an instruction writes nothing to GitHub" {
   github_with_failure
   attempt_cap
@@ -127,20 +104,6 @@ comment_count() {
 
   [ "${status}" -eq 0 ]
   [ "$(bash "${oe}" records o/r 5 | jq -c 'select(.kind == "continue") | keys')" = '["at","kind"]' ]
-}
-
-@test "continue gives a bot back the round its earlier attempt used" {
-  github_with_failure
-  records 5 claim@07:00 "attempt@07:01#h1" "attempt@07:20#h2"
-  printf '%s\n' '{"kind":"attempt","at":"2027-01-15T07:40:00Z","head":"h3","bots":["coderabbitai"]}' >>"$(record_file 5)"
-  # The failure verdict repairs, but the bot's round is used, so its finding is not named in the reason.
-  [ "$(bash "${oe}" ready o/r 1 | awk -F '\t' '$1 == 5 { print $3 }')" = "3 attempts used; still: failure verdict on bbbbbbb" ]
-
-  run bash "${oe}" continue o/r 5
-
-  [ "${status}" -eq 0 ]
-  reason="$(bash "${oe}" ready o/r 1 | awk -F '\t' '$1 == 5 { print $3 }')"
-  [ "${reason}" = "attempt 1 of 3: failure verdict on bbbbbbb; major finding from coderabbitai" ]
 }
 
 @test "oe attempt admits an Owner start after continue, and counts it as the first attempt" {
@@ -188,25 +151,6 @@ comment_count() {
 
   [ "${status}" -eq 1 ]
   [ "$(records_of 5)" = "${before}" ]
-}
-
-@test "oe ready prints the continue command on an Issue parked at the cap, and none on any other park" {
-  github_with_failure
-  attempt_cap
-  bash "${oe}" ready o/r 1 | awk -F '\t' '$1 == 5 { print $4 }' >"${BATS_TEST_TMPDIR}/command"
-  [ "$(<"${BATS_TEST_TMPDIR}/command")" = "bash '${oe}' continue o/r 5 [<instruction>]" ]
-
-  # A head with no checks ten minutes after its push is parked too, but no continue helps it.
-  cat >"${OE_GITHUB}" <<'JSON'
-{
-  "default_branch": {"checks": {"test": "success"}},
-  "issues": [{"number": 5, "branch": true, "pull_requests": [{"number": 50, "opened": "07:10"}]}]
-}
-JSON
-  records 5 claim@07:00
-  run bash "${oe}" ready o/r 1
-  [ "$(printf '%s\n' "${lines[@]}" | awk -F '\t' '$1 == 5 { print $2 }')" = parked ]
-  [ -z "$(printf '%s\n' "${lines[@]}" | awk -F '\t' '$1 == 5 { print $4 }')" ]
 }
 
 @test "a blank instruction and an invalid repository are refused" {

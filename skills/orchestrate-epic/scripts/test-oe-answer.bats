@@ -84,6 +84,22 @@ action_of_5() {
   [ "$(action_of_5)" = start-owner ]
 }
 
+@test "an answer to a hold is written on the Issue against the hold, and oe ready then starts an Owner" {
+  bash "${oe}" hold o/r 5 "PR #50 was closed without merging" >/dev/null
+  [ "$(action_of_5)" = wait-answer ]
+
+  run --separate-stderr bash "${oe}" question o/r 5 --answer "Reopen the PR and continue"
+
+  [ "${status}" -eq 0 ]
+  [ "${output%%$'\t'*}" = answer ]
+  [ "$(comment_count)" -eq 2 ]
+  body="$(last_comment)"
+  [ "${body%%$'\n'*}" = "<!-- oe:answer -->" ]
+  [ "${body}" != "${body#*https://github.com/o/r/issues/5#issuecomment-1}" ]
+  [ "${body}" != "${body#*$'\n'Reopen the PR and continue$'\n'}" ]
+  [ "$(action_of_5)" = start-owner ]
+}
+
 @test "a free-text answer is written as given, and oe ready reads it as the engineer's answer" {
   ask
 

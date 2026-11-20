@@ -36,11 +36,6 @@ lagging() {
   }' >"${OE_GITHUB}"
 }
 
-# Prints the attempts that oe ready --facts shows for Issue $1.
-attempts_of() {
-  bash "${oe}" ready o/r 1 --facts | jq -r --argjson n "$1" 'select(.number == $n) | .attempts'
-}
-
 @test "an update moves the head to one without checks or verdict, and writes no comment" {
   lagging
   records 5 claim@07:00 attempt@07:01
@@ -54,7 +49,7 @@ attempts_of() {
   [ "$(jq '.issues[1] | has("comments")' "${OE_GITHUB}")" = false ]
 }
 
-@test "an update records the head it replaces, and spends no attempt" {
+@test "an update records the head it replaces" {
   lagging
   records 5 claim@07:00 "attempt@07:01#${head50}"
 
@@ -63,23 +58,6 @@ attempts_of() {
   [ "${status}" -eq 0 ]
   [ "$(records_of 5 | jq -sc 'map(.kind)')" = '["claim","attempt","update"]' ]
   [ "$(records_of 5 | jq -sr 'last | .head')" = "${head50}" ]
-
-  [ "$(attempts_of 5)" = 0 ]
-}
-
-@test "an Owner start that pushed before the update still counts, and one that pushed nothing still does not" {
-  lagging
-  records 5 claim@07:00 "attempt@07:01#cccccccccccccccccccccccccccccccccccccccc"
-  run --separate-stderr bash "${oe}" update o/r 5
-  [ "${status}" -eq 0 ]
-  [ "$(attempts_of 5)" = 1 ]
-
-  lagging
-  rm -rf "${OE_STATE_DIR}/records"
-  records 5 claim@07:00 "attempt@07:01#${head50}"
-  run --separate-stderr bash "${oe}" update o/r 5
-  [ "${status}" -eq 0 ]
-  [ "$(attempts_of 5)" = 0 ]
 }
 
 @test "repeating an update on the same head writes one record" {

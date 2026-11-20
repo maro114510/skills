@@ -12,6 +12,8 @@
 # | wait | Blocks until oe ready's output changes or a timeout passes |
 # | claim | Creates an Issue's branch on origin and records the claim on this host, and assigns the Issue to the gh user |
 # | attempt | Records an Owner attempt on this host before the Owner starts, and refuses one past the cap |
+# | start | Starts an Owner or a Verifier for one Issue, writing the working marker in the Issue body |
+# | hold | Records that an Issue waits on the person, with the reason oe ready gave, as an Issue comment |
 # | question | Writes an Owner's question on the Issue, or records the person's answer to it |
 # | continue | Returns a parked Issue to the loop on its branch, resetting its attempts and bot rounds, and records an optional instruction on the Issue |
 # | rereview | Asks the bots whose rounds the latest attempt used to review the PR again |
@@ -28,7 +30,7 @@ set -uo pipefail
 dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 case "${1:-}" in
-ready | status | board | wait | start | claim | attempt | question | continue | rereview | update | brief | verdict | records | worktree | lock)
+ready | status | board | wait | start | hold | claim | attempt | question | continue | rereview | update | brief | verdict | records | worktree | lock)
   sub="$1"
   shift
   exec bash "${dir}/oe-${sub}.sh" "$@"
@@ -41,6 +43,7 @@ Usage: oe ready <owner/repo> <epic-number> [--running <issue-number>]... [--fact
        oe wait <owner/repo> <epic-number> [--running <issue-number>]... [--max-agents <n>] [--timeout <seconds>] [--idle-since <epoch>]
        oe start owner <owner/repo> <issue-number> [--claim] [<reason>]
        oe start verifier <owner/repo> <issue-number>
+       oe hold <owner/repo> <issue-number> <reason>
        oe claim <owner/repo> <issue-number>
        oe attempt <owner/repo> <issue-number>
        oe question <owner/repo> <issue-number> < question
