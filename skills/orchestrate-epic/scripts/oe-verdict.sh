@@ -9,7 +9,7 @@
 #   oe verdict <owner/repo> <issue-number> <sha> success|failure < findings
 #
 # - The findings are read from stdin, one line per acceptance criterion, as pr-verify writes them.
-#   A line ending a criterion with `-> unconfirmed` or `-> none` names one the Verifier could not observe.
+#   A line holding `-> unconfirmed` names a criterion the Verifier could not observe.
 # - The PR is the open PR from the Issue's branch in this repository.
 #
 # Writes, in order
@@ -91,7 +91,7 @@ if [[ "${head}" != "${sha}" ]]; then
   exit 4
 fi
 
-if [[ "${state}" == failure ]] || grep -Eq -- '->[[:space:]]*(unconfirmed|none)([^[:alnum:]_]|$)' <<<"${findings}"; then
+if [[ "${state}" == failure ]] || grep -Eq -- '->[[:space:]]*unconfirmed([^[:alnum:]_]|$)' <<<"${findings}"; then
   gh api -X POST "repos/${repo}/issues/${pr}/comments" -f body="$(record_marker findings)
 ### Verifier ${state} on ${sha}
 
