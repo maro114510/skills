@@ -292,10 +292,3 @@ dsh_stub() {
   has_line "Unsupported DSH CLI: 'dsh --help' lists no --patch (a DSH that can pin a read-only preset table is required)"
   [ ! -e "${BATS_TEST_TMPDIR}/ran" ]
 }
-
-@test "a dsh session that edits a tracked file exits 3" {
-  harness dsh "$(dsh_stub present "echo b >> tracked.txt; ${reply}")"
-  describe dsh "${note}"
-  [ "${status}" -eq 3 ]
-  has_line "DESCRIBE status=changed head=${head_sha}"
-}

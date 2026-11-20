@@ -41,7 +41,6 @@ if [[ "${harness}" == dsh ]]; then
   dsh_help="$(dsh --help 2>&1 </dev/null)"
   if ! grep -qE -- "(^|[[:space:]])--patch([[:space:],=]|$)" <<<"${dsh_help}"; then
     echo "Unsupported DSH CLI: 'dsh --help' lists no --patch (a DSH that can pin a read-only preset table is required)" >&2
-    head -n 5 <<<"${dsh_help}" >&2
     exit 2
   fi
 fi
