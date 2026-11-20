@@ -57,13 +57,13 @@ If any of the first four is missing, end without changing anything and say which
        query($owner: String!, $name: String!, $pr: Int!) {
          repository(owner: $owner, name: $name) { pullRequest(number: $pr) { reviewThreads(last: 100) { totalCount nodes {
            isResolved isOutdated path line
-           comments(last: 20) { totalCount nodes { authorAssociation author { login __typename } body createdAt } }
+           comments(last: 20) { nodes { authorAssociation author { login __typename } body createdAt } }
          } } } }
        }'
      ```
 
-     A `totalCount` above the nodes read is a read cut short, so end without pushing.
-     The head was pushed at the `timestamp` of the first entry whose `after` is `headRefOid` in `gh api 'repos/<repo>/activity?ref=refs/heads/<branch>&per_page=100'`. When no entry has it, take the head commit's `committedDate`.
+     A `reviewThreads.totalCount` above the threads read is a read cut short, so end without pushing. A thread's last 20 comments always hold its last one, so older comments left out cut nothing short.
+     The head was pushed at the `timestamp` of the first entry whose `after` is `headRefOid` in `gh api 'repos/<repo>/activity?ref=refs/heads/<branch>&per_page=100'`. When no entry has it, take `gh api repos/<repo>/commits/<headRefOid> --jq .commit.committer.date`. Compare it with a comment's `createdAt` as times, never as strings.
 
      `<owner>` and `<name>` are the two parts of `<repo>`. A finding from a review bot is no engineer input, so this Owner neither fixes nor answers it.
      If none of these is present and there is no answer, end without pushing, and say so.
