@@ -29,7 +29,8 @@
 #
 # - Only the orchestrate-epic session runs --answer, with the reply the person gave in its conversation.
 #   An Owner or a Verifier never runs it, because the answer counts as the person's even when the agents' bot writes it.
-# - It answers the Issue's latest question record, as oe-records.jq reads records, from the latest claim on, as oe ready reads it.
+# - It answers the Issue's latest hold or question record, as oe-records.jq reads records, from the latest claim on, as oe ready reads it.
+#   A hold has no options and no Decision line, so its decision is named by the hold's URL.
 # - A reply that is one option's letter, in either case, records that option with its label. Any other reply is recorded as written.
 #
 #   <!-- oe:answer -->
@@ -56,7 +57,7 @@
 # | 0 | The question or the answer was written, and its kind and URL printed, separated by a tab | The record, and for an answer its decision in the Issue body |
 # | 1 | A GitHub read or write failed, or the reader's language could not be resolved | Nothing, or only the decision when the answer record failed after it; a rerun then writes the record alone |
 # | 2 | The arguments are invalid, the question breaks the template, or the reply is empty or a letter no option has | Nothing |
-# | 3 | The Issue has no question to answer since its latest claim | Nothing |
+# | 3 | The Issue has no hold or question to answer since its latest claim | Nothing |
 set -uo pipefail
 
 dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -120,11 +121,11 @@ if [[ $# -eq 4 ]]; then
   question="$(jq -cs --arg claimed_at "${claimed_at}" "${bot}"$'\n'"${trust}"$'\n'"${rules}"$'\n''
     map({authorAssociation: .author_association, body, url: .html_url, createdAt: .created_at,
       author: {login: ((.user.login // "") | sub("\\[bot\\]$"; "")), __typename: (.user.type // "User")}})
-    | map(select(record("question") and .createdAt >= $claimed_at)) | last
+    | map(select((record("question") or record("hold")) and .createdAt >= $claimed_at)) | last
     | if . == null then null else {url, options: (.body | options), decision: (.body | decision_line)} end' <<<"${comments}" 2>"${err}")" ||
     fail "the comments of Issue #${n} are unreadable: $(head -n1 "${err}")"
   if [[ "${question}" == null ]]; then
-    echo "oe question: Issue #${n} has no question to answer since its latest claim" >&2
+    echo "oe question: Issue #${n} has no hold or question to answer since its latest claim" >&2
     exit 3
   fi
   trimmed="${reply#"${reply%%[![:space:]]*}"}"
