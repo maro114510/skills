@@ -8,7 +8,7 @@ Every non-container `Tn`, and every `Tn.m`:
 
 - Requirements section: the approved requirement bullets, verbatim in substance (may be copy-edited for clarity, not expanded).
 - Specs section: the approved spec bullets. Omit this section entirely if no technical decision was actually settled in the conversation — do not fill it with invented detail.
-- Dependencies section: one line referencing the sibling it depends on, or the template's "none" phrasing. Which parent it points to differs by level:
+- Dependencies section: one line referencing the sibling it depends on, or the template's "none" phrasing, which is also what a `Tn` gets when there is no Epic. Which parent it points to differs by level:
   - `Tn`: points to the Epic for the full dependency picture.
   - `Tn.m`: points to its parent `Tn`'s body instead — the Epic never shows grandchildren, per the dependency-scope rule in `references/structure.md`.
   Don't restate the full dependency chain here; that lives only in the parent.
@@ -32,6 +32,8 @@ Only when Step 2 promoted it:
 
 ## Epic
 
+Only when an Epic is created, as `references/structure.md` § Epic or standalone Issues decides.
+
 - Verification may hold checks of the whole Epic that a person runs, besides checks built from the children's Verification.
 - Dependencies & Parallel Execution Plan section: a Mermaid `flowchart` grouping child Issues into `subgraph` blocks per wave, using `{{Tn}}` tokens (double curly braces) everywhere a real Issue number will later be substituted — both in node labels and in any prose. **If there are more than 12 child Issues, replace the flowchart with the compact wave table** in `references/templates.<LANG>.md` instead — a graph that large stops being readable.
   - **Escaping in node labels:** if a title contains a double quote, write it as the entity code `#quot;` inside the `["..."]` label — never a raw `"` (it terminates the label) and never a backslash-escaped `\"` (Mermaid does not support backslash escaping and the diagram fails to render). Same rule applies to the Step 3 dependency preview.
@@ -49,4 +51,4 @@ Check the generated bodies mechanically, by re-reading each one against every ch
 - Every leaf Issue's Verification is one list with no subheading, and no item in it needs a person, another machine, a real device, or an environment, or is a deployment or other operational step.
 - No Mermaid node label (Step 3 preview, Epic body, or a container `Tn` body) contains a raw `"` — a title with a quote must use `#quot;` instead.
 - Leaf bodies never contain a `{{Tn}}` or `{{Tn.m}}` token — that substitution syntax is container-body-only (the Epic for its `Tn` tokens, a container `Tn` for its own `Tn.m` tokens).
-- Collect every `{{Tn}}` token appearing anywhere in the Epic body (diagram/table node labels, dependency-column references, prose) and confirm that set of ids exactly matches the set of `Tn` (leaf and container alike) about to be created — none missing, none referring to a `Tn` that doesn't exist. Separately, for each container `Tn`, collect every `{{Tn.m}}` token in its own body and confirm that set exactly matches the set of its own `Tn.m` grandchildren — none missing, none referring to a different container's child. A given id may legitimately appear more than once within its own scope (e.g. once as its own row, again in another row's dependency column), so check set membership, not occurrence count.
+- When an Epic is created, collect every `{{Tn}}` token appearing anywhere in the Epic body (diagram/table node labels, dependency-column references, prose) and confirm that set of ids exactly matches the set of `Tn` (leaf and container alike) about to be created — none missing, none referring to a `Tn` that doesn't exist. Separately, for each container `Tn`, collect every `{{Tn.m}}` token in its own body and confirm that set exactly matches the set of its own `Tn.m` grandchildren — none missing, none referring to a different container's child. A given id may legitimately appear more than once within its own scope (e.g. once as its own row, again in another row's dependency column), so check set membership, not occurrence count.

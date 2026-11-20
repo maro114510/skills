@@ -22,6 +22,15 @@ Output this when the user instructs to proceed with unresolved items:
 - <Undecided item 2>
 ````
 
+## Step 1.5: Design Change Stop Format
+
+Output this when a Step 1.5 answer changes a merged Design Doc or implementation plan that the Issues cite, then stop:
+
+````
+[!] No Issue was created. The answers change <document>, which has already merged: <the change>.
+Merge that design change first, then run this skill again.
+````
+
 ## Step 3: Summary Format
 
 Output this block and ask for approval. This is the main checkpoint for catching invented or misplaced content before it's written into a real Issue, and — by default — the *only* checkpoint before creation: Step 4.5's full-body re-display is skipped unless the user asks for it (see Step 4.5), so this summary must carry enough substance (background, full verification list) that approving it is equivalent to approving the final bodies.
@@ -35,7 +44,7 @@ In any Mermaid node label, a double quote in a title must be written as `#quot;`
 ````
 ## Issue structure to be created
 
-### Epic (parent Issue)
+### Epic (parent Issue; only when structure.md decides an Epic is created)
 **Title**: <Epic title>
 **Summary**: <purpose in one line>
 **Background**: <what led to needing this Epic, in 1-2 sentences>
@@ -48,9 +57,9 @@ In any Mermaid node label, a double quote in a title must be written as `#quot;`
 
 (Only if applicable: **Epic split suggestion**: The dependency graph splits into independent groups and the count is large, so <proposed split> as separate Epics could also work instead of one Epic. Proceed with a single Epic anyway?)
 
-(Only when Step 1.5 changed a merged design doc/implementation plan: **Document currently out of sync**: <document> no longer matches the clarified answers. T<doc> (Wave 1 / Depends on: none) updates it to match, and every Tn whose content the answers changed depends on it — directly or transitively, as stated on each Tn's dependency line.)
+(When no Epic is created, write instead: **No Epic**: <the reason, such as "no task depends on another and no grouping was asked for">. Show every task below as a standalone Issue and skip the dependency preview.)
 
-### Dependency preview (temporary IDs; real Issue numbers are assigned after creation)
+### Dependency preview (only with an Epic; temporary IDs; real Issue numbers are assigned after creation)
 
 ```mermaid
 flowchart LR
@@ -87,8 +96,6 @@ flowchart LR
 - Target state: <one line>
 - Verification: <bullet>
 
-When this Tn's content changed because Step 1.5 changed a merged document, write its heading's dependency part in full as "Depends on: T<doc>, directly" or "Depends on: T<via>, transitively on T<doc>" instead of the plain "Depends on: ..." — the summary must approve which of the two applies.
-
 Only when a Tn was promoted to a container, show it in this shape instead — Requirements/Specs/Verification live only on the Tn.m side.
 
 #### T3: <title> (container / Wave 1 / Depends on: none)
@@ -123,7 +130,7 @@ Let me know if anything needs to be added, removed, retitled, or corrected (depe
 
 ## Epic body (Step 4)
 
-Use the Mermaid variant when there are 12 or fewer child Issues; otherwise use the table variant.
+Only when an Epic is created. Use the Mermaid variant when there are 12 or fewer child Issues; otherwise use the table variant.
 
 ### Mermaid variant (≤12 child Issues)
 
@@ -233,7 +240,7 @@ Both a non-container `Tn` (leaf) and a `Tn.m` (grandchild) use this shape.
 
 ## Dependencies
 
-{Name each dependency by its title, never by its temporary `Tn` id, which readers never see. For a `Tn`: "Can start after <title> is done. See the Epic for the full dependency picture." / For a `Tn.m`: "Can start after <title> is done. See the parent Issue for the full dependency picture within it." or "None (can start in parallel)". Don't write step-by-step reasoning or detail here. When this Tn's content changed because Step 1.5 changed a merged document, state instead whether it depends on the doc-update task directly ("Can start after the doc-update task <doc-update title> is done, which it depends on directly") or transitively ("Can start after <title> is done, which in turn depends on the doc-update task <doc-update title>, so it depends on it transitively"), keeping the "See the Epic" sentence.}
+{Name each dependency by its title, never by its temporary `Tn` id, which readers never see. For a `Tn`: "Can start after <title> is done. See the Epic for the full dependency picture.", or "None (can start in parallel)" when it has no dependency or there is no Epic / For a `Tn.m`: "Can start after <title> is done. See the parent Issue for the full dependency picture within it." or "None (can start in parallel)". Don't write step-by-step reasoning or detail here.}
 
 ## Acceptance Criteria
 
@@ -272,7 +279,7 @@ Only used when the user explicitly asked to see the full draft (see Step 4.5 in 
 
 `{{Tn}}` and `{{Tn.m}}` are temporary placeholders. `{{Tn}}` is replaced with the real Issue number (e.g. #123) in the Epic once the Tn Issues are created; `{{Tn.m}}` is replaced the same way in a container Tn's own body once its grandchildren are created.
 
-### Epic: <title>
+### Epic: <title> (only when an Epic is created)
 
 <Full Epic body ({{Tn}} placeholders left as-is)>
 
@@ -319,7 +326,7 @@ Let me know which part needs changes. If everything looks good, reply "create th
 ````
 ## Created
 
-### Epic
+### Epic (only when an Epic was created; otherwise write "No Epic: <reason>" and list the Issues below as standalone)
 - #<number> <title>  (<URL>)
   (The Epic's number is lower than the child Issues' since it was created first; the child Issues follow in wave order<, and every grandchild comes after all of them — only when a container exists><, and every person Issue comes last — only when a person Issue exists>.)
 
@@ -344,5 +351,4 @@ The Epic body's dependency diagram (or table), and any container Tn's own depend
 - <title>: <the error gh printed>. <Issues that should depend on it, by number> are not blocked by it. Create it by hand with parent #<Epic or container> and blocked-by <its own dependencies, by number>, add it as blocked-by to those Issues, and replace its "(creation failed)" in the Epic body with its number.
 - For a failed person Issue instead: <title>: <the error gh printed>. Create it by hand with no parent and blocked-by <the Issues it waits for, by number>.)
 
-(Only when a doc-update dependency was wired transitively: <Tn(s)> depend on the doc-update Tn transitively via <Tvia> — they are not directly blocked by it. This ordering is intentional; do not "fix" it by adding or removing edges.)
 ````
