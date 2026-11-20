@@ -1,16 +1,14 @@
 #!/usr/bin/env bats
 # Tests for oe verdict.
 #
-# - Each test writes the GitHub state it needs as JSON and the host-local records it needs, then runs oe against them.
+# - Each test writes the GitHub state it needs as JSON, then runs oe against it.
 # - testdata/fake-gh.sh stands in for gh, answers every read from that state, and applies every write to it.
 # - testdata/fake-github.jq lists every field of the state and its default.
-# - testdata/records.bash writes and reads the host-local records under the test's own OE_STATE_DIR.
 # - A pull request's head SHA is named by its number unless head_sha sets it: PR 15's is 38 b's then 15.
 # shellcheck disable=SC2292 # bats fails a test on a mid-test `[[ ]]` only under bash 4.1+; `[ ]` works on every bash.
 
 setup() {
   bats_require_minimum_version 1.5.0
-  load testdata/records
   export OE_STATE_DIR="${BATS_TEST_TMPDIR}/state"
   oe="${BATS_TEST_DIRNAME}/oe"
   mkdir -p "${BATS_TEST_TMPDIR}/bin"
@@ -28,9 +26,8 @@ github() {
   cat >"${OE_GITHUB}"
 }
 
-# Saves a state where Issue 5 is claimed and its open PR 15 passed its checks.
+# Saves a state where Issue 5 has its open PR 15 passed its checks.
 pr_15_passed_checks() {
-  records 5 claim@07:00 attempt@07:01
   github <<'JSON'
 {
   "default_branch": {"checks": {"test": "success"}},
@@ -51,11 +48,6 @@ verdicts_on() {
 # Prints the oe/verify statuses written on SHA $1 as JSON, newest first.
 statuses_on() {
   jq -c --arg sha "$1" '[.written_statuses[]? | select(.sha == $sha and .context == "oe/verify")]' "${OE_GITHUB}"
-}
-
-# Prints the verdict records of Issue 5 on this host, one JSON object per line.
-verdict_records() {
-  records_of 5 | jq -c 'select(.kind == "verdict")'
 }
 
 # Prints the conversation comments on pull request $1 as JSON.
@@ -144,7 +136,6 @@ state_files() {
   [ -z "$(verdicts_on "${stale_head}")" ]
   [ -z "$(verdicts_on "${head_of_pr_15}")" ]
   [ "$(pr_comments 15)" = "[]" ]
-  [ -z "$(verdict_records)" ]
 }
 
 @test "a verdict for an Issue with no open PR writes nothing and exits non-zero" {
@@ -157,14 +148,12 @@ state_files() {
   }]
 }
 JSON
-  records 5 claim@07:00
 
   run --separate-stderr bash "${oe}" verdict o/r 5 "${head_of_pr_15}" success <<<"criterion 1 -> [behavior] ok"
 
   [ "${status}" -eq 4 ]
   [ -z "$(verdicts_on "${head_of_pr_15}")" ]
   [ "$(pr_comments 15)" = "[]" ]
-  [ -z "$(verdict_records)" ]
 }
 
 @test "a verdict with empty findings is refused and writes nothing" {
@@ -174,7 +163,6 @@ JSON
 
   [ "${status}" -eq 2 ]
   [ -z "$(verdicts_on "${head_of_pr_15}")" ]
-  [ -z "$(verdict_records)" ]
 }
 
 @test "a verdict state other than success or failure is refused and writes nothing" {
@@ -197,7 +185,6 @@ JSON
   *) return 1 ;;
   esac
   [ -z "$(verdicts_on "${head_of_pr_15}")" ]
-  [ -z "$(verdict_records)" ]
 }
 
 @test "a success verdict that holds an unconfirmed criterion posts its findings as one PR comment" {

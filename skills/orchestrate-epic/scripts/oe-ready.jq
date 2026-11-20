@@ -288,34 +288,3 @@ def next_action:
 def classify:
   if .data.repository.issue.state == "CLOSED" then .data.repository.issue | act("done"; "closed")
   else issue_state | next_action end;
-
-# Facts for oe status
-#
-# facts describes one Issue as a JSON object, with the action and reason classify gives it.
-#
-# | Field | Holds |
-# |---|---|
-# | number, action, reason | The Issue number, and the action and reason classify gives |
-# | pr | The PR, or null |
-# | head | The full SHA of the PR's open head, or null |
-# | ci, verdict | The CI state and the oe/verify state of that head, or null |
-# | starts, attempts | Always null, because nothing on GitHub counts them |
-# | started | Epoch seconds when the Issue entered its step, or null when no read shows it |
-#
-# | Action | Started at |
-# |---|---|
-# | wait-answer | The latest hold or question |
-# | wait-ci, start-verifier, wait-merge | The push of the head |
-# | wait-agent | The start in the working marker |
-# | Any other | null |
-def facts:
-  if .data.repository.issue.state == "CLOSED" then .data.repository.issue | {number, action: "done", reason: "closed"}
-  else issue_state
-    | (next_action | split("\t")) as [$n, $action, $reason]
-    | {number, action: $action, reason: $reason, pr, head: .head.oid, ci: .head.ci, verdict: .head.verdict, starts: null, attempts: null,
-        started: (
-          if $action == "wait-answer" then .wait.at | epoch
-          elif $action == "wait-ci" or $action == "start-verifier" or $action == "wait-merge" then .head.pushed
-          elif $action == "wait-agent" then .working.at | epoch
-          else null end)}
-  end;

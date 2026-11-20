@@ -4,13 +4,11 @@
 # - Each test writes the GitHub state it needs as JSON, then runs oe against it.
 # - testdata/fake-gh.sh stands in for gh, answers every read from that state, and applies every write to it.
 # - testdata/fake-github.jq lists every field of the state and its default.
-# - testdata/records.bash writes the host-local records under the test's own OE_STATE_DIR.
 # - An agent's worktree is a real Git repository under the test's temporary directory, so its HEAD is a real SHA.
 # shellcheck disable=SC2292 # bats fails a test on a mid-test `[[ ]]` only under bash 4.1+; `[ ]` works on every bash.
 
 setup() {
   bats_require_minimum_version 1.5.0
-  load testdata/records
   export OE_STATE_DIR="${BATS_TEST_TMPDIR}/state"
   oe="${BATS_TEST_DIRNAME}/oe"
   tmp="$(cd "${BATS_TEST_TMPDIR}" && pwd -P)"
@@ -39,9 +37,8 @@ detached_worktree() {
   git -C "${wt}" switch -q --detach
 }
 
-# Saves a state where Issue 5 is claimed and its open PR 15, whose head is $1, passed its checks.
+# Saves a state where Issue 5 has its open PR 15, whose head is $1, passed its checks.
 pr_15_passed_checks_at() {
-  records 5 claim@07:00 attempt@07:01
   jq -n --arg sha "$1" '{
     default_branch: {checks: {test: "success"}},
     issues: [{

@@ -7,11 +7,9 @@
 #
 # Usage
 #
-#   oe ready <owner/repo> <epic-number> [--running <issue-number>]... [--facts]
+#   oe ready <owner/repo> <epic-number> [--running <issue-number>]...
 #
 # - --running is accepted and ignored, so a caller written for it still runs: the working marker in each Issue body shows a running agent.
-# - --facts, for oe status, prints each line as the JSON object that facts in oe-ready.jq describes.
-#   It changes only the format: the same reads run, and the same action is decided.
 # - OE_NOW sets the current time in epoch seconds.
 #
 # Output
@@ -60,7 +58,7 @@ source "${dir}/oe-config.sh"
 
 usage() {
   echo "$1" >&2
-  echo "Usage: oe ready <owner/repo> <epic-number> [--running <issue-number>]... [--facts]" >&2
+  echo "Usage: oe ready <owner/repo> <epic-number> [--running <issue-number>]..." >&2
   exit 2
 }
 
@@ -75,13 +73,7 @@ fail() {
 repo="$1"
 epic="$2"
 shift 2
-entry=classify
 while [[ $# -gt 0 ]]; do
-  if [[ "$1" == --facts ]]; then
-    entry='facts | tojson'
-    shift
-    continue
-  fi
   [[ "$1" == --running && "${2:-}" =~ ^[1-9][0-9]*$ ]] || usage "Expected --running <issue-number>, got: $*"
   shift 2
 done
@@ -231,12 +223,8 @@ for n in ${sorted[@]+"${sorted[@]}"}; do
     -f branch="${branch_prefix}${n}" -f ref="refs/heads/${branch_prefix}${n}" 2>"${err}")" ||
     fail "Issue #${n} read failed: $(head -n1 "${err}")"
   response="$(all_checks "${response}")" || exit 1
-  line="$(jq -r "$(program "${entry}" "${pr_heads%,}")" <<<"${response}" 2>"${err}")" ||
+  line="$(jq -r "$(program classify "${pr_heads%,}")" <<<"${response}" 2>"${err}")" ||
     fail "Issue #${n} read failed: $(head -n1 "${err}")"
   out+="${line}"$'\n'
 done
-if [[ "${entry}" == classify ]]; then
-  with_commands "$(printf '%s' "${out}" | sort -t $'\t' -k1,1n)"
-else
-  printf '%s' "${out}"
-fi
+with_commands "$(printf '%s' "${out}" | sort -t $'\t' -k1,1n)"

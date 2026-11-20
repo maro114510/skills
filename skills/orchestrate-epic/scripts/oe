@@ -7,22 +7,13 @@
 # | Subcommand | Does |
 # |---|---|
 # | ready | Prints the next action of every child Issue of an Epic |
-# | status | Shows each child Issue's step, PR, CI result, verdict, attempts, running agent, and time in step |
-# | board | Opens a Herdr pane that runs status --watch, inside Herdr with git config skills.herdr true |
 # | wait | Blocks until oe ready's output changes or a timeout passes |
-# | claim | Creates an Issue's branch on origin and records the claim on this host, and assigns the Issue to the gh user |
-# | attempt | Records an Owner attempt on this host before the Owner starts, and refuses one past the cap |
 # | start | Starts an Owner or a Verifier for one Issue, writing the working marker in the Issue body |
 # | hold | Records that an Issue waits on the person, with the reason oe ready gave, as an Issue comment |
 # | question | Writes an Owner's question on the Issue, or records the person's answer to it |
-# | continue | Returns a parked Issue to the loop on its branch, resetting its attempts and bot rounds, and records an optional instruction on the Issue |
-# | rereview | Asks the bots whose rounds the latest attempt used to review the PR again |
-# | update | Updates an Issue branch with the base branch through GitHub, starting no agent and spending no attempt |
 # | brief | Builds an Owner's or a Verifier's brief, recording each Verifier start on its SHA |
 # | verdict | Writes a Verifier's verdict on the PR head SHA it checked, posting its findings on the PR when a person must read them |
-# | records | Prints an Issue's records on this host from its latest claim on |
 # | worktree | Creates or removes an Issue branch's worktree outside the shared checkout |
-# | lock | Holds or releases the one session allowed per Epic on this host |
 #
 # An unknown or missing subcommand exits 2.
 set -uo pipefail
@@ -30,35 +21,25 @@ set -uo pipefail
 dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 case "${1:-}" in
-ready | status | board | wait | start | hold | claim | attempt | question | continue | rereview | update | brief | verdict | records | worktree | lock)
+ready | wait | start | hold | question | brief | verdict | worktree)
   sub="$1"
   shift
   exec bash "${dir}/oe-${sub}.sh" "$@"
   ;;
 *)
   cat >&2 <<'EOF'
-Usage: oe ready <owner/repo> <epic-number> [--running <issue-number>]... [--facts]
-       oe status <owner/repo> <epic-number> [--watch]
-       oe board <owner/repo> <epic-number>
+Usage: oe ready <owner/repo> <epic-number> [--running <issue-number>]...
        oe wait <owner/repo> <epic-number> [--running <issue-number>]... [--max-agents <n>] [--timeout <seconds>] [--idle-since <epoch>]
        oe start owner <owner/repo> <issue-number> [--claim] [<reason>]
        oe start verifier <owner/repo> <issue-number>
        oe hold <owner/repo> <issue-number> <reason>
-       oe claim <owner/repo> <issue-number>
-       oe attempt <owner/repo> <issue-number>
        oe question <owner/repo> <issue-number> < question
        oe question <owner/repo> <issue-number> --answer <reply>
-       oe continue <owner/repo> <issue-number> [<instruction>]
-       oe rereview <owner/repo> <issue-number>
-       oe update <owner/repo> <issue-number>
        oe brief owner <owner/repo> <issue-number> <worktree> [<reason>]
        oe brief verifier <owner/repo> <issue-number> <worktree>
        oe verdict <owner/repo> <issue-number> <sha> success|failure < findings
-       oe records <owner/repo> <issue-number>
        oe worktree add <issue-number> [--detach]
        oe worktree remove <issue-number>
-       oe lock acquire <owner/repo> <epic-number> [<token>]
-       oe lock release <owner/repo> <epic-number> <token>
 EOF
   exit 2
   ;;

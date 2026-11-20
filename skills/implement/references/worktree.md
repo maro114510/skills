@@ -13,7 +13,7 @@ The run never asks: wherever a choice is open, it returns Questions as SKILL.md 
 
 Run this when the Request names a GitHub Issue `<N>`, before Phase 1, so a second session handed the same Issue returns Busy before duplicating work.
 
-The Lock is the branch `feat/issue-<N>` on origin, the name `oe claim` creates, so a person's run and the orchestrator see each other. Only one run creates it; nothing releases it, because a Result that leaves the branch in place is how a caller finds the work again.
+The Lock is the branch `feat/issue-<N>` on origin, the name orchestrate-epic's `oe worktree` gives an Issue branch, so a person's run and the orchestrator see each other. Only one run creates it; nothing releases it, because a Result that leaves the branch in place is how a caller finds the work again.
 
 1. Resolve the base branch from an explicit choice or `refs/remotes/origin/HEAD`. Do not assume `main`. If no trustworthy base can be resolved, end the run before changing Git state, with no Result.
 2. Run the script from the repository. It fetches the base and creates the branch on origin at its head only when the branch is absent.
