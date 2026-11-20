@@ -53,7 +53,7 @@ gh skill install maro114510/skills --all --agent claude-code --scope user
 | Skill | Goal |
 |---|---|
 | `commit` | Commit the working tree with a Conventional Commits message. |
-| `create-github-issues` | Turn a plan or TODO list into Issues, with an Epic and linked child Issues only when tasks depend on each other. |
+| `create-github-issues` | Turn a plan or TODO list into Issues, under an Epic only when tasks depend on each other. |
 | `create-pr` | Create a pull request with a useful description. |
 | `diagram-conventions` | Create or review a diagram in the right type's notation without adding or dropping meaning. |
 | `domain-master` | Review domain model and state-transition code for illegal states that bypass validation. |

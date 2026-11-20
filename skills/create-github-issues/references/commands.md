@@ -24,13 +24,11 @@ The Epic is created first: `gh issue create --parent` needs the parent to exist,
 - Neither a failed `Tn` nor a failed `Tn.m` aborts the rest of the run.
 - A failed `Tn`/`Tn.m` never gets a real number, so any not-yet-created sibling whose `depends_on` names it must drop that id from its own `--blocked-by` list — never pass a number that doesn't exist. Note the dropped edge in the Step 6 report so the user knows that dependency was never wired, rather than silently creating an Issue that was supposed to wait but isn't blocked on anything.
 - Before each `gh issue edit` in 5.4 and 5.5, confirm no token remains in that body's scope; if one does and a failed create doesn't explain it, the substitution missed it — fix it before submitting.
-- Note in the Step 6 report that the Epic's number, when there is one, is lowest, `Tn` numbers come next in wave order, every `Tn.m` number comes after all of them, and every person Issue number comes last, since person Issues are created last.
+- Note in the Step 6 report that the Epic's number is lowest, `Tn` numbers come next in wave order, every `Tn.m` number comes after all of them, and every person Issue number comes last, since person Issues are created last.
 
 Every title goes in single quotes, so the shell expands nothing in it, such as a backtick-quoted name; write a `'` inside a title as `'\''`.
 
 ### 5.1 Create the Epic
-
-Only when an Epic is created; otherwise skip to 5.2.
 
 `{{Tn}}` placeholders stay in the body; record the number from the printed URL as the Epic number.
 
@@ -45,7 +43,7 @@ EOF
 
 ### 5.2 Create every Tn in wave order
 
-Repeat per `Tn`, in wave order, Wave 1 first. With no Epic, omit the `--parent` line. `--blocked-by` lists every `Tm` in its `depends_on`; GitHub treats the Issue as blocked until all of them close, so omit it when there are none. A container `Tn` body still holds `{{Tn.m}}` tokens; 5.4 fills them in.
+Repeat per `Tn`, in wave order, Wave 1 first. `--blocked-by` lists every `Tm` in its `depends_on`; GitHub treats the Issue as blocked until all of them close, so omit it when there are none. A container `Tn` body still holds `{{Tn.m}}` tokens; 5.4 fills them in.
 
 ```bash
 gh issue create \
@@ -113,8 +111,6 @@ Update every container before 5.5, so the Epic substitution never reaches past a
 
 ### 5.5 Substitute placeholders into the Epic body
 
-Only when an Epic was created.
-
 Replace every `{{Tn}}` in the approved Epic body with `#<number>`, or `(creation failed)` for a `Tn` that failed in 5.2. Mechanical substitution only.
 
 ```bash
@@ -133,7 +129,7 @@ Script output is not proof: read the relations back before Step 6 and stop on an
 gh api graphql -f query='{ __type(name:"Issue"){ fields { name } } }'
 ```
 
-Sub-issue count, only when an Epic was created: Epic sub-issues are the `Tn` level only, so the expected count is the number of non-dotted `Tn` ids created, never counting a person Issue. Run the same query for each container `Tn`, expecting its created `Tn.m`.
+Sub-issue count: Epic sub-issues are the `Tn` level only, so the expected count is the number of non-dotted `Tn` ids created, never counting a person Issue. Run the same query for each container `Tn`, expecting its created `Tn.m`.
 
 ```bash
 gh api graphql -f owner="<owner>" -f name="<name>" -F number=<Epic number> -f query='

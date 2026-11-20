@@ -2,17 +2,9 @@
 
 SKILL.md Step 2 reads this file in full before it structures any task.
 
-## Epic or standalone Issues
-
-Create an Epic only when the work needs grouping or dependency coordination, and decide it here, before listing the tasks:
-
-- Dependency coordination: two or more `Tn` with a `depends_on` edge between them. A person Issue's `blocked_by` and the edges between `Tn.m` of one container do not count.
-- Grouping: the owner asked for an Epic or a parent Issue.
-- Otherwise create no Epic: every `Tn` is a standalone Issue with no parent, and Step 3 states the reason.
-
 ## Child Issue list
 
-- **Hierarchy is at most three levels: Epic → `Tn` → `Tn.m`, or `Tn` → `Tn.m` when there is no Epic. A `Tn.m` is never a parent.** Every `Tn` is a leaf by default, carrying its own Requirements/Specs/Verification. When a `Tn` overflows the 5-bullet cap in Step 4, split it into a sibling `Tn` by default — for fragments the Epic-level reader would find independently interesting, or when there are only two. The one exception: a Verification list owned by an upstream authoritative document uses Step 4's point option instead of splitting — see the cap rule below. Make a container with `Tn.m` grandchildren when the user explicitly asks for a parent Issue with sub-issues. Otherwise, split into `Tn.m` grandchildren instead only when three or more fragments share one cohesive theme already named by the original `Tn`. In that case `Tn` becomes a pure container: it drops its own Requirements/Specs/Verification and keeps only background, scope, and a dependency diagram of its `Tn.m` children — see `references/bodies.md` § Container `Tn` body. A `Tn.m` is never split further; that overflow becomes a new sibling `Tn` instead.
+- **Hierarchy is at most three levels: Epic → `Tn` → `Tn.m`. A `Tn.m` is never a parent.** Every `Tn` is a leaf by default, carrying its own Requirements/Specs/Verification. When a `Tn` overflows the 5-bullet cap in Step 4, split it into a sibling `Tn` by default — for fragments the Epic-level reader would find independently interesting, or when there are only two. The one exception: a Verification list owned by an upstream authoritative document uses Step 4's point option instead of splitting — see the cap rule below. Make a container with `Tn.m` grandchildren when the user explicitly asks for a parent Issue with sub-issues. Otherwise, split into `Tn.m` grandchildren instead only when three or more fragments share one cohesive theme already named by the original `Tn`. In that case `Tn` becomes a pure container: it drops its own Requirements/Specs/Verification and keeps only background, scope, and a dependency diagram of its `Tn.m` children — see `references/bodies.md` § Container `Tn` body. A `Tn.m` is never split further; that overflow becomes a new sibling `Tn` instead.
 - Split each task into independently implementable and verifiable units
 - **Split a `Tn` by the change-unit rules as well as the 5-bullet cap.** Read `references/change-units.md` and apply its reasons, never-split list, and ordering to every task; never copy its reasons here. A `Tn` that reason 4 keeps whole across several targets names its targets. A task to which no change-unit reason applies and that has at most 5 bullets stays one `Tn` however large it is. Put no size estimate in the Step 3 summary.
 - **If the area reason separates a document from the code it describes, make the document its own `Tn` and make each code `Tn` that needs it depend on it.**

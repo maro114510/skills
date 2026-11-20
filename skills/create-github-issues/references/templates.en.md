@@ -22,15 +22,6 @@ Output this when the user instructs to proceed with unresolved items:
 - <Undecided item 2>
 ````
 
-## Step 1.5: Design Change Stop Format
-
-Output this when a Step 1.5 answer changes a merged Design Doc or implementation plan that the Issues cite, then stop:
-
-````
-[!] No Issue was created. The answers change <document>, which has already merged: <the change>.
-Merge that design change first, then run this skill again.
-````
-
 ## Step 3: Summary Format
 
 Output this block and ask for approval. This is the main checkpoint for catching invented or misplaced content before it's written into a real Issue, and — by default — the *only* checkpoint before creation: Step 4.5's full-body re-display is skipped unless the user asks for it (see Step 4.5), so this summary must carry enough substance (background, full verification list) that approving it is equivalent to approving the final bodies.
@@ -44,7 +35,7 @@ In any Mermaid node label, a double quote in a title must be written as `#quot;`
 ````
 ## Issue structure to be created
 
-### Epic (parent Issue; only when structure.md decides an Epic is created)
+### Epic (parent Issue)
 **Title**: <Epic title>
 **Summary**: <purpose in one line>
 **Background**: <what led to needing this Epic, in 1-2 sentences>
@@ -57,9 +48,7 @@ In any Mermaid node label, a double quote in a title must be written as `#quot;`
 
 (Only if applicable: **Epic split suggestion**: The dependency graph splits into independent groups and the count is large, so <proposed split> as separate Epics could also work instead of one Epic. Proceed with a single Epic anyway?)
 
-(When no Epic is created, write instead: **No Epic**: <the reason, such as "no task depends on another and no grouping was asked for">. Show every task below as a standalone Issue and skip the dependency preview.)
-
-### Dependency preview (only with an Epic; temporary IDs; real Issue numbers are assigned after creation)
+### Dependency preview (temporary IDs; real Issue numbers are assigned after creation)
 
 ```mermaid
 flowchart LR
@@ -130,7 +119,7 @@ Let me know if anything needs to be added, removed, retitled, or corrected (depe
 
 ## Epic body (Step 4)
 
-Only when an Epic is created. Use the Mermaid variant when there are 12 or fewer child Issues; otherwise use the table variant.
+Use the Mermaid variant when there are 12 or fewer child Issues; otherwise use the table variant.
 
 ### Mermaid variant (≤12 child Issues)
 
@@ -240,7 +229,7 @@ Both a non-container `Tn` (leaf) and a `Tn.m` (grandchild) use this shape.
 
 ## Dependencies
 
-{Name each dependency by its title, never by its temporary `Tn` id, which readers never see. For a `Tn`: "Can start after <title> is done. See the Epic for the full dependency picture.", or "None (can start in parallel)" when it has no dependency or there is no Epic / For a `Tn.m`: "Can start after <title> is done. See the parent Issue for the full dependency picture within it." or "None (can start in parallel)". Don't write step-by-step reasoning or detail here.}
+{Name each dependency by its title, never by its temporary `Tn` id, which readers never see. For a `Tn`: "Can start after <title> is done. See the Epic for the full dependency picture." / For a `Tn.m`: "Can start after <title> is done. See the parent Issue for the full dependency picture within it." or "None (can start in parallel)". Don't write step-by-step reasoning or detail here.}
 
 ## Acceptance Criteria
 
@@ -279,7 +268,7 @@ Only used when the user explicitly asked to see the full draft (see Step 4.5 in 
 
 `{{Tn}}` and `{{Tn.m}}` are temporary placeholders. `{{Tn}}` is replaced with the real Issue number (e.g. #123) in the Epic once the Tn Issues are created; `{{Tn.m}}` is replaced the same way in a container Tn's own body once its grandchildren are created.
 
-### Epic: <title> (only when an Epic is created)
+### Epic: <title>
 
 <Full Epic body ({{Tn}} placeholders left as-is)>
 
@@ -326,7 +315,7 @@ Let me know which part needs changes. If everything looks good, reply "create th
 ````
 ## Created
 
-### Epic (only when an Epic was created; otherwise write "No Epic: <reason>" and list the Issues below as standalone)
+### Epic
 - #<number> <title>  (<URL>)
   (The Epic's number is lower than the child Issues' since it was created first; the child Issues follow in wave order<, and every grandchild comes after all of them — only when a container exists><, and every person Issue comes last — only when a person Issue exists>.)
 

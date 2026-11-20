@@ -22,15 +22,6 @@ Output this when the user instructs to proceed with unresolved items:
 - <未確定項目2>
 ````
 
-## Step 1.5: Design Change Stop Format
-
-Step 1.5 の回答が、Issue が参照する統合済みの設計ドキュメントや実装計画を変更する場合に、これを出力して止まる:
-
-````
-[!] Issue は作成していません。回答により、統合済みの <文書名> を <変更内容> に変える必要があります。
-先にこの設計変更を統合してから、このスキルをもう一度実行してください。
-````
-
 ## Step 3: Summary Format
 
 Output this block and ask for approval. This is the main checkpoint for catching invented or misplaced content before it's written into a real Issue, and — by default — the *only* checkpoint before creation: Step 4.5's full-body re-display is skipped unless the user asks for it (see Step 4.5), so this summary must carry enough substance (background, full verification list) that approving it is equivalent to approving the final bodies.
@@ -44,7 +35,7 @@ In any Mermaid node label, a double quote in a title must be written as `#quot;`
 ````
 ## 作成する Issue の構成
 
-### Epic（親 Issue。structure.md が Epic を作ると判断した場合のみ）
+### Epic（親 Issue）
 **タイトル**: <Epic タイトル>
 **サマリー**: <目的を1行で>
 **背景**: <この Epic が必要になった経緯を1〜2文で>
@@ -57,9 +48,7 @@ In any Mermaid node label, a double quote in a title must be written as `#quot;`
 
 （該当する場合のみ記載: **Epic分割の提案**: 依存関係が互いに独立した複数グループに分かれており件数も多いため、1つのEpicではなく<提案するEpic分割案>として別Epicに分けることも検討できます。このまま1つのEpicとして進めますか？）
 
-（Epic を作らない場合は代わりに次を書く: **Epic なし**: <理由。例えば「他に依存するタスクがなく、まとめる依頼もない」>。以下の各タスクは単独の Issue として示し、依存関係プレビューは省く。）
-
-### 依存関係プレビュー（Epic がある場合のみ。仮ID、実 Issue 番号は作成後に確定）
+### 依存関係プレビュー（仮ID、実 Issue 番号は作成後に確定）
 
 ```mermaid
 flowchart LR
@@ -130,7 +119,7 @@ flowchart LR
 
 ## Epic body (Step 4)
 
-Epic を作る場合のみ。Use the Mermaid variant when there are 12 or fewer child Issues; otherwise use the table variant.
+Use the Mermaid variant when there are 12 or fewer child Issues; otherwise use the table variant.
 
 ### Mermaid variant (≤12 child Issues)
 
@@ -240,7 +229,7 @@ flowchart LR
 
 ## 依存関係
 
-{依存先は読者に見えない一時 ID `Tn` ではなく、タイトルで書く。`Tn` なら: "<タイトル> の完了後に着手可能。全体の依存関係は Epic を参照。"、依存がない場合や Epic がない場合は "なし（並列着手可能）" / `Tn.m` なら: "<タイトル> の完了後に着手可能。同じ親配下の依存関係は親 Issue を参照。" または "なし（並列着手可能）"。ステップ列挙や理由の詳細はここに書かない。}
+{依存先は読者に見えない一時 ID `Tn` ではなく、タイトルで書く。`Tn` なら: "<タイトル> の完了後に着手可能。全体の依存関係は Epic を参照。" / `Tn.m` なら: "<タイトル> の完了後に着手可能。同じ親配下の依存関係は親 Issue を参照。" または "なし（並列着手可能）"。ステップ列挙や理由の詳細はここに書かない。}
 
 ## 受け入れ条件
 
@@ -279,7 +268,7 @@ Only used when the user explicitly asked to see the full draft (see Step 4.5 in 
 
 `{{Tn}}` と `{{Tn.m}}` は仮のプレースホルダーです。`{{Tn}}` は子 Issue 作成後に実際の Issue 番号（例: #123）へ置換されて Epic に反映され、`{{Tn.m}}` は孫 Issue 作成後にコンテナ化された Tn 本文へ同様に反映されます。
 
-### Epic: <タイトル>（Epic を作る場合のみ）
+### Epic: <タイトル>
 
 <Epic 本文全文（{{Tn}} プレースホルダーのまま）>
 
@@ -326,7 +315,7 @@ Only used when the user explicitly asked to see the full draft (see Step 4.5 in 
 ````
 ## 作成完了
 
-### Epic（Epic を作った場合のみ。作らなかった場合は「Epic なし: <理由>」と書き、以下を単独の Issue として列挙する）
+### Epic
 - #<number> <title>  (<URL>)
   Epic を先に作成しているため、Epic の番号は子 Issue より小さくなります。子 Issue は wave 順に続きます<。孫はすべての子 Issue の後に続きます — コンテナがある場合のみ><。人が行う Issue は最後に続きます — 人が行う Issue がある場合のみ>。
 
