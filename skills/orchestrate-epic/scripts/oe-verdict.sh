@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # oe verdict
 #
-# Writes a Verifier's verdict on the PR head SHA it checked, and keeps its findings on this host.
+# Writes a Verifier's verdict on the PR head SHA it checked, and posts its findings on the PR when a person must read them.
 # The verdict is a commit status on that SHA, so a push leaves the new head without one and nothing else must reset it.
 #
 # Usage
@@ -9,21 +9,23 @@
 #   oe verdict <owner/repo> <issue-number> <sha> success|failure < findings
 #
 # - The findings are read from stdin, one line per acceptance criterion, as pr-verify writes them.
+#   A line holding `-> unconfirmed` names a criterion the Verifier could not observe.
 # - The PR is the open PR from the Issue's branch in this repository.
 #
 # Writes, in order
 #
-# 1. The findings, as a verdict record on this host that names the state and the SHA.
-#    The next Owner reads the latest one for its PR head with oe records.
+# 1. When the verdict is failure or the findings name an unconfirmed criterion, the findings as one PR comment
+#    that starts with the findings marker and names the state and the SHA, so the person reads them on the PR.
+#    A clean success posts nothing.
 # 2. The verify_context status on the SHA.
 #    oe ready reads it as the verdict.
 #
 # A success verdict whose findings hold no `-> [behavior]` or `-> [static]` line is still written as success,
 # and its status description ends with "but nothing was verified". Refusing it would park the Issue.
 #
-# The findings go first, so a verdict never exists without its findings.
+# The findings go first, so a verdict never exists without the findings a person must read.
 # Findings whose status write failed leave the SHA without a verdict, which oe ready treats as unverified.
-# Nothing goes to a PR or Issue comment.
+# Nothing is written on this host.
 #
 # Output
 #
@@ -33,8 +35,8 @@
 #
 # | Code | Meaning | Changed |
 # |---|---|---|
-# | 0 | The verdict was written | The verdict record and the status |
-# | 1 | A GitHub read or write, or the record store, failed | Nothing, or only the verdict record when stderr says the status failed |
+# | 0 | The verdict was written | The findings comment when one is due, and the status |
+# | 1 | A GitHub read or write failed | Nothing, or only the findings comment when stderr says the status failed |
 # | 2 | The arguments are invalid, or the findings are empty | Nothing |
 # | 4 | The Issue's branch has no open PR, or its head is no longer the SHA | Nothing |
 #
@@ -44,8 +46,6 @@ set -uo pipefail
 dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source-path=SCRIPTDIR
 source "${dir}/oe-config.sh"
-# shellcheck source-path=SCRIPTDIR
-source "${dir}/oe-store.sh"
 # shellcheck source-path=SCRIPTDIR
 source "${dir}/oe-bot.sh"
 
@@ -91,12 +91,13 @@ if [[ "${head}" != "${sha}" ]]; then
   exit 4
 fi
 
-at="$(record_now 2>"${err}")" || usage "$(head -n1 "${err}")"
-record="$(jq -cn --arg at "${at}" --arg sha "${sha}" --arg state "${state}" --arg findings "${findings}" \
-  '{kind: "verdict", at: $at, sha: $sha, state: $state, findings: $findings}')" ||
-  fail "cannot build the verdict record, so no verdict was written"
-records_add "${repo}" "${n}" "${record}" 2>"${err}" ||
-  fail "recording the findings of Issue #${n} failed, so no verdict was written: $(head -n1 "${err}")"
+if [[ "${state}" == failure ]] || grep -Eq -- '->[[:space:]]*unconfirmed([^[:alnum:]_]|$)' <<<"${findings}"; then
+  gh api -X POST "repos/${repo}/issues/${pr}/comments" -f body="$(record_marker findings)
+### Verifier ${state} on ${sha}
+
+${findings}" --jq '.html_url' >/dev/null 2>"${err}" ||
+    fail "posting the findings on PR #${pr} failed, so no verdict was written: $(head -n1 "${err}")"
+fi
 
 description="Verifier ${state} on PR #${pr}"
 if [[ "${state}" == success ]] && ! grep -Eq -- '->[[:space:]]*\[(behavior|static)\]' <<<"${findings}"; then

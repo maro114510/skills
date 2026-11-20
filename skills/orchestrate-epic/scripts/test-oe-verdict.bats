@@ -72,14 +72,21 @@ action_of() {
   done
 }
 
+# Prints every file under the state directory with the hash of its content, one per line.
+state_files() {
+  [ ! -d "${OE_STATE_DIR}" ] || find "${OE_STATE_DIR}" -type f -exec git hash-object {} + | sort
+}
+
 @test "a success verdict on the PR head shows up on that SHA with no comment, and a push leaves the new head without a verdict" {
   pr_15_passed_checks
+  before="$(state_files)"
 
   run bash "${oe}" verdict o/r 5 "${head_of_pr_15}" success <<<"criterion 1 -> [behavior] ran it; observed ok"
 
   [ "${status}" -eq 0 ]
   [ "$(verdicts_on "${head_of_pr_15}")" = success ]
   [ "$(pr_comments 15)" = "[]" ]
+  [ "$(state_files)" = "${before}" ]
   run bash "${oe}" ready o/r 1
   [ "$(action_of 5)" = wait-merge ]
 
@@ -94,16 +101,29 @@ action_of() {
   [ "$(verdicts_on "${head_of_pr_15}")" = success ]
 }
 
-@test "a failure verdict keeps its findings on this host instead of a PR comment, and oe ready holds the Issue" {
+@test "a failure verdict posts its findings as one marked PR comment and writes nothing on this host, and oe ready holds the Issue" {
   pr_15_passed_checks
+  before="$(state_files)"
 
-  run bash "${oe}" verdict o/r 5 "${head_of_pr_15}" failure <<<"criterion 2 -> none: no test exercises the timeout"
+  run bash "${oe}" verdict o/r 5 "${head_of_pr_15}" failure <<<"criterion 2 -> failed: bats test-timeout.bats; observed exit 0 after 30s"
 
   [ "${status}" -eq 0 ]
   [ "$(verdicts_on "${head_of_pr_15}")" = failure ]
-  [ "$(pr_comments 15)" = "[]" ]
-  [ "$(statuses_on "${head_of_pr_15}" | jq -r '.[0].target_url')" = null ]
-  [ "$(verdict_records)" = '{"kind":"verdict","at":"2027-01-15T08:00:00Z","sha":"'"${head_of_pr_15}"'","state":"failure","findings":"criterion 2 -> none: no test exercises the timeout"}' ]
+  [ "$(pr_comments 15 | jq length)" -eq 1 ]
+  body="$(pr_comments 15 | jq -r '.[0].body')"
+  case "${body}" in
+  "<!-- oe:findings -->"*) ;;
+  *) return 1 ;;
+  esac
+  case "${body}" in
+  *"criterion 2 -> failed: bats test-timeout.bats; observed exit 0 after 30s"*) ;;
+  *) return 1 ;;
+  esac
+  case "${body}" in
+  *"${head_of_pr_15}"*) ;;
+  *) return 1 ;;
+  esac
+  [ "$(state_files)" = "${before}" ]
 
   run bash "${oe}" ready o/r 1
 
@@ -180,11 +200,27 @@ JSON
   [ -z "$(verdict_records)" ]
 }
 
-@test "findings the record store cannot take leave the SHA without a verdict" {
+@test "a success verdict that holds an unconfirmed criterion posts its findings as one PR comment" {
   pr_15_passed_checks
-  echo 'not json' >>"$(record_file 5)"
+  before="$(state_files)"
 
-  run --separate-stderr bash "${oe}" verdict o/r 5 "${head_of_pr_15}" failure <<<"criterion 1 -> none"
+  run bash "${oe}" verdict o/r 5 "${head_of_pr_15}" success <<<"criterion 1 -> [behavior] ran it; observed ok
+criterion 2 -> unconfirmed: a person must look at the screen"
+
+  [ "${status}" -eq 0 ]
+  [ "$(verdicts_on "${head_of_pr_15}")" = success ]
+  [ "$(pr_comments 15 | jq length)" -eq 1 ]
+  case "$(pr_comments 15 | jq -r '.[0].body')" in
+  "<!-- oe:findings -->"*"criterion 2 -> unconfirmed: a person must look at the screen"*) ;;
+  *) return 1 ;;
+  esac
+  [ "$(state_files)" = "${before}" ]
+}
+
+@test "findings whose comment write failed leave the SHA without a verdict" {
+  pr_15_passed_checks
+
+  GH_FAIL="/comments" run --separate-stderr bash "${oe}" verdict o/r 5 "${head_of_pr_15}" failure <<<"criterion 1 -> failed: ran it; observed exit 1"
 
   [ "${status}" -eq 1 ]
   case "${stderr}" in
