@@ -7,7 +7,7 @@ Two programs define what work is and when it may proceed. A pipeline with two su
 | Program | Model of work | State | Harness binding | Status |
 |---|---|---|---|---|
 | Intentline | Outcome, Grant, Evaluator, evidence records | Its own records | One harness's sandbox profiles | Development stopped |
-| orchestrate-epic with `oe` | Ticket, claim, verdict | GitHub and host-local records | Replaceable Executor | Shipped and running |
+| orchestrate-epic with `oe` | Ticket, claim, verdict | GitHub | Replaceable Executor | Shipped and running |
 
 ## Decision
 

@@ -176,9 +176,6 @@ sequenceDiagram
 
 | Case | What happens |
 |---|---|
-| Lost agent | The agent ends without a push or a verdict, or the session dies. Its marker expires after 2 hours, and the next oe ready holds the Issue. The session shows the hold and asks the person |
-| Failed CI | An Owner fixes the failed check on the same branch and pushes. The third commit with a failed check since the latest answer holds the Issue instead |
-| Failed verification | oe verdict puts a failure status on the SHA and the findings on the PR, and oe ready holds the Issue. The session shows the findings' link and asks the person. The person's answer starts an Owner, and the cap counts from that answer |
 | Sibling merged | Nothing starts. When the engineer wants B's head to contain A, they update B's branch with GitHub's button, and CI and a Verifier run on the new head |
 
 ## Accepted Risks
@@ -201,11 +198,7 @@ sequenceDiagram
 
 | Question | Decision |
 |---|---|
-| A dependency closed as not planned or duplicate | The dependent Issue does not start and waits for an engineer's decision |
 | Signals that start a repair Owner | Only the repair signals above. Plain PR comments and review bots start nothing |
-| A failure verdict | Holds the Issue for the person and never starts an Owner by itself |
-| Repair cap | 3 commits of the PR with a failed check, counted from the latest answer, so the person's answer gives the Issue 3 more |
-| A start with no result | Holds the Issue when its marker expires with no result, and never starts the agent again by itself |
 | The default branch's checks | oe ready does not read them. A check run by changed paths shows only what the head commit triggered, so a gate on it missed a broken base and held Issues for checks no child PR runs |
 | Waiting | The session waits in oe wait until oe ready's next actions change or an agent it started ends. It ends only when the Epic is done or a person stops it, never after an idle time, failed reads, or every remaining Issue waiting on the person |
 | Agents running at once | 3 Owners and Verifiers combined per session by default, set by the skill's `max-agents` argument |
