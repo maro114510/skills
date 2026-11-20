@@ -79,7 +79,6 @@ def ci:
       else {state: "passed", detail: ""} end
     end;
 
-
 # Whether one commit of a pull request had a failed check, from the checks the read holds of it.
 # The read holds the first 100 checks of each earlier commit, enough for the repair cap, which only counts commits.
 def commit_failed:
