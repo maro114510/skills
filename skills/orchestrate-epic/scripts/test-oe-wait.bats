@@ -393,3 +393,101 @@ JSON
   [ "${status}" -eq 5 ]
   [ "$(action_of 5)" = wait-ci ]
 }
+# Reads of one Issue each, across the polls of one call
+
+# Puts a date in front of the real one that prints the epoch second in the file OE_CLOCK, so a test moves time with OE_CLOCK_STEP.
+clock_starts_at_eight() {
+  real_date="$(command -v date)"
+  # shellcheck disable=SC2016 # The shim expands $* and $@ when it runs, not here.
+  printf '#!/usr/bin/env bash\nif [[ "$*" == "-u +%%s" ]]; then cat "${OE_CLOCK}"; else exec "%s" "$@"; fi\n' "${real_date}" >"${BATS_TEST_TMPDIR}/bin/date"
+  chmod +x "${BATS_TEST_TMPDIR}/bin/date"
+  export OE_CLOCK="${BATS_TEST_TMPDIR}/clock"
+  echo 1800000000 >"${OE_CLOCK}"
+  unset OE_NOW
+}
+
+# Prints how many times the Issue read ran for Issue $1.
+issue_reads_of() {
+  grep -cx "$1" "${OE_GITHUB}.issue-reads"
+}
+
+@test "two polls with nothing changed read an open Issue once" {
+  pr_15_checks_running
+  github_at_second_poll <"${OE_GITHUB}"
+
+  run bash "${oe}" wait o/r 1 --timeout 4
+
+  [ "${status}" -eq 5 ]
+  [ "$(wc -l <"${OE_GITHUB}.polls")" -ge 2 ]
+  [ "$(issue_reads_of 5)" -eq 1 ]
+}
+
+@test "a check that finishes between two polls makes the next poll read the Issue again" {
+  pr_15_checks_running
+  github_at_second_poll <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "pull_requests": [{"number": 15, "opened": "07:10", "checks": {"test": "success"}}]
+  }]
+}
+JSON
+
+  run bash "${oe}" wait o/r 1 --timeout 60
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-verifier ]
+  [ "$(issue_reads_of 5)" -eq 2 ]
+}
+
+@test "a comment on an open Issue between two polls makes the next poll read the Issue again" {
+  pr_15_checks_running
+  github_at_second_poll <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [{"by": "NONE", "at": "07:30", "body": "Thanks"}],
+    "pull_requests": [{"number": 15, "opened": "07:10", "checks": {"test": "in_progress"}}]
+  }]
+}
+JSON
+
+  run bash "${oe}" wait o/r 1 --timeout 4
+
+  [ "${status}" -eq 5 ]
+  [ "$(action_of 5)" = wait-ci ]
+  [ "$(issue_reads_of 5)" -eq 2 ]
+}
+
+@test "a head that has had no checks for 10 minutes makes the next poll read the Issue again, with nothing else changed" {
+  github <<'JSON'
+{"issues": [{"number": 5, "branch": true, "pull_requests": [{"number": 15, "opened": "07:55"}]}]}
+JSON
+  clock_starts_at_eight
+  seven_minutes=420
+
+  OE_CLOCK_STEP="${seven_minutes}" run bash "${oe}" wait o/r 1 --timeout 3600
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = hold ]
+  [ "$(issue_reads_of 5)" -eq 2 ]
+}
+
+@test "a working marker that reaches its 2 hours between two polls makes the next poll read the Issue again, with nothing else changed" {
+  github <<'JSON'
+{"issues": [{"number": 5}]}
+JSON
+  agent_runs 5
+  clock_starts_at_eight
+  two_hours=7200
+
+  OE_CLOCK_STEP="${two_hours}" run bash "${oe}" wait o/r 1 --timeout 36000
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = hold ]
+  [ "$(issue_reads_of 5)" -eq 2 ]
+}

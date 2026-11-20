@@ -1,0 +1,13 @@
+# The light read of one open pull request in oe wait.
+# It returns what changes the pull request's next action without a change to its Issue: when it changed, whether it conflicts,
+# its unresolved review threads, and the state of its head's checks.
+query($owner: String!, $repo: String!, $number: Int!) {
+  repository(owner: $owner, name: $repo) {
+    pullRequest(number: $number) {
+      updatedAt
+      mergeable
+      reviewThreads(last: 100) { nodes { isResolved isOutdated } }
+      commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
+    }
+  }
+}

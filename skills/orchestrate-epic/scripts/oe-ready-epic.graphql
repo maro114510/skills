@@ -1,5 +1,6 @@
 # The Epic read of oe ready.
-# It returns the default branch name and the list of child Issues.
+# It returns the default branch name and the list of child Issues,
+# each with when it changed and what blocks it, which tell oe wait whether the Issue needs another read.
 query($owner: String!, $repo: String!, $epic: Int!) {
   repository(owner: $owner, name: $repo) {
     nameWithOwner
@@ -7,7 +8,13 @@ query($owner: String!, $repo: String!, $epic: Int!) {
     issue(number: $epic) {
       subIssues(first: 100) {
         totalCount
-        nodes { number state repository { nameWithOwner } }
+        nodes {
+          number
+          state
+          updatedAt
+          blockedBy(first: 100) { totalCount nodes { number state stateReason } }
+          repository { nameWithOwner }
+        }
       }
     }
   }
