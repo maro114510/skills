@@ -56,7 +56,7 @@ flowchart TB
 | Session | An interactive harness session a person runs |
 | Design | The intended boundary of a change, recorded in a Design Doc when the boundary changes. The owner explicitly agrees to the changed boundary; see Development Flow in AGENTS.md |
 | Epic | A parent Issue grouping work that needs coordination. Its existence grants no authority |
-| Ticket | An independently verifiable Issue. The Coordinator acts on children of the Epic it was started on |
+| Ticket | An independently verifiable Issue. At least one acceptance criterion observes the Ticket's own behavior, and a whole suite or existing tests passing is owned by CI and never counts as that criterion. The Coordinator acts on children of the Epic it was started on |
 | Mandate | Authority to work within the agreed scope of a Ticket under an open Epic that a running Coordinator holds. An Issue edit does not extend that authority |
 | Operator | The person who starts a Coordinator on an Epic. Starting it is the only consent to unattended work, and ending it stops new starts |
 | Host-local records | oe's state on the Coordinator's host, as `orchestrate-epic.md` lays it out: one lock per Epic, each Ticket's claim, attempt, and verdict records, and each Epic's board pane and running wait |
