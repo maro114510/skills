@@ -3,7 +3,7 @@ name: orchestrate-epic
 description: >
   Turn a GitHub Epic's child Issues into verified PRs in dependency order.
   A loop asks oe ready for each Issue's next action, starts a fresh pr-owner agent to implement or repair one Issue and a fresh pr-verify agent to check one PR head SHA, and waits for GitHub to change with oe wait, with agents and the wait running in the background where the harness allows, so waiting costs no tokens there.
-  State lives on GitHub and in host-local records, so rerunning with the same Epic on the same host resumes from anywhere.
+  State lives on GitHub only, so rerunning with the same Epic resumes from anywhere.
   The AI never merges and never enables auto-merge: an engineer or repository automation merges, and a merged dependency starts the next Issue.
   Invoking it is consent to push branches and open PRs; ending the session stops everything.
   Use when the user runs it to implement an Epic — "Epic を実装して", "この Epic を進めて", "Issue 群を順に実装して", "オーケストレーションして".
@@ -13,7 +13,7 @@ argument-hint: "epic <number|url> [repo <owner/repo>] [max-agents <n>]"
 
 # orchestrate-epic
 
-Drive an Epic's child Issues to verified PRs, one step per fresh agent, with every state read from GitHub and from oe's records on this host.
+Drive an Epic's child Issues to verified PRs, one step per fresh agent, with every state read from GitHub.
 
 `<skill-dir>` is the directory containing this file, and `<skills-root>` is its parent.
 `oe` below means `bash <skill-dir>/scripts/oe`; each subcommand's header documents its arguments, output, and exit codes.
@@ -124,7 +124,6 @@ The harness wakes you when an agent ends or the wait returns, and whichever come
 | An agent ended | Run `oe worktree remove <n>` for its Issue, and go to 2.1. Its final line goes into the summary only |
 | The wait exited 0 or 5 | Go to 2.1 |
 | The wait exited 1 | Every read failed until its timeout: go to 2.1 |
-| The wait exited 6 | A wait for this Epic already runs and wakes you once the next actions change: end your turn |
 | The harness stopped the wait, as on a time limit | Go to 2.1 |
 
 ## Step 3: End the session
@@ -141,5 +140,5 @@ The harness wakes you when an agent ends or the wait returns, and whichever come
 |---|---|---|
 | #<n> | <oe ready の action> | <例: PR #<pr> のレビューと merge / 質問や保留への回答 / 依存 Issue #<m> の完了 / merge 済み PR のある Issue の確認> |
 
-再開するには同じホストで同じ引数でもう一度実行してください。状態は GitHub とこのホストの記録から読み直します。
+再開するには同じ引数でもう一度実行してください。状態は GitHub から読み直します。
 ```

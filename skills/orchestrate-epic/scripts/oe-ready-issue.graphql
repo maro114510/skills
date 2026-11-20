@@ -17,7 +17,7 @@ query($owner: String!, $repo: String!, $num: Int!, $branch: String!, $ref: Strin
         nodes { authorAssociation author { login __typename } body createdAt url }
       }
     }
-    # The head the branch has now decides which Owner starts pushed, as oe-starts.jq says.
+    # The head the branch has now picks the PR, as issue_state in oe-ready.jq says.
     ref(qualifiedName: $ref) { name target { oid } }
     # The PR is the newest one that is open or whose head is the branch's head, so a few newer closed ones may come first.
     # Each one more costs about one rate-limit point.

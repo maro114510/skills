@@ -125,7 +125,7 @@ origin_head_of() {
   [ "${status}" -eq 2 ]
 }
 
-@test "uses the branch name that oe claim creates" {
+@test "uses the Issue branch name that oe gives an Issue branch" {
   prefix="$(sed -n 's/^branch_prefix=//p' "${BATS_TEST_DIRNAME}/../../orchestrate-epic/scripts/oe-config.sh")"
   [ "${prefix}" = "feat/issue-" ]
   run bash "${target}" 7 main

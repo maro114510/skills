@@ -1286,7 +1286,7 @@ JSON
   [ "$(action_of 6)" = start-owner ]
 }
 
-@test "--facts, which only oe status read, is refused as an unknown argument" {
+@test "--facts, whose only reader is gone, is refused as an unknown argument" {
   github <<'JSON'
 {"issues": [{"number": 5}]}
 JSON

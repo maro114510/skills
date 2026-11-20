@@ -1,7 +1,7 @@
 #!/usr/bin/env bats
 # Tests for oe question recording the person's answer, given in the session's conversation, on the Issue and its decision in the Issue body.
 #
-# - Each test writes the GitHub state it needs as JSON and the host-local records it needs, then runs oe against them.
+# - Each test writes the GitHub state it needs as JSON, then runs oe against it.
 # - testdata/fake-gh.sh stands in for gh, answers every read from that state, and applies every write to it.
 # - git config skills.lang sets the reader's language, through the environment, so the user's config never leaks in.
 # - Every comment oe writes is by the OWNER at 08:00, and every test runs at 08:00.
@@ -9,7 +9,6 @@
 
 setup() {
   bats_require_minimum_version 1.5.0
-  load testdata/records
   export OE_STATE_DIR="${BATS_TEST_TMPDIR}/state"
   oe="${BATS_TEST_DIRNAME}/oe"
   mkdir -p "${BATS_TEST_TMPDIR}/bin"
@@ -21,7 +20,6 @@ setup() {
   export OE_NOW=1800000000
   export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=skills.lang GIT_CONFIG_VALUE_0=en
   printf '%s\n' '{"default_branch": {"checks": {"test": "success"}}, "issues": [{"number": 5, "branch": true}]}' >"${OE_GITHUB}"
-  records 5 claim@07:00 attempt@07:01
 }
 
 # Writes an Owner's question with options A and B on Issue 5 through oe question.
@@ -127,16 +125,6 @@ action_of_5() {
   run bash "${oe}" question o/r 5 --answer "  "
 
   [ "${status}" -eq 2 ]
-  [ "$(comment_count)" -eq 1 ]
-}
-
-@test "a question from before the latest claim gets no answer" {
-  ask
-  records 5 claim@08:30
-
-  run bash "${oe}" question o/r 5 --answer A
-
-  [ "${status}" -eq 3 ]
   [ "$(comment_count)" -eq 1 ]
 }
 

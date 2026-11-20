@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Takes the Lock on a GitHub Issue: its fixed-name branch feat/issue-<N> on origin, the name oe claim creates.
+# Takes the Lock on a GitHub Issue: its fixed-name branch feat/issue-<N> on origin, the name orchestrate-epic's oe worktree gives an Issue branch.
 # The branch is created at the head of <base-branch> only when it is absent, in one push that fails when it exists,
 # so one Issue has one branch at a time. When the branch exists, nothing is written and the exit code says why.
 # Usage: lock.sh <issue> <base-branch>
@@ -28,7 +28,7 @@ git fetch -q origin "${base}" 2>/dev/null || die "Fetching ${base} from origin f
 
 # Only a push that creates the branch counts as taking the Lock. Git reports a push of the commit a branch already
 # points to as up to date and exits 0, so the exit code cannot tell this run from one that created the branch at the
-# same head a moment earlier, as oe claim or a second run does. The porcelain flag `*` marks a created ref.
+# same head a moment earlier, as a second run does. The porcelain flag `*` marks a created ref.
 pushed="$(git push --porcelain --force-with-lease="${ref}:" origin "FETCH_HEAD:${ref}" 2>/dev/null)"
 if [[ "${pushed}" == *$'\n*\t'* ]]; then
   printf 'locked\t%s\n' "${branch}"
