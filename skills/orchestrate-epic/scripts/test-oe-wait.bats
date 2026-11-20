@@ -741,3 +741,27 @@ JSON
   [ ! -e "${notified}" ]
   [ -z "$(find "${OE_STATE_DIR}" -path '*/notices/*' 2>/dev/null)" ]
 }
+
+@test "git config skills.notify is not read: a question waiting for an answer runs no command" {
+  issue_5_waits_for_an_answer
+  set_notify="touch '${BATS_TEST_TMPDIR}/notified'"
+
+  GIT_CONFIG_VALUE_0="${set_notify}" run bash "${oe}" wait o/r 1 --timeout 1
+
+  [ "${status}" -eq 5 ]
+  [ ! -e "${BATS_TEST_TMPDIR}/notified" ]
+}
+
+@test "a second wait for the same Epic while one runs waits on its own, and returns at its timeout" {
+  pr_15_checks_running
+  OE_WAIT_INTERVAL=1 bash "${oe}" wait o/r 1 --timeout 30 >/dev/null 2>&1 3>&- &
+  first=$!
+  sleep 2
+
+  run --separate-stderr bash "${oe}" wait o/r 1 --timeout 1
+  pkill -P "${first}" 2>/dev/null || true
+  kill "${first}" 2>/dev/null || true
+
+  [ "${status}" -eq 5 ]
+  [ "$(action_of 5)" = wait-ci ]
+}

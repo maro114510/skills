@@ -1285,3 +1285,14 @@ JSON
   [ "${status}" -eq 0 ]
   [ "$(action_of 6)" = start-owner ]
 }
+
+@test "--facts, which only oe status read, is refused as an unknown argument" {
+  github <<'JSON'
+{"issues": [{"number": 5}]}
+JSON
+
+  run --separate-stderr bash "${oe}" ready o/r 1 --facts
+
+  [ "${status}" -eq 2 ]
+  [ -z "${output}" ]
+}

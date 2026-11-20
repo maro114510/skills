@@ -340,3 +340,15 @@ ${decisions_note}
   [ "$(comment_count)" -eq 1 ]
   [ "$(body_of_5)" = "${criteria_body}" ]
 }
+
+@test "a record file an older oe left on this host does not stop an answer" {
+  ask
+  key="$(printf o/r | git hash-object --stdin)"
+  mkdir -p "${OE_STATE_DIR}/records/${key}"
+  echo 'not json' >"${OE_STATE_DIR}/records/${key}/5.jsonl"
+
+  run --separate-stderr bash "${oe}" question o/r 5 --answer A
+
+  [ "${status}" -eq 0 ]
+  [ "$(comment_count)" -eq 2 ]
+}
