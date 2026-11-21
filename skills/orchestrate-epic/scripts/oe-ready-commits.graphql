@@ -1,0 +1,28 @@
+# The read of the commits before a cursor on one pull request in oe ready.
+# It returns the 50 commits before the cursor, each as oe-ready-issue.graphql reads a commit, so oe-ready.sh joins them to that read.
+query($owner: String!, $repo: String!, $number: Int!, $before: String!) {
+  repository(owner: $owner, name: $repo) {
+    pullRequest(number: $number) {
+      commits(last: 50, before: $before) {
+        pageInfo { hasPreviousPage startCursor }
+        nodes { commit { ...HeadChecks } }
+      }
+    }
+  }
+}
+
+fragment HeadChecks on Commit {
+  oid
+  committedDate
+  statusCheckRollup {
+    contexts(first: 100) {
+      totalCount
+      pageInfo { hasNextPage endCursor }
+      nodes {
+        __typename
+        ... on CheckRun { name status conclusion startedAt checkSuite { databaseId workflowRun { workflow { databaseId } } } }
+        ... on StatusContext { context state createdAt }
+      }
+    }
+  }
+}

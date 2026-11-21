@@ -22,6 +22,7 @@
 # | api rate_limit | the buckets, as GH_RATE_LIMIT_UNTIL says |
 # | api graphql with the Epic query | epic |
 # | api graphql with the checks page query, oid=SHA, and after=CURSOR | checks SHA:CURSOR |
+# | api graphql with the commits page query, number=N, and before=CURSOR | commits N:CURSOR |
 # | api graphql with the pull request query, number=N | head N |
 # | api graphql with num=N | issue N |
 # | api repos/o/r/pulls | pulls |
@@ -145,6 +146,8 @@ graphql)
     fi
   elif [[ "${query}" == *"object(oid"* ]]; then
     call=checks arg="$(jq -r '"\(.oid):\(.after)"' <<<"${fields}")"
+  elif [[ "${query}" == *\$before* ]]; then
+    call=commits arg="$(jq -r '"\(.number):\(.before)"' <<<"${fields}")"
   elif [[ "${query}" == *"pullRequest(number"* ]]; then
     call=head arg="$(jq -r '.number' <<<"${fields}")"
   else
@@ -177,5 +180,13 @@ installation/repositories*) call=installation arg="" ;;
 *) unexpected ;;
 esac
 
-jq -n --argjson state "$(cat "${OE_GITHUB}")" --arg call "${call}" --arg arg "${arg}" \
+# GitHub returns only the fields a query selects.
+# The Issue read selects the total and the next page of the checks of its commits only through a fragment spread, so a query without one gets neither.
+commit_pages=true
+if [[ "${call}" == issue ]]; then
+  selection="${query#*commits(}"
+  [[ "${selection%%headRef*}" == *"...HeadChecks"* ]] || commit_pages=false
+fi
+
+jq -n --argjson state "$(cat "${OE_GITHUB}")" --arg call "${call}" --arg arg "${arg}" --argjson commit_pages "${commit_pages}" \
   -f "${here}/fake-github.jq" | jq -r "${filter}"
