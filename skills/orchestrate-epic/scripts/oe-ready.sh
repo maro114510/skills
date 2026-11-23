@@ -135,14 +135,15 @@ all_commits() {
     page="$(gh api graphql -f query="${commits_query}" -F owner="${repo%/*}" -F repo="${repo#*/}" \
       -F number="${number}" -f before="${cursor}" --jq '.data.repository.pullRequest.commits' 2>"${err}")" ||
       fail "commits read on PR #${number} failed: $(head -n1 "${err}")"
-    # A page that is not a list of commits, or that does not move back from the cursor, would end or repeat the read on part of the commits.
-    jq -e --arg cursor "${cursor}" '(.nodes | type) == "array" and (.pageInfo.hasPreviousPage | type) == "boolean"
+    # A page that is not a list of commits, is empty although the read advertised earlier commits, or does not move back from the cursor, would end or repeat the read on part of the commits.
+    jq -e --arg cursor "${cursor}" '(.nodes | type) == "array" and (.nodes | length) > 0 and (.pageInfo.hasPreviousPage | type) == "boolean"
       and (.pageInfo.hasPreviousPage == false or ((.pageInfo.startCursor | type) == "string" and .pageInfo.startCursor != $cursor))' \
       <<<"${page}" >/dev/null 2>&1 || fail "commits page on PR #${number} unreadable"
-    response="$(jq -c --argjson at "${at}" --argjson page "${page:-null}" '
+    # The page is read from a descriptor, since a page of 50 commits can exceed the limit of one argument.
+    response="$(jq -c --argjson at "${at}" --slurpfile page <(printf '%s' "${page}") '
       setpath($at + ["commits"];
         getpath($at).commits
-        | .nodes = (($page.nodes // []) + .nodes) | .pageInfo = $page.pageInfo)' <<<"${response}")" ||
+        | .nodes = (($page[0].nodes // []) + .nodes) | .pageInfo = $page[0].pageInfo)' <<<"${response}")" ||
       fail "commits on PR #${number} unreadable"
   done
   printf '%s' "${response}"

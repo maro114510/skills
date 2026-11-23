@@ -1074,6 +1074,21 @@ JSON
   [ -z "${output}" ]
 }
 
+@test "an earlier page of commits with no commits exits non-zero even when it says no earlier commits remain" {
+  github <<JSON
+{"issues": [{"number": 5, "branch": true, "pull_requests": [{
+  "number": 50, "opened": "00:30", "committed": "07:50", "conflicting": true, "checks": {"test": "success"},
+  "commits": $(earlier_commits 20 3)
+}]}]}
+JSON
+  page_answer 'echo "{\"nodes\":[],\"pageInfo\":{\"hasPreviousPage\":false,\"startCursor\":null}}"'
+
+  run --separate-stderr bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 1 ]
+  [ -z "${output}" ]
+}
+
 @test "an earlier commit whose only failed check is the 101st counts as a commit with a failed check" {
   github <<JSON
 {"issues": [{"number": 5, "branch": true, "pull_requests": [{
