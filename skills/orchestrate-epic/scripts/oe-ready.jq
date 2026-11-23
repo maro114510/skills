@@ -80,7 +80,7 @@ def ci:
     end;
 
 # Whether one commit of a pull request had a failed check, from the checks the read holds of it.
-# The read holds the first 100 checks of each earlier commit, enough for the repair cap, which only counts commits.
+# oe-ready.sh reads every commit of the pull request with every check of it, so the repair cap counts them all.
 def commit_failed:
   ((.statusCheckRollup.contexts.nodes // [])
     | map(select(.__typename != "StatusContext" or .context != verify_context))) as $nodes

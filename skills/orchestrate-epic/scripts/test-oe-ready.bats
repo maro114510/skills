@@ -984,6 +984,140 @@ JSON
   [ "$(action_of 5)" = start-owner ]
 }
 
+# Prints, as a JSON array, $1 earlier commits of a PR, oldest first, from 01:00 on.
+# The oldest $2 of them have a failed check, and the others passed.
+earlier_commits() {
+  jq -nc --argjson count "$1" --argjson failed "$2" '
+    def pad: if . < 10 then "0\(.)" else "\(.)" end;
+    [range(0; $count) | {sha: (("e" * (39 - ("\(.)" | length))) + "a\(.)"),
+      committed: "\(1 + (. / 60 | floor) | pad):\(. % 60 | pad)",
+      checks: {test: (if . < $failed then "failure" else "success" end)}}]'
+}
+
+@test "the oldest 3 of 21 commits since the latest answer with a failed check hold the Issue" {
+  github <<JSON
+{"issues": [{"number": 5, "branch": true, "pull_requests": [{
+  "number": 50, "opened": "00:30", "committed": "07:50", "conflicting": true, "checks": {"test": "success"},
+  "commits": $(earlier_commits 20 3)
+}]}]}
+JSON
+
+  run --separate-stderr bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = hold ]
+  [ "$(field_of 5 3)" = "3 commits of PR #50 had a failed check since the latest answer; still: PR #50 conflicts with its base" ]
+}
+
+@test "the oldest 3 of 71 commits since the latest answer with a failed check hold the Issue" {
+  github <<JSON
+{"issues": [{"number": 5, "branch": true, "pull_requests": [{
+  "number": 50, "opened": "00:30", "committed": "07:50", "conflicting": true, "checks": {"test": "success"},
+  "commits": $(earlier_commits 70 3)
+}]}]}
+JSON
+
+  run --separate-stderr bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = hold ]
+  [ "$(field_of 5 3)" = "3 commits of PR #50 had a failed check since the latest answer; still: PR #50 conflicts with its base" ]
+}
+
+@test "a failed read of an earlier page of commits exits non-zero and prints nothing" {
+  github <<JSON
+{"issues": [{"number": 5, "branch": true, "pull_requests": [{
+  "number": 50, "opened": "00:30", "committed": "07:50", "conflicting": true, "checks": {"test": "success"},
+  "commits": $(earlier_commits 20 3)
+}]}]}
+JSON
+
+  GH_FAIL="before=" run --separate-stderr bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 1 ]
+  [ -z "${output}" ]
+}
+
+# Puts a gh in front of the fake one that answers every commits page query with the output of $1, and passes the rest on.
+page_answer() {
+  printf '#!/usr/bin/env bash\ncase "$*" in *before=*) %s; exit 0 ;; esac\nexec bash "%s/testdata/fake-gh.sh" "$@"\n' \
+    "$1" "${BATS_TEST_DIRNAME}" >"${BATS_TEST_TMPDIR}/bin/gh"
+}
+
+@test "an earlier page of commits that comes back empty exits non-zero and prints nothing" {
+  github <<JSON
+{"issues": [{"number": 5, "branch": true, "pull_requests": [{
+  "number": 50, "opened": "00:30", "committed": "07:50", "conflicting": true, "checks": {"test": "success"},
+  "commits": $(earlier_commits 20 3)
+}]}]}
+JSON
+  page_answer 'echo null'
+
+  run --separate-stderr bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 1 ]
+  [ -z "${output}" ]
+}
+
+@test "an earlier page of commits that does not move back stops the read instead of repeating it" {
+  github <<JSON
+{"issues": [{"number": 5, "branch": true, "pull_requests": [{
+  "number": 50, "opened": "00:30", "committed": "07:50", "conflicting": true, "checks": {"test": "success"},
+  "commits": $(earlier_commits 20 3)
+}]}]}
+JSON
+  page_answer 'echo "{\"nodes\":[],\"pageInfo\":{\"hasPreviousPage\":true,\"startCursor\":\"1\"}}"'
+
+  run --separate-stderr perl -e 'alarm 20; exec @ARGV' bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 1 ]
+  [ -z "${output}" ]
+}
+
+@test "an earlier page of commits with no commits exits non-zero even when it says no earlier commits remain" {
+  github <<JSON
+{"issues": [{"number": 5, "branch": true, "pull_requests": [{
+  "number": 50, "opened": "00:30", "committed": "07:50", "conflicting": true, "checks": {"test": "success"},
+  "commits": $(earlier_commits 20 3)
+}]}]}
+JSON
+  page_answer 'echo "{\"nodes\":[],\"pageInfo\":{\"hasPreviousPage\":false,\"startCursor\":null}}"'
+
+  run --separate-stderr bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 1 ]
+  [ -z "${output}" ]
+}
+
+@test "an earlier commit whose only failed check is the 101st counts as a commit with a failed check" {
+  github <<JSON
+{"issues": [{"number": 5, "branch": true, "pull_requests": [{
+  "number": 50, "opened": "00:30", "committed": "07:50", "conflicting": true, "checks": {"test": "success"},
+  "commits": $(earlier_commits 2 2 | jq -c '. + [{sha: "1111111111111111111111111111111111111111", committed: "07:00", checks: ([range(1; 101) | {key: "check-\(.)", value: "success"}] + [{key: "check-101", value: "failure"}] | from_entries)}]')
+}]}]}
+JSON
+
+  run --separate-stderr bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = hold ]
+  [ "$(field_of 5 3)" = "3 commits of PR #50 had a failed check since the latest answer; still: PR #50 conflicts with its base" ]
+}
+
+@test "a failed read of a later page of an earlier commit's checks exits non-zero and prints nothing" {
+  github <<JSON
+{"issues": [{"number": 5, "branch": true, "pull_requests": [{
+  "number": 50, "opened": "00:30", "committed": "07:50", "conflicting": true, "checks": {"test": "success"},
+  "commits": [{"sha": "1111111111111111111111111111111111111111", "committed": "07:00", "checks": $(checks_150 success)}]
+}]}]}
+JSON
+
+  GH_FAIL="after=" run --separate-stderr bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 1 ]
+  [ -z "${output}" ]
+}
+
 @test "a failed check whose name holds a newline and tabs yields one line of four fields and no injected command" {
   github <<'JSON'
 {"issues": [{"number": 5, "branch": true, "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"x\n9; touch pwned\tstart-owner\ty": "failure"}}]}]}

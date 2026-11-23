@@ -39,6 +39,7 @@
 # | oe-ready-epic.graphql | The Epic read |
 # | oe-ready-issue.graphql | The read of one Issue |
 # | oe-ready-checks.graphql | One more page of checks on a commit |
+# | oe-ready-commits.graphql | One more page of the commits of a pull request |
 # | oe-ready-head.graphql | The light read of one open pull request |
 # | oe-ready.jq | Every rule that turns a response into an action |
 # | oe-records.jq | Which comments count as holds, questions, answers, and engineer input |
@@ -58,7 +59,7 @@
 #    or at the time next_deadline in oe-ready.jq gives: a head moved during the read, a working marker's 2 hours, or a head's 10 minutes with no checks.
 #    Until then its line is the one from the run that read it, so the seconds in its reason are from that run.
 #
-# Read 5 holds 100 checks of a commit, and one more read per page gives the rest.
+# Read 5 holds the last 20 commits of an open pull request and 100 checks of each commit, and one more read per page gives the rest.
 # No read covers the default branch's checks, so its state never decides an action.
 set -uo pipefail
 
@@ -94,6 +95,7 @@ now="${OE_NOW:-$(date -u +%s)}"
 epic_query="$(<"${dir}/oe-ready-epic.graphql")" || fail "cannot read oe-ready-epic.graphql"
 issue_query="$(<"${dir}/oe-ready-issue.graphql")" || fail "cannot read oe-ready-issue.graphql"
 checks_query="$(<"${dir}/oe-ready-checks.graphql")" || fail "cannot read oe-ready-checks.graphql"
+commits_query="$(<"${dir}/oe-ready-commits.graphql")" || fail "cannot read oe-ready-commits.graphql"
 head_query="$(<"${dir}/oe-ready-head.graphql")" || fail "cannot read oe-ready-head.graphql"
 trust="$(<"${dir}/oe-records.jq")" || fail "cannot read oe-records.jq"
 rules="$(<"${dir}/oe-ready.jq")" || fail "cannot read oe-ready.jq"
@@ -117,6 +119,34 @@ pushed_at() {
   gh api "repos/${repo}/activity?ref=refs/heads/$1&per_page=100" \
     --jq '[.[] | select(.after == "'"$2"'")] | first | .timestamp // empty | sub("\\.[0-9]+"; "") | fromdateiso8601' \
     2>"${err}" || fail "activity read for $1 failed: $(head -n1 "${err}")"
+}
+
+# Prints the GraphQL response $1 with every commit of each open pull request in it, reading the pages before the first.
+# A page that cannot be read fails, so no repair cap is decided from part of the commits.
+all_commits() {
+  local response="$1" at number cursor page
+  while true; do
+    at="$(jq -c 'first(paths(objects | .state? == "OPEN" and .commits?.pageInfo?.hasPreviousPage == true)) // empty' \
+      <<<"${response}")" || fail "commits unreadable"
+    [[ -n "${at}" ]] || break
+    IFS=$'\t' read -r number cursor < <(jq -r --argjson at "${at}" \
+      'getpath($at) | "\(.number)\t\(.commits.pageInfo.startCursor)"' <<<"${response}")
+    [[ "${number}" =~ ^[1-9][0-9]*$ && -n "${cursor}" && "${cursor}" != null ]] || fail "commits unreadable"
+    page="$(gh api graphql -f query="${commits_query}" -F owner="${repo%/*}" -F repo="${repo#*/}" \
+      -F number="${number}" -f before="${cursor}" --jq '.data.repository.pullRequest.commits' 2>"${err}")" ||
+      fail "commits read on PR #${number} failed: $(head -n1 "${err}")"
+    # A page that is not a list of commits, is empty although the read advertised earlier commits, or does not move back from the cursor, would end or repeat the read on part of the commits.
+    jq -e --arg cursor "${cursor}" '(.nodes | type) == "array" and (.nodes | length) > 0 and (.pageInfo.hasPreviousPage | type) == "boolean"
+      and (.pageInfo.hasPreviousPage == false or ((.pageInfo.startCursor | type) == "string" and .pageInfo.startCursor != $cursor))' \
+      <<<"${page}" >/dev/null 2>&1 || fail "commits page on PR #${number} unreadable"
+    # The page is read from a descriptor, since a page of 50 commits can exceed the limit of one argument.
+    response="$(jq -c --argjson at "${at}" --slurpfile page <(printf '%s' "${page}") '
+      setpath($at + ["commits"];
+        getpath($at).commits
+        | .nodes = (($page[0].nodes // []) + .nodes) | .pageInfo = $page[0].pageInfo)' <<<"${response}")" ||
+      fail "commits on PR #${number} unreadable"
+  done
+  printf '%s' "${response}"
 }
 
 # Prints the GraphQL response $1 with every check of each commit in it, reading the pages after the first.
@@ -267,6 +297,7 @@ for n in ${sorted[@]+"${sorted[@]}"}; do
   response="$(gh api graphql -f query="${issue_query}" -F owner="${repo%/*}" -F repo="${repo#*/}" -F num="${n}" \
     -f branch="${branch_prefix}${n}" -f ref="refs/heads/${branch_prefix}${n}" 2>"${err}")" ||
     fail "Issue #${n} read failed: $(head -n1 "${err}")"
+  response="$(all_commits "${response}")" || exit 1
   response="$(all_checks "${response}")" || exit 1
   line="$(jq -r "$(program classify "${pr_heads%,}")" <<<"${response}" 2>"${err}")" ||
     fail "Issue #${n} read failed: $(head -n1 "${err}")"
