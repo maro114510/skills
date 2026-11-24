@@ -126,7 +126,7 @@ For each Issue, oe ready reads this table from the top and outputs the action of
   - An Owner's marker gives its result when an open PR from the branch has a head pushed after the start time, or the Issue gets a question after it
   - A Verifier's marker gives its result when its SHA gets a verdict, as Counting reads it
   - A marker is live until it gives its result or 2 hours pass since its start time, and expired with no result after that
-  - An answer newer than a marker ends it, so the answer starts the next agent instead of holding the Issue again
+  - An answer or a re-run request newer than a marker ends it, so it starts the next agent instead of holding the Issue again
 - Repair signals
   - No PR exists yet
   - The PR conflicts with the base branch
