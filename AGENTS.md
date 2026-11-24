@@ -23,7 +23,7 @@ Repository instructions for coding agents.
 | `agents/<agent-name>.md` | Portable subagent that APM deploys; only `name`, `description`, and `mode: subagent` frontmatter, and listed in `tests/validate-apm.sh` |
 | `skills/orchestrate-epic/scripts/oe` | Shell helpers that read and write orchestrate-epic's state on GitHub; each `oe-<subcommand>.sh` header documents one subcommand |
 | `skills/orchestrate-epic/scripts/oe-bot.sh` | The Bot identity an agent's worktree carries when its clone sets `skills.bot`, and the token the scripts that write to GitHub take from it |
-| `skills/**/*.bats` | Script tests that `.github/workflows/lint-shell.yml` runs |
+| `skills/**/*.bats` | Script tests that `tests/run-bats.sh` runs, locally and in `.github/workflows/lint-shell.yml` |
 | `docs/design/orchestrate-epic.md` | The orchestrate-epic Design Doc that oe and the agents implement |
 | `.github/rulesets/main.json` | The main-branch ruleset; the admin applies it with `.github/rulesets/apply.sh`, as its README describes |
 | `.github/rulesets/tags.json` | The ruleset that limits `v*` tag creation to admins; applied by the same script |
@@ -139,6 +139,12 @@ claude plugin validate .
 claude plugin marketplace add ./
 claude plugin install skills@maro114510-agent-skills --scope user
 claude plugin list | grep skills
+
+# Run every bats suite, one file per process, BATS_JOBS at a time, by default the CPU count; CI runs the same command
+tests/run-bats.sh
+
+# Run one bats suite
+bats skills/implement/scripts/test-lock.bats
 
 # Pre-commit hooks for shell scripts, workflows, and secrets: https://github.com/j178/prek
 brew install j178/tap/prek   # macOS, once
