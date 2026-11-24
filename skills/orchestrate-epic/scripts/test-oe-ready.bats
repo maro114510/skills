@@ -1471,6 +1471,48 @@ JSON
   [ "$(field_of 5 3)" = "failure verdict on bbbbbbb" ]
 }
 
+@test "with a cache, a failure verdict that replaces an older one after a re-run request holds the Issue on the next run" {
+  export OE_READY_CACHE="${BATS_TEST_TMPDIR}/cache"
+  mkdir -p "${OE_READY_CACHE}"
+  github <<'JSON'
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "OWNER", "at": "07:30", "body": "<!-- oe:hold -->\nfailure verdict on bbbbbbb"},
+      {"by": "OWNER", "at": "07:40", "body": "<!-- oe:rerun -->\nJudge it again"}
+    ],
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": [{"state": "failure", "at": "07:20"}]}]
+  }]
+}
+JSON
+  run bash "${oe}" ready o/r 1
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-verifier ]
+
+  # The run in between never saw the new Verifier's pending status, so only the time of the newest verdict changed.
+  github <<'JSON'
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "OWNER", "at": "07:30", "body": "<!-- oe:hold -->\nfailure verdict on bbbbbbb"},
+      {"by": "OWNER", "at": "07:40", "body": "<!-- oe:rerun -->\nJudge it again"}
+    ],
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"},
+      "verdicts": [{"state": "failure", "at": "07:50"}, {"state": "pending", "at": "07:45"}, {"state": "failure", "at": "07:20"}]}]
+  }]
+}
+JSON
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = hold ]
+  [ "$(field_of 5 3)" = "failure verdict on bbbbbbb" ]
+}
+
 @test "a re-run request followed by a failed check on the head gets an Owner, not a Verifier" {
   github <<'JSON'
 {
