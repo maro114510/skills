@@ -12,7 +12,7 @@
 # | hold | Records that an Issue waits on the person, with the reason oe ready gave, as an Issue comment |
 # | question | Writes an Owner's question on the Issue, or records the person's answer to it |
 # | brief | Builds an Owner's or a Verifier's brief, recording each Verifier start on its SHA |
-# | verdict | Writes a Verifier's verdict on the PR head SHA it checked, posting its findings on the PR when a person must read them |
+# | verdict | Writes a Verifier's verdict on the PR head SHA it checked, with its findings in one block in the PR body |
 # | worktree | Creates or removes an Issue branch's worktree outside the shared checkout |
 #
 # An unknown or missing subcommand exits 2.
