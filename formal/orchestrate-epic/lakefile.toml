@@ -1,0 +1,17 @@
+name = "orchestrate-epic"
+defaultTargets = ["OrchestrateEpic"]
+
+# The checks read these files, so a change to either rebuilds them.
+[[input_file]]
+name = "orchestrateEpicDoc"
+path = "../../docs/design/orchestrate-epic.md"
+
+[[input_file]]
+name = "designVerificationDoc"
+path = "../../docs/design/design-verification.md"
+
+[[lean_lib]]
+name = "OrchestrateEpic"
+needs = ["orchestrateEpicDoc", "designVerificationDoc"]
+# The search runs compiled code, not the interpreter.
+precompileModules = true
