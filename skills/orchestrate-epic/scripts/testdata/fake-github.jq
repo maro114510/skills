@@ -73,7 +73,7 @@
 # | pushed | When its head was pushed | Same as opened |
 # | pushed_during_read | Whether a new head arrived after the pull request list was read | false |
 # | committed | The commit time of its head | Same as opened |
-# | commits | Earlier commits of the pull request, oldest first, each with sha, committed, and optionally checks | None |
+# | commits | Earlier commits of the pull request, oldest first, each with sha, committed, and optionally checks and verdicts | None |
 # | checks | Check name to result on its head | No checks |
 # | check_runs | Further check runs on its head, each with name, result, suite, started, and optionally the workflow that ran it, so one name can run in several check suites | None |
 # | updated | When it last changed, as the head read shows it | The latest of its times and comments |
@@ -103,12 +103,16 @@ def check_run($name; $result):
     conclusion: (if $result == "in_progress" then null else ($result | ascii_upcase) end)};
 def status_context($context; $state):
   {__typename: "StatusContext", context: $context, state: ($state | ascii_upcase), createdAt: ("07:20" | time)};
+# A verdict in verdicts is a state written at 07:20, or {state, at}.
+def verdict_status: if type == "string" then {state: ., at: "07:20"} else . end;
+# The rollup holds only the newest status of each context, so only the newest verdict shows in it.
 def rollup_nodes:
-  if .checks == null and .check_runs == null and .statuses == null then null
+  if .checks == null and .check_runs == null and .statuses == null and .verdicts == null then null
   else [(.checks // {} | to_entries[] | check_run(.key; .value)),
       (.check_runs[]? | check_run(.name; .result) + {startedAt: (.started | time),
         checkSuite: {databaseId: .suite, workflowRun: (if .workflow then {workflow: {databaseId: .workflow}} else null end)}}),
-      (.statuses // {} | to_entries[] | status_context(.key; .value))]
+      (.statuses // {} | to_entries[] | status_context(.key; .value)),
+      ((.verdicts // [])[0:1][] | verdict_status | status_context("oe/verify"; .state) + {createdAt: (.at | time)})]
   end;
 
 # One page of checks, which holds 100 at most, as GitHub returns them; the cursor is the position after the page.
@@ -231,8 +235,7 @@ def open_pull_requests:
 
 def statuses($sha):
   [(.written_statuses[]? | select(.sha == $sha) | {context, state, target_url, created_at: ("08:00" | time)}),
-    (.issues[].pull_requests[]? | select(pr_sha == $sha) | .verdicts[]?
-      | if type == "string" then {state: ., at: "07:20"} else . end
+    (.issues[].pull_requests[]? | select(pr_sha == $sha) | .verdicts[]? | verdict_status
       | {context: "oe/verify", state, created_at: (.at | time)})];
 
 def pushes($branch):
