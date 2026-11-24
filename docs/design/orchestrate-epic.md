@@ -142,6 +142,7 @@ For each Issue, oe ready reads this table from the top and outputs the action of
   - A SHA's verdict is its latest verify status other than pending that is newer than the latest re-run request, so the request is used once and an older verdict counts as none. Both times are GitHub's
 - Re-run request
   - A record the session writes from the person's reply, separate from an answer, so it starts a Verifier on the same head instead of an Owner, and resets neither cap
+  - oe question accepts it only while the PR's head has a failure verdict, as Counting reads it. That verdict means the Verifier before it has ended, so a re-run never runs beside a Verifier whose late verdict would count for it
   - It may carry a decision, which goes into the decisions section as an answer's does, so an answer that changes no code reaches the Verifier without an Owner start
 - Findings
   - oe verdict replaces one folded block in the PR body, between fixed markers, before it writes the status, so a verdict never exists without its findings
