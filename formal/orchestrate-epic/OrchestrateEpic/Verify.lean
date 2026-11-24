@@ -119,6 +119,7 @@ structure Breaker where
   property : Property
   on : Switches → Switches
   base : Switches := fixes
+  skew : Bool := false
 
 def breakers : List Breaker := [
   { name := "Row 6 is gone", view := .noFault, property := .noDoubleStart,
@@ -135,17 +136,28 @@ def breakers : List Breaker := [
     property := .resultBelongsToStart, on := ({ · with rerunWithoutFailureVerdict := true }),
     base := { fixes with fixVerdictCarriesStart := false, fixRerunWithoutSuccess := false } },
   { name := "Known defect: an answer that changes no code loops forever", view := .noFault,
-    property := .noDeadEnd, on := ({ · with noRerun := true }) }
+    property := .noDeadEnd, on := ({ · with noRerun := true }) },
+  -- The counterexamples this model found in the Design Doc as written: turning a fix off restores one.
+  { name := "Found defect: a late push from an expired Owner gives a newer Owner its result",
+    view := .codeFault, property := .resultBelongsToStart,
+    on := ({ · with fixOwnerResultCarriesStart := false }) },
+  { name := "Found defect: a re-run request after an answer that changes no code starts an Owner",
+    view := .noFault, property := .inputTakesEffect, on := ({ · with fixRerunClearsAnswer := false }) },
+  { name := "Found defect: a head with no verdict takes no re-run request", view := .noFault,
+    property := .noDeadEnd, on := ({ · with fixRerunWithoutSuccess := false }) },
+  { name := "Found defect: a late verdict counts for a newer Verifier once a head with no verdict takes a re-run request",
+    view := .noFault, skew := true, property := .resultBelongsToStart,
+    on := ({ · with fixVerdictCarriesStart := false }) }
 ]
 
 def checkBreakers : IO Unit := do
   for p in Property.all do
     if !breakers.any (·.property == p) then throw (IO.userError s!"no switch breaks {p.name}")
   for b in breakers do
-    let base : Config := { view := b.view, sw := b.base }
+    let base : Config := { view := b.view, skew := b.skew, sw := b.base }
     if (b.property.check base (← explored base)).isSome then
       throw (IO.userError s!"switch \"{b.name}\": {b.property.name} already breaks without it")
-    let cfg : Config := { view := b.view, sw := b.on b.base }
+    let cfg : Config := { view := b.view, skew := b.skew, sw := b.on b.base }
     let g ← explored cfg
     match (b.property.check cfg g).map (labels cfg g) with
     | some path => IO.println s!"switch \"{b.name}\" breaks {b.property.name}\n{showPath path}"
