@@ -68,7 +68,7 @@ flowchart LR
 |---|---|
 | Checked sections | Every section of `orchestrate-epic.md` that a property cites: Purpose, Invariants, and Source of Truth |
 | When CI runs the model | On a pull request or a push to `main` that changes `orchestrate-epic.md`, this document, or `formal/`, because a change here can redefine a property without touching the model |
-| A Design Doc change that leaves the model alone | The model records a hash of the checked sections, and CI fails when the hash differs. Updating it is a reviewed edit that says the model still matches |
+| A Design Doc change that leaves the model alone | The model records a hash of the checked sections and of this document's Properties table, and CI fails when the hash differs, so a property weakened here does not pass on the old model. Updating it is a reviewed edit that says the model still matches |
 | Order | A child Issue that changes the next-action table starts only after the Design Doc change that defines it has merged with its model |
 | Who writes the model | The agent that writes the Design Doc change. An implementation agent never edits the model to make its code pass |
 | A defect the model finds | The pull request body quotes the event path and names the Design Doc change that removes it |
