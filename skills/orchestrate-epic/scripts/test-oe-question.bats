@@ -331,3 +331,20 @@ Decisions the engineer made on this Issue's questions. Each takes precedence ove
   [ "$(comment_count)" -eq 1 ]
   [ "$(body_of_5)" = "${criteria_body}" ]
 }
+
+@test "a re-run request with a decision on a question files the decision under the question's Decision line" {
+  issue_with_pr "${criteria_body}" '[{"by": "OWNER", "at": "07:30", "body": "<!-- oe:question -->\n### Question\n\nDecision: Does the retry count bind?\n\n---\nAnswer here."}]' '["failure"]'
+
+  run bash "${oe}" question o/r 5 --rerun "It is a default"
+
+  [ "${status}" -eq 0 ]
+  [ "$(body_of_5)" = "${criteria_body}
+
+## Decisions
+
+Decisions the engineer made on this Issue's questions. Each takes precedence over the criteria it contradicts, and a later one over an earlier one.
+
+- Decision: Does the retry count bind?
+  - It is a default
+  - https://github.com/o/r/issues/5#issuecomment-1" ]
+}

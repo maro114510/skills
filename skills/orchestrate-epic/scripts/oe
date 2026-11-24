@@ -10,7 +10,7 @@
 # | wait | Blocks until oe ready's output changes or a timeout passes |
 # | start | Starts an Owner or a Verifier for one Issue, writing the working marker in the Issue body |
 # | hold | Records that an Issue waits on the person, with the reason oe ready gave, as an Issue comment |
-# | question | Writes an Owner's question on the Issue, or records the person's answer to it |
+# | question | Writes an Owner's question on the Issue, or records the person's answer to it or the person's re-run request |
 # | brief | Builds an Owner's or a Verifier's brief, recording each Verifier start on its SHA |
 # | verdict | Writes a Verifier's verdict on the PR head SHA it checked, posting its findings on the PR when a person must read them |
 # | worktree | Creates or removes an Issue branch's worktree outside the shared checkout |
@@ -35,6 +35,7 @@ Usage: oe ready <owner/repo> <epic-number> [--running <issue-number>]...
        oe hold <owner/repo> <issue-number> <reason>
        oe question <owner/repo> <issue-number> < question
        oe question <owner/repo> <issue-number> --answer <reply>
+       oe question <owner/repo> <issue-number> --rerun [<decision>]
        oe brief owner <owner/repo> <issue-number> <worktree> [<reason>]
        oe brief verifier <owner/repo> <issue-number> <worktree>
        oe verdict <owner/repo> <issue-number> <sha> success|failure < findings
