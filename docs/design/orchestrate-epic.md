@@ -36,11 +36,11 @@ oe starts no agent, edits no code, never merges a PR, and never writes to a PR's
 | Part | Job | Writes to |
 |---|---|---|
 | oe ready | Reads GitHub and prints each Issue's next action, with the oe command that carries it out | nothing |
-| oe start | Runs every step that starts an Owner or a Verifier for one Issue, writes the working marker, and prints the agent's prompt | The working marker in the Issue body |
+| oe start | Runs every step that starts an Owner or a Verifier for one Issue, writes the working marker, and prints the agent's prompt and the oe end command for this start | The working marker in the Issue body |
 | oe wait | Blocks until oe ready's next actions change, reading GitHub as Polling and Rate limit under Decisions say | nothing |
 | oe hold | Records that an Issue waits on the person, with the reason oe ready gave | An Issue comment |
 | oe brief | Builds the brief handed to an Owner or a Verifier | nothing |
-| oe end | Records that an agent ended, then removes its worktree through oe worktree. It records only the fact and the time, never what the agent reported | The end time in the working marker in the Issue body, and a local worktree and branch |
+| oe end | Records that an agent ended, then removes its worktree through oe worktree. It records only the fact and the time, never what the agent reported. It names the start time of its agent's marker, and when the Issue's marker has another start time, it writes nothing and removes nothing, so an agent that outlived its marker never ends a later agent's marker or removes its worktree | The end time in the working marker in the Issue body, and a local worktree and branch |
 | oe worktree | Creates an agent's worktree outside the shared checkout, on the Issue branch for an Owner and detached at its head for a Verifier, and removes it after the agent ends. When origin has no Issue branch, it creates the branch locally from the base branch, and the Owner's first push creates it on origin | A local worktree and branch |
 | oe question | Writes an Owner's question in a fixed format, and records the answer or the re-run request the person gives in the session's conversation. | An Issue comment for a question, an answer, or a re-run request, and the decision an answer or a re-run request carries in the Issue body's decisions section |
 | oe verdict | Writes a Verifier's verdict, and its findings as Findings under Source of Truth says | A commit status on the SHA, and the findings block in the PR body |
