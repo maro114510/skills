@@ -93,7 +93,8 @@ input="$(mktemp "${TMPDIR:-/tmp}/describe.XXXXXX")"
 out="${input}.out"
 log="${input}.log"
 pin="${input}.pin.yml"
-trap 'rm -f "${input}" "${out}" "${log}" "${pin}"' EXIT
+sessions="${input}.sessions"
+trap 'rm -rf "${input}" "${out}" "${log}" "${pin}" "${sessions}"' EXIT
 cat >"${input}" <<EOF
 <rules>
 ${rules}
@@ -134,7 +135,9 @@ opencode)
 dsh)
   # The same overlay as self-review.sh, which explains it: only a read-only preset is named and made the
   # default. `-` reads the task from stdin, which cannot also carry an argument, so the prompt goes first.
-  cat >"${pin}" <<'EOF'
+  # The session root moves to a temp directory the trap removes, so no session is left in the profile's root.
+  mkdir -p "${sessions}"
+  cat >"${pin}" <<EOF
 - id: permission
   name: '@deepseek-ai/dsh-permission-presets'
   config:
@@ -145,6 +148,10 @@ dsh)
         name: describe-read-only
         description: Writing a PR description only. No file may be modified and no approval is granted.
     defaultPreset: describe-read-only
+- id: session-persistence-jsonl
+  name: '@deepseek-ai/dsh-session-persistence-jsonl'
+  config:
+    root: ${sessions}
 EOF
   {
     printf '%s\n\n' "${prompt}"
