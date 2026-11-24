@@ -44,6 +44,12 @@ In any Mermaid node label, a double quote in a title must be written as `#quot;`
 **Target state**: <what must be true when every child Issue is done, in one line>
 **Verification**: <how to confirm the whole Epic is done, built from the children's verification below, plus any check of the whole Epic that a person runs>
 
+(Only when no Epic is created, write this section in place of the Epic section above)
+
+### No Epic
+**Reason**: <why no Epic is created: no `depends_on` edge joins two tasks, and the owner did not ask for one>
+**Scope (not included)**: <only if applicable, in the same form as the Epic's line above. Omit this line entirely if there are none>
+
 (Only if the number of tasks discussed differs from the number of child Issues: **Restructured from the conversation**: <which tasks were split/merged and why, in 1-2 sentences>)
 
 (Only if applicable: **Epic split suggestion**: The dependency graph splits into independent groups and the count is large, so <proposed split> as separate Epics could also work instead of one Epic. Proceed with a single Epic anyway?)
