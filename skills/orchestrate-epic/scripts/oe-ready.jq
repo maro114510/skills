@@ -10,7 +10,7 @@
 # | repair_cap | Commits of the PR with a failed check, since the latest answer, that hold the Issue |
 # | verify_context | The commit status context that holds the verdict |
 # | branch_prefix | The prefix of an Issue branch, followed by the Issue number |
-# | pr_heads | The verdict and the push time of each open pull request head |
+# | pr_heads | The verdicts, newest first, and the push time of each open pull request head |
 
 def epoch: sub("\\.[0-9]+"; "") | fromdateiso8601;
 
@@ -89,6 +89,16 @@ def commit_failed:
   | . as $latest
   | any(.[]; (superseded($latest) | not) and check_class == "failed");
 
+# Whether one earlier commit of a pull request had a failure verdict, from the newest verify status its checks hold.
+def commit_failure_verdict:
+  any((.statusCheckRollup.contexts.nodes // [])[];
+    .__typename == "StatusContext" and .context == verify_context and (.state == "FAILURE" or .state == "ERROR"));
+
+# The verdict of the open pull request head $sha: its latest verify status other than pending that is newer than $rerun_at,
+# the epoch seconds of the latest re-run request or null, so a re-run request makes an older verdict count as none.
+def verdict_of($sha; $rerun_at):
+  [(pr_heads[$sha].verdicts // [])[] | select($rerun_at == null or ((.at | epoch) > $rerun_at)) | .state] | first // "none";
+
 # Reading the Epic
 #
 # epic_lines prints tab-separated lines for oe-ready.sh.
@@ -150,6 +160,7 @@ def thread_waits($pushed):
 # issue_state reduces one Issue response to the facts that next_action decides on.
 #
 # - A wait is a hold or a question record, and an answer is an answer record, or engineer input after the first wait.
+# - A re-run request ends a wait and an older working marker as an answer does, and the head's verdict counts only when newer than it.
 # - A read cut short by GitHub fails when the Issue has a branch or a pull request and the comments it holds show no wait and no answer,
 #   because an older one could still decide the Issue.
 # - The PR is the newest pull request opened from the Issue's branch that is open or whose head is the branch's current head.
@@ -160,10 +171,12 @@ def thread_waits($pushed):
 # - The working marker gives its result, ends, stays live, or expires:
 #   - An Owner's gives its result when the PR is open with a head pushed after its start, or a question came after its start.
 #   - A Verifier's gives its result when its SHA has a verdict.
-#   - An answer newer than its start ends it, so the answer starts the next agent.
+#   - An answer or a re-run request newer than its start ends it, so it starts the next agent.
 #   - It stays live until marker_ttl passes since its start, and expires with no result after that.
 # - Repair signals count only engineer input and answers since the PR's head was pushed.
 # - The repair cap counts the PR's commits with a failed check that were committed after the latest answer.
+# - A failure verdict on the head is a repair signal only when no re-run request came since the latest answer
+#   and no other commit of the PR committed after the latest answer had a failure verdict. A re-run request resets neither this nor the cap.
 def issue_state:
   .data.repository as $r
   | ($r.issue // error("Issue not found")) as $issue
@@ -180,9 +193,12 @@ def issue_state:
       and ($waits | length) == 0 and ($answers | length) == 0
     then error("Issue #\($issue.number) has over \($comments | length) comments, and the read holds no hold, question, or answer")
     else . end
+  | ($comments | indexes(record("rerun"))) as $reruns
   | ($waits | last) as $wait
   | ($answers | last) as $answer
+  | ($reruns | last) as $rerun
   | (if $answer == null then null else $comments[$answer].createdAt | epoch end) as $answered_at
+  | (if $rerun == null then null else $comments[$rerun].createdAt | epoch end) as $rerun_at
   | (if $branch and $pr.state == "OPEN" then try (
       ($pr.headRef.target // error("PR #\($pr.number) head unreadable")) as $target
       | if $target.oid != $pr.headRefOid then error("PR #\($pr.number) head changed during the read") else . end
@@ -191,7 +207,7 @@ def issue_state:
         then error("PR #\($pr.number) has more review threads than one read holds") else . end
       | ($target | ci) as $ci
       | ($facts.pushed // ($target.committedDate | epoch)) as $pushed
-      | {sha: $target.oid[0:7], oid: $target.oid, ci: $ci.state, ci_detail: $ci.detail, verdict: $facts.verdict,
+      | {sha: $target.oid[0:7], oid: $target.oid, ci: $ci.state, ci_detail: $ci.detail, verdict: verdict_of($target.oid; $rerun_at),
           pushed: $pushed, age: (now_s - $pushed)}
     ) catch {unreadable: .}
     else null end) as $head
@@ -201,8 +217,8 @@ def issue_state:
      | (if $marker.role == "owner" then
           ($head != null and $head.unreadable == null and $head.pushed > $started)
           or any($comments[]; record("question") and (.createdAt | epoch) > $started)
-        else ((pr_heads[$marker.sha].verdict // "none") | . == "success" or . == "failure" or . == "error") end) as $result
-     | if $answered_at != null and $answered_at > $started then null
+        else (verdict_of($marker.sha; $rerun_at) | . == "success" or . == "failure" or . == "error") end) as $result
+     | if ($answered_at != null and $answered_at > $started) or ($rerun_at != null and $rerun_at > $started) then null
        elif $result then null
        elif now_s - $started < marker_ttl then {state: "live", role: $marker.role, at: $marker.at}
        else {state: "expired", role: $marker.role, at: $marker.at} end
@@ -213,7 +229,7 @@ def issue_state:
   | {
       number: $issue.number,
       closed: ($issue.state == "CLOSED"),
-      wait: (if $wait == null or ($answer != null and $answer > $wait) then null
+      wait: (if $wait == null or ([$answer, $rerun] | map(. // -1) | max) > $wait then null
         else $comments[$wait] | {kind: (if record("hold") then "hold" else "question" end), url, text: (.body | question_text),
           at: .createdAt} end),
       pr: $pr.number,
@@ -236,7 +252,12 @@ def issue_state:
           if any($pr.reviews.nodes[]?; .commit.oid == $head.oid and engineer_input and ((.submittedAt | epoch) > $head.pushed))
           then "a trusted Changes requested review" else empty end,
           if any($pr.reviewThreads.nodes[]?; thread_waits($head.pushed))
-          then "a trusted review-thread comment" else empty end
+          then "a trusted review-thread comment" else empty end,
+          if ($head.verdict == "failure" or $head.verdict == "error")
+            and ($rerun == null or ($answer != null and $answer > $rerun))
+            and ([$pr.commits.nodes[]?.commit | select(.oid != $head.oid)
+              | select($answered_at == null or (.committedDate | epoch) > $answered_at) | select(commit_failure_verdict)] | length) == 0
+          then "failure verdict on \($head.sha)" else empty end
         ] end)
     };
 
@@ -247,7 +268,7 @@ def issue_state:
 # | Row | When | Action |
 # |---|---|---|
 # | 1 | The Issue is closed | done |
-# | 2 | A hold or a question is newer than the latest answer | wait-answer |
+# | 2 | A hold or a question is newer than the latest answer and the latest re-run request | wait-answer |
 # | 3 | The PR was closed without merging, or merged with the Issue open | hold |
 # | 4 | A dependency was closed as not planned or duplicate | hold |
 # | 5 | A dependency is not completed | wait-dependencies |

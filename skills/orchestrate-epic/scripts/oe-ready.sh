@@ -49,7 +49,7 @@
 #
 # 1. The Epic read gives the default branch name and the child Issues.
 # 2. The open pull request list gives the head of each Issue branch.
-# 3. Commit statuses give the verdict on each head.
+# 3. Commit statuses give the verdicts on each head, with the time of each.
 # 4. Repository activity gives the push time of each head.
 # 5. One read per open Issue gives everything else, the working marker in its body included.
 #    A closed Issue is done on read 1 alone and gets no read of its own.
@@ -237,7 +237,8 @@ pulls="$(gh api "repos/${repo}/pulls?state=open&per_page=100" --paginate --jq '.
   fail "pull request list read failed: $(head -n1 "${err}")"
 
 # Reads 3 and 4 for each head.
-# Statuses come newest first, so the first verdict status that is not pending is the current verdict.
+# Statuses come newest first, so the first verdict status that is not pending is the latest verdict.
+# pr_heads keeps every verdict status that is not pending, newest first, because a re-run request makes the older ones count as none.
 pr_heads=""
 heads=""
 while IFS=$'\t' read -r n sha pr; do
@@ -245,18 +246,20 @@ while IFS=$'\t' read -r n sha pr; do
   [[ "${n}" =~ ^[1-9][0-9]*$ && "${sha}" =~ ^[0-9a-f]{40}$ && "${pr}" =~ ^[1-9][0-9]*$ ]] || fail "pull request list unreadable"
   [[ " ${sorted[*]-} " == *" ${n} "* ]] || continue
   states="$(gh api "repos/${repo}/commits/${sha}/statuses?per_page=100" --paginate \
-    --jq '.[] | select(.context == "'"${verify_context}"'") | .state' 2>"${err}")" ||
+    --jq '.[] | select(.context == "'"${verify_context}"'") | "\(.state)\t\(.created_at)"' 2>"${err}")" ||
     fail "status read for ${sha} failed: $(head -n1 "${err}")"
   verdict=none
-  while read -r state; do
+  verdicts=""
+  while IFS=$'\t' read -r state at; do
     [[ -n "${state}" ]] || continue
     [[ "${state}" =~ ^(pending|success|failure|error)$ ]] || fail "unknown status state on ${sha}: ${state}"
+    [[ "${at}" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?Z$ ]] || fail "unreadable status time on ${sha}: ${at}"
     [[ "${state}" != pending ]] || continue
-    verdict="${state}"
-    break
+    [[ "${verdict}" != none ]] || verdict="${state}"
+    verdicts+="{state: \"${state}\", at: \"${at}\"},"
   done <<<"${states}"
   pushed="$(pushed_at "${branch_prefix}${n}" "${sha}")" || exit 1
-  pr_heads+="\"${sha}\": {verdict: \"${verdict}\", pushed: ${pushed:-null}},"
+  pr_heads+="\"${sha}\": {verdicts: [${verdicts%,}], pushed: ${pushed:-null}},"
   heads+="${n}"$'\t'"${sha}"$'\t'"${pr}"$'\t'"${verdict}"$'\n'
 done <<<"${pulls}"
 
