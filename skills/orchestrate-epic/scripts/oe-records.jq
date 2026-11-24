@@ -15,6 +15,7 @@
 # | Question | `<!-- oe:question -->` | oe question |
 # | Hold | `<!-- oe:hold -->` | oe hold, run only by the session |
 # | Answer | `<!-- oe:answer -->` | oe question --answer, run only by the session |
+# | Re-run request | `<!-- oe:rerun -->` | oe question --rerun, run only by the session |
 #
 # The working marker is no comment: oe start writes it in the Issue body, and oe-ready.jq reads it.
 # A marked comment from an older oe is no record, and its marker still keeps it from counting as engineer input.

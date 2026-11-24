@@ -77,7 +77,7 @@
 # | checks | Check name to result on its head | No checks |
 # | check_runs | Further check runs on its head, each with name, result, suite, started, and optionally the workflow that ran it, so one name can run in several check suites | None |
 # | updated | When it last changed, as the head read shows it | The latest of its times and comments |
-# | verdicts | oe/verify states on its head, newest first | None |
+# | verdicts | oe/verify states on its head, newest first, each a state written at 07:20, or {state, at} | None |
 # | reviews | Changes requested reviews, each with by, at, body, and the sha it reviewed, which defaults to the head the read sees | None |
 # | approvals | Approved reviews, each with by, at, and the sha it approved | None |
 # | thread_comments | Review-thread comments, each with by, at, and body | None |
@@ -230,8 +230,10 @@ def open_pull_requests:
     | {number, head: {ref: "feat/issue-\($n)", sha: pr_sha, repo: {full_name: (if .from_fork then "fork/r" else "o/r" end)}}}];
 
 def statuses($sha):
-  [(.written_statuses[]? | select(.sha == $sha) | {context, state, target_url}),
-    (.issues[].pull_requests[]? | select(pr_sha == $sha) | .verdicts[]? | {context: "oe/verify", state: .})];
+  [(.written_statuses[]? | select(.sha == $sha) | {context, state, target_url, created_at: ("08:00" | time)}),
+    (.issues[].pull_requests[]? | select(pr_sha == $sha) | .verdicts[]?
+      | if type == "string" then {state: ., at: "07:20"} else . end
+      | {context: "oe/verify", state, created_at: (.at | time)})];
 
 def pushes($branch):
   if $branch == "main" then [{after: default_sha, timestamp: (.default_branch.pushed // "07:00" | time)}]

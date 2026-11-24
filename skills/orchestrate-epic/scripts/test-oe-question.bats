@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# Tests for oe question writing an Owner's question.
+# Tests for oe question writing an Owner's question, and the re-run request the person gives in the session's conversation.
 #
 # - Each test writes the GitHub state it needs as JSON, then runs oe question against it.
 # - testdata/fake-gh.sh stands in for gh, answers every read from that state, and applies every write to it.
@@ -171,4 +171,180 @@ EOF
   run bash "${oe}" question o/r 5 < <(english_question)
 
   [ "${status}" -eq 1 ]
+}
+
+# Sets the saved GitHub state to Issue 5 with the body $1, the comments in the JSON array $2, and PR 50 whose head has the verify statuses in the JSON array $3.
+# A verify status is a state written at 07:20, or {state, at}.
+issue_with_pr() {
+  jq -n --arg body "$1" --argjson comments "$2" --argjson verdicts "$3" \
+    '{issues: [{number: 5, branch: true, body: $body, comments: $comments,
+      pull_requests: [{number: 50, opened: "07:10", checks: {test: "success"}, verdicts: $verdicts}]}]}' >"${OE_GITHUB}"
+}
+
+hold_on_failure='[{"by": "OWNER", "at": "07:30", "body": "<!-- oe:hold -->\nfailure verdict on bbbbbbb"}]'
+
+# Prints the body of Issue 5 in the saved GitHub state.
+body_of_5() {
+  jq -r '.issues[0].body // ""' "${OE_GITHUB}"
+}
+
+@test "while the Issue waits on the person and the head has a failure verdict, a re-run request is written as its own record, not an answer" {
+  issue_with_pr "" "${hold_on_failure}" '["failure"]'
+
+  run bash "${oe}" question o/r 5 --rerun
+
+  [ "${status}" -eq 0 ]
+  [ "${output}" = $'rerun\thttps://github.com/o/r/issues/5#issuecomment-1' ]
+  [ "$(comment_count)" -eq 2 ]
+  body="$(last_comment)"
+  [ "${body%%$'\n'*}" = "<!-- oe:rerun -->" ]
+  [ "${body}" != "${body#*https://github.com/o/r/issues/5#issuecomment-1}" ]
+}
+
+@test "a re-run request is refused and writes nothing when the hold is already answered" {
+  issue_with_pr "" '[
+    {"by": "OWNER", "at": "07:30", "body": "<!-- oe:hold -->\nfailure verdict on bbbbbbb"},
+    {"by": "OWNER", "at": "07:40", "body": "<!-- oe:answer -->\nRetry with a smaller batch"}
+  ]' '["failure"]'
+
+  run bash "${oe}" question o/r 5 --rerun
+
+  [ "${status}" -eq 3 ]
+  [ "$(comment_count)" -eq 2 ]
+}
+
+@test "a re-run request is refused and writes nothing when the Issue has no hold or question" {
+  issue_with_pr "" '[]' '["failure"]'
+
+  run bash "${oe}" question o/r 5 --rerun
+
+  [ "${status}" -eq 3 ]
+  [ "$(comment_count)" -eq 0 ]
+}
+
+@test "a second re-run request for the same hold is refused, because the first already ended the wait" {
+  issue_with_pr "" '[
+    {"by": "OWNER", "at": "07:30", "body": "<!-- oe:hold -->\nfailure verdict on bbbbbbb"},
+    {"by": "OWNER", "at": "07:40", "body": "<!-- oe:rerun -->\nJudge it again"}
+  ]' '["failure"]'
+
+  run bash "${oe}" question o/r 5 --rerun
+
+  [ "${status}" -eq 3 ]
+  [ "$(comment_count)" -eq 2 ]
+}
+
+@test "a re-run request is refused and writes nothing when the head has a success verdict" {
+  issue_with_pr "" "${hold_on_failure}" '["success", "failure"]'
+
+  run bash "${oe}" question o/r 5 --rerun
+
+  [ "${status}" -eq 4 ]
+  [ "$(comment_count)" -eq 1 ]
+}
+
+@test "a re-run request is refused and writes nothing when the head has no verdict but a pending one" {
+  issue_with_pr "" "${hold_on_failure}" '["pending"]'
+
+  run bash "${oe}" question o/r 5 --rerun
+
+  [ "${status}" -eq 4 ]
+  [ "$(comment_count)" -eq 1 ]
+}
+
+@test "a re-run request is refused and writes nothing when the head's failure verdict is older than the latest re-run request" {
+  issue_with_pr "" '[
+    {"by": "OWNER", "at": "07:25", "body": "<!-- oe:hold -->\nfailure verdict on bbbbbbb"},
+    {"by": "OWNER", "at": "07:30", "body": "<!-- oe:rerun -->\nJudge it again"},
+    {"by": "OWNER", "at": "07:40", "body": "<!-- oe:hold -->\npr-verify started at 07:31 and gave no result"}
+  ]' '[{"state": "failure", "at": "07:20"}]'
+
+  run bash "${oe}" question o/r 5 --rerun
+
+  [ "${status}" -eq 4 ]
+  [ "$(comment_count)" -eq 3 ]
+}
+
+@test "a re-run request is accepted when the head's failure verdict is newer than the latest re-run request" {
+  issue_with_pr "" '[
+    {"by": "OWNER", "at": "07:25", "body": "<!-- oe:hold -->\nfailure verdict on bbbbbbb"},
+    {"by": "OWNER", "at": "07:30", "body": "<!-- oe:rerun -->\nJudge it again"},
+    {"by": "OWNER", "at": "07:50", "body": "<!-- oe:hold -->\nfailure verdict on bbbbbbb"}
+  ]' '[{"state": "failure", "at": "07:45"}, {"state": "failure", "at": "07:20"}]'
+
+  run bash "${oe}" question o/r 5 --rerun
+
+  [ "${status}" -eq 0 ]
+  [ "$(comment_count)" -eq 4 ]
+}
+
+@test "a re-run request is refused and writes nothing when the Issue has no open PR" {
+  printf '%s\n' '{"issues": [{"number": 5, "branch": true, "comments": [{"by": "OWNER", "at": "07:30", "body": "<!-- oe:hold -->\nno PR"}]}]}' >"${OE_GITHUB}"
+
+  run bash "${oe}" question o/r 5 --rerun
+
+  [ "${status}" -eq 4 ]
+  [ "$(comment_count)" -eq 1 ]
+}
+
+criteria_body='## Background
+
+Exports fail silently.
+
+## Acceptance Criteria
+
+- The export retries once.'
+
+@test "a re-run request with a decision appends it to the decisions section, leaving the rest of the body as it was" {
+  issue_with_pr "${criteria_body}" "${hold_on_failure}" '["failure"]'
+
+  run bash "${oe}" question o/r 5 --rerun "The retry count is a default, not a requirement"
+
+  [ "${status}" -eq 0 ]
+  [ "$(body_of_5)" = "${criteria_body}
+
+## Decisions
+
+Decisions the engineer made on this Issue's questions. Each takes precedence over the criteria it contradicts, and a later one over an earlier one.
+
+- https://github.com/o/r/issues/5#issuecomment-1
+  - The retry count is a default, not a requirement" ]
+  body="$(last_comment)"
+  [ "${body}" != "${body#*$'\n'The retry count is a default, not a requirement$'\n'}" ]
+}
+
+@test "a re-run request without a decision leaves the Issue body unchanged" {
+  issue_with_pr "${criteria_body}" "${hold_on_failure}" '["failure"]'
+
+  run bash "${oe}" question o/r 5 --rerun
+
+  [ "${status}" -eq 0 ]
+  [ "$(body_of_5)" = "${criteria_body}" ]
+}
+
+@test "a re-run request with an empty decision is refused and writes nothing" {
+  issue_with_pr "${criteria_body}" "${hold_on_failure}" '["failure"]'
+
+  run bash "${oe}" question o/r 5 --rerun "  "
+
+  [ "${status}" -eq 2 ]
+  [ "$(comment_count)" -eq 1 ]
+  [ "$(body_of_5)" = "${criteria_body}" ]
+}
+
+@test "a re-run request with a decision on a question files the decision under the question's Decision line" {
+  issue_with_pr "${criteria_body}" '[{"by": "OWNER", "at": "07:30", "body": "<!-- oe:question -->\n### Question\n\nDecision: Does the retry count bind?\n\n---\nAnswer here."}]' '["failure"]'
+
+  run bash "${oe}" question o/r 5 --rerun "It is a default"
+
+  [ "${status}" -eq 0 ]
+  [ "$(body_of_5)" = "${criteria_body}
+
+## Decisions
+
+Decisions the engineer made on this Issue's questions. Each takes precedence over the criteria it contradicts, and a later one over an earlier one.
+
+- Decision: Does the retry count bind?
+  - It is a default
+  - https://github.com/o/r/issues/5#issuecomment-1" ]
 }
