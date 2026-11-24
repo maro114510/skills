@@ -43,8 +43,8 @@ suite() {
   marks="${BATS_TEST_TMPDIR}/marks"
   mkdir -p "${marks}"
   # Each suite passes only if the other one starts while it waits.
-  suite skills/a/scripts/test-a.bats "touch ${marks}/a; for _ in \$(seq 50); do [ -e ${marks}/b ] \&\& exit 0; sleep 0.1; done; exit 1"
-  suite skills/b/scripts/test-b.bats "touch ${marks}/b; for _ in \$(seq 50); do [ -e ${marks}/a ] \&\& exit 0; sleep 0.1; done; exit 1"
+  suite skills/a/scripts/test-a.bats "touch ${marks}/a; for _ in \$(seq 50); do [ -e ${marks}/b ] && return 0; sleep 0.1; done; return 1"
+  suite skills/b/scripts/test-b.bats "touch ${marks}/b; for _ in \$(seq 50); do [ -e ${marks}/a ] && return 0; sleep 0.1; done; return 1"
   BATS_JOBS=2 run bash "${runner}"
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"ok skills/a/scripts/test-a.bats"* ]] || false
