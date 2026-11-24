@@ -121,7 +121,8 @@ fi
 out="$(mktemp "${TMPDIR:-/tmp}/self-review.XXXXXX")"
 log="${out}.log"
 pin="${out}.pin.yml"
-trap 'rm -f "${out}" "${log}" "${pin}"' EXIT
+sessions="${out}.sessions"
+trap 'rm -rf "${out}" "${log}" "${pin}" "${sessions}"' EXIT
 
 if [[ -n "${range}" ]]; then
   claude_prompt="/code-review ${range}"
@@ -190,9 +191,11 @@ dsh)
   # DSH has no built-in review, so it takes the review prompt like OpenCode. The overlay replaces the
   # preset table with one that only names a read-only review, and makes it the default, so the session
   # is confined whatever the profile maps its own names to. `--approval-policy never` keeps an escalation
-  # request from waiting on an answer nobody gives. No flag turns session persistence off, so a review
-  # leaves a session behind.
-  cat >"${pin}" <<'EOF'
+  # request from waiting on an answer nobody gives. No flag turns session persistence off, so the overlay
+  # moves the session root to a temp directory the trap removes, and a review leaves no session in the
+  # profile's own root.
+  mkdir -p "${sessions}"
+  cat >"${pin}" <<EOF
 - id: permission
   name: '@deepseek-ai/dsh-permission-presets'
   config:
@@ -203,6 +206,10 @@ dsh)
         name: self-review-read-only
         description: Review only. No file may be modified and no approval is granted.
     defaultPreset: self-review-read-only
+- id: session-persistence-jsonl
+  name: '@deepseek-ai/dsh-session-persistence-jsonl'
+  config:
+    root: ${sessions}
 EOF
   dsh headless --patch "${pin}" --approval-policy never "${review_prompt} ${verdict_rule}" </dev/null >"${out}" 2>"${log}"
   ;;

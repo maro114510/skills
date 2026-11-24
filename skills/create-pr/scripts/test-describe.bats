@@ -284,6 +284,17 @@ dsh_stub() {
   grep -qF "## Step 2. Analyze the Change" "${stdin_file}"
 }
 
+@test "dsh keeps its session out of the profile's session root and removes it afterwards" {
+  # shellcheck disable=SC2016 # expanded by the stub, not here
+  harness dsh "$(dsh_stub present 'for a; do if [ "${p:-}" = --patch ]; then cp "$a" "'"${BATS_TEST_TMPDIR}"'/pin"; r="$(sed -n "s/^    root: //p" "$a")"; printf %s "$r" >"'"${BATS_TEST_TMPDIR}"'/root"; mkdir -p "$r/s"; fi; p="$a"; done; '"${reply}")"
+  describe dsh "${note}"
+  [ "${status}" -eq 0 ]
+  grep -qF -- "name: '@deepseek-ai/dsh-session-persistence-jsonl'" "${BATS_TEST_TMPDIR}/pin"
+  root="$(cat "${BATS_TEST_TMPDIR}/root")"
+  case "${root}" in "${BATS_TEST_TMPDIR}"/?*) ;; *) return 1 ;; esac
+  [ ! -e "${root}" ]
+}
+
 @test "dsh without --patch exits 2 before the session runs" {
   # shellcheck disable=SC2016 # expanded by the stub, not here
   harness dsh "$(dsh_stub absent 'touch "'"${BATS_TEST_TMPDIR}"'/ran"; '"${reply}")"

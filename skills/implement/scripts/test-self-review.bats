@@ -624,6 +624,17 @@ run_scope_stub() {
   grep -qF -- "defaultPreset: self-review-read-only" <<<"${output}"
 }
 
+@test "dsh keeps its session out of the profile's session root and removes it afterwards" {
+  # A headless run has no flag that skips persistence, so the overlay moves the session root to a temp directory.
+  # shellcheck disable=SC2016 # expanded by the stub, not here
+  run_stub "$(dsh_stub present 'for a; do [ "${p:-}" = --patch ] && f="$a"; p="$a"; done; cat "$f"; r="$(sed -n "s/^    root: //p" "$f")"; mkdir -p "$r/s"; echo "ROOT: $r"; echo "REVIEW_VERDICT: none"')" '' dsh
+  [ "${status}" -eq 0 ]
+  grep -qF -- "name: '@deepseek-ai/dsh-session-persistence-jsonl'" <<<"${output}"
+  root="$(sed -n 's/^ROOT: //p' <<<"${output}")"
+  case "${root}" in "${work}"/?*) ;; *) return 1 ;; esac
+  [ ! -e "${root}" ]
+}
+
 @test "dsh without --patch fails before the review runs" {
   # shellcheck disable=SC2016 # expanded by the stub, not here
   run_stub "$(dsh_stub no-patch 'echo "ARGS: $*"')" '' dsh
