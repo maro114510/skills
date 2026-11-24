@@ -130,6 +130,7 @@ For each Issue, oe ready reads this table from the top and outputs the action of
   - A marker with an end time and no result stays live for 2 minutes after the end, one poll interval, so a push or a verdict that GitHub shows late is not held, and ended with no result after that
   - A marker with no end time is live until it gives its result or 6 hours pass since its start time, and expired with no result after that. The 6 hours cover only a session that died with its agents, so it is far longer than a run
   - When oe end cannot write, the marker keeps no end time, so a failed write never holds an Issue and only the 6 hours apply
+  - oe end writes an end time only into the marker its own agent's start wrote, matched by the start time, and leaves any other marker as it is. An Owner that pushed can still be running when a Verifier's start replaces its marker, and the Owner's end must not end the Verifier's
   - An answer or a re-run request newer than a marker ends it, so it starts the next agent instead of holding the Issue again
 - Repair signals
   - No PR exists yet
