@@ -35,7 +35,7 @@ Each property names the Design Doc text it comes from. The owner approves the li
 | No double start | No agent starts while the working marker is live | Invariants |
 | A result belongs to its start | A push, a question, or a verdict gives a result, or ends a marker, only for the start that produced it | Working marker |
 | A person's input takes effect | After an answer or a re-run request, the next read starts the agent it asks for, unless a fact newer than the input, or a fact about the Issue, its dependencies, the PR's state, or CI, decides first | Hold, Re-run request |
-| No dead end | From every reachable state of an open Issue, some sequence of agent results, CI results, and the person's answers, re-run requests, and merges ends in a merge of a head with a success verdict, without the person deleting the branch or closing anything | Purpose, Source of Truth |
+| No dead end | From every state of an open Issue reached without the person deleting the branch or closing anything, some sequence of agent results, CI results, and the person's answers, re-run requests, and merges ends in a merge of a head with a success verdict, again without deleting or closing. A state after the person closed a PR or deleted a branch is the person's own decision and is not checked | Purpose, Source of Truth |
 | Starts are bounded | Between two inputs from the person, the number of agent starts is bounded | Repair signals, row 8 |
 
 A property is kept only with a recorded change to the model that makes it fail, so a property that can never fail is not mistaken for one that holds.
@@ -66,8 +66,8 @@ flowchart LR
 
 | Rule | Detail |
 |---|---|
-| Checked sections | Invariants and Source of Truth of `orchestrate-epic.md` |
-| When CI runs the model | On a pull request or a push to `main` that changes `orchestrate-epic.md` or `formal/` |
+| Checked sections | Every section of `orchestrate-epic.md` that a property cites: Purpose, Invariants, and Source of Truth |
+| When CI runs the model | On a pull request or a push to `main` that changes `orchestrate-epic.md`, this document, or `formal/`, because a change here can redefine a property without touching the model |
 | A Design Doc change that leaves the model alone | The model records a hash of the checked sections, and CI fails when the hash differs. Updating it is a reviewed edit that says the model still matches |
 | Order | A child Issue that changes the next-action table starts only after the Design Doc change that defines it has merged with its model |
 | Who writes the model | The agent that writes the Design Doc change. An implementation agent never edits the model to make its code pass |
