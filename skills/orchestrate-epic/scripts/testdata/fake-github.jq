@@ -15,6 +15,7 @@
 # | ref | Branch name | The head of that branch |
 # | comments | Issue number | The comments on that Issue, oldest first |
 # | issue_rest | Issue number | The REST read of one Issue, with its number and body |
+# | pull_rest | Pull request number | The REST read of one pull request, with its number, body, and head SHA |
 # | checks | Commit SHA and cursor, as SHA:CURSOR | The page of checks on that commit after the cursor |
 # | commits | Pull request number and cursor, as N:CURSOR | The page of 50 commits of that pull request before the cursor |
 # | compare | Two commits, as BASE...HEAD | Whether HEAD contains BASE: ahead when it does, and diverged when it does not |
@@ -61,6 +62,7 @@
 # | number | The pull request number, which also names its head SHA | Required |
 # | head_sha | Its head SHA, set to model a push | Named by number |
 # | comments | Conversation comments, oldest first, each with by, at, and body | None |
+# | body | Its description, which GitHub returns as null when empty | Empty |
 # | state | open, merged, or closed | open |
 # | opened | When it was opened | Required |
 # | merged | When it was merged | Not merged |
@@ -252,6 +254,10 @@ def issue_rest($n):
   [.issues[] | select(.number == $n)] | first // error("Issue #\($n) not found")
   | {number, body: (.body // "")};
 
+def pull_rest($n):
+  [.issues[].pull_requests[]? | select(.number == $n)] | first // error("unknown pull request \($n)")
+  | {number, body: (.body // null), head: {sha: pr_sha}};
+
 # The page of checks after the cursor $after on the pull request head $oid.
 def checks_response($oid; $after):
   ([.issues[].pull_requests[]? | select(read_sha == $oid), (.commits[]? | select(.sha == $oid))] | first // error("unknown commit \($oid)")) as $commit
@@ -284,6 +290,7 @@ $state
   elif $call == "ref" then branch_head($arg)
   elif $call == "comments" then issue_comments($arg | tonumber)
   elif $call == "issue_rest" then issue_rest($arg | tonumber)
+  elif $call == "pull_rest" then pull_rest($arg | tonumber)
   elif $call == "commits" then ($arg | split(":")) as [$n, $before] | commits_response($n | tonumber; $before | tonumber)
   elif $call == "checks" then ($arg | split(":")) as [$oid, $after] | checks_response($oid; $after | tonumber)
   elif $call == "compare" then ($arg | split("...")) as [$base, $head] | compare_response($base; $head)

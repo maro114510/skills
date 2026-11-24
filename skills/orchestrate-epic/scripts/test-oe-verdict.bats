@@ -57,6 +57,27 @@ pr_comments() {
   jq -c --argjson n "$1" '[.issues[].pull_requests[]? | select(.number == $n) | .comments // [] | .[]]' "${OE_GITHUB}"
 }
 
+# Prints the body of pull request $1.
+pr_body() {
+  jq -r --argjson n "$1" '.issues[].pull_requests[]? | select(.number == $n) | .body // ""' "${OE_GITHUB}"
+}
+
+# Prints the findings block of pull request $1, from its start marker line to its end marker line.
+findings_block() {
+  pr_body "$1" | sed -n '/^<!-- oe:findings -->$/,/^<!-- oe:findings-end -->$/p'
+}
+
+# Prints how many findings blocks the body of pull request $1 holds.
+findings_blocks() {
+  pr_body "$1" | grep -c '^<!-- oe:findings -->$'
+}
+
+# Sets the body of pull request 15 to $1.
+pr_15_body() {
+  jq --arg body "$1" '.issues[0].pull_requests[0].body = $body' "${OE_GITHUB}" >"${OE_GITHUB}.new"
+  mv "${OE_GITHUB}.new" "${OE_GITHUB}"
+}
+
 # Prints the action that oe ready gave the Issue numbered $1.
 action_of() {
   printf '%s\n' "${lines[@]}" | while IFS=$'\t' read -r n action _; do
@@ -95,26 +116,28 @@ state_files() {
   [ "$(verdicts_on "${head_of_pr_15}")" = success ]
 }
 
-@test "a failure verdict posts its findings as one marked PR comment and writes nothing on this host, and oe ready holds the Issue" {
+@test "a failure verdict writes its findings as one block in the PR body with its SHA and state, posts no comment, and oe ready holds the Issue" {
   pr_15_passed_checks
+  pr_15_body "Closes #5"
   before="$(state_files)"
 
   run bash "${oe}" verdict o/r 5 "${head_of_pr_15}" failure <<<"criterion 2 -> failed: bats test-timeout.bats; observed exit 0 after 30s"
 
   [ "${status}" -eq 0 ]
   [ "$(verdicts_on "${head_of_pr_15}")" = failure ]
-  [ "$(pr_comments 15 | jq length)" -eq 1 ]
-  body="$(pr_comments 15 | jq -r '.[0].body')"
-  case "${body}" in
-  "<!-- oe:findings -->"*) ;;
-  *) return 1 ;;
-  esac
-  case "${body}" in
+  [ "$(pr_comments 15)" = "[]" ]
+  [ "$(findings_blocks 15)" -eq 1 ]
+  block="$(findings_block 15)"
+  case "${block}" in
   *"criterion 2 -> failed: bats test-timeout.bats; observed exit 0 after 30s"*) ;;
   *) return 1 ;;
   esac
-  case "${body}" in
-  *"${head_of_pr_15}"*) ;;
+  case "${block}" in
+  *"failure on ${head_of_pr_15}"*) ;;
+  *) return 1 ;;
+  esac
+  case "$(pr_body 15)" in
+  "Closes #5"*) ;;
   *) return 1 ;;
   esac
   [ "$(state_files)" = "${before}" ]
@@ -124,6 +147,30 @@ state_files() {
   [ "$(action_of 5)" = hold ]
   case "${lines[0]}" in
   *"failure verdict"*) ;;
+  *) return 1 ;;
+  esac
+}
+
+@test "a second verdict on the same PR replaces the block, so one block remains and the rest of the body stays" {
+  pr_15_passed_checks
+  pr_15_body "Closes #5"
+  bash "${oe}" verdict o/r 5 "${head_of_pr_15}" failure <<<"criterion 1 -> failed: ran it; observed exit 1" >/dev/null
+
+  run bash "${oe}" verdict o/r 5 "${head_of_pr_15}" failure <<<"criterion 2 -> failed: ran it; observed exit 3"
+
+  [ "${status}" -eq 0 ]
+  [ "$(findings_blocks 15)" -eq 1 ]
+  block="$(findings_block 15)"
+  case "${block}" in
+  *"criterion 2 -> failed: ran it; observed exit 3"*) ;;
+  *) return 1 ;;
+  esac
+  case "${block}" in
+  *"criterion 1"*) return 1 ;;
+  *) ;;
+  esac
+  case "$(pr_body 15)" in
+  "Closes #5"*) ;;
   *) return 1 ;;
   esac
 }
@@ -189,7 +236,7 @@ JSON
   [ -z "$(verdicts_on "${head_of_pr_15}")" ]
 }
 
-@test "a success verdict that holds an unconfirmed criterion posts its findings as one PR comment" {
+@test "a success verdict that holds an unconfirmed criterion keeps only that line in the block and posts no comment" {
   pr_15_passed_checks
   before="$(state_files)"
 
@@ -198,24 +245,96 @@ criterion 2 -> unconfirmed: a person must look at the screen"
 
   [ "${status}" -eq 0 ]
   [ "$(verdicts_on "${head_of_pr_15}")" = success ]
-  [ "$(pr_comments 15 | jq length)" -eq 1 ]
-  case "$(pr_comments 15 | jq -r '.[0].body')" in
-  "<!-- oe:findings -->"*"criterion 2 -> unconfirmed: a person must look at the screen"*) ;;
+  [ "$(pr_comments 15)" = "[]" ]
+  [ "$(findings_blocks 15)" -eq 1 ]
+  block="$(findings_block 15)"
+  case "${block}" in
+  *"success on ${head_of_pr_15}"*"criterion 2 -> unconfirmed: a person must look at the screen"*) ;;
   *) return 1 ;;
+  esac
+  case "${block}" in
+  *"criterion 1"*) return 1 ;;
+  *) ;;
   esac
   [ "$(state_files)" = "${before}" ]
 }
 
-@test "findings whose comment write failed leave the SHA without a verdict" {
+@test "a success verdict with no unconfirmed criterion removes the block an earlier verdict wrote and keeps the rest of the body" {
+  pr_15_passed_checks
+  pr_15_body "Closes #5"
+  bash "${oe}" verdict o/r 5 "${head_of_pr_15}" failure <<<"criterion 1 -> failed: ran it; observed exit 1" >/dev/null
+
+  run bash "${oe}" verdict o/r 5 "${head_of_pr_15}" success <<<"criterion 1 -> [behavior] ran it; observed ok"
+
+  [ "${status}" -eq 0 ]
+  [ "$(verdicts_on "${head_of_pr_15}" | head -n 1)" = success ]
+  [ "$(findings_blocks 15)" -eq 0 ]
+  [ "$(pr_body 15)" = "Closes #5" ]
+}
+
+@test "a criterion quoting a closing keyword, a mention, a task item, or the end marker appears in the block in a form that takes no effect" {
+  pr_15_passed_checks
+  end_marker="<!-- oe:findings-end -->"
+
+  run bash "${oe}" verdict o/r 5 "${head_of_pr_15}" failure <<EOF
+Closes #1 -> failed: ran it; observed open
+@alice approves -> failed: ran it; observed none
+- [ ] the box is checked -> failed: ran it; observed unchecked
+${end_marker} stays -> failed: ran it; observed gone
+\`\`\`\` fence -> failed: ran it; observed broken
+EOF
+
+  [ "${status}" -eq 0 ]
+  [ "$(findings_blocks 15)" -eq 1 ]
+  body="$(pr_body 15)"
+  # The end marker the criterion quotes is not one: only the block's own ends the block.
+  [ "$(grep -c -- "${end_marker}" <<<"${body}")" -eq 1 ]
+  [ "$(tail -n 1 <<<"${body}")" = "${end_marker}" ]
+  if grep -Eiq '(close[sd]?|fix(e[sd])?|resolve[sd]?):?[[:space:]]+#[0-9]' <<<"${body}"; then return 1; fi
+  if grep -q '@alice' <<<"${body}"; then return 1; fi
+  # Every quoted line sits inside one fenced code block, so no line renders as a task item.
+  fence="$(grep -E '^`{3,}' <<<"${body}" | head -n 1)"
+  [ "${#fence}" -gt 4 ]
+  inside="$(awk -v f="${fence}" '$0 == f { n++; next } n == 1' <<<"${body}")"
+  [ "$(grep -c -- '-> failed:' <<<"${inside}")" -eq 5 ]
+  [ "$(grep -c -- '-> failed:' <<<"${body}")" -eq 5 ]
+}
+
+@test "findings beyond the size cap are cut at a line, and the block says how many lines were cut" {
+  pr_15_passed_checks
+  padding="$(printf '%0300d' 0)"
+  long="$(for i in $(seq 1 200); do echo "criterion ${i} -> failed: ran it; observed ${padding}"; done)"
+
+  run bash "${oe}" verdict o/r 5 "${head_of_pr_15}" failure <<<"${long}"
+
+  [ "${status}" -eq 0 ]
+  block="$(findings_block 15)"
+  [ "${#block}" -lt 30000 ]
+  grep -q '^criterion 1 -> failed' <<<"${block}"
+  if grep -q '^criterion 200 -> failed' <<<"${block}"; then return 1; fi
+  grep -Eq '[1-9][0-9]* more lines were cut' <<<"${block}"
+}
+
+@test "findings whose PR body write failed leave the SHA without a verdict and exit 1" {
   pr_15_passed_checks
 
-  GH_FAIL="/comments" run --separate-stderr bash "${oe}" verdict o/r 5 "${head_of_pr_15}" failure <<<"criterion 1 -> failed: ran it; observed exit 1"
+  GH_FAIL="PATCH" run --separate-stderr bash "${oe}" verdict o/r 5 "${head_of_pr_15}" failure <<<"criterion 1 -> failed: ran it; observed exit 1"
 
   [ "${status}" -eq 1 ]
   case "${stderr}" in
   *"findings"*) ;;
   *) return 1 ;;
   esac
+  [ -z "$(verdicts_on "${head_of_pr_15}")" ]
+  [ "$(pr_comments 15)" = "[]" ]
+}
+
+@test "a failed read of the PR body leaves the SHA without a verdict and exits 1" {
+  pr_15_passed_checks
+
+  GH_FAIL="pulls/15" run --separate-stderr bash "${oe}" verdict o/r 5 "${head_of_pr_15}" success <<<"criterion 1 -> [behavior] ran it; observed ok"
+
+  [ "${status}" -eq 1 ]
   [ -z "$(verdicts_on "${head_of_pr_15}")" ]
 }
 

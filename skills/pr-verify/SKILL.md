@@ -51,7 +51,7 @@ If any of the five is missing, end without a verdict and say which.
    | Not observed either way, such as a UI no tool can drive or a check that needs a deploy or a person | `<check> -> unconfirmed: <the evidence that would settle it>` |
 
    Put an input too long for its line after all check lines.
-5. Decide the verdict. It is `failure` only when at least one check has a `-> failed:` line. Otherwise it is `success`, including when the list is empty or some checks are unconfirmed. `oe verdict` posts the findings on the PR for a failure or an unconfirmed check, so the person reads each one.
+5. Decide the verdict. It is `failure` only when at least one check has a `-> failed:` line. Otherwise it is `success`, including when the list is empty or some checks are unconfirmed. `oe verdict` writes each failed and unconfirmed check into a block in the PR body, so the person reads each one.
 6. Confirm `git -C <worktree> rev-parse HEAD` still prints `<sha>`. Create a unique temporary file outside `<worktree>` with `mktemp`, then use your file-writing tool to write the step 4 lines into it. Never put findings in shell command text, including a heredoc, `echo`, or `printf`: findings may name paths the harness denies in shell commands.
 
    Record the verdict by redirecting that file into stdin; `<findings-file>` is the temporary file's path:
