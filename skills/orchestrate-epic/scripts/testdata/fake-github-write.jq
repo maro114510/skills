@@ -10,6 +10,7 @@
 # | comment | Issue or pull request number | Appends a comment by the OWNER at 08:00 | Neither exists |
 # | status | Commit SHA | Puts a commit status on that SHA, newest first in written_statuses | Never |
 # | edit_issue | Issue number | Replaces the Issue's body with $fields.body | The Issue does not exist |
+# | edit_pull | Pull request number | Replaces the pull request's body with $fields.body | The pull request does not exist |
 # | update_branch | Pull request number | Moves the head to a new commit that contains every merge, with no checks or verdicts, pushed at 08:00, and appends the pull request number to branch_updates | The pull request is not open, its head differs from $fields.expected_head_sha, or it conflicts |
 
 def create_ref:
@@ -47,6 +48,12 @@ def edit_issue($n):
       response: {number: $n, body: $fields.body}}
     end;
 
+def edit_pull($n):
+  if ([$state.issues[].pull_requests[]? | select(.number == $n)] | length) == 0 then {error: "Not Found (HTTP 404)"}
+  else {state: ($state | .issues |= map(.pull_requests |= (if . == null then . else map(if .number == $n then .body = $fields.body else . end) end))),
+    response: {number: $n, body: $fields.body}}
+  end;
+
 def status($sha):
   ($fields | {sha: $sha, context, state, description, target_url}) as $new
   | {state: ($state | .written_statuses = [$new] + (.written_statuses // [])), response: $new};
@@ -75,5 +82,6 @@ elif $call == "assign" then assign($arg | tonumber)
 elif $call == "comment" then comment($arg | tonumber)
 elif $call == "status" then status($arg)
 elif $call == "edit_issue" then edit_issue($arg | tonumber)
+elif $call == "edit_pull" then edit_pull($arg | tonumber)
 elif $call == "update_branch" then update_branch($arg | tonumber)
 else error("unknown write \($call)") end

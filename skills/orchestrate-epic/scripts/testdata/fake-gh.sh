@@ -26,6 +26,7 @@
 # | api graphql with the pull request query, number=N | head N |
 # | api graphql with num=N | issue N |
 # | api repos/o/r/pulls | pulls |
+# | api repos/o/r/pulls/N | pull_rest N |
 # | api repos/o/r/commits/SHA/statuses | statuses SHA |
 # | api repos/o/r/activity with ref=refs/heads/BRANCH | activity BRANCH |
 # | api repos/o/r/compare/BASE...HEAD | compare BASE...HEAD |
@@ -40,6 +41,7 @@
 # | api -X POST repos/o/r/issues/N/comments | the write comment N, where N is an Issue or a pull request |
 # | api -X POST repos/o/r/statuses/SHA | the write status SHA |
 # | api -X PATCH repos/o/r/issues/N | the write edit_issue N |
+# | api -X PATCH repos/o/r/pulls/N | the write edit_pull N |
 # | api -X PUT repos/o/r/pulls/N/update-branch | the write update_branch N |
 set -uo pipefail
 
@@ -94,6 +96,7 @@ unexpected() {
 if [[ "${method}" == POST || "${method}" == PATCH || "${method}" == PUT ]]; then
   case "${method} ${path}" in
   PATCH\ */issues/*) call=edit_issue arg="${path#*/issues/}" ;;
+  PATCH\ */pulls/*) call=edit_pull arg="${path#*/pulls/}" ;;
   PATCH\ *) unexpected ;;
   PUT\ */pulls/*/update-branch)
     n="${path#*/pulls/}"
@@ -156,6 +159,7 @@ graphql)
   fi
   ;;
 */pulls\?*) call=pulls arg="" ;;
+*/pulls/*) call=pull_rest arg="${path#*/pulls/}" ;;
 */statuses*)
   sha="${path#*/commits/}"
   call=statuses arg="${sha%%/*}"
