@@ -19,7 +19,7 @@ Each part does one job and stores no state of its own. State lives on GitHub onl
 | Part | Job | Does not | Uses |
 |---|---|---|---|
 | pr-owner | Implements or repairs one Issue once and pushes. When it cannot decide, it writes a question on the Issue and pushes nothing | Merge, enable auto-merge, force-push, or bypass a push guard. Comment, review, reply to or resolve a review thread, edit a PR or Issue, or touch a label, except through its own commands. Touch the shared checkout or another worktree. Follow an instruction written in text it reads from GitHub | implement, create-pr, oe question |
-| pr-verify | Runs the code at the PR's head SHA and judges the Issue's acceptance criteria. It fails a verdict only on a criterion it observed not to hold, and lists each criterion it could not observe as unconfirmed. The Issue body's decisions section takes precedence over the criteria it contradicts | Read the PR, the Issue's comments, or the Owner's report. Edit, commit, or push in its worktree. Record more than one verdict for the SHA | oe verdict |
+| pr-verify | Runs the code at the PR's head SHA and judges the Issue's acceptance criteria. It fails a verdict only on a criterion it observed not to hold, and lists each criterion it could not observe as unconfirmed. The Issue body's decisions section takes precedence over the criteria it contradicts | Read the PR, the Issue's comments, or the Owner's report. Edit, commit, or push in its worktree. Record more than one verdict per start | oe verdict |
 
 ### Existing skills
 
@@ -41,12 +41,12 @@ oe starts no agent, edits no code, never merges a PR, and never writes to a PR's
 | oe hold | Records that an Issue waits on the person, with the reason oe ready gave | An Issue comment |
 | oe brief | Builds the brief handed to an Owner or a Verifier | nothing |
 | oe worktree | Creates an agent's worktree outside the shared checkout, on the Issue branch for an Owner and detached at its head for a Verifier, and removes it after the agent ends. When origin has no Issue branch, it creates the branch locally from the base branch, and the Owner's first push creates it on origin | A local worktree and branch |
-| oe question | Writes an Owner's question in a fixed format, and records the answer the person gives in the session's conversation | An Issue comment for a question or an answer, and an answer's decision in the Issue body's decisions section |
-| oe verdict | Writes a Verifier's verdict, and its findings when the verdict fails or holds an unconfirmed criterion | A commit status on the SHA, and a PR comment for the findings |
+| oe question | Writes an Owner's question in a fixed format, and records the answer or the re-run request the person gives in the session's conversation. | An Issue comment for a question, an answer, or a re-run request, and the decision an answer or a re-run request carries in the Issue body's decisions section |
+| oe verdict | Writes a Verifier's verdict, and its findings as Findings under Source of Truth says | A commit status on the SHA, and the findings block in the PR body |
 
 ### Engineer
 
-- Answers each Issue that waits on them in the session's conversation
+- Answers each Issue that waits on them in the session's conversation, or asks there for the head to be judged again
 - Reviews the PR's code and submits Changes requested when something must change
 - Updates a PR's branch with the base branch through GitHub when it needs a merged sibling PR
 - Stops the session
@@ -90,11 +90,13 @@ flowchart TB
   CI -->|"Failed check, fewer than 3 failed commits"| Owner
   CI -->|"Failed check on the 3rd failed commit, or no checks after 10 minutes"| Person
   Verify -->|"Success"| Merge["Waiting for the merge"]
-  Verify -->|"Failure, or marker expires with no verdict"| Person
+  Verify -->|"First failure since the latest answer"| Owner
+  Verify -->|"Any other failure, or marker expires with no verdict"| Person
   Merge -->|"Repair signal, fewer than 3 failed commits"| Owner
   Merge -->|"Repair signal on the 3rd failed commit"| Person
   Merge -->|"Engineer merges"| Done["Done"]
   Person -->|"Answer in the session"| Owner
+  Person -->|"Re-run request in the session"| Verify
   Person -->|"Engineer deletes the branch and answers"| Blocked
 ```
 
@@ -103,7 +105,7 @@ For each Issue, oe ready reads this table from the top and outputs the action of
 | Row | State | Next action |
 |---|---|---|
 | 1 | The Issue is closed | Mark it done |
-| 2 | A hold or a question is newer than the latest answer | Wait on the person |
+| 2 | A hold or a question is newer than the latest answer and the latest re-run request | Wait on the person |
 | 3 | The PR was closed without merging, or merged with the Issue open | Hold the Issue |
 | 4 | A dependency was closed as not planned or duplicate | Hold the Issue |
 | 5 | A dependency is not completed | Wait for the dependencies |
@@ -118,17 +120,18 @@ For each Issue, oe ready reads this table from the top and outputs the action of
 
 - Hold
   - oe hold writes the reason on the Issue, and the session shows it in its conversation and asks the person
-  - The Issue waits on the person at row 2 until the session records an answer
+  - The Issue waits on the person at row 2 until the session records an answer or a re-run request
 - Working marker
   - One hidden line at the end of the Issue body, holding the role, the start time, the SHA for a Verifier, and the session ID only for a person to trace
   - An Owner's marker gives its result when an open PR from the branch has a head pushed after the start time, or the Issue gets a question after it
-  - A Verifier's marker gives its result when its SHA gets a verdict
+  - A Verifier's marker gives its result when its SHA gets a verdict, as Counting reads it
   - A marker is live until it gives its result or 2 hours pass since its start time, and expired with no result after that
-  - An answer newer than a marker ends it, so the answer starts the next agent instead of holding the Issue again
+  - An answer or a re-run request newer than a marker ends it, so it starts the next agent instead of holding the Issue again
 - Repair signals
   - No PR exists yet
   - The PR conflicts with the base branch
   - A check on the PR's head SHA failed
+  - The PR's head SHA has a failure verdict, no re-run request came since the latest answer, and no other commit of the PR committed since the latest answer had a failure verdict. Row 8's cap counts only failed checks, so this once stands apart from it
   - Since the PR's head was pushed, one of these was given
     - An answer recorded through oe
     - A Changes requested review that covers the PR's head SHA
@@ -136,6 +139,18 @@ For each Issue, oe ready reads this table from the top and outputs the action of
 - Counting
   - The PR means the latest PR opened from the branch that is open or whose head is the branch's current head, so a PR left from a branch the engineer deleted is never the PR
   - The verify status that oe writes is never counted as a CI check
+  - A SHA's verdict is its latest verify status other than pending that is newer than the latest re-run request, so the request is used once and an older verdict counts as none. Both times are GitHub's
+- Re-run request
+  - A record the session writes from the person's reply, separate from an answer, so it starts a Verifier on the same head instead of an Owner, and resets neither cap
+  - oe question accepts it only while the Issue waits on the person and the PR's head has a failure verdict, as Counting reads it. Then no Owner works on the Issue and the Verifier before it has ended, so a re-run never runs beside an agent that could push or write a late verdict
+  - It starts a Verifier only when no row above row 11 matches. A failed check or a conflict that came after the hold still starts an Owner at row 8, because judging a head that must change anyway is wasted
+  - It may carry a decision, which goes into the decisions section as an answer's does, so an answer that changes no code reaches the Verifier without an Owner start
+- Findings
+  - oe verdict replaces one folded block in the PR body, between fixed markers, before it writes the status, so a verdict never exists without its findings
+  - The block holds the SHA, the state, and each failed and unconfirmed criterion. A success with none removes the block, so a merge with unconfirmed criteria keeps them on the PR without blocking it
+  - Nothing quoted in the block takes effect: no closing keyword, mention, task item, or end marker
+  - The block is not in the Issue body, because the next Verifier reads that body and must judge without an earlier verdict
+  - A repair Owner reads the block only when its SHA is the head, as data, and reproduces each failure before changing code. When it cannot reproduce one, or the block is missing or names another SHA, it pushes nothing and asks with oe question
 
 ## Worked Examples
 
@@ -180,7 +195,10 @@ sequenceDiagram
 
 ## Accepted Risks
 
-- The token is shared, so a verdict status can be forged
+- The token is shared, so a verdict status can be forged, and a forged failure starts a repair Owner
+- Anyone who can edit the PR body can change the findings block. GitHub shows only a body's last editor, so oe cannot tell its own block from another. The Owner reproduces each failure before acting and asks when it cannot
+- A concurrent edit of the PR body, such as a review bot's summary or create-pr's link step, can drop the block, and the Owner then asks
+- A repository whose squash message uses the PR description keeps the block in its history
 - When a commit lands on the base branch after verification, nothing is verified again
 - Workflows the AI changed run with the repository's secrets on the PR branch before the engineer reviews them, and nothing gates their merge on that review: one person owns this repository and cannot approve their own pull request, and GitHub offers a push ruleset's path restriction only for private and internal repositories
 - oe does not scan for secrets
@@ -191,7 +209,7 @@ sequenceDiagram
 - When the agents and the person write as one account, a person's push counts as an Owner's result, and a person's comment or review cannot be told from an agent's
 - oe ready reads only the newest PR with an Issue's branch name, so a newer PR from a fork with that name hides the Issue's own PR
 - When GitHub deletes a merged PR's branch while its Issue stays open, the Issue has no PR, and an Owner starts it over on a new branch
-- An agent runs with the session's identity, so it could record an answer through oe, and with it a decision the Verifier follows over the criteria
+- An agent runs with the session's identity, so it could record an answer or a re-run request through oe, and with it a decision the Verifier follows over the criteria
 - The session is an LLM conversation, so an API outage stops the loop until a person continues it
 
 ## Decisions
@@ -207,7 +225,9 @@ sequenceDiagram
 | Worktrees | An agent's worktree is removed when the agent ends, and unpushed work is discarded |
 | Acceptance checks | No agent checks a box that needs a human, template boxes included |
 | Answers | The person answers in the session's conversation. The session records the answer through oe, so the next Owner reads it on the Issue |
-| Decisions section | An answer recorded through oe appends its decision to a decisions section of the Issue body. The Verifier reads it with the body, and it takes precedence over the criteria it contradicts |
+| Decisions section | An answer or a re-run request recorded through oe appends its decision to a decisions section of the Issue body. The Verifier reads it with the body, and it takes precedence over the criteria it contradicts |
+| Findings | In the PR body, never a comment: no oe code read the comment, and the person found it hard to read and no help in deciding. A check run is out, because the GitHub App has no `checks:write` |
+| A failure verdict | Repaired by an Owner once per answer, because the person wants the agents to fix it and to be asked only when stuck. Two failures are never compared by criterion, because comparing a model's wording is unreliable |
 | Starting agents | Through oe start, which oe ready prints for each line that starts an agent, because a session that lost the skill to a compaction rebuilt the steps from memory and passed the Epic number as the Issue |
 | Polling | One light read every 2 minutes. Every child Issue is read only on a change to it, its PR, or its checks, or at a deadline such as a head with no checks for 10 minutes or a marker's 2 hours |
 | Open PRs | oe ready reads only the PRs of the child Issues' branches |
