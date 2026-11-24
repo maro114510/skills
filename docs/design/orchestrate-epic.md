@@ -12,7 +12,7 @@ Each part does one job and stores no state of its own. State lives on GitHub onl
 
 | Part | Job | Does not | Uses |
 |---|---|---|---|
-| orchestrate-epic session | Started by a person on one Epic. Gets each Issue's next action from oe ready, starts each agent it needs with the oe start command that oe ready prints, up to its `max-agents` argument at once, and waits with oe wait until the next actions change or an agent ends. It is the person's only window: it shows every Issue that waits on the person in its conversation, with the reason, and records the person's reply through oe. It ends only as Waiting under Decisions says | Merge, enable auto-merge, approve, or close anything. Write to GitHub except through oe. Edit code or touch the shared checkout. Decide a next action other than from oe ready. Ask a person a question of its own | oe, pr-owner, pr-verify |
+| orchestrate-epic session | Started by a person on one Epic. Gets each Issue's next action from oe ready, starts each agent it needs with the oe start command that oe ready prints, up to its `max-agents` argument at once, and waits with oe wait until the next actions change or an agent ends. When an agent ends, it records the end through oe end. It is the person's only window: it shows every Issue that waits on the person in its conversation, with the reason, and records the person's reply through oe. It ends only as Waiting under Decisions says | Merge, enable auto-merge, approve, or close anything. Write to GitHub except through oe. Edit code or touch the shared checkout. Decide a next action other than from oe ready. Ask a person a question of its own | oe, pr-owner, pr-verify |
 
 ### Agents
 
@@ -40,6 +40,7 @@ oe starts no agent, edits no code, never merges a PR, and never writes to a PR's
 | oe wait | Blocks until oe ready's next actions change, reading GitHub as Polling and Rate limit under Decisions say | nothing |
 | oe hold | Records that an Issue waits on the person, with the reason oe ready gave | An Issue comment |
 | oe brief | Builds the brief handed to an Owner or a Verifier | nothing |
+| oe end | Records that an agent ended, then removes its worktree through oe worktree. It records only the fact and the time, never what the agent reported | The end time in the working marker in the Issue body, and a local worktree and branch |
 | oe worktree | Creates an agent's worktree outside the shared checkout, on the Issue branch for an Owner and detached at its head for a Verifier, and removes it after the agent ends. When origin has no Issue branch, it creates the branch locally from the base branch, and the Owner's first push creates it on origin | A local worktree and branch |
 | oe question | Writes an Owner's question in a fixed format, and records the answer or the re-run request the person gives in the session's conversation. | An Issue comment for a question, an answer, or a re-run request, and the decision an answer or a re-run request carries in the Issue body's decisions section |
 | oe verdict | Writes a Verifier's verdict, and its findings as Findings under Source of Truth says | A commit status on the SHA, and the findings block in the PR body |
@@ -85,13 +86,13 @@ flowchart TB
   Blocked -->|"A dependency closed as not planned or duplicate"| Person
   Owner -->|"Question"| Person["Waiting on the person"]
   Owner -->|"Push"| CI["Waiting for CI"]
-  Owner -->|"Marker expires with no PR push"| Person
+  Owner -->|"Ends, or its marker expires, with no PR push"| Person
   CI -->|"Success"| Verify["Verifier working"]
   CI -->|"Failed check, fewer than 3 failed commits"| Owner
   CI -->|"Failed check on the 3rd failed commit, or no checks after 10 minutes"| Person
   Verify -->|"Success"| Merge["Waiting for the merge"]
   Verify -->|"First failure since the latest answer"| Owner
-  Verify -->|"Any other failure, or marker expires with no verdict"| Person
+  Verify -->|"Any other failure, or it ends or its marker expires with no verdict"| Person
   Merge -->|"Repair signal, fewer than 3 failed commits"| Owner
   Merge -->|"Repair signal on the 3rd failed commit"| Person
   Merge -->|"Engineer merges"| Done["Done"]
@@ -110,7 +111,7 @@ For each Issue, oe ready reads this table from the top and outputs the action of
 | 4 | A dependency was closed as not planned or duplicate | Hold the Issue |
 | 5 | A dependency is not completed | Wait for the dependencies |
 | 6 | The working marker is live | Wait for the agent |
-| 7 | The working marker expired with no result | Hold the Issue |
+| 7 | The working marker ended or expired with no result | Hold the Issue |
 | 8 | A repair signal below is present | Hold the Issue when 3 commits of the PR since the latest answer had a failed check. Otherwise start an Owner |
 | 9 | A check on the PR's head SHA is pending, or the SHA has had no checks for less than 10 minutes | Wait for CI |
 | 10 | The PR's head SHA still has no checks after 10 minutes | Hold the Issue |
@@ -122,10 +123,13 @@ For each Issue, oe ready reads this table from the top and outputs the action of
   - oe hold writes the reason on the Issue, and the session shows it in its conversation and asks the person
   - The Issue waits on the person at row 2 until the session records an answer or a re-run request
 - Working marker
-  - One hidden line at the end of the Issue body, holding the role, the start time, the SHA for a Verifier, and the session ID only for a person to trace
+  - One hidden line at the end of the Issue body, holding the role, the start time, the SHA for a Verifier, the session ID only for a person to trace, and the end time once oe end records it
   - An Owner's marker gives its result when an open PR from the branch has a head pushed after the start time, or the Issue gets a question after it
   - A Verifier's marker gives its result when its SHA gets a verdict, as Counting reads it
-  - A marker is live until it gives its result or 2 hours pass since its start time, and expired with no result after that
+  - A marker that gives its result never holds the Issue, whether or not it has an end time
+  - A marker with an end time and no result stays live for 2 minutes after the end, one poll interval, so a push or a verdict that GitHub shows late is not held, and ended with no result after that
+  - A marker with no end time is live until it gives its result or 6 hours pass since its start time, and expired with no result after that. The 6 hours cover only a session that died with its agents, so it is far longer than a run
+  - When oe end cannot write, the marker keeps no end time, so a failed write never holds an Issue and only the 6 hours apply
   - An answer or a re-run request newer than a marker ends it, so it starts the next agent instead of holding the Issue again
 - Repair signals
   - No PR exists yet
@@ -175,6 +179,8 @@ sequenceDiagram
   O->>+W: Start with A
   W->>G: Push and open the PR
   W-->>-O: End
+  O->>E: end
+  E->>G: Write the end time in the working marker on A
   O->>E: wait
   E->>G: Poll
   E-->>O: Start a Verifier for A
@@ -184,6 +190,8 @@ sequenceDiagram
   V->>E: verdict success
   E->>G: Put a success status on the SHA
   V-->>-O: End
+  O->>E: end
+  E->>G: Write the end time in the working marker on A
   O->>E: wait
   H->>G: Review, approve, and merge
   E-->>O: A closed, start an Owner for B
@@ -191,6 +199,8 @@ sequenceDiagram
 
 | Case | What happens |
 |---|---|
+| An Owner ends with no push and no question | The session runs oe end. 2 minutes later oe ready holds the Issue, and the session asks the person |
+| The session dies with its agents | No end is recorded. A session started later waits on each live marker until 6 hours pass since its start, then holds the Issue |
 | Sibling merged | Nothing starts. When the engineer wants B's head to contain A, they update B's branch with GitHub's button, and CI and a Verifier run on the new head |
 
 ## Accepted Risks
@@ -204,8 +214,8 @@ sequenceDiagram
 - oe does not scan for secrets
 - A comment the AI forgot to mark is read as engineer input
 - Writing the working marker is not atomic, so two sessions on the same Epic can start two agents on one Issue. One host runs an Epic at a time
-- An agent that ends early without a result holds its Issue until its marker's 2 hours pass
-- An agent that runs longer than 2 hours has its Issue held while it still works, and an answer then starts a second agent beside it. Measured Owner runs took at most 89 minutes
+- When a session dies with its agents, their markers stay live until 6 hours pass since their start: their Issues wait, and a session started in the meantime counts them as running agents
+- An agent that runs longer than 6 hours has its Issue held while it still works, and an answer then starts a second agent beside it. Measured Owner runs took at most 89 minutes, and one under an older oe took about 3 hours
 - When the agents and the person write as one account, a person's push counts as an Owner's result, and a person's comment or review cannot be told from an agent's
 - oe ready reads only the newest PR with an Issue's branch name, so a newer PR from a fork with that name hides the Issue's own PR
 - When GitHub deletes a merged PR's branch while its Issue stays open, the Issue has no PR, and an Owner starts it over on a new branch
@@ -223,12 +233,13 @@ sequenceDiagram
 | Harnesses | The skill's Harnesses table maps the Executor contract of `development-pipeline.md` onto Claude Code, DeepSeek Harness, and OpenCode V2. Agents start with no view of any other session. The target is a harness that runs oe wait in the background, so idle waiting spends no tokens |
 | Agent mode | The agents declare `mode: subagent`, because OpenCode V2 refuses to start an agent without it as a subagent |
 | Worktrees | An agent's worktree is removed when the agent ends, and unpushed work is discarded |
+| An agent's end | The session records it on GitHub through oe end, because the person decided that an Owner that pushes nothing asks the person at once, and the next action must still come from GitHub. A fixed deadline alone held an Issue for hours after an early end, and held it while a long run still worked |
 | Acceptance checks | No agent checks a box that needs a human, template boxes included |
 | Answers | The person answers in the session's conversation. The session records the answer through oe, so the next Owner reads it on the Issue |
 | Decisions section | An answer or a re-run request recorded through oe appends its decision to a decisions section of the Issue body. The Verifier reads it with the body, and it takes precedence over the criteria it contradicts |
 | Findings | In the PR body, never a comment: no oe code read the comment, and the person found it hard to read and no help in deciding. A check run is out, because the GitHub App has no `checks:write` |
 | A failure verdict | Repaired by an Owner once per answer, because the person wants the agents to fix it and to be asked only when stuck. Two failures are never compared by criterion, because comparing a model's wording is unreliable |
 | Starting agents | Through oe start, which oe ready prints for each line that starts an agent, because a session that lost the skill to a compaction rebuilt the steps from memory and passed the Epic number as the Issue |
-| Polling | One light read every 2 minutes. Every child Issue is read only on a change to it, its PR, or its checks, or at a deadline such as a head with no checks for 10 minutes or a marker's 2 hours |
+| Polling | One light read every 2 minutes. Every child Issue is read only on a change to it, its PR, or its checks, or at a deadline such as a head with no checks for 10 minutes, 2 minutes after a marker's end, or a marker's 6 hours |
 | Open PRs | oe ready reads only the PRs of the child Issues' branches |
 | Rate limit | oe wait waits until the reset time. Any other failed read is tried again at the next poll, and the wait goes on |
