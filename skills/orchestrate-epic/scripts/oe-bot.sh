@@ -15,6 +15,13 @@
 # clone's own config, so a repository cannot name the command that mints its credentials.
 # A person's own checkout carries no identity and keeps acting as the person; every agent
 # worktree is created with the identity, and a start refuses when it could not be.
+#
+# What keeps an agent's worktree from acting as the person:
+# - The clone's remote and every push URL are HTTPS GitHub URLs, or a start refuses
+# - Neither the clone nor the worktree an agent gets has submodules, or a start refuses
+# - The worktree resets inherited http.<url>.extraheader values
+# - The worktree's credential chain ends at the Bot helper, so a helper that declines fails the
+#   push instead of falling back to the person
 
 # Prints the opt-in login of this clone, without the [bot] suffix REST adds.
 bot_login() {
