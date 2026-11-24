@@ -1,0 +1,30 @@
+# Labels each Issue the owner or the owner's bot opens or edits with its rough
+# size: size/S, size/M, size/L, or size/? when the model is unsure, plus
+# size/auto. A person who sets the size by hand removes size/auto, and the
+# size is then never changed again.
+#
+# The behavior lives in the reusable workflow this job calls, so every repository
+# shares one implementation. This file holds only the trigger, the permissions,
+# and the author check. Issues from anyone else never start a model call.
+name: issue-size
+
+on:
+  issues:
+    types: [opened, edited]
+
+permissions:
+  issues: write
+
+concurrency:
+  group: issue-size-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  size:
+    if: >-
+      github.event.issue.pull_request == null &&
+      (github.event.issue.user.login == 'maro114510' ||
+       github.event.issue.user.login == 'maronium[bot]')
+    uses: maro114510/dotfiles/.github/workflows/reusable-issue-size.yml@main
+    secrets:
+      TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
