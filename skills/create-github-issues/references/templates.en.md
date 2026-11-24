@@ -47,7 +47,7 @@ In any Mermaid node label, a double quote in a title must be written as `#quot;`
 (Only when no Epic is created, write this section in place of the Epic section above)
 
 ### No Epic
-**Reason**: <why no Epic is created: no task depends on another, and the owner did not ask for one>
+**Reason**: <why no Epic is created: no `depends_on` edge joins two tasks, and the owner did not ask for one>
 **Scope (not included)**: <only if applicable, in the same form as the Epic's line above. Omit this line entirely if there are none>
 
 (Only if the number of tasks discussed differs from the number of child Issues: **Restructured from the conversation**: <which tasks were split/merged and why, in 1-2 sentences>)
