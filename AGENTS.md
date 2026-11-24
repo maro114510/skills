@@ -140,11 +140,11 @@ claude plugin marketplace add ./
 claude plugin install skills@maro114510-agent-skills --scope user
 claude plugin list | grep skills
 
-# Run every bats suite, one file per process, BATS_JOBS at a time, by default the CPU count; CI runs the same command
+# Run every bats suite; CI runs the same command
 tests/run-bats.sh
 
 # Run one bats suite
-bats skills/implement/scripts/test-lock.bats
+bats <file>
 
 # Pre-commit hooks for shell scripts, workflows, and secrets: https://github.com/j178/prek
 brew install j178/tap/prek   # macOS, once
