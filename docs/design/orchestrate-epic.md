@@ -143,6 +143,7 @@ For each Issue, oe ready reads this table from the top and outputs the action of
 - Re-run request
   - A record the session writes from the person's reply, separate from an answer, so it starts a Verifier on the same head instead of an Owner, and resets neither cap
   - oe question accepts it only while the Issue waits on the person and the PR's head has a failure verdict, as Counting reads it. Then no Owner works on the Issue and the Verifier before it has ended, so a re-run never runs beside an agent that could push or write a late verdict
+  - It starts a Verifier only when no row above row 11 matches. A failed check or a conflict that came after the hold still starts an Owner at row 8, because judging a head that must change anyway is wasted
   - It may carry a decision, which goes into the decisions section as an answer's does, so an answer that changes no code reaches the Verifier without an Owner start
 - Findings
   - oe verdict replaces one folded block in the PR body, between fixed markers, before it writes the status, so a verdict never exists without its findings
