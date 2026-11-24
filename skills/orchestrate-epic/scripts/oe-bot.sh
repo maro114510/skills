@@ -22,7 +22,6 @@
 # - The worktree resets inherited http.<url>.extraheader values
 # - The worktree's credential chain ends at the Bot helper, so a helper that declines fails the
 #   push instead of falling back to the person
-# - The worktree records its Bot login in skills.bot.identity, which bot_env reads
 
 # Prints the opt-in login of this clone, without the [bot] suffix REST adds.
 bot_login() {
