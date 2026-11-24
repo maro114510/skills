@@ -48,20 +48,9 @@ jobs:
       - name: Install git-cliff
         run: pipx install git-cliff==2.14.2
 
-      # Files run in parallel through the runner's preinstalled GNU parallel.
-      # Tests within a file stay serial: no single file dominates the run,
-      # so splitting files further saves little and risks order dependence.
-      - name: Run every skills/**/*.bats suite
-        run: find skills -name '*.bats' -print0 | sort -z | xargs -0 bats --jobs "$(nproc)" --no-parallelize-within-files
-
-      - name: Run the implement reproduction repository suite
-        run: bats tests/implement-repro.bats
-
-      - name: Run the ruleset suite
-        run: bats tests/apply-ruleset.bats
-
-      - name: Run the release path suite
-        run: bats tests/release.bats
+      # The same command a local run uses, so a green local run predicts this job.
+      - name: Run every skills/**/*.bats and tests/*.bats suite
+        run: tests/run-bats.sh
 
   shell-script-tests:
     name: Shell script tests
