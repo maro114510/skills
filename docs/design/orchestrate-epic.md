@@ -126,6 +126,7 @@ For each Issue, oe ready reads this table from the top and outputs the action of
   - One hidden line at the end of the Issue body, holding the role, the start time, the SHA for a Verifier, the session ID only for a person to trace, and the end time once oe end records it
   - An Owner's marker gives its result when an open PR from the branch has a head pushed after the start time, or the Issue gets a question after it
   - A Verifier's marker gives its result when its SHA gets a verdict, as Counting reads it
+  - A push, a question, or a verdict gives a marker its result only when the start the marker records wrote it. An agent writes one only while the Issue's marker still holds its own start time, read just before it writes, and otherwise ends without writing, so a late write from an expired or replaced start never counts for a newer one
   - A marker that gives its result never holds the Issue, whether or not it has an end time
   - A marker with an end time and no result stays live for 2 minutes after the end, one poll interval, so a push or a verdict that GitHub shows late is not held, and ended with no result after that
   - A marker with no end time is live until it gives its result or 6 hours pass since its start time, and expired with no result after that. The 6 hours cover only a session that died with its agents, so it is far longer than a run
@@ -138,7 +139,7 @@ For each Issue, oe ready reads this table from the top and outputs the action of
   - A check on the PR's head SHA failed
   - The PR's head SHA has a failure verdict, no re-run request came since the latest answer, and no other commit of the PR committed since the latest answer had a failure verdict. Row 8's cap counts only failed checks, so this once stands apart from it
   - Since the PR's head was pushed, one of these was given
-    - An answer recorded through oe
+    - An answer recorded through oe, unless a re-run request came after it
     - A Changes requested review that covers the PR's head SHA
     - A review-thread comment that is engineer input and its thread's last comment, in a thread that is unresolved and not outdated
 - Counting
@@ -147,7 +148,8 @@ For each Issue, oe ready reads this table from the top and outputs the action of
   - A SHA's verdict is its latest verify status other than pending that is newer than the latest re-run request, so the request is used once and an older verdict counts as none. Both times are GitHub's
 - Re-run request
   - A record the session writes from the person's reply, separate from an answer, so it starts a Verifier on the same head instead of an Owner, and resets neither cap
-  - oe question accepts it only while the Issue waits on the person and the PR's head has a failure verdict, as Counting reads it. Then no Owner works on the Issue and the Verifier before it has ended, so a re-run never runs beside an agent that could push or write a late verdict
+  - oe question accepts it while the Issue waits on the person and the PR's head has no success verdict, as Counting reads it, so a head held with no verdict, or after an answer that changes no code, can still be judged without an Owner. An earlier agent that still runs cannot count, because it writes only while the marker holds its own start time
+  - A re-run request newer than the latest answer replaces it, so the answer no longer starts an Owner
   - It starts a Verifier only when no row above row 11 matches. A failed check or a conflict that came after the hold still starts an Owner at row 8, because judging a head that must change anyway is wasted
   - It may carry a decision, which goes into the decisions section as an answer's does, so an answer that changes no code reaches the Verifier without an Owner start
 - Findings
@@ -216,7 +218,8 @@ sequenceDiagram
 - A comment the AI forgot to mark is read as engineer input
 - Writing the working marker is not atomic, so two sessions on the same Epic can start two agents on one Issue. One host runs an Epic at a time
 - When a session dies with its agents, their markers stay live until 6 hours pass since their start: their Issues wait, and a session started in the meantime counts them as running agents
-- An agent that runs longer than 6 hours has its Issue held while it still works, and an answer then starts a second agent beside it. Measured Owner runs took at most 89 minutes, and one under an older oe took about 3 hours
+- An agent that runs longer than 6 hours has its Issue held while it still works, and an answer then starts a second agent beside it; the first one writes nothing once the second start replaces its marker. Measured Owner runs took at most 89 minutes, and one under an older oe took about 3 hours
+- An agent reads the marker and then writes, so a start that replaces the marker between the two lets one late write count for the newer start
 - When the agents and the person write as one account, a person's push counts as an Owner's result, and a person's comment or review cannot be told from an agent's
 - oe ready reads only the newest PR with an Issue's branch name, so a newer PR from a fork with that name hides the Issue's own PR
 - When GitHub deletes a merged PR's branch while its Issue stays open, the Issue has no PR, and an Owner starts it over on a new branch
