@@ -48,7 +48,7 @@ If any of the first four is missing, end without changing anything and say which
      | Item | Source |
      |---|---|
      | Failed checks | `gh pr checks <pr> --repo <repo>`, leaving out the `oe/verify` status, which holds a verdict and is no check, and `gh run view --job <job-id> --repo <repo> --log-failed` for each failed GitHub Actions job |
-     | Failure verdict | The first `oe/verify` status other than `pending` in `gh api 'repos/<repo>/commits/<headRefOid>/statuses?per_page=100' --paginate` is `failure` or `error`, and its findings are every `-> failed:` line of the findings block, read as below |
+     | Failure verdict | The first `oe/verify` status other than `pending` whose `created_at` is newer than the latest re-run request in `gh api 'repos/<repo>/commits/<headRefOid>/statuses?per_page=100' --paginate` is `failure` or `error`, and its findings are every `-> failed:` line of the findings block, read as below. The latest re-run request is the `createdAt` of the last Issue comment starting with `<!-- oe:rerun -->` from a trusted author or the agents' own bot; with none, every status counts. Compare the two as times, never as strings, so a re-run request makes an older failure count as none |
      | Conflict | `mergeable` is `CONFLICTING` in step 2 |
      | Changes requested reviews | Engineer input in `CHANGES_REQUESTED` reviews from `gh api repos/<repo>/pulls/<pr>/reviews --paginate` whose `commit_id` is the PR's `headRefOid` from step 2 |
      | Review-thread comments | Every comment of each thread the query below prints that is not resolved, not outdated, and whose last comment is engineer input posted after the PR's head was pushed |
