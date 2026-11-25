@@ -19,6 +19,7 @@ setup() {
   export OE_WAIT_INTERVAL=0
   export GIT_CONFIG_GLOBAL="${BATS_TEST_TMPDIR}/gitconfig"
   export GIT_CONFIG_NOSYSTEM=1
+  cd "${BATS_TEST_TMPDIR}" || return 1
   unset OE_WORKTREE_ROOT
   # 2027-01-15 08:00 UTC
   export OE_NOW=1800000000
