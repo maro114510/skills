@@ -414,8 +414,9 @@ issue_reads_of() {
 @test "two polls with nothing changed read an open Issue once" {
   pr_15_checks_running
   github_at_second_poll <"${OE_GITHUB}"
+  clock_starts_at_eight
 
-  run bash "${oe}" wait o/r 1 --timeout 4
+  OE_CLOCK_STEP=1 run bash "${oe}" wait o/r 1 --timeout 4
 
   [ "${status}" -eq 5 ]
   [ "$(wc -l <"${OE_GITHUB}.polls")" -ge 2 ]
@@ -455,8 +456,9 @@ JSON
   }]
 }
 JSON
+  clock_starts_at_eight
 
-  run bash "${oe}" wait o/r 1 --timeout 4
+  OE_CLOCK_STEP=1 run bash "${oe}" wait o/r 1 --timeout 4
 
   [ "${status}" -eq 5 ]
   [ "$(action_of 5)" = wait-ci ]
