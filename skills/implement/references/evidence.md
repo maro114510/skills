@@ -30,7 +30,7 @@ A criterion that reads both ways, for any kind of file, is a behavior criterion.
 | Reproducible | Its record lets someone else run it again under the same conditions. Prefer a test or script the change already needs, so its command is the record. When no deterministic check exists, as for an agent instruction file, record the exact input: the procedure's file path and the concrete input. Keep the input on the line when it is short. Otherwise keep it in the Phase 6.9 output and the PR body. Never add a file only to hold it |
 | Untouched worktree | No run or observation changes the worktree's source. Never stash, reset, check out, or edit it to make one. Build and cache output that running a check writes is allowed |
 | No outside effects | No run pushes, publishes, or changes state outside the worktree, such as a GitHub Issue or comment, a shared database, or a deployed service. Show such an outcome against a fake, a local sandbox, or a dry run whose output names the effect it would have. A criterion that only the real effect can show is `No evidence` |
-| Named check | When the criterion itself is that a named check passes, such as "`claude plugin validate .` passes", a fresh run of that check is its `[behavior]` evidence, and section 2.2 does not apply |
+| Named check | When the criterion itself is that a named check passes, such as "`claude plugin validate .` passes", and a CI job runs that check on the commit, that job's result on that commit is its `[behavior]` evidence, and section 2.2 does not apply. It is not a replayed result under section 3, and the check is never rerun locally. When no CI job runs the check on that commit, the criterion is unconfirmed, never a silent pass |
 
 ### 2.2 Tests
 
@@ -113,5 +113,5 @@ Any line this file puts into a report field, including a criterion in `SKIPPED` 
 | `greet` rejects an empty name | Behavior | Ran the installed `greet --name ""` | `... -> none` |
 | `greet` rejects an empty name | Behavior | Ran `go run ./cmd/greet --name ""` on the final state | `... -> [behavior] go run ./cmd/greet --name ""; observed exit 2, "name is empty"` |
 | `/greet-skill` asks for a name when none is given | Behavior | A fresh context followed the worktree's `skills/greet/SKILL.md` on the input `/greet-skill` | `... -> [behavior] skills/greet/SKILL.md, input "/greet-skill"; observed it asked for a name` |
-| `claude plugin validate .` passes | Behavior | Ran it on the final state | `... -> [behavior] claude plugin validate .; observed exit 0` |
+| `claude plugin validate .` passes | Behavior | The CI job that runs it succeeded on the commit | `... -> [behavior] the CI job that runs it, on <sha>; observed success` |
 | The usage section documents `--name` | Content | `README.md:18` | `... -> [static] README.md:18` |
