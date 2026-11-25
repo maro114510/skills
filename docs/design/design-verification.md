@@ -24,7 +24,7 @@ The model holds one Issue. It keeps what the three known defects needed and noth
 | An answer that asks for no code change | An answer that changes no code led to a dead end |
 | A clock that can differ between the host that writes a marker and GitHub | The marker's start time comes from the host, and the 2-minute grace after an end is about the size of a skew |
 
-An agent may outlive its marker and write a result after a later start, so the model lets any ended or outlived start emit its result.
+An agent may outlive its marker and write a result after a later start, so the model lets any ended or outlived start emit its result. At most 2 starts can still write at once; a later start drops the oldest, which then writes nothing, and the build prints this bound. A check can fail whatever the person's view, but only on the first commit an Owner pushes after a repair starts, and a person rerunning a failed check is not modeled.
 
 ## Properties
 
@@ -48,7 +48,7 @@ A property is kept only with a change to the model that makes it fail, so a prop
 | Written from `orchestrate-epic.md` alone, never from `oe-ready.jq`, and every rule cites the Design Doc text it encodes | A model copied from the code agrees with the code on every defect the two share |
 | A term the Design Doc leaves undefined, such as which of two equal times is newer, is decided in the model and written back into the Design Doc in the same pull request | The model is where the ambiguity surfaces |
 | Every property fails the build when it does not hold, and prints the shortest event path to the state that breaks it | A report that only prints passes CI |
-| The search over reachable states may rely on the compiler through `native_decide`; a rule of one row is proved with the kernel | Trusting the compiler is far less of a risk than a model that misreads the design |
+| Every property is checked by an exhaustive search over reachable states that the build runs as compiled code; a proof is optional | Trusting the compiler is far less of a risk than a model that misreads the design |
 | It lives under `formal/orchestrate-epic/`, outside `skills/` | A plugin install ships nothing of it |
 
 ## Operation
