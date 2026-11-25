@@ -499,12 +499,17 @@ def times (s : St) : List Nat :=
   s.marker.toList.flatMap (fun m => m.startAt :: m.endAt.toList) ++
   s.questions.map (·.time) ++ s.waitAt.toList ++ (answerAt s).toList ++ s.rerunAt.toList
 
+/-- The number `normalize` gives each start identity of a pruned state. -/
+def idRank (s : St) : Nat → Nat :=
+  rank (s.agents.map (·.id) ++ s.marker.toList.flatMap (fun m => m.start :: m.endedBy.toList) ++
+    s.commits.flatMap (fun c => c.src :: c.verdict.toList.map (·.src)) ++ s.questions.map (·.src))
+
+def shaRank (s : St) : Nat → Nat := rank (s.commits.map (·.sha))
+
 def normalize (s : St) : St :=
   let s := prune s
-  let ids := s.agents.map (·.id) ++ s.marker.toList.flatMap (fun m => m.start :: m.endedBy.toList) ++
-    s.commits.flatMap (fun c => c.src :: c.verdict.toList.map (·.src)) ++ s.questions.map (·.src)
-  let id := rank ids
-  let sha := rank (s.commits.map (·.sha))
+  let id := idRank s
+  let sha := shaRank s
   let ts := times s
   let lows := ((ts.filter (· + 1 < s.now)).eraseDups).mergeSort (· ≤ ·)
   let now := lows.length + 10
@@ -531,6 +536,19 @@ def rawStep (cfg : Config) (s : St) : List (Event × St) :=
 
 def step (cfg : Config) (s : St) : List (Event × St) :=
   (rawStep cfg s).map fun (e, t) => (e, normalize t)
+
+/-- An event of `rawStep` on `s`, numbered as `step` on `normalize s` numbers it. -/
+def renumber (s : St) : Event → Event :=
+  let s := prune s
+  let id := idRank s
+  fun
+  | .push a => .push (id a)
+  | .question a => .question (id a)
+  | .verdict a ok => .verdict (id a) ok
+  | .agentEnd a => .agentEnd (id a)
+  | .agentDies a => .agentDies (id a)
+  | .ci sha ok => .ci (shaRank s sha) ok
+  | e => e
 
 def init : St := {}
 

@@ -217,7 +217,9 @@ def labels (cfg : Config) (g : Graph) (path : Path) : List String := Id.run do
   let mut raw := init
   let mut out : Array String := #[]
   for (e, j) in path do
-    match (rawStep cfg raw).find? (fun (_, t) => normalize t == g.states[j]!) with
+    -- Two events can reach one state, so match the event the path took, not only the state.
+    match (rawStep cfg raw).find? (fun (e', t) =>
+        (renumber raw e').label == e.label && normalize t == g.states[j]!) with
     | some (e', t) =>
       let started := if e'.isStart then s!", start {nextId raw}" else ""
       out := out.push (e'.label ++ started); raw := t
