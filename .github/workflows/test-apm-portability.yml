@@ -29,6 +29,9 @@ jobs:
       - name: Run the static agent portability validator
         run: make validate-agent-portability
 
+      - name: Check that model-invocable skill descriptions stay within 400 bytes
+        run: make validate-skill-descriptions
+
   apm-portability:
     name: APM install (${{ matrix.target }})
     runs-on: ubuntu-latest

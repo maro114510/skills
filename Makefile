@@ -7,7 +7,7 @@ MANIFESTS := $(PLUGIN_MANIFEST) $(MARKETPLACE_MANIFEST)
 GIT_CLIFF := git-cliff
 CLAUDE := claude
 
-.PHONY: help next-version check-version validate validate-plugin validate-agent-portability validate-apm release
+.PHONY: help next-version check-version validate validate-plugin validate-agent-portability validate-skill-descriptions validate-apm release
 
 help: ## Show available commands.
 	@awk 'BEGIN { FS = ":.*##"; printf "Usage:\n  make <command>\n\nCommands:\n" } /^[a-zA-Z0-9_-]+:.*##/ { printf "  %-20s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
@@ -41,13 +41,16 @@ check-version: ## Check that plugin and marketplace manifest versions match.
 	test "$$plugin_version" = "$$marketplace_version" || { printf 'Version mismatch: %s=%s, %s=%s\n' '$(PLUGIN_MANIFEST)' "$$plugin_version" '$(MARKETPLACE_MANIFEST)' "$$marketplace_version"; exit 1; }; \
 	printf 'Manifest versions match: %s\n' "$$plugin_version"
 
-validate: check-version validate-plugin validate-agent-portability ## Validate manifests, the plugin, and agent portability.
+validate: check-version validate-plugin validate-agent-portability validate-skill-descriptions ## Validate manifests, the plugin, agent portability, and skill description sizes.
 
 validate-plugin: ## Validate the plugin and marketplace manifests with Claude Code.
 	@$(CLAUDE) plugin validate .
 
 validate-agent-portability: ## Validate portable agent frontmatter and harness-neutral skill paths.
 	@tests/validate-agent-portability.sh
+
+validate-skill-descriptions: ## Validate that each model-invocable skill description is at most 400 bytes.
+	@tests/validate-skill-descriptions.sh
 
 validate-apm: ## Verify APM deploys the agents portably (APM_TARGET=claude|codex|opencode, default all).
 	@tests/validate-apm.sh $(APM_TARGET)

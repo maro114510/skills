@@ -1,6 +1,7 @@
 ---
 name: tear-down
-description: Tear down the plan, design, or conclusion on the table instead of defending or polishing it — a blank-slate red-team pass that discards every premise surviving only because "that's what we already decided." Use when a proposal needs to be ruthlessly stress-tested for fatal flaws or gaps in the reasoning, not merely cleaned up. Not for business-strategy Why interrogation (why-man) or completeness review of an already-written Design Doc/ADR/RFC (pr-doc-review-pe).
+description: >
+  Tear down the plan, design, or conclusion on the table instead of defending or polishing it: a blank-slate red-team pass that discards premises surviving only because "we already decided." Use to stress-test for fatal flaws. Not for why-man or pr-doc-review-pe.
 argument-hint: "[optional: file path | PR number | issue URL]"
 ---
 
