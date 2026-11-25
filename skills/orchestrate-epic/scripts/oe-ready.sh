@@ -11,6 +11,8 @@
 #
 # - --running is accepted and ignored, so a caller written for it still runs: the working marker in each Issue body shows a running agent.
 # - OE_NOW sets the current time in epoch seconds.
+# - OE_READ_TIMEOUT sets the seconds one GitHub read may take, read_timeout by default.
+#   A read that has not returned by then fails as any failed read does, so a run fails within that time of starting the read that hangs.
 # - OE_READY_CACHE names a directory in which oe ready keeps what it read of each open Issue, which oe wait sets for the polls of one call.
 #   A later run reads an open Issue again only when what the lighter reads below show has changed, or a time that decides its action has passed.
 #   A run without it reads every open Issue.
@@ -29,7 +31,7 @@
 # | Code | Meaning | Output |
 # |---|---|---|
 # | 0 | Every Issue was classified | One line per Issue |
-# | 1 | A GitHub read failed | Nothing |
+# | 1 | A GitHub read failed or did not return within OE_READ_TIMEOUT | Nothing |
 # | 2 | The arguments, or git config skills.bot, are invalid | Nothing |
 #
 # Files
@@ -91,6 +93,7 @@ done
 
 now="${OE_NOW:-$(date -u +%s)}"
 [[ "${now}" =~ ^[0-9]+$ ]] || usage "OE_NOW must be epoch seconds"
+[[ -z "${OE_READ_TIMEOUT:-}" || "${OE_READ_TIMEOUT}" =~ ^[1-9][0-9]*$ ]] || usage "OE_READ_TIMEOUT must be whole seconds above 0"
 
 epic_query="$(<"${dir}/oe-ready-epic.graphql")" || fail "cannot read oe-ready-epic.graphql"
 issue_query="$(<"${dir}/oe-ready-issue.graphql")" || fail "cannot read oe-ready-issue.graphql"
@@ -116,7 +119,7 @@ trap 'rm -f "${err}"' EXIT
 # Prints the epoch seconds of the latest push of the commit $2 to the branch $1.
 # Prints nothing when repository activity does not list that push.
 pushed_at() {
-  gh api "repos/${repo}/activity?ref=refs/heads/$1&per_page=100" \
+  gh_read api "repos/${repo}/activity?ref=refs/heads/$1&per_page=100" \
     --jq '[.[] | select(.after == "'"$2"'")] | first | .timestamp // empty | sub("\\.[0-9]+"; "") | fromdateiso8601' \
     2>"${err}" || fail "activity read for $1 failed: $(head -n1 "${err}")"
 }
@@ -132,7 +135,7 @@ all_commits() {
     IFS=$'\t' read -r number cursor < <(jq -r --argjson at "${at}" \
       'getpath($at) | "\(.number)\t\(.commits.pageInfo.startCursor)"' <<<"${response}")
     [[ "${number}" =~ ^[1-9][0-9]*$ && -n "${cursor}" && "${cursor}" != null ]] || fail "commits unreadable"
-    page="$(gh api graphql -f query="${commits_query}" -F owner="${repo%/*}" -F repo="${repo#*/}" \
+    page="$(gh_read api graphql -f query="${commits_query}" -F owner="${repo%/*}" -F repo="${repo#*/}" \
       -F number="${number}" -f before="${cursor}" --jq '.data.repository.pullRequest.commits' 2>"${err}")" ||
       fail "commits read on PR #${number} failed: $(head -n1 "${err}")"
     # A page that is not a list of commits, is empty although the read advertised earlier commits, or does not move back from the cursor, would end or repeat the read on part of the commits.
@@ -160,7 +163,7 @@ all_checks() {
     IFS=$'\t' read -r oid cursor < <(jq -r --argjson at "${at}" \
       'getpath($at) | "\(.oid)\t\(.statusCheckRollup.contexts.pageInfo.endCursor)"' <<<"${response}")
     [[ "${oid}" =~ ^[0-9a-f]{40}$ && -n "${cursor}" && "${cursor}" != null ]] || fail "checks unreadable"
-    page="$(gh api graphql -f query="${checks_query}" -F owner="${repo%/*}" -F repo="${repo#*/}" \
+    page="$(gh_read api graphql -f query="${checks_query}" -F owner="${repo%/*}" -F repo="${repo#*/}" \
       -f oid="${oid}" -f after="${cursor}" --jq '.data.repository.object.statusCheckRollup.contexts' 2>"${err}")" ||
       fail "checks read on ${oid} failed: $(head -n1 "${err}")"
     response="$(jq -c --argjson at "${at}" --argjson page "${page:-null}" '
@@ -173,7 +176,7 @@ all_checks() {
 }
 
 # Read 1: the Epic.
-epic_response="$(gh api graphql -f query="${epic_query}" -F owner="${repo%/*}" -F repo="${repo#*/}" -F epic="${epic}" \
+epic_response="$(gh_read api graphql -f query="${epic_query}" -F owner="${repo%/*}" -F repo="${repo#*/}" -F epic="${epic}" \
   2>"${err}")" || fail "Epic read failed: $(head -n1 "${err}")"
 epic_lines="$(jq -r "$(program epic_lines)" <<<"${epic_response}" 2>"${err}")" ||
   fail "Epic read failed: $(head -n1 "${err}")"
@@ -230,7 +233,7 @@ if [[ ${#issues[@]} -gt 0 ]]; then
 fi
 
 # Read 2: the head of each open Issue branch in this repository.
-pulls="$(gh api "repos/${repo}/pulls?state=open&per_page=100" --paginate --jq '.[]
+pulls="$(gh_read api "repos/${repo}/pulls?state=open&per_page=100" --paginate --jq '.[]
   | select((.head.repo.full_name // "" | ascii_downcase) == ("'"${repo}"'" | ascii_downcase)
     and (.head.ref | test("^'"${branch_prefix}"'[1-9][0-9]*$")))
   | "\(.head.ref | ltrimstr("'"${branch_prefix}"'"))\t\(.head.sha)\t\(.number)"' 2>"${err}")" ||
@@ -245,7 +248,7 @@ while IFS=$'\t' read -r n sha pr; do
   [[ -n "${n}" ]] || continue
   [[ "${n}" =~ ^[1-9][0-9]*$ && "${sha}" =~ ^[0-9a-f]{40}$ && "${pr}" =~ ^[1-9][0-9]*$ ]] || fail "pull request list unreadable"
   [[ " ${sorted[*]-} " == *" ${n} "* ]] || continue
-  states="$(gh api "repos/${repo}/commits/${sha}/statuses?per_page=100" --paginate \
+  states="$(gh_read api "repos/${repo}/commits/${sha}/statuses?per_page=100" --paginate \
     --jq '.[] | select(.context == "'"${verify_context}"'") | "\(.state)\t\(.created_at)"' 2>"${err}")" ||
     fail "status read for ${sha} failed: $(head -n1 "${err}")"
   verdict=none
@@ -270,7 +273,7 @@ facts_of() {
   local n="$1" sha pr verdict verdict_at light="null" head="null"
   IFS=$'\t' read -r sha pr verdict verdict_at < <(awk -F '\t' -v n="${n}" '$1 == n { print $2 "\t" $3 "\t" $4 "\t" $5 }' <<<"${heads}")
   if [[ -n "${sha}" ]]; then
-    light="$(gh api graphql -f query="${head_query}" -F owner="${repo%/*}" -F repo="${repo#*/}" -F number="${pr}" --jq '.data.repository.pullRequest
+    light="$(gh_read api graphql -f query="${head_query}" -F owner="${repo%/*}" -F repo="${repo#*/}" -F number="${pr}" --jq '.data.repository.pullRequest
       | {updatedAt, mergeable, threads: [.reviewThreads.nodes[] | [.isResolved, .isOutdated]], checks: .commits.nodes[0].commit.statusCheckRollup.state}' \
       2>"${err}")" || fail "pull request #${pr} read failed: $(head -n1 "${err}")"
     head="$(jq -cn --arg sha "${sha}" --arg verdict "${verdict}" --arg verdict_at "${verdict_at}" --argjson light "${light}" \
@@ -299,7 +302,7 @@ for n in ${sorted[@]+"${sorted[@]}"}; do
       continue
     fi
   fi
-  response="$(gh api graphql -f query="${issue_query}" -F owner="${repo%/*}" -F repo="${repo#*/}" -F num="${n}" \
+  response="$(gh_read api graphql -f query="${issue_query}" -F owner="${repo%/*}" -F repo="${repo#*/}" -F num="${n}" \
     -f branch="${branch_prefix}${n}" -f ref="refs/heads/${branch_prefix}${n}" 2>"${err}")" ||
     fail "Issue #${n} read failed: $(head -n1 "${err}")"
   response="$(all_commits "${response}")" || exit 1

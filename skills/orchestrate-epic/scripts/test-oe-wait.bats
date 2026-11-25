@@ -303,6 +303,19 @@ JSON
   esac
 }
 
+@test "reads that never return end the wait with an error within its timeout plus one poll interval" {
+  pr_15_checks_running
+  timeout=3
+  interval=4
+  started="$(date +%s)"
+
+  GH_HANG=api OE_READ_TIMEOUT=1 OE_WAIT_INTERVAL="${interval}" run --separate-stderr bash "${oe}" wait o/r 1 --timeout "${timeout}"
+
+  [ "$(($(date +%s) - started))" -le "$((timeout + interval))" ]
+  [ "${status}" -eq 1 ]
+  [ -z "${output}" ]
+}
+
 # Prints the UTC time of epoch second $1 as oe wait shows a reset time, YYYY-MM-DDTHH:MM:SSZ.
 utc_time() {
   date -u -d "@$1" '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || date -u -r "$1" '+%Y-%m-%dT%H:%M:%SZ'
