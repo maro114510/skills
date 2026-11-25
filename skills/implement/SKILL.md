@@ -1,7 +1,7 @@
 ---
 name: implement
 description: >
-  Implement a request with quality first: ground it in the codebase, set acceptance criteria, build in a worktree with TDD commits and a self-review, and return Built, Questions, or Busy. Never pushes or opens a PR. Use for 「これを実装して」「機能を追加して」「バグを修正して」「リファクタリングして」「対応して」.
+  Implement a request with quality first: ground it in the codebase, set acceptance criteria, build in a worktree with TDD commits and a self-review, and return Built, Questions, or Busy. Pushes only the Issue branch as a Lock, never a commit or a PR. Use for 「これを実装して」「機能を追加して」「バグを修正して」「リファクタリングして」「対応して」.
 argument-hint: "[description of what to implement]"
 ---
 

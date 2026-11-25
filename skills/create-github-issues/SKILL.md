@@ -1,7 +1,7 @@
 ---
 name: create-github-issues
 description: >
-  Create GitHub Issues from a conversation, plan, or TODO list: one Issue per task with background, requirements, specs, dependency, and acceptance criteria, under an Epic only when tasks depend on each other. Use when the user asks to track tasks with an Epic, turn TODOs or a plan into Issues, or extract action items from a review or investigation.
+  Create GitHub Issues from a conversation, plan, or TODO list: one Issue per task with background, requirements, specs, dependency, and acceptance criteria, under an Epic only when tasks depend on each other or the owner asks for one. Use when the user asks to track tasks with an Epic, turn TODOs or a plan into Issues, or extract action items from a review or investigation.
 argument-hint: "[repo <owner/repo>] [lang <ja|en>] [project <n>]"
 ---
 
