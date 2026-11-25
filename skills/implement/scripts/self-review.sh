@@ -157,6 +157,7 @@ verdict_rule="End your final message with exactly one line, \`REVIEW_VERDICT: fi
 
 before="$(fingerprint)"
 # Read-only is pinned per CLI because user configuration can override each CLI's default sandbox.
+# create-pr's describe.sh pins the same way, and tests/read-only-pin.bats fails when the two differ.
 # The Claude Code review level is deliberately not pinned: /code-review reuses the last level typed, so the
 # user's own choice applies, including ultra, which is billed.
 case "${harness}" in

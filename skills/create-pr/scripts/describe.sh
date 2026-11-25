@@ -113,7 +113,7 @@ prompt="Write the title and description of a GitHub pull request, in a fresh con
 
 before="$(fingerprint)"
 # Read-only is pinned per CLI, as in self-review.sh, because user configuration can override each CLI's
-# default sandbox. The input goes on stdin, or as an attached file for OpenCode, because a diff can exceed
+# default sandbox. tests/read-only-pin.bats fails when the two scripts' pins differ. The input goes on stdin, or as an attached file for OpenCode, because a diff can exceed
 # the size of one command-line argument.
 case "${harness}" in
 claude)
