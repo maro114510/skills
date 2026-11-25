@@ -66,11 +66,9 @@ gh skill install maro114510/skills --all --agent claude-code --scope user
 | `pick-next` | Pick what to work on next in the current repository, and say what waits on you and what is blocked; optionally list open Discussions. |
 | `pr-doc-review-pe` | Review design documents from a Principal Engineer perspective. |
 | `pr-review-pe` | Review code diffs from a Principal Engineer perspective. |
-| `research-transfer-checker` | Check whether a claim stays within the scope of its cited research. |
 | `shakedown` | Generate a pre-release QA runbook from a diff or design document. |
 | `skill-cleaner` | Audit and slim down skill definitions. |
 | `tear-down` | Blank-slate red-team a plan or design instead of defending or polishing it. |
-| `write-researched-document` | Research, verify, and draft an evidence-backed Markdown document. |
 | `why-man` | Challenge assumptions with higher-level Why questions. |
 
 `shared` is not a skill; `skills/shared` holds files that several skills use.
