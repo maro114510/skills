@@ -1,6 +1,6 @@
 # skills
 
-Agent skills working toward human-out-of-the-loop software development.
+Agent skills with one mission: what the owner decides to build becomes a change that solves the problem it came from. See [MISSION.md](MISSION.md).
 
 Today, agents take an Issue to a verified PR with TDD, a separate-context self-review, and Principal Engineer-level reviews, and a human makes only the calls that matter, such as the merge.
 

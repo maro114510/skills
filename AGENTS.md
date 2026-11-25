@@ -1,6 +1,7 @@
 # AGENTS.md
 
 Repository instructions for coding agents.
+The mission and the goals of this repository are in [MISSION.md](MISSION.md).
 
 Write here only what an agent cannot learn by reading the repository, or would otherwise rediscover every session. Anything else belongs in the file it describes, such as a script's header.
 
