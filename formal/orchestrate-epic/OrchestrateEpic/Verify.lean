@@ -7,7 +7,6 @@ The build fails when:
 
 - the checked text of the Design Docs no longer has the recorded hash
 - the Design Doc as written breaks a property with any event path other than a known counterexample below
-- the model with every fix switch on breaks a property
 - a switch no longer breaks the property it names, or a property has no switch
 -/
 
@@ -47,7 +46,7 @@ def checkedText (epic verification : String) : Except String String := do
   return String.intercalate "\n" parts
 
 /-- Update only after reading the changed text and changing the model to match it. -/
-def recordedHash : String := "b8d2b7e0d78eaef9"
+def recordedHash : String := "c2918738684c021e"
 
 def checkHash : IO Unit := do
   let epic ← IO.FS.readFile "../../docs/design/orchestrate-epic.md"
@@ -65,12 +64,6 @@ def checkHash : IO Unit := do
 def View.name : View → String
   | .codeFault => "a person who sees a fault in the code"
   | .noFault => "a person who sees no fault in the code"
-
-/-- The fixes for the counterexamples in the Design Doc as written. With all of them on, every property
-holds, so a switch that breaks a property from here is what breaks it. -/
-def fixes : Switches :=
-  { fixOwnerResultCarriesStart := true, fixVerdictCarriesStart := true, fixRerunClearsAnswer := true,
-    fixRerunWithoutSuccess := true }
 
 def explored (cfg : Config) : IO Graph :=
   match explore cfg (limit := 3000000) with
@@ -118,7 +111,7 @@ structure Breaker where
   view : View
   property : Property
   on : Switches → Switches
-  base : Switches := fixes
+  base : Switches := {}
   skew : Bool := false
 
 def breakers : List Breaker := [
@@ -130,24 +123,17 @@ def breakers : List Breaker := [
     on := ({ · with noFailureCap := true }) },
   { name := "Known defect: a re-run request loses to an older working marker", view := .noFault,
     property := .inputTakesEffect, on := ({ · with inputKeepsMarker := true }) },
-  -- The Design Doc guards against this defect only by when it accepts a re-run request, so the base
-  -- drops the two fixes that would guard it another way.
   { name := "Known defect: a late verdict from an older Verifier counts for a newer start", view := .noFault,
-    property := .resultBelongsToStart, on := ({ · with rerunWithoutFailureVerdict := true }),
-    base := { fixes with fixVerdictCarriesStart := false, fixRerunWithoutSuccess := false } },
+    property := .resultBelongsToStart, on := ({ · with verdictFromAnyStart := true }) },
   { name := "Known defect: an answer that changes no code loops forever", view := .noFault,
     property := .noDeadEnd, on := ({ · with noRerun := true }) },
-  -- The counterexamples this model found in the Design Doc as written: turning a fix off restores one.
-  { name := "Found defect: a late push from an expired Owner gives a newer Owner its result",
-    view := .codeFault, property := .resultBelongsToStart,
-    on := ({ · with fixOwnerResultCarriesStart := false }) },
-  { name := "Found defect: a re-run request after an answer that changes no code starts an Owner",
-    view := .noFault, property := .inputTakesEffect, on := ({ · with fixRerunClearsAnswer := false }) },
-  { name := "Found defect: a head with no verdict takes no re-run request", view := .noFault,
-    property := .noDeadEnd, on := ({ · with fixRerunWithoutSuccess := false }) },
-  { name := "Found defect: a late verdict counts for a newer Verifier once a head with no verdict takes a re-run request",
-    view := .noFault, skew := true, property := .resultBelongsToStart,
-    on := ({ · with fixVerdictCarriesStart := false }) }
+  -- The counterexamples this model found in the Design Doc before it was fixed: each switch undoes one fix.
+  { name := "Fixed defect: a late push from an expired Owner gives a newer Owner its result",
+    view := .codeFault, property := .resultBelongsToStart, on := ({ · with ownerResultFromAnyStart := true }) },
+  { name := "Fixed defect: a re-run request after an answer that changes no code starts an Owner",
+    view := .noFault, property := .inputTakesEffect, on := ({ · with answerOutlivesRerun := true }) },
+  { name := "Fixed defect: a head with no verdict takes no re-run request", view := .noFault,
+    property := .noDeadEnd, on := ({ · with rerunOnlyOnFailure := true }) }
 ]
 
 def checkBreakers : IO Unit := do

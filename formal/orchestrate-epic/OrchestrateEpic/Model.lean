@@ -105,22 +105,20 @@ structure Switches where
   noFailureCap : Bool := false
   /-- Known defect: a re-run request that loses to an older working marker. -/
   inputKeepsMarker : Bool := false
-  /-- Known defect: a late verdict from an older Verifier counted for a newer start. -/
-  rerunWithoutFailureVerdict : Bool := false
+  /-- Known defect: a late verdict from an older Verifier counted for a newer start. It restores the defect
+  by undoing the Design Doc's fix for it: a verdict gives a Verifier's marker its result whoever wrote it. -/
+  verdictFromAnyStart : Bool := false
   /-- Known defect: an answer that changes no code loops forever for a person who sees no fault. -/
   noRerun : Bool := false
-  /-- A fix for a counterexample this model found, not in the Design Doc: a push or a question gives an
-  Owner's marker its result only when the marker's own start wrote it. -/
-  fixOwnerResultCarriesStart : Bool := false
-  /-- A fix, not in the Design Doc: a re-run request newer than the latest answer clears that answer's
-  repair signal. -/
-  fixRerunClearsAnswer : Bool := false
-  /-- A fix, not in the Design Doc: a verdict gives a Verifier's marker its result only when the marker's
-  own start wrote it. -/
-  fixVerdictCarriesStart : Bool := false
-  /-- A fix, not in the Design Doc: oe question accepts a re-run request whenever the head has no success
-  verdict, so a head whose Verifier died can be judged without an Owner. -/
-  fixRerunWithoutSuccess : Bool := false
+  /-- Restores a defect the Design Doc fixed: a push or a question gives an Owner's marker its result
+  whoever wrote it. -/
+  ownerResultFromAnyStart : Bool := false
+  /-- Restores a defect the Design Doc fixed: an answer stays a repair signal after a re-run request newer
+  than it. -/
+  answerOutlivesRerun : Bool := false
+  /-- Restores a defect the Design Doc fixed: oe question accepts a re-run request only while the head has
+  a failure verdict. -/
+  rerunOnlyOnFailure : Bool := false
   deriving BEq, Hashable, Repr
 
 structure Config where
@@ -163,11 +161,13 @@ def resultSources (cfg : Config) (s : St) (m : Marker) : List Nat :=
         | some h => if h.pushedAt > m.startAt then [h.src] else []
         | none => []
       let srcs := push ++ (s.questions.filter (·.time > m.startAt)).map (·.src)
-      if cfg.sw.fixOwnerResultCarriesStart then srcs.filter (· == m.start) else srcs
+      -- DD: "A push, a question, or a verdict gives a marker its result only when the start the marker
+      -- records wrote it"
+      if cfg.sw.ownerResultFromAnyStart then srcs else srcs.filter (· == m.start)
     | .verifier =>
       -- DD: "A Verifier's marker gives its result when its SHA gets a verdict, as Counting reads it"
       match m.sha.bind (commit? s) |>.bind (verdictOf s) with
-      | some v => if cfg.sw.fixVerdictCarriesStart && v.src != m.start then [] else [v.src]
+      | some v => if !cfg.sw.verdictFromAnyStart && v.src != m.start then [] else [v.src]
       | none => []
   srcs
 
@@ -236,8 +236,9 @@ def repairSignal (cfg : Config) (s : St) : Bool :=
     -- no other commit of the PR committed since the latest answer had a failure verdict"
     ((headVerdict s).any (!·.success) && !rerunSinceAnswer s &&
       !((sinceAnswer s).any fun c => c.sha != h.sha && (verdictOf s c).any (!·.success))) ||
-    -- DD: "Since the PR's head was pushed, one of these was given: An answer recorded through oe"
-    ((answerAt s).any (· > h.pushedAt) && !(cfg.sw.fixRerunClearsAnswer && rerunSinceAnswer s))
+    -- DD: "Since the PR's head was pushed, one of these was given: An answer recorded through oe, unless a
+    -- re-run request came after it"
+    ((answerAt s).any (· > h.pushedAt) && (cfg.sw.answerOutlivesRerun || !rerunSinceAnswer s))
 
 /-- DD: "For each Issue, oe ready reads this table from the top and outputs the action of the first row
 that matches." Rows 3, 4, and 5 are absent: the Issue has no dependency, and the person closes nothing,
@@ -271,13 +272,12 @@ def decide (cfg : Config) (s : St) : Decision :=
         -- DD row 13: "The PR's head SHA has a success verdict | Wait for an engineer to merge"
         | some ⟨_, true, _⟩ => ⟨13, .waitMerge⟩
 
-/-- DD: "oe question accepts it only while the Issue waits on the person and the PR's head has a failure
+/-- DD: "oe question accepts it while the Issue waits on the person and the PR's head has no success
 verdict, as Counting reads it" -/
 def rerunAccepted (cfg : Config) (s : St) : Bool :=
   !cfg.sw.noRerun && (decide cfg s).action == .waitPerson && (head? s).isSome &&
-    (cfg.sw.rerunWithoutFailureVerdict ||
-      (headVerdict s).any (!·.success) ||
-      (cfg.sw.fixRerunWithoutSuccess && !(headVerdict s).any (·.success)))
+    (if cfg.sw.rerunOnlyOnFailure then (headVerdict s).any (!·.success)
+     else !(headVerdict s).any (·.success))
 
 /-! ## Events -/
 
