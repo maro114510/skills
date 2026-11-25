@@ -45,9 +45,13 @@ flowchart LR
     G -->|No| X[Refuse and say which one]
     G -->|Yes| P{Branch has a PR}
     P -->|No| C[Open it with create-pr]
-    P -->|Yes| S[Type /steward into a new Watch pane]
-    C --> S
+    P -->|Yes| A{Auto-merge off}
+    C --> A
+    A -->|No| X
+    A -->|Yes| S[Type /steward into a new Watch pane]
 ```
+
+The skill checks auto-merge after the pull request exists, so a pull request that `create-pr` just opened is checked before the launch line too.
 
 The skill types `/ship` instead only when the person asks for it, because `/ship` writes the pull request in English and ignores the repository's template.
 
@@ -60,6 +64,8 @@ The skill reports state from `herdr agent read` on the Watch pane and from `gh p
 ## Invariants
 
 - The skill starts only on the person's explicit request.
+- The skill runs only inside a Herdr pane, with `HERDR_ENV=1`, because it controls the Watch pane through Herdr.
+- The pull request is on GitHub, because the skill opens it with `create-pr` and reads it with `gh pr view`. The Watch's flow for other hosts is out of scope.
 - The skill types nothing into a Watch pane but a Launch line. A typed message lifts the Watch's merge guards for that turn.
 - The pull request has auto-merge off, because a push from the Watch can let the host merge it.
 - The person trusts everyone who can merge to the base branch or push to the pull request branch, because the Watch runs their code with the person's credentials. The skill cannot check this, so it asks the person to confirm it before each launch.
