@@ -7,8 +7,6 @@ PORTABLE_AGENT_KEYS='name description mode'
 OPENCODE_AGENT_MODE='subagent'
 OPENCODE_REJECT_MARKER='OpenCode will reject this agent'
 OPENCODE_CLI='opencode'
-# Skills that must run only when a user names them.
-CODEX_EXPLICIT_SKILLS=(steering-audit)
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "${script_dir}/.." && pwd)"
@@ -105,24 +103,28 @@ check_codex() {
     fi
   done
 
-  # Codex ignores disable-model-invocation, so only agents/openai.yaml keeps these skills from
-  # starting on their own.
-  local skill policy
-  for skill in "${CODEX_EXPLICIT_SKILLS[@]}"; do
+  # Codex ignores disable-model-invocation, so only agents/openai.yaml keeps a skill that sets it from
+  # starting on its own. The SKILL.md key is the one declaration; every deployed policy file must match it.
+  local source_body skill policy explicit
+  for source_body in "${repo_root}"/skills/*/SKILL.md; do
+    skill="$(basename "$(dirname "${source_body}")")"
     policy="${project_dir}/.agents/skills/${skill}/agents/openai.yaml"
-    if [[ ! -f "${policy}" ]]; then
-      fail "[codex] ${skill} has no agents/openai.yaml, so Codex may invoke it implicitly"
-    elif ! grep -q '^policy:[[:space:]]*$' "${policy}" ||
-      ! grep -Eq '^[[:space:]]+allow_implicit_invocation:[[:space:]]*false[[:space:]]*$' "${policy}"; then
-      fail "[codex] ${skill}/agents/openai.yaml does not set policy.allow_implicit_invocation: false"
+    explicit=0
+    if [[ -f "${policy}" ]] && grep -q '^policy:[[:space:]]*$' "${policy}" &&
+      grep -Eq '^[[:space:]]+allow_implicit_invocation:[[:space:]]*false[[:space:]]*$' "${policy}"; then
+      explicit=1
     fi
-  done
-
-  local body
-  for skill in "${CODEX_EXPLICIT_SKILLS[@]}"; do
-    body="${project_dir}/.agents/skills/${skill}/SKILL.md"
-    if [[ ! -f "${body}" ]]; then
-      fail "[codex] ${skill}/SKILL.md was not deployed under .agents/skills/"
+    if frontmatter_has "${source_body}" disable-model-invocation true; then
+      if [[ ! -f "${policy}" ]]; then
+        fail "[codex] ${skill} sets disable-model-invocation: true but has no agents/openai.yaml, so Codex may invoke it implicitly"
+      elif [[ "${explicit}" -eq 0 ]]; then
+        fail "[codex] ${skill}/agents/openai.yaml does not set policy.allow_implicit_invocation: false"
+      fi
+      if [[ ! -f "${project_dir}/.agents/skills/${skill}/SKILL.md" ]]; then
+        fail "[codex] ${skill}/SKILL.md was not deployed under .agents/skills/"
+      fi
+    elif [[ "${explicit}" -eq 1 ]]; then
+      fail "[codex] ${skill}/agents/openai.yaml sets allow_implicit_invocation: false, but its SKILL.md does not set disable-model-invocation: true"
     fi
   done
 }
