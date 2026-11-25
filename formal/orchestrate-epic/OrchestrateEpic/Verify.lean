@@ -114,15 +114,13 @@ def checkKnown (known : List Known) (view : View) (skew : Bool) (sw : Switches) 
       IO.println s!"  holds, but a counterexample is recorded as known: {p.name}"
   if failed then throw (IO.userError s!"{label}: a property breaks other than as known")
 
-/-- A switch and the property it must break: the property holds on `base` and breaks once the switch is
-on. -/
+/-- A switch and the property it must break: the property holds on the Design Doc as written and breaks
+once the switch is on. -/
 structure Breaker where
   name : String
   view : View
   property : Property
   on : Switches → Switches
-  base : Switches := {}
-  skew : Bool := false
 
 def breakers : List Breaker := [
   { name := "Row 6 is gone", view := .noFault, property := .noDoubleStart,
@@ -150,10 +148,10 @@ def checkBreakers : IO Unit := do
   for p in Property.all do
     if !breakers.any (·.property == p) then throw (IO.userError s!"no switch breaks {p.name}")
   for b in breakers do
-    let base : Config := { view := b.view, skew := b.skew, sw := b.base }
+    let base : Config := { view := b.view }
     if (b.property.check base (← explored base)).isSome then
       throw (IO.userError s!"switch \"{b.name}\": {b.property.name} already breaks without it")
-    let cfg : Config := { view := b.view, skew := b.skew, sw := b.on b.base }
+    let cfg : Config := { view := b.view, sw := b.on {} }
     let g ← explored cfg
     match (b.property.check cfg g).map (labels cfg g) with
     | some path => IO.println s!"switch \"{b.name}\" breaks {b.property.name}\n{showPath path}"

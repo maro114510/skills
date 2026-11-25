@@ -24,7 +24,7 @@ The model holds one Issue. It keeps what the three known defects needed and noth
 | An answer that asks for no code change | An answer that changes no code led to a dead end |
 | A clock that can differ between the host that writes a marker and GitHub | The marker's start time comes from the host, and the 2-minute grace after an end is about the size of a skew |
 
-An agent may outlive its marker and write a result after a later start, so the model lets any ended or outlived start emit its result. At most 2 starts can still write at once; a later start drops the oldest, which then writes nothing, and the build prints this bound. With 3 the search passes 3,000,000 states.
+An agent may outlive its marker and write a result after a later start, so the model lets any ended or outlived start emit its result. At most 2 starts can still write at once; a later start drops the oldest, which then writes nothing, and the build prints this bound.
 
 ## Properties
 
