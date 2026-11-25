@@ -6,6 +6,7 @@
 # - fake-github-write.jq applies a write to the state, and this script saves the new state.
 # - The --jq filter is then applied to that response, as gh applies it.
 # - A call whose arguments contain GH_FAIL fails as if GitHub were down, and changes nothing.
+# - A call whose arguments contain GH_HANG returns nothing for 30 seconds, far past any read limit a test sets, as if GitHub never answered.
 # - OE_GITHUB_NEXT, when set, names a state file that replaces the state at the second Epic read.
 #   It models GitHub changing between two oe ready runs, at a point the test controls.
 # - GH_FAIL_EPIC_READ=N fails only the Nth Epic read, as if GitHub were down for one oe ready run.
@@ -49,6 +50,9 @@ args="$*"
 if [[ -n "${GH_FAIL:-}" && "${args}" == *"${GH_FAIL}"* ]]; then
   echo "gh: HTTP 502" >&2
   exit 1
+fi
+if [[ -n "${GH_HANG:-}" && "${args}" == *"${GH_HANG}"* ]]; then
+  exec sleep 30
 fi
 
 filter="." path="" query="" num="" method=GET fields="{}"

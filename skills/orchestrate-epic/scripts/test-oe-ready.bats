@@ -123,6 +123,23 @@ JSON
   done
 }
 
+@test "a GitHub read that never returns fails oe ready within the read limit, as any failed read does" {
+  github <<'JSON'
+{"issues": [{"number": 5, "branch": true, "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}}]}]}
+JSON
+  read_limit=1
+  seconds_for_the_other_reads=3
+
+  for read in subIssues "num=5" /pulls /statuses /activity; do
+    started="$(date +%s)"
+    GH_HANG="${read}" OE_READ_TIMEOUT="${read_limit}" run --separate-stderr bash "${oe}" ready o/r 1
+
+    [ "$(($(date +%s) - started))" -le "$((read_limit + seconds_for_the_other_reads))" ]
+    [ "${status}" -eq 1 ]
+    [ -z "${output}" ]
+  done
+}
+
 # Row 1: the Issue is closed
 
 @test "a closed Issue is done" {
