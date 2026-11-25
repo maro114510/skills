@@ -26,6 +26,7 @@ A criterion that reads both ways, for any kind of file, is a behavior criterion.
 | Rule | Requirement |
 |---|---|
 | Final state | It comes from a fresh run on the final state of the change. An edit to anything the run depends on, made after it, voids it until it is run again. A hook or formatter that rewrites a file at commit time is such an edit |
+| Test cache | Only the run cited as evidence disables the test result cache, such as `-count=1` for `go test`. Intermediate runs keep the cache |
 | This change | It runs what the worktree builds, never an installed copy: `go run ./cmd/greet` or a binary built from the worktree, not `greet` found on `PATH`. The record names what ran |
 | Reproducible | Its record lets someone else run it again under the same conditions. Prefer a test or script the change already needs, so its command is the record. When no deterministic check exists, as for an agent instruction file, record the exact input: the procedure's file path and the concrete input. Keep the input on the line when it is short. Otherwise keep it in the Phase 6.9 output and the PR body. Never add a file only to hold it |
 | Untouched worktree | No run or observation changes the worktree's source. Never stash, reset, check out, or edit it to make one. Build and cache output that running a check writes is allowed |
