@@ -1,0 +1,47 @@
+name: Check Formal Model
+
+# docs/design/design-verification.md § Operation: a change to either Design Doc can redefine a property
+# without touching the model, so those paths run the model too.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/design/orchestrate-epic.md'
+      - 'docs/design/design-verification.md'
+      - 'formal/**'
+      - '.github/workflows/check-formal-model.yml'
+  pull_request:
+    paths:
+      - 'docs/design/orchestrate-epic.md'
+      - 'docs/design/design-verification.md'
+      - 'formal/**'
+      - '.github/workflows/check-formal-model.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  orchestrate-epic:
+    name: orchestrate-epic model
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # elan installs the toolchain pinned in formal/orchestrate-epic/lean-toolchain.
+      # `lake build` fails when a property breaks or the checked text no longer has the recorded hash.
+      # No cache: a restored .lake could stand in for a check this commit never ran.
+      - name: Build the model, which runs every check
+        uses: leanprover/lean-action@ba3fdfe5c4476c925da13bf11a005ddb47e47aee # v1.7.1
+        with:
+          lake-package-directory: formal/orchestrate-epic
+          auto-config: 'false'
+          build: 'true'
+          test: 'false'
+          lint: 'false'
+          use-mathlib-cache: 'false'
+          use-github-cache: 'false'
