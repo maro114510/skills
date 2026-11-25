@@ -65,7 +65,40 @@ def lateOwnerWrite (write : String) : List String := [
 
 def ownerFixUndone : Switches → Switches := ({ · with ownerResultFromAnyStart := false })
 
+/-- The labels of the events that can happen after `events`. -/
+def nextLabels (cfg : Config) (events : List String) : IO (List String) :=
+  match walk cfg events with
+  | .ok (g, _) => pure ((step cfg g.states.back!).map (·.1.label))
+  | .error e => throw (IO.userError e)
+
+/-- The events up to the push of the first commit after a repair starts, which is commit 2. -/
+def toRepairPush : List String := [
+  "oe ready row 8: start an Owner", "Owner start 1 pushes", "CI on commit 1 succeeds",
+  "oe ready row 11: start a Verifier", "Verifier start 2 writes a failure verdict",
+  "oe ready row 8: start an Owner", "Owner start 3 pushes"]
+
 end OE.Tests
+
+#eval show IO Unit from do
+  let next ← nextLabels { view := .noFault } toRepairPush
+  expect "CI can fail on the first commit after a repair starts for a person who sees no fault"
+    (next.contains "CI on commit 2 fails") (toString next)
+
+#eval show IO Unit from do
+  let next ← nextLabels { view := .codeFault } ["oe ready row 8: start an Owner", "Owner start 1 pushes"]
+  expect "CI cannot fail on the commit that opens the PR"
+    (next.contains "CI on commit 1 succeeds" && !next.contains "CI on commit 1 fails") (toString next)
+
+#eval show IO Unit from do
+  let cfg : Config := { view := .noFault }
+  let pending ← nextLabels cfg toRepairPush
+  let failed ← nextLabels cfg (toRepairPush ++ ["CI on commit 2 fails"])
+  let rerunLabel := "the person reruns the failed check on commit 2"
+  expect "the person can rerun a failed check, and only a failed one"
+    (!pending.contains rerunLabel && failed.contains rerunLabel) s!"{pending}\n{failed}"
+  let rerun ← nextLabels cfg (toRepairPush ++ ["CI on commit 2 fails", rerunLabel])
+  expect "a rerun sets the failed check pending again"
+    (rerun.contains "CI on commit 2 succeeds" && rerun.contains "CI on commit 2 fails") (toString rerun)
 
 -- Two defects break "A result belongs to its start", and the known counterexample is only the shorter.
 #eval show IO Unit from do
