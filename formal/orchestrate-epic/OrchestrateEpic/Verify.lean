@@ -79,6 +79,8 @@ structure Known where
   skew : Bool
   property : Property
   path : List String
+  /-- The Design Doc change that removes this counterexample. -/
+  fix : Switches → Switches := id
 
 def checkKnown (known : List Known) (view : View) (skew : Bool) (sw : Switches) (label : String) :
     IO Unit := do
