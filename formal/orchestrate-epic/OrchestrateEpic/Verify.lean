@@ -82,6 +82,8 @@ structure Known where
   /-- The Design Doc change that removes this counterexample. -/
   fix : Switches → Switches := id
 
+/-- A known counterexample passes only when its path is a run that breaks its property, and its fix makes
+the property hold, so it hides no other violation of the property, however short. -/
 def checkKnown (known : List Known) (view : View) (skew : Bool) (sw : Switches) (label : String) :
     IO Unit := do
   let cfg : Config := { view, skew, sw }
@@ -93,11 +95,17 @@ def checkKnown (known : List Known) (view : View) (skew : Bool) (sw : Switches) 
     match (p.check cfg g).map (labels cfg g), expected with
     | none, none => IO.println s!"  holds: {p.name}"
     | some path, some k =>
-      if path == k.path then
-        IO.println s!"  known counterexample: {p.name}\n{showPath path}"
-      else
+      if !(replay cfg g k.path).any (p.breaksOn cfg g) then
         failed := true
-        IO.println s!"  BREAKS: {p.name}, on a path other than the known one\n{showPath path}"
+        IO.println s!"  BREAKS: {p.name}, and the known path does not break it\n{showPath path}"
+      else
+        let fixed : Config := { cfg with sw := k.fix sw }
+        let fg ← explored fixed
+        match (p.check fixed fg).map (labels fixed fg) with
+        | none => IO.println s!"  known counterexample: {p.name}\n{showPath k.path}"
+        | some other =>
+          failed := true
+          IO.println s!"  BREAKS: {p.name}, on a path the known one's fix leaves\n{showPath other}"
     | some path, none =>
       failed := true
       IO.println s!"  BREAKS: {p.name}\n{showPath path}"

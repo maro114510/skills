@@ -101,34 +101,40 @@ def firstEdge (g : Graph) (bad : St → Event → Nat → Bool) : Option Path :=
       if bad g.states[i]! e j then return some (g.pathTo i ++ [(e, j)])
   return none
 
-def firstState (g : Graph) (bad : St → Bool) : Option Path := Id.run do
+def firstState' (g : Graph) (bad : Nat → Bool) : Option Path := Id.run do
   for i in [0:g.states.size] do
-    if bad g.states[i]! then return some (g.pathTo i)
+    if bad i then return some (g.pathTo i)
   return none
 
+def firstState (g : Graph) (bad : St → Bool) : Option Path := firstState' g (bad g.states[·]!)
+
 /-- "No agent starts while the working marker is live" -/
-def noDoubleStart (cfg : Config) (g : Graph) : Option Path :=
-  firstEdge g fun s e _ => e.isStart && markerLive cfg s
+def doubleStart (cfg : Config) (_g : Graph) (s : St) (e : Event) (_j : Nat) : Bool :=
+  e.isStart && markerLive cfg s
+
+def noDoubleStart (cfg : Config) (g : Graph) : Option Path := firstEdge g (doubleStart cfg g)
 
 /-- "A push, a question, or a verdict gives a result, or ends a marker, only for the start that produced
 it" -/
-def resultBelongsToStart (cfg : Config) (g : Graph) : Option Path :=
-  firstState g fun s => s.marker.any fun m =>
-    m.endedBy.any (· != m.start) || (resultSources cfg s m).any (· != m.start)
+def foreignResult (cfg : Config) (s : St) : Bool :=
+  s.marker.any fun m => m.endedBy.any (· != m.start) || (resultSources cfg s m).any (· != m.start)
+
+def resultBelongsToStart (cfg : Config) (g : Graph) : Option Path := firstState g (foreignResult cfg)
 
 /-- "After an answer or a re-run request, the next read starts the agent it asks for, unless a fact newer
 than the input, or a fact about the Issue, its dependencies, the PR's state, or CI, decides first".
 The read right after the input has no fact newer than it. The facts about CI are a pending or failed check
 on the head and the cap on failed checks. -/
-def inputTakesEffect (cfg : Config) (g : Graph) : Option Path :=
-  firstEdge g fun _ e j =>
-    let t := g.states[j]!
-    let d := decide cfg t
-    let ciFact := (head? t).any (fun h => h.ci != .success) || (d.row == 8 && d.action == .hold)
-    match e with
-    | .answer _ => d.action != .startOwner && !ciFact
-    | .rerun => d.action != .startVerifier && !ciFact
-    | _ => false
+def inputIgnored (cfg : Config) (g : Graph) (_s : St) (e : Event) (j : Nat) : Bool :=
+  let t := g.states[j]!
+  let d := decide cfg t
+  let ciFact := (head? t).any (fun h => h.ci != .success) || (d.row == 8 && d.action == .hold)
+  match e with
+  | .answer _ => d.action != .startOwner && !ciFact
+  | .rerun => d.action != .startVerifier && !ciFact
+  | _ => false
+
+def inputTakesEffect (cfg : Config) (g : Graph) : Option Path := firstEdge g (inputIgnored cfg g)
 
 /-- The events a path to the merge may use: agent results, CI results, time passing, and the person's
 replies the view allows. An agent dying and the clock moving are left out, since nobody can count on them. -/
@@ -138,7 +144,7 @@ def Event.helps : Event → Bool
 
 /-- "some sequence of agent results, CI results, and the person's answers, re-run requests, and merges ends
 in a merge of a head with a success verdict" -/
-def noDeadEnd (_cfg : Config) (g : Graph) : Option Path := Id.run do
+def mergeable (g : Graph) : Array Bool := Id.run do
   let n := g.states.size
   let mut back : Array (Array Nat) := Array.replicate n #[]
   for i in [0:n] do
@@ -154,9 +160,11 @@ def noDeadEnd (_cfg : Config) (g : Graph) : Option Path := Id.run do
       if !good[u]! then
         good := good.set! u true
         queue := queue.push u
-  for i in [0:n] do
-    if !good[i]! then return some (g.pathTo i)
-  return none
+  return good
+
+def noDeadEnd (_cfg : Config) (g : Graph) : Option Path :=
+  let good := mergeable g
+  firstState' g fun i => !good[i]!
 
 /-- Strongly connected components over the events that are not the person's input, by Kosaraju's
 algorithm, iterative so a long path does not overflow the stack. -/
@@ -225,6 +233,38 @@ def labels (cfg : Config) (g : Graph) (path : Path) : List String := Id.run do
       out := out.push (e'.label ++ started); raw := t
     | none => out := out.push e.label; raw := g.states[j]!
   return out.toList
+
+/-- The path in `g` whose labels are `shown`, or none when no run of the model prints them. -/
+def replay (cfg : Config) (g : Graph) (shown : List String) : Option Path := Id.run do
+  let mut raw := init
+  let mut path : Path := []
+  for want in shown do
+    let label (e : Event) := e.label ++ (if e.isStart then s!", start {nextId raw}" else "")
+    match (rawStep cfg raw).find? (label ·.1 == want) with
+    | none => return none
+    | some (e, t) =>
+      match g.states.findIdx? (· == normalize t) with
+      | none => return none
+      | some j => path := path ++ [(renumber raw e, j)]; raw := t
+  return some path
+
+/-- Whether `path`, from the start of the Issue, ends where it breaks `p`. -/
+def Property.breaksOn (p : Property) (cfg : Config) (g : Graph) (path : Path) : Bool :=
+  let ends := path.getLast?.map (·.2) |>.getD 0
+  let lastEdge (bad : St → Event → Nat → Bool) : Bool :=
+    match path.reverse with
+    | (e, j) :: rest => bad g.states[(rest.head?.map (·.2)).getD 0]! e j
+    | [] => false
+  match p with
+  | .noDoubleStart => lastEdge (doubleStart cfg g)
+  | .resultBelongsToStart => foreignResult cfg g.states[ends]!
+  | .inputTakesEffect => lastEdge (inputIgnored cfg g)
+  | .noDeadEnd => !(mergeable g)[ends]!
+  | .startsBounded =>
+    -- A start whose two ends lie in one component of events that are not the person's input.
+    let comp := components g
+    let froms := 0 :: path.map (·.2)
+    (froms.zip path).any fun (i, (e, j)) => e.isStart && comp[i]! == comp[j]!
 
 def Property.check (p : Property) (cfg : Config) (g : Graph) : Option Path :=
   match p with
