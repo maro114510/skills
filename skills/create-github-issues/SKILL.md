@@ -1,11 +1,7 @@
 ---
 name: create-github-issues
 description: >
-  Create GitHub Issues from a conversation, plan, or TODO list.
-  Produces one Issue per task, each with background, requirements, specs, dependency, and acceptance criteria, under an Epic parent Issue only when tasks depend on each other or the owner asks for one, linked as GitHub sub-issues with dependencies recorded as blocked-by/blocking relations.
-  Requirements (what) and specs (how) are kept separate and length-capped so bodies stay concise, and the Epic also renders a Mermaid diagram (a compact table for large epics) showing which child Issues block each other and which can run in parallel.
-  Issue titles, bodies, and every interactive prompt are written in the language that `lang <ja|en>` or git config `skills.lang` selects.
-  Use this skill when the user asks to track tasks with an Epic, turn TODOs or a plan into GitHub Issues, or extract action items from a review or investigation.
+  Create GitHub Issues from a conversation, plan, or TODO list: one Issue per task with background, requirements, specs, dependency, and acceptance criteria, under an Epic only when tasks depend on each other. Use when the user asks to track tasks with an Epic, turn TODOs or a plan into Issues, or extract action items from a review or investigation.
 argument-hint: "[repo <owner/repo>] [lang <ja|en>] [project <n>]"
 ---
 

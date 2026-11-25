@@ -1,13 +1,7 @@
 ---
 name: write-researched-document
 description: >
-  根拠を調査・検証し、監査可能なMarkdown文書を作成する対話型スキル。
-  調査レビュー、複数資料を統合する分析・モデル文書、読者向けの解説記事を、
-  GitHub Issueや依頼文からworktree上で執筆する。既存のClaim Ledgerや調査資料を優先し、
-  不足する根拠だけを追加調査する。研究結果を別の集団・制度・地域・時代・概念へ援用する場合は、
-  research-transfer-checkerを独立したコンテキストで執筆前後に実行する。
-  `$write-researched-document` と明示された場合だけ使用し、一般的なコード実装、
-  README・仕様書・議事録の作成、根拠を必要としない文章修正には使用しない。
+  根拠を調査・検証し、監査可能な Markdown 文書を worktree 上で執筆する(調査レビュー、統合分析、解説記事)。研究の援用は research-transfer-checker で検査する。`$write-researched-document` と明示された場合だけ使い、一般的な実装・README・議事録・文章修正には使わない。
 ---
 
 # write-researched-document

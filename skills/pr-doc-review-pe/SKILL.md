@@ -1,10 +1,7 @@
 ---
 name: pr-doc-review-pe
 description: >
-  Design Doc・ADR・RFC・実装計画書を Principal Engineer 視点でレビューするスキル。
-  本番障害・データ不整合・移行失敗・ロールバック不能・契約破壊、または収益棄損・法務違反・後戻り不能な事業判断に直結する致命的な欠陥だけを指摘し、typo・表記揺れ・体裁・命名の好みには一切触れない。
-  「Design Doc レビュー」「ADR を見て」「RFC レビュー」「実装計画書を確認して」「設計レビュー」「設計書のレビューをして」「この設計の穴を探して」などの依頼で使う。
-  引数に PR 番号または GitHub URL を渡す。
+  Design Doc・ADR・RFC・実装計画書を Principal Engineer 視点でレビューし、本番障害・データ不整合・移行失敗・契約破壊など致命的な欠陥だけを指摘する。「Design Doc レビュー」「ADR を見て」「RFC レビュー」「設計レビュー」で使う。引数は PR 番号か URL。
 argument-hint: "<pr-number or url>"
 ---
 

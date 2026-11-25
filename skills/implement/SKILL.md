@@ -1,20 +1,7 @@
 ---
 name: implement
 description: >
-  A skill for executing implementation tasks with quality as the top priority. Grounds the request
-  in the codebase, resolves requirements and acceptance criteria, decides autonomously from the Issue and
-  repository, and returns Questions only when acceptance, a premise, or the sources are in doubt, or a critical
-  decision is unsettled. Writes tests through one playbook per task type, commits each TDD cycle, and proves every
-  fix that goes through the bug-fix playbook with a reproduction test that fails on the pre-fix code.
-  Trigger on requests like
-  「これを実装して」「機能を追加して」「バグを修正して」「変更して」「これを作って」
-  「リファクタリングして」「対応して」 and similar implementation requests.
-  Builds one Request as one change unit for one PR, and returns Questions asking to split the Issue or request when it needs more.
-  Works in a worktree, commits as it goes, and before it returns has a fresh context check that the branch adds nothing the request did not ask for and lacks nothing it asks for,
-  then self-reviews the whole branch range on the first pass and only the fix delta on a second.
-  Locks an Issue by creating its branch `feat/issue-<N>` on origin first, so a second session handed the same Issue returns Busy instead of duplicating the work.
-  Behaves the same whoever calls it: it never asks and never waits, and ends by returning Busy, Questions, or Built.
-  Never pushes a commit and does not create a PR; both are the caller's. The only thing it writes to origin is the Issue's branch, as the Lock.
+  Implement a request with quality first: ground it in the codebase, set acceptance criteria, build in a worktree with TDD commits and a self-review, and return Built, Questions, or Busy. Never pushes or opens a PR. Use for 「これを実装して」「機能を追加して」「バグを修正して」「リファクタリングして」「対応して」.
 argument-hint: "[description of what to implement]"
 ---
 

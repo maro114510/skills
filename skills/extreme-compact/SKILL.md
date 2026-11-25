@@ -1,14 +1,7 @@
 ---
 name: extreme-compact
 description: >
-  Recursively compact AI-generated writing or an existing document down to its essential point,
-  without changing the overall meaning. Strips redundant phrasing, repeated claims, tangents, and
-  decorative preambles, leaving only what the text is actually trying to say. Numbers, dates,
-  conditions, proper nouns, negations/exceptions, conclusions, and the causal chain behind them
-  form a safety list that must never be dropped. Use this proactively for requests like
-  "compress this", "make this more concise", "just give me the key points", "trim the fluff",
-  "this AI output is too long", "the argument keeps wandering", "Extreme Compact", or "compact this as much as possible".
-  Do not use it for simple typo fixes or general Japanese prose-style polishing.
+  Recursively compact AI-generated writing or a document to its essential point without changing its meaning, keeping numbers, dates, conditions, proper nouns, negations, and conclusions. Use proactively for "compress this", "make this more concise", "just give me the key points", "trim the fluff", "this AI output is too long", "Extreme Compact". Not for typo fixes or Japanese prose polishing.
 argument-hint: "[text | file path]"
 ---
 

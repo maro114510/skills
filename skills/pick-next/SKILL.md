@@ -1,10 +1,7 @@
 ---
 name: pick-next
 description: >
-  Pick what to work on next in the current repository: what waits on the owner, the few Issues or PRs to start next, and what is blocked and on what, each explained in plain words.
-  With discussions, also lists the open Discussions, the ideas and questions not yet turned into work.
-  Use when the user asks "what should I work on next", "what's next", "which Issue next", "pick the next task", "次に何やる", "次どのIssueやればいい", "今やるべきことは", or "Discussionも含めて".
-  Not for one Epic's run, which orchestrate-epic's oe ready covers.
+  Pick what to work on next in the current repository: what waits on the owner, the few Issues or PRs to start, and what is blocked. With `discussions`, also lists open Discussions. Use for "what should I work on next", "what's next", "which Issue next", 「次に何やる」「今やるべきことは」. Not for one Epic's run.
 argument-hint: "[lang <ja|en>] [limit <n>] [discussions]"
 ---
 

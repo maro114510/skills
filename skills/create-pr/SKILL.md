@@ -1,12 +1,7 @@
 ---
 name: create-pr
 description: >
-  Create a GitHub pull request with a high-signal title and description, written
-  in the language that `lang <ja|en>` or git config `skills.lang` selects.
-  Analyze the branch diff and complete commit history to explain the motivation,
-  impact, risks, implementation choices, and review focus, then push the branch
-  and open the PR through the skill's script, as a draft unless `ready` is given. Use this skill when the user asks to open, create, submit, or send a PR
-  for review.
+  Create a GitHub pull request with a high-signal title and description, in the language `lang <ja|en>` or git config `skills.lang` selects. Analyzes the branch diff and commit history, pushes the branch, and opens the PR, as a draft unless `ready` is given. Use when the user asks to open, create, submit, or send a PR for review.
 argument-hint: "[ready] [base <branch>] [lang <ja|en>]"
 ---
 
