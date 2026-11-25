@@ -10,7 +10,7 @@ The watch does the repair work: failing checks, review comments, and base confli
 |---|---|
 | Starting, reading, and stopping one watch per pull request | Repair logic, polling, and push or merge caps, which the watch owns |
 | Keeping the watch inside the limits Claude Code sets | Per-repository watch rules, which live in the target repository's `.claude/skills/steward/SKILL.md` |
-| Opening the pull request with `create-pr` when none exists | Merging or approving, which stay with a person, so the skill refuses a pull request with auto-merge on |
+| Opening the pull request with `create-pr` when none exists | Merging or approving, which neither the skill nor the Watch requests, so the skill refuses a pull request with auto-merge on. A program from the branch, such as a test, can still merge with the person's credentials, and only the repository's branch rules prevent that |
 
 ## Domain Model
 
@@ -55,7 +55,7 @@ The skill reports Watching only after the pane shows that the watch started. Whe
 
 ### Reading and stopping
 
-The skill reports state from `herdr agent read` on the Watch pane and from `gh pr view`. A stop types `/ship stop` and reports the End line.
+The skill reports state from `herdr agent read` on the Watch pane and from `gh pr view`. A stop types `/ship stop` and reports the End line. When Claude is working at that moment, the Watch ends only after the current turn, and what that turn pushes or posts still reaches the pull request, so the skill tells the person so until the End line appears.
 
 ## Invariants
 
