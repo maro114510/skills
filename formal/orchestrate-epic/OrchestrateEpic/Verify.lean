@@ -66,7 +66,7 @@ def View.name : View → String
   | .noFault => "a person who sees no fault in the code"
 
 def explored (cfg : Config) : IO Graph :=
-  match explore cfg (limit := 3000000) with
+  match explore cfg (limit := 20000000) with
   | .ok g => pure g
   | .error e => throw (IO.userError e)
 
@@ -144,14 +144,17 @@ def breakers : List Breaker := [
     property := .noDeadEnd, on := ({ · with rerunOnlyOnFailure := true }) }
 ]
 
-def checkBreakers : IO Unit := do
+/-- A switch is checked on the Design Doc with the fix of each known counterexample of its view applied, so
+a known counterexample does not hide what the switch breaks. -/
+def checkBreakers (known : List Known) : IO Unit := do
   for p in Property.all do
     if !breakers.any (·.property == p) then throw (IO.userError s!"no switch breaks {p.name}")
   for b in breakers do
-    let base : Config := { view := b.view }
+    let fixed := (known.filter fun k => k.view == b.view && !k.skew).foldl (fun sw k => k.fix sw) {}
+    let base : Config := { view := b.view, sw := fixed }
     if (b.property.check base (← explored base)).isSome then
       throw (IO.userError s!"switch \"{b.name}\": {b.property.name} already breaks without it")
-    let cfg : Config := { view := b.view, sw := b.on {} }
+    let cfg : Config := { view := b.view, sw := b.on fixed }
     let g ← explored cfg
     match (b.property.check cfg g).map (labels cfg g) with
     | some path => IO.println s!"switch \"{b.name}\" breaks {b.property.name}\n{showPath path}"

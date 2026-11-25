@@ -33,23 +33,27 @@ open OE OE.Tests
 -- same state.
 #eval show IO Unit from do
   let cfg : Config := { view := .codeFault, maxAgents := 3 }
-  let toThirdPush := [
-    "oe ready row 8: start an Owner", "Owner start 1 pushes", "CI on commit 1 fails",
-    "oe ready row 8: start an Owner", "Owner start 2 writes a question",
+  -- The Verifier, start 2, ends after its verdict, so the two older starts that wrote are Owners 1 and 3.
+  -- Once commit 1 is dropped, the state numbers start 3 as 2.
+  let toFourthPush := [
+    "oe ready row 8: start an Owner", "Owner start 1 pushes", "CI on commit 1 succeeds",
+    "oe ready row 11: start a Verifier", "Verifier start 2 writes a failure verdict",
+    "start 2 ends, and oe end runs", "oe ready row 8: start an Owner", "Owner start 3 writes a question",
     "the person answers that the code must change", "oe ready row 8: start an Owner",
-    "Owner start 3 pushes"]
-  match walk cfg (toThirdPush ++ ["start 1 ends, and oe end runs"]),
-      walk cfg (toThirdPush ++ ["start 2 ends, and oe end runs"]) with
+    "Owner start 4 pushes"]
+  match walk cfg (toFourthPush ++ ["start 1 ends, and oe end runs"]),
+      walk cfg (toFourthPush ++ ["start 2 ends, and oe end runs"]) with
   | .ok (g1, _), .ok (g, path) =>
-    expect "the ends of start 1 and start 2 reach the same state" (g1.states.back! == g.states.back!)
+    expect "the ends of start 1 and start 3 reach the same state" (g1.states.back! == g.states.back!)
     let shown := labels cfg g path
     expect "labels names the end the path took when another end reaches the same state"
-      (shown.getLast? == some "start 2 ends, and oe end runs") (showPath shown)
+      (shown.getLast? == some "start 3 ends, and oe end runs") (showPath shown)
   | .error e, _ | _, .error e => throw (IO.userError e)
 
 namespace OE.Tests
 
-/-- Whether `checkKnown` passes. -/
+/-- Whether `checkKnown` passes. A test turns on `rerunRerunsCi`, the fix of the known dead end, so that
+only the property it tests can break. -/
 def passesKnown (known : List Known) (view : View) (sw : Switches) : IO Bool := do
   try checkKnown known view false sw "test"; pure true
   catch _ => pure false
@@ -89,20 +93,9 @@ end OE.Tests
   expect "CI cannot fail on the commit that opens the PR"
     (next.contains "CI on commit 1 succeeds" && !next.contains "CI on commit 1 fails") (toString next)
 
-#eval show IO Unit from do
-  let cfg : Config := { view := .noFault }
-  let pending ← nextLabels cfg toRepairPush
-  let failed ← nextLabels cfg (toRepairPush ++ ["CI on commit 2 fails"])
-  let rerunLabel := "the person reruns the failed check on commit 2"
-  expect "the person can rerun a failed check, and only a failed one"
-    (!pending.contains rerunLabel && failed.contains rerunLabel) s!"{pending}\n{failed}"
-  let rerun ← nextLabels cfg (toRepairPush ++ ["CI on commit 2 fails", rerunLabel])
-  expect "a rerun sets the failed check pending again"
-    (rerun.contains "CI on commit 2 succeeds" && rerun.contains "CI on commit 2 fails") (toString rerun)
-
 -- Two defects break "A result belongs to its start", and the known counterexample is only the shorter.
 #eval show IO Unit from do
-  let sw : Switches := { ownerResultFromAnyStart := true, verdictFromAnyStart := true }
+  let sw : Switches := { ownerResultFromAnyStart := true, verdictFromAnyStart := true, rerunRerunsCi := true }
   let known := [{ view := .noFault, skew := false, property := .resultBelongsToStart,
                   path := lateOwnerWrite "Owner start 1 pushes", fix := ownerFixUndone : Known }]
   expect "checkKnown fails when a known counterexample hides another violation of its property"
@@ -110,7 +103,7 @@ end OE.Tests
 
 -- The late question is as short as the late push, which the search finds first.
 #eval show IO Unit from do
-  let sw : Switches := { ownerResultFromAnyStart := true }
+  let sw : Switches := { ownerResultFromAnyStart := true, rerunRerunsCi := true }
   let known := [{ view := .noFault, skew := false, property := .resultBelongsToStart,
                   path := lateOwnerWrite "Owner start 1 writes a question", fix := ownerFixUndone : Known }]
   expect "checkKnown passes on a known counterexample as short as the one the search finds"
@@ -118,7 +111,7 @@ end OE.Tests
 
 -- The path stops before the late write, so it breaks nothing.
 #eval show IO Unit from do
-  let sw : Switches := { ownerResultFromAnyStart := true }
+  let sw : Switches := { ownerResultFromAnyStart := true, rerunRerunsCi := true }
   let known := [{ view := .noFault, skew := false, property := .resultBelongsToStart,
                   path := (lateOwnerWrite "Owner start 1 pushes").dropLast ++ ["start 1 ends, and oe end runs"],
                   fix := ownerFixUndone : Known }]

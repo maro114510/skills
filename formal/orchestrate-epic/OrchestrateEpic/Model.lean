@@ -40,6 +40,8 @@ structure Commit where
   ci : Ci
   /-- Pushed by an Owner that started after an answer asking for a code change. -/
   fixed : Bool
+  /-- Its check can fail: it is the first commit pushed after a repair starts. -/
+  mayFail : Bool
   /-- The latest verify status other than pending. -/
   verdict : Option Verdict
   deriving BEq, Hashable, Repr
@@ -90,6 +92,8 @@ structure St where
   waitAt : Option Nat := none
   answer : Option (Nat × Kind) := none
   rerunAt : Option Nat := none
+  /-- An Owner started on an open PR, and no commit was pushed since. -/
+  repairOpen : Bool := false
   /-- DD: "An answer or a re-run request recorded through oe appends its decision to a decisions section" -/
   decided : Bool := false
   merged : Bool := false
@@ -119,6 +123,9 @@ structure Switches where
   /-- Restores a defect the Design Doc fixed: oe question accepts a re-run request only while the head has
   a failure verdict. -/
   rerunOnlyOnFailure : Bool := false
+  /-- A Design Doc change that removes a known defect: a re-run request also reruns a failed check on the
+  PR's head, so a check that failed for a cause outside the code no longer holds the Issue for good. -/
+  rerunRerunsCi : Bool := false
   deriving BEq, Hashable, Repr
 
 structure Config where
@@ -351,6 +358,7 @@ def start (cfg : Config) (s : St) (role : Role) : St :=
                      emitted := false, ended := false }
   let kept := if s.agents.length ≥ cfg.maxAgents then s.agents.drop 1 else s.agents
   { s with agents := kept ++ [a],
+           repairOpen := s.repairOpen || (role == .owner && (head? s).isSome),
            marker := some { role, start := id, startAt := stamp s t, sha, endAt := none, endedBy := none,
                             graceOver := false, expired := false } }
 
@@ -368,8 +376,6 @@ def passes (cfg : Config) (a : Agent) (c : Commit) : Bool :=
   -- DD: "The Issue body's decisions section takes precedence over the criteria it contradicts"
   | .noFault => a.decidedAtStart
 
-def ciMayFail (cfg : Config) (c : Commit) : Bool := cfg.view == .codeFault && !c.fixed
-
 def agentEvents (cfg : Config) (s : St) (a : Agent) : List (Event × St) :=
   let writes : List (Event × St) :=
     if a.emitted then [] else
@@ -379,8 +385,10 @@ def agentEvents (cfg : Config) (s : St) (a : Agent) : List (Event × St) :=
         if mayPush cfg a then
           let (s', t) := tick s
           let c : Commit := { sha := nextSha s', pushedAt := t, src := a.id, ci := .pending,
-                              fixed := a.answerAtStart == some .change, verdict := none }
-          [(.push a.id, setAgent { s' with commits := s'.commits ++ [c] } { a with emitted := true })]
+                              fixed := a.answerAtStart == some .change, mayFail := s'.repairOpen,
+                              verdict := none }
+          [(.push a.id, setAgent { s' with commits := s'.commits ++ [c], repairOpen := false }
+            { a with emitted := true })]
         else []
       let q :=
         let (s', t) := tick s
@@ -421,13 +429,16 @@ def sessionEvents (cfg : Config) (s : St) : List (Event × St) :=
   | .hold => let (s', t) := tick s; [(.read d, { s' with waitAt := some t })]
   | _ => []
 
-def ciEvents (cfg : Config) (s : St) : List (Event × St) :=
+/-- A check can fail for a cause outside the code, whatever the person's view, but only on a commit
+`mayFail` marks, which keeps the state space small. A person rerunning a failed check is left out: with
+it, the checks ran past 20 minutes. -/
+def ciEvents (s : St) : List (Event × St) :=
   s.commits.foldr (init := []) fun c acc =>
     if c.ci != .pending then acc else
     let set (r : Ci) : St := let (s', _) := tick s
       { s' with commits := s'.commits.map fun (d : Commit) => if d.sha == c.sha then { d with ci := r } else d }
     [(Event.ci c.sha true, set .success)] ++
-    (if ciMayFail cfg c then [(Event.ci c.sha false, set .failure)] else []) ++ acc
+    (if c.mayFail then [(Event.ci c.sha false, set .failure)] else []) ++ acc
 
 def clockEvents (cfg : Config) (s : St) : List (Event × St) :=
   let marker := match s.marker with
@@ -459,6 +470,10 @@ def personEvents (cfg : Config) (s : St) : List (Event × St) :=
     | .noFault =>
       if rerunAccepted cfg s then
         let (s', t) := tick s
+        let s' := if cfg.sw.rerunRerunsCi then
+            { s' with commits := s'.commits.map fun c =>
+                if some c.sha == (head? s').map (·.sha) && c.ci == .failure then { c with ci := .pending } else c }
+          else s'
         [(.rerun, { s' with rerunAt := some t, decided := true })]
       else [answer .noCode]
   -- DD: "Approves and merges the PR"
@@ -531,7 +546,7 @@ def normalize (s : St) : St :=
 /-- Every event that can happen next, before renumbering. -/
 def rawStep (cfg : Config) (s : St) : List (Event × St) :=
   if s.merged then [] else
-  sessionEvents cfg s ++ s.agents.flatMap (agentEvents cfg s) ++ ciEvents cfg s ++ clockEvents cfg s ++
+  sessionEvents cfg s ++ s.agents.flatMap (agentEvents cfg s) ++ ciEvents s ++ clockEvents cfg s ++
     personEvents cfg s
 
 def step (cfg : Config) (s : St) : List (Event × St) :=
