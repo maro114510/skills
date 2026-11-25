@@ -88,7 +88,7 @@ def checkKnown (known : List Known) (view : View) (skew : Bool) (sw : Switches) 
     IO Unit := do
   let cfg : Config := { view, skew, sw }
   let g ← explored cfg
-  IO.println s!"{label}, for {view.name}{if skew then ", with clock skew" else ""}: {g.states.size} states"
+  IO.println s!"{label}, for {view.name}{if skew then ", with clock skew" else ""}: {g.states.size} states, with at most {cfg.maxAgents} starts that can still write"
   let mut failed := false
   for p in Property.all do
     let expected := known.find? fun k => k.view == view && k.skew == skew && k.property == p
