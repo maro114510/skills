@@ -1303,7 +1303,7 @@ JSON
   [ -z "${output}" ]
 }
 
-# Rows 11 to 13: the verdict on the head
+# Rows 8 and 11 to 13: the verdict on the head, and re-run requests
 
 @test "a head that passed its checks with no verdict gets a Verifier with the command that starts it" {
   github <<'JSON'
@@ -1328,9 +1328,46 @@ JSON
   [ "$(action_of 5)" = start-verifier ]
 }
 
-@test "a failure verdict on the head holds the Issue" {
+@test "a first failure verdict on the head since the latest answer gets an Owner" {
   github <<'JSON'
-{"issues": [{"number": 5, "branch": true, "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["failure", "pending"]}]}]}
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "OWNER", "at": "07:02", "body": "<!-- oe:question -->\nWhich option?"},
+      {"by": "OWNER", "at": "07:05", "body": "<!-- oe:answer -->\nA. Keep it"}
+    ],
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": ["failure", "pending"]}]
+  }]
+}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-owner ]
+  [ "$(field_of 5 3)" = "failure verdict on bbbbbbb" ]
+}
+
+@test "a failure verdict on the head when an earlier commit of the PR had one since the latest answer holds the Issue" {
+  github <<'JSON'
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "OWNER", "at": "07:02", "body": "<!-- oe:question -->\nWhich option?"},
+      {"by": "OWNER", "at": "07:05", "body": "<!-- oe:answer -->\nA. Keep it"}
+    ],
+    "pull_requests": [{
+      "number": 50, "opened": "07:10", "committed": "07:40", "pushed": "07:40", "checks": {"test": "success"},
+      "verdicts": [{"state": "failure", "at": "07:50"}],
+      "commits": [{"sha": "1111111111111111111111111111111111111111", "committed": "07:10", "checks": {"test": "success"},
+        "verdicts": [{"state": "failure", "at": "07:20"}]}]
+    }]
+  }]
+}
 JSON
 
   run bash "${oe}" ready o/r 1
@@ -1338,6 +1375,213 @@ JSON
   [ "${status}" -eq 0 ]
   [ "$(action_of 5)" = hold ]
   [ "$(field_of 5 3)" = "failure verdict on bbbbbbb" ]
+}
+
+@test "a failure verdict on an earlier commit committed before the latest answer does not keep the head's first one from getting an Owner" {
+  github <<'JSON'
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "OWNER", "at": "07:25", "body": "<!-- oe:hold -->\nfailure verdict on 1111111"},
+      {"by": "OWNER", "at": "07:30", "body": "<!-- oe:answer -->\nFix the timeout"}
+    ],
+    "pull_requests": [{
+      "number": 50, "opened": "07:00", "committed": "07:40", "pushed": "07:40", "checks": {"test": "success"},
+      "verdicts": [{"state": "failure", "at": "07:50"}],
+      "commits": [{"sha": "1111111111111111111111111111111111111111", "committed": "07:10", "checks": {"test": "success"},
+        "verdicts": [{"state": "failure", "at": "07:20"}]}]
+    }]
+  }]
+}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-owner ]
+}
+
+@test "after a re-run request the older failure verdict counts as none, and a Verifier marker older than the request neither waits nor holds" {
+  github <<JSON
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "body": $(marker_body verifier 07:15 "${pr50}"),
+    "comments": [
+      {"by": "OWNER", "at": "07:30", "body": "<!-- oe:hold -->\nfailure verdict on bbbbbbb"},
+      {"by": "OWNER", "at": "07:40", "body": "<!-- oe:rerun -->\nJudge it again"}
+    ],
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": [{"state": "failure", "at": "07:20"}]}]
+  }]
+}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-verifier ]
+}
+
+@test "a Verifier started after a re-run request waits for its own verdict instead of taking the older one as its result" {
+  github <<JSON
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "body": $(marker_body verifier 07:45 "${pr50}"),
+    "comments": [
+      {"by": "OWNER", "at": "07:30", "body": "<!-- oe:hold -->\nfailure verdict on bbbbbbb"},
+      {"by": "OWNER", "at": "07:40", "body": "<!-- oe:rerun -->\nJudge it again"}
+    ],
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"},
+      "verdicts": [{"state": "pending", "at": "07:45"}, {"state": "failure", "at": "07:20"}]}]
+  }]
+}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-agent ]
+}
+
+@test "a failure verdict newer than a re-run request since the latest answer holds the Issue" {
+  github <<'JSON'
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "OWNER", "at": "07:30", "body": "<!-- oe:hold -->\nfailure verdict on bbbbbbb"},
+      {"by": "OWNER", "at": "07:40", "body": "<!-- oe:rerun -->\nJudge it again"}
+    ],
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"},
+      "verdicts": [{"state": "failure", "at": "07:50"}, {"state": "pending", "at": "07:45"}, {"state": "failure", "at": "07:20"}]}]
+  }]
+}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = hold ]
+  [ "$(field_of 5 3)" = "failure verdict on bbbbbbb" ]
+}
+
+@test "with a cache, a failure verdict that replaces an older one after a re-run request holds the Issue on the next run" {
+  export OE_READY_CACHE="${BATS_TEST_TMPDIR}/cache"
+  mkdir -p "${OE_READY_CACHE}"
+  github <<'JSON'
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "OWNER", "at": "07:30", "body": "<!-- oe:hold -->\nfailure verdict on bbbbbbb"},
+      {"by": "OWNER", "at": "07:40", "body": "<!-- oe:rerun -->\nJudge it again"}
+    ],
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": [{"state": "failure", "at": "07:20"}]}]
+  }]
+}
+JSON
+  run bash "${oe}" ready o/r 1
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-verifier ]
+
+  # The run in between never saw the new Verifier's pending status, so only the time of the newest verdict changed.
+  github <<'JSON'
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "OWNER", "at": "07:30", "body": "<!-- oe:hold -->\nfailure verdict on bbbbbbb"},
+      {"by": "OWNER", "at": "07:40", "body": "<!-- oe:rerun -->\nJudge it again"}
+    ],
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"},
+      "verdicts": [{"state": "failure", "at": "07:50"}, {"state": "pending", "at": "07:45"}, {"state": "failure", "at": "07:20"}]}]
+  }]
+}
+JSON
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = hold ]
+  [ "$(field_of 5 3)" = "failure verdict on bbbbbbb" ]
+}
+
+@test "a re-run request followed by a failed check on the head gets an Owner, not a Verifier" {
+  github <<'JSON'
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "OWNER", "at": "07:30", "body": "<!-- oe:hold -->\nfailure verdict on bbbbbbb"},
+      {"by": "OWNER", "at": "07:40", "body": "<!-- oe:rerun -->\nJudge it again"}
+    ],
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "failure"}, "verdicts": [{"state": "failure", "at": "07:20"}]}]
+  }]
+}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-owner ]
+  [ "$(field_of 5 3)" = "checks failed on bbbbbbb: test" ]
+}
+
+@test "a re-run request does not reset the cap of 3 commits with a failed check" {
+  github <<'JSON'
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "OWNER", "at": "07:45", "body": "<!-- oe:hold -->\nfailure verdict on bbbbbbb"},
+      {"by": "OWNER", "at": "07:50", "body": "<!-- oe:rerun -->\nJudge it again"}
+    ],
+    "pull_requests": [{
+      "number": 50, "opened": "07:00", "committed": "07:40", "checks": {"test": "failure"},
+      "commits": [
+        {"sha": "1111111111111111111111111111111111111111", "committed": "07:10", "checks": {"test": "failure"}},
+        {"sha": "3333333333333333333333333333333333333333", "committed": "07:30", "checks": {"lint": "failure"}}
+      ]
+    }]
+  }]
+}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = hold ]
+  [ "$(field_of 5 3)" = "3 commits of PR #50 had a failed check since the latest answer; still: checks failed on bbbbbbb: test" ]
+}
+
+@test "a re-run request from an untrusted author is no record, so the failure verdict still holds the Issue on its hold" {
+  github <<'JSON'
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "comments": [
+      {"by": "OWNER", "at": "07:30", "body": "<!-- oe:hold -->\nfailure verdict on bbbbbbb"},
+      {"by": "NONE", "at": "07:40", "body": "<!-- oe:rerun -->\nJudge it again"}
+    ],
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}, "verdicts": [{"state": "failure", "at": "07:20"}]}]
+  }]
+}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-answer ]
 }
 
 @test "a success verdict on the head waits for the merge" {
