@@ -129,7 +129,7 @@ For each Issue, oe ready reads this table from the top and outputs the action of
   - A push, a question, or a verdict gives a marker its result only when the start the marker records wrote it. An agent writes one only while the Issue's marker still holds its own start time, read just before it writes, and otherwise ends without writing, so a late write from an expired or replaced start never counts for a newer one
   - A marker that gives its result never holds the Issue, whether or not it has an end time
   - A marker with an end time and no result stays live for 2 minutes after the end, one poll interval, so a push or a verdict that GitHub shows late is not held, and ended with no result after that
-  - A marker with no end time is live until it gives its result or 6 hours pass since its start time, and expired with no result after that. The 6 hours cover only a session that died with its agents, so it is far longer than a run
+  - A marker with no end time is live until it gives its result or 6 hours pass since its start time, and expired with no result after that. The 6 hours cover only a session that died with its agents, and a session that lost oe start's output and cannot tell which start an ended agent's was, so it is far longer than a run
   - When oe end cannot write, the marker keeps no end time, so a failed write never holds an Issue and only the 6 hours apply
   - oe end writes an end time only into the marker its own agent's start wrote, matched by the start time, and leaves any other marker as it is. An Owner that pushed can still be running when a Verifier's start replaces its marker, and the Owner's end must not end the Verifier's
   - An answer or a re-run request newer than a marker ends it, so it starts the next agent instead of holding the Issue again
@@ -218,6 +218,7 @@ sequenceDiagram
 - A comment the AI forgot to mark is read as engineer input
 - Writing the working marker is not atomic, so two sessions on the same Epic can start two agents on one Issue. One host runs an Epic at a time
 - When a session dies with its agents, their markers stay live until 6 hours pass since their start: their Issues wait, and a session started in the meantime counts them as running agents
+- When a session that lost oe start's output cannot tell which start an ended agent's was, it records no end, so that Issue waits until 6 hours pass since the marker's start
 - An agent that runs longer than 6 hours has its Issue held while it still works, and an answer then starts a second agent beside it; the first one writes nothing once the second start replaces its marker. Measured Owner runs took at most 89 minutes, and one under an older oe took about 3 hours
 - An agent reads the marker and then writes, so a start that replaces the marker between the two lets one late write count for the newer start
 - When the agents and the person write as one account, a person's push counts as an Owner's result, and a person's comment or review cannot be told from an agent's
