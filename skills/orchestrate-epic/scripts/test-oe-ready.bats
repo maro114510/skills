@@ -5,7 +5,7 @@
 # - testdata/fake-gh.sh stands in for gh and answers every read from that state.
 # - testdata/fake-github.jq lists every field of the state and its default.
 # - The tests are grouped by the row of the next-action table in docs/design/orchestrate-epic.md that they cover.
-# - Every test runs at 08:00 on the same day, so a working marker started at 06:00 or earlier has expired.
+# - Every test runs at 08:00 on the same day, so a working marker started at 02:00 or earlier has expired.
 # shellcheck disable=SC2292 # bats fails a test on a mid-test `[[ ]]` only under bash 4.1+; `[ ]` works on every bash.
 
 setup() {
@@ -34,11 +34,13 @@ agent_bot() {
   export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=skills.bot GIT_CONFIG_VALUE_0="$1"
 }
 
-# Prints, as a JSON string, an Issue body that ends in the working marker of role $1 started at $2, HH:MM, with the SHA $3 for a Verifier.
+# Prints, as a JSON string, an Issue body that ends in the working marker of role $1 started at $2, HH:MM, with the SHA $3 for a Verifier,
+# and the end time $4, HH:MM, once the agent ended.
 marker_body() {
-  local sha=""
+  local sha="" ended=""
   [ -z "${3:-}" ] || sha=" sha=$3"
-  printf 'Some work.\n\n<!-- oe:working role=%s at=2027-01-15T%s:00Z%s session=s1 -->' "$1" "$2" "${sha}" | jq -Rs .
+  [ -z "${4:-}" ] || ended=" ended=2027-01-15T$4:00Z"
+  printf 'Some work.\n\n<!-- oe:working role=%s at=2027-01-15T%s:00Z%s session=s1%s -->' "$1" "$2" "${sha}" "${ended}" | jq -Rs .
 }
 
 # Prints the action that oe ready gave the Issue numbered $1.
@@ -673,26 +675,53 @@ JSON
   [ "$(action_of 5)" = start-owner ]
 }
 
-@test "an Owner's marker two hours old with no push or question is held as expired" {
+@test "an Owner's marker with no end time waits at 2 hours and at 5 hours 59 minutes, and is held as expired at 6 hours" {
+  for started in 06:00 02:01; do
+    github <<JSON
+{"issues": [{"number": 5, "body": $(marker_body owner "${started}")}]}
+JSON
+
+    run bash "${oe}" ready o/r 1
+
+    [ "${status}" -eq 0 ]
+    [ "$(action_of 5)" = wait-agent ]
+  done
   github <<JSON
-{"issues": [{"number": 5, "body": $(marker_body owner 06:00)}]}
+{"issues": [{"number": 5, "body": $(marker_body owner 02:00)}]}
 JSON
 
   run bash "${oe}" ready o/r 1
 
   [ "${status}" -eq 0 ]
   [ "$(action_of 5)" = hold ]
-  [ "$(field_of 5 3)" = "pr-owner started at 2027-01-15T06:00:00Z and gave no result within 2 hours" ]
+  [ "$(field_of 5 3)" = "pr-owner started at 2027-01-15T02:00:00Z and gave no result within 6 hours" ]
 }
 
-@test "a Verifier's marker two hours old with no verdict is held as expired" {
+@test "a Verifier's marker with no end time waits at 2 hours and at 5 hours 59 minutes, and is held as expired at 6 hours" {
+  for started in 06:00 02:01; do
+    github <<JSON
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "body": $(marker_body verifier "${started}" "${pr50}"),
+    "pull_requests": [{"number": 50, "opened": "01:40", "checks": {"test": "success"}}]
+  }]
+}
+JSON
+
+    run bash "${oe}" ready o/r 1
+
+    [ "${status}" -eq 0 ]
+    [ "$(action_of 5)" = wait-agent ]
+  done
   github <<JSON
 {
   "issues": [{
     "number": 5,
     "branch": true,
-    "body": $(marker_body verifier 05:50 "${pr50}"),
-    "pull_requests": [{"number": 50, "opened": "05:40", "checks": {"test": "success"}}]
+    "body": $(marker_body verifier 02:00 "${pr50}"),
+    "pull_requests": [{"number": 50, "opened": "01:40", "checks": {"test": "success"}}]
   }]
 }
 JSON
@@ -703,9 +732,144 @@ JSON
   [ "$(action_of 5)" = hold ]
 }
 
+@test "an Owner's marker whose end was 2 minutes ago with no push or question since is held as ended" {
+  github <<JSON
+{"issues": [{"number": 5, "body": $(marker_body owner 07:00 "" 07:58)}]}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = hold ]
+  [ "$(field_of 5 3)" = "pr-owner started at 2027-01-15T07:00:00Z, ended at 2027-01-15T07:58:00Z, and gave no result" ]
+}
+
+@test "an Owner's marker whose end was 1 minute ago with no push or question since waits for the agent" {
+  github <<JSON
+{"issues": [{"number": 5, "body": $(marker_body owner 07:00 "" 07:59)}]}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-agent ]
+}
+
+@test "a Verifier's marker whose end was 2 minutes ago with no verdict is held as ended, and 1 minute ago it waits" {
+  github <<JSON
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "body": $(marker_body verifier 07:30 "${pr50}" 07:58),
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}}]
+  }]
+}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = hold ]
+
+  github <<JSON
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "body": $(marker_body verifier 07:30 "${pr50}" 07:59),
+    "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "success"}}]
+  }]
+}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-agent ]
+}
+
+@test "an ended Owner's marker whose PR head was pushed after its start gives its result and holds nothing, so CI decides" {
+  github <<JSON
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "body": $(marker_body owner 07:00 "" 07:30),
+    "pull_requests": [{"number": 50, "opened": "07:20", "checks": {"test": "in_progress"}}]
+  }]
+}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-ci ]
+}
+
+@test "an ended Verifier's marker whose SHA got a verdict gives its result and holds nothing" {
+  github <<JSON
+{
+  "issues": [{
+    "number": 5,
+    "branch": true,
+    "body": $(marker_body verifier 07:00 "${pr50}" 07:30),
+    "pull_requests": [{"number": 50, "opened": "06:50", "checks": {"test": "success"}, "verdicts": ["success"]}]
+  }]
+}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-merge ]
+}
+
+@test "an Owner's marker that started over 6 hours ago but ended 1 minute ago still waits for the agent" {
+  github <<JSON
+{"issues": [{"number": 5, "body": $(marker_body owner 01:00 "" 07:59)}]}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-agent ]
+}
+
+@test "an answer newer than an ended marker starts the next agent, whatever the end time" {
+  github <<JSON
+{
+  "issues": [{
+    "number": 5,
+    "body": $(marker_body owner 07:00 "" 07:59),
+    "comments": [
+      {"by": "OWNER", "at": "06:50", "body": "<!-- oe:hold -->\nno result"},
+      {"by": "OWNER", "at": "07:30", "body": "<!-- oe:answer -->\nTry again"}
+    ]
+  }]
+}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-owner ]
+}
+
 @test "a malformed marker line is no marker" {
   github <<'JSON'
 {"issues": [{"number": 5, "body": "Work.\n\n<!-- oe:working role=owner at=yesterday -->"}]}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = start-owner ]
+}
+
+@test "a marker whose end time is malformed is no marker" {
+  github <<'JSON'
+{"issues": [{"number": 5, "body": "Work.\n\n<!-- oe:working role=owner at=2027-01-15T07:00:00Z ended=soon -->"}]}
 JSON
 
   run bash "${oe}" ready o/r 1

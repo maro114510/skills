@@ -5,7 +5,8 @@
 # | Name | Value | Meaning |
 # |---|---|---|
 # | no_checks_grace | 600 | Seconds a commit may go without checks before its CI counts as missing |
-# | marker_ttl | 7200 | Seconds a working marker stays live without a result |
+# | marker_ttl | 21600 | Seconds a working marker with no end time stays live without a result, which covers only a session that died with its agents |
+# | marker_grace | wait_interval | Seconds a working marker with an end time stays live without a result after its end, one poll interval, so a push or a verdict that GitHub shows late is not held |
 # | repair_cap | 3 | Commits of a PR with a failed check, since the latest answer, that hold the Issue |
 # | verify_context | oe/verify | The commit status context that holds the verdict |
 # | branch_prefix | feat/issue- | The prefix of an Issue branch, followed by the Issue number |
@@ -16,12 +17,13 @@
 # oe-records.jq defines which comments count as records when oe reads them.
 # shellcheck disable=SC2034 # The sourcing subcommand reads these.
 no_checks_grace=600
-marker_ttl=7200
+marker_ttl=21600
 repair_cap=3
 verify_context=oe/verify
 branch_prefix=feat/issue-
 wait_timeout=540
 wait_interval=120
+marker_grace="${wait_interval}"
 read_timeout=60
 
 # Runs gh with the arguments given, and fails as a failed read does when gh has not returned within OE_READ_TIMEOUT seconds, read_timeout by default.
