@@ -493,15 +493,31 @@ JSON
   [ "$(issue_reads_of 5)" -eq 2 ]
 }
 
-@test "a working marker that reaches its 2 hours between two polls makes the next poll read the Issue again, with nothing else changed" {
+@test "a working marker that reaches its 6 hours between two polls makes the next poll read the Issue again, with nothing else changed" {
   github <<'JSON'
 {"issues": [{"number": 5}]}
 JSON
   agent_runs 5
   clock_starts_at_eight
-  two_hours=7200
+  five_hours=18000
 
-  OE_CLOCK_STEP="${two_hours}" run bash "${oe}" wait o/r 1 --timeout 36000
+  # The marker started at 07:30, so the poll at 13:00 is before its 6 hours and the poll at 18:00 is after them.
+  OE_CLOCK_STEP="${five_hours}" run bash "${oe}" wait o/r 1 --timeout 72000
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = hold ]
+  [ "$(wc -l <"${OE_GITHUB}.polls")" -eq 3 ]
+  [ "$(issue_reads_of 5)" -eq 2 ]
+}
+
+@test "a working marker that ended 1 minute ago reaches its end plus 2 minutes between two polls, which makes the next poll read the Issue again, with nothing else changed" {
+  github <<'JSON'
+{"issues": [{"number": 5, "body": "<!-- oe:working role=owner at=2027-01-15T07:30:00Z ended=2027-01-15T07:59:00Z -->"}]}
+JSON
+  clock_starts_at_eight
+  one_minute=60
+
+  OE_CLOCK_STEP="${one_minute}" run bash "${oe}" wait o/r 1 --timeout 3600
 
   [ "${status}" -eq 0 ]
   [ "$(action_of 5)" = hold ]
