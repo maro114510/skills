@@ -62,7 +62,7 @@ A property is kept only with a change to the model that makes it fail, so a prop
 flowchart LR
   A["Design Doc PR changes a checked section"] --> B["Owner approves the property list"]
   B --> C["Model changed in the same PR, from the Design Doc only"]
-  C --> D{"CI runs the model"}
+  C --> D{"The model runs on the PR branch, by hand"}
   D -->|"A property fails"| E["The PR body shows the event path, and the Design Doc changes"]
   E --> C
   D -->|"All hold"| F["Merge the Design Doc"]
@@ -72,7 +72,7 @@ flowchart LR
 | Rule | Detail |
 |---|---|
 | Checked sections | Every section of `orchestrate-epic.md` that a property cites: Purpose, Invariants, and Source of Truth |
-| When CI runs the model | On a pull request or a push to `main` that changes `orchestrate-epic.md`, this document, or `formal/`, because a change here can redefine a property without touching the model |
+| When CI runs the model | On a push to `main` that changes `orchestrate-epic.md`, this document, or `formal/`, because a change here can redefine a property without touching the model, and on demand for a pull request branch. It is not a required check and does not run on every pull request, so a defect it finds after the merge is repaired by a new pull request |
 | A Design Doc change that leaves the model alone | The model records a hash of the checked sections and of this document's Properties table, and CI fails when the hash differs, so a property weakened here does not pass on the old model. Updating it is a reviewed edit that says the model still matches |
 | Order | A child Issue that changes the next-action table starts only after the Design Doc change that defines it has merged with its model |
 | Who writes the model | The agent that writes the Design Doc change. An implementation agent never edits the model to make its code pass |

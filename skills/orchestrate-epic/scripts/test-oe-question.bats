@@ -15,6 +15,7 @@ setup() {
   chmod +x "${BATS_TEST_TMPDIR}/bin/gh"
   export GIT_CONFIG_GLOBAL="${BATS_TEST_TMPDIR}/gitconfig"
   export GIT_CONFIG_NOSYSTEM=1
+  cd "${BATS_TEST_TMPDIR}" || return 1
   export PATH="${BATS_TEST_TMPDIR}/bin:${PATH}"
   export OE_GITHUB="${BATS_TEST_TMPDIR}/github.json"
   printf '%s\n' '{"issues": [{"number": 5, "branch": true}]}' >"${OE_GITHUB}"

@@ -1,6 +1,7 @@
 # AGENTS.md
 
 Repository instructions for coding agents.
+The mission and the goals of this repository are in [MISSION.md](MISSION.md).
 
 Write here only what an agent cannot learn by reading the repository, or would otherwise rediscover every session. Anything else belongs in the file it describes, such as a script's header.
 
@@ -27,7 +28,7 @@ Ideas, experiments, and open questions go to [Discussions](https://github.com/ma
 | Key | Rule |
 |---|---|
 | `description` | Matched against user requests; include phrasings users naturally say |
-| `disable-model-invocation` | Optional; `true` only stops Claude from loading the skill automatically. It does not disable the agentic loop: the skill still runs through `/name` and calls its tools normally, as in `orchestrate-epic` |
+| `disable-model-invocation` | Optional; `true` only stops Claude from loading the skill automatically. It does not disable the agentic loop: the skill still runs through `/name` and calls its tools normally, as in `orchestrate-epic`. Codex ignores it, so a skill that sets it also ships `agents/openai.yaml` with `policy.allow_implicit_invocation: false`; `make validate-apm APM_TARGET=codex` fails when the two disagree |
 | `argument-hint` | Shown on `/help` |
 
 - The body is the full prompt; user arguments arrive as `$ARGUMENTS`

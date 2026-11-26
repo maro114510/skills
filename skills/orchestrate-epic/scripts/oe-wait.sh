@@ -13,10 +13,12 @@
 # - --max-agents is how many agents the session can run at once, 3 by default as in the skill.
 #   The session passes its running count after a start failed, so the failed Issue does not end the wait at once.
 # - --timeout bounds this call, wait_timeout seconds by default.
-#   The deadline is checked before each poll, so the call can run up to one poll interval past it.
+#   No pause runs past the deadline, and the deadline is checked after each poll, so the call can run up to one poll past it.
+#   A poll whose reads never return ends within twice OE_READ_TIMEOUT, oe ready's read and the rate_limit read, which is one poll interval by default.
 # - --idle-since is accepted and ignored, so a caller written for the idle limit still runs; the wait never ends the session for idling.
 # - OE_NOW sets the current time in epoch seconds, as in oe ready.
 # - OE_WAIT_INTERVAL sets the seconds between two polls, wait_interval by default.
+# - OE_READ_TIMEOUT sets the seconds one GitHub read may take, as in oe ready.
 #
 # The polls of one call share a cache that oe ready keeps, so an open Issue is read again only when oe ready's header says it changed.
 # The cache lives in a temporary directory that the call removes when it ends.
@@ -88,6 +90,7 @@ done
 interval="${OE_WAIT_INTERVAL:-${wait_interval}}"
 [[ "${interval}" =~ ^[0-9]+$ ]] || usage "OE_WAIT_INTERVAL must be whole seconds"
 [[ -z "${OE_NOW:-}" || "${OE_NOW}" =~ ^[0-9]+$ ]] || usage "OE_NOW must be epoch seconds"
+[[ -z "${OE_READ_TIMEOUT:-}" || "${OE_READ_TIMEOUT}" =~ ^[1-9][0-9]*$ ]] || usage "OE_READ_TIMEOUT must be whole seconds above 0"
 
 # Prints the latest oe ready output, which is empty for an Epic without child Issues.
 emit() {
@@ -108,21 +111,19 @@ trap 'rm -rf "${cache}"' EXIT
 check_rate_limit() {
   local reset
   rate_reset=0
-  reset="$(gh api rate_limit --jq '.resources.graphql | select(.remaining == 0) | .reset' 2>/dev/null)" || return 0
+  reset="$(gh_read api rate_limit --jq '.resources.graphql | select(.remaining == 0) | .reset' 2>/dev/null)" || return 0
   [[ "${reset}" =~ ^[0-9]+$ ]] || return 0
   rate_reset="${reset}"
   echo "oe wait: the GitHub GraphQL rate limit is exhausted; waiting until it resets at $(utc_time "${reset}")" >&2
 }
 
-# Sleeps one poll interval, or until the rate limit resets or the deadline when that is later than now and comes first.
+# Sleeps one poll interval, or until the rate limit resets when that is later than now, and never past the deadline.
 pause() {
   local now seconds="${interval}"
   now="$(date -u +%s)"
-  if ((rate_reset > now)); then
-    seconds=$((rate_reset - now))
-    ((seconds <= deadline - now)) || seconds=$((deadline - now))
-    ((seconds >= 0)) || seconds=0
-  fi
+  ((rate_reset <= now)) || seconds=$((rate_reset - now))
+  ((seconds <= deadline - now)) || seconds=$((deadline - now))
+  ((seconds >= 0)) || seconds=0
   sleep "${seconds}"
 }
 

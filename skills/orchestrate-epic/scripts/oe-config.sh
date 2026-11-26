@@ -11,6 +11,7 @@
 # | branch_prefix | feat/issue- | The prefix of an Issue branch, followed by the Issue number |
 # | wait_timeout | 540 | Seconds one oe wait call waits for oe ready's output to change, under the 10-minute limit Claude Code puts on a background command |
 # | wait_interval | 120 | Seconds between two oe ready runs inside oe wait |
+# | read_timeout | 60 | Seconds one GitHub read in oe ready or oe wait may take before it fails, so a poll whose reads hang, oe ready's read and the rate_limit read, fits in one wait_interval |
 #
 # oe-records.jq defines which comments count as records when oe reads them.
 # shellcheck disable=SC2034 # The sourcing subcommand reads these.
@@ -21,6 +22,31 @@ verify_context=oe/verify
 branch_prefix=feat/issue-
 wait_timeout=540
 wait_interval=120
+read_timeout=60
+
+# Runs gh with the arguments given, and fails as a failed read does when gh has not returned within OE_READ_TIMEOUT seconds, read_timeout by default.
+# gh sets no time limit on a read, so a connection GitHub never answers would otherwise hold the caller for hours.
+# The watcher exits 0 only when it killed gh, so a read that returns just as the limit passes keeps its own exit code.
+gh_read() {
+  local limit="${OE_READ_TIMEOUT:-${read_timeout}}" pid watcher rc
+  gh "$@" &
+  pid=$!
+  (
+    sleep "${limit}" &
+    trap 'kill $! 2>/dev/null; exit 1' TERM
+    wait $!
+    kill "${pid}" 2>/dev/null
+  ) >/dev/null 2>&1 &
+  watcher=$!
+  wait "${pid}"
+  rc=$?
+  kill "${watcher}" 2>/dev/null
+  if wait "${watcher}"; then
+    echo "gh: no response within ${limit} seconds" >&2
+    return 1
+  fi
+  return "${rc}"
+}
 
 # Prints the marker that starts the body of a record of kind $1, such as hold.
 # It must equal marker($kind) in oe-records.jq, which reads what this writes.

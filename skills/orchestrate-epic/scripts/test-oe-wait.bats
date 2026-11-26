@@ -19,6 +19,7 @@ setup() {
   export OE_WAIT_INTERVAL=0
   export GIT_CONFIG_GLOBAL="${BATS_TEST_TMPDIR}/gitconfig"
   export GIT_CONFIG_NOSYSTEM=1
+  cd "${BATS_TEST_TMPDIR}" || return 1
   unset OE_WORKTREE_ROOT
   # 2027-01-15 08:00 UTC
   export OE_NOW=1800000000
@@ -300,6 +301,19 @@ JSON
   *"Epic read failed"*) ;;
   *) return 1 ;;
   esac
+}
+
+@test "reads that never return end the wait with an error within its timeout plus one poll interval" {
+  pr_15_checks_running
+  timeout=3
+  interval=4
+  started="$(date +%s)"
+
+  GH_HANG=api OE_READ_TIMEOUT=1 OE_WAIT_INTERVAL="${interval}" run --separate-stderr bash "${oe}" wait o/r 1 --timeout "${timeout}"
+
+  [ "$(($(date +%s) - started))" -le "$((timeout + interval))" ]
+  [ "${status}" -eq 1 ]
+  [ -z "${output}" ]
 }
 
 # Prints the UTC time of epoch second $1 as oe wait shows a reset time, YYYY-MM-DDTHH:MM:SSZ.
