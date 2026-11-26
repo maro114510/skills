@@ -6,7 +6,8 @@
 # |---|---|
 # | now_s | The current time in epoch seconds |
 # | no_checks_grace | Seconds a commit may go without checks before its CI counts as missing |
-# | marker_ttl | Seconds a working marker stays live without a result |
+# | marker_ttl | Seconds a working marker with no end time stays live without a result |
+# | marker_grace | Seconds a working marker with an end time stays live without a result after its end |
 # | repair_cap | Commits of the PR with a failed check, since the latest answer, that hold the Issue |
 # | verify_context | The commit status context that holds the verdict |
 # | branch_prefix | The prefix of an Issue branch, followed by the Issue number |
@@ -138,8 +139,9 @@ def question_text:
 
 # The working marker oe start writes as the last line of that form in the Issue body, or null.
 # A line that does not hold every field in this form is no marker.
+# The optional ended is the time of the agent's end, written last and in the format of at, so a line with a malformed ended is no marker.
 def marker_pattern:
-  "^<!-- oe:working role=(?<role>owner|verifier) at=(?<at>[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z)( sha=(?<sha>[0-9a-f]{40}))?( session=(?<session>[^ ]+))? -->$";
+  "^<!-- oe:working role=(?<role>owner|verifier) at=(?<at>[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z)( sha=(?<sha>[0-9a-f]{40}))?( session=(?<session>[^ ]+))?( ended=(?<ended>[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z))? -->$";
 def working_marker:
   [gsub("\r"; "") | split("\n")[] | sub("[ \t]+$"; "") | select(test(marker_pattern)) | capture(marker_pattern)]
   | last
@@ -168,11 +170,12 @@ def thread_waits($pushed):
 #   - A PR left from a branch the engineer deleted is never the PR, so an Owner starts the Issue over.
 # - A head that moved between the reads leaves only its Issue unreadable, and the read goes on with every other Issue.
 #   - next_action gives that Issue read-again right before the working marker, the first row that needs the head.
-# - The working marker gives its result, ends, stays live, or expires:
+# - The working marker gives its result, stays live, ends with no result, or expires:
 #   - An Owner's gives its result when the PR is open with a head pushed after its start, or a question came after its start.
 #   - A Verifier's gives its result when its SHA has a verdict.
 #   - An answer or a re-run request newer than its start ends it, so it starts the next agent.
-#   - It stays live until marker_ttl passes since its start, and expires with no result after that.
+#   - With an end time, it stays live until marker_grace passes since its end, and ends with no result after that.
+#   - With no end time, it stays live until marker_ttl passes since its start, and expires with no result after that.
 # - Repair signals count only engineer input and answers since the PR's head was pushed.
 # - The repair cap counts the PR's commits with a failed check that were committed after the latest answer.
 # - A failure verdict on the head is a repair signal only when no re-run request came since the latest answer
@@ -220,6 +223,9 @@ def issue_state:
         else (verdict_of($marker.sha; $rerun_at) | . == "success" or . == "failure" or . == "error") end) as $result
      | if ($answered_at != null and $answered_at > $started) or ($rerun_at != null and $rerun_at > $started) then null
        elif $result then null
+       elif $marker.ended != null then
+         if now_s - ($marker.ended | epoch) < marker_grace then {state: "live", role: $marker.role, at: $marker.at, ended: $marker.ended}
+         else {state: "ended", role: $marker.role, at: $marker.at, ended: $marker.ended} end
        elif now_s - $started < marker_ttl then {state: "live", role: $marker.role, at: $marker.at}
        else {state: "expired", role: $marker.role, at: $marker.at} end
      end) as $working
@@ -274,7 +280,7 @@ def issue_state:
 # | 5 | A dependency is not completed | wait-dependencies |
 # | - | The PR's head moved during the read | read-again |
 # | 6 | The working marker is live | wait-agent |
-# | 7 | The working marker expired with no result | hold |
+# | 7 | The working marker ended or expired with no result | hold |
 # | 8 | A repair signal is present, and repair_cap commits of the PR since the latest answer had a failed check | hold |
 # | 8 | A repair signal is present otherwise | start-owner |
 # | 9 | A check on the head is pending, or the head has had no checks for less than no_checks_grace | wait-ci |
@@ -298,6 +304,8 @@ def next_action:
     if .head.unreadable | test("changed during the read$") then act("read-again"; "\(.head.unreadable); read again at the next pass")
     else error(.head.unreadable) end
   elif .working.state == "live" then act("wait-agent"; "\(agent(.working.role)) started at \(.working.at)")
+  elif .working.state == "ended" then
+    act("hold"; "\(agent(.working.role)) started at \(.working.at), ended at \(.working.ended), and gave no result")
   elif .working.state == "expired" then
     act("hold"; "\(agent(.working.role)) started at \(.working.at) and gave no result within \(marker_ttl / 3600) hours")
   elif (.repairs | length) > 0 then
@@ -315,12 +323,14 @@ def next_action:
 
 # The epoch second from which what classify decided for an Issue can differ with no change on GitHub, or null when no clock decides it.
 # - A head that moved during the read is read again at the next run.
-# - A live working marker expires marker_ttl seconds after its start.
+# - A live working marker with an end time ends marker_grace seconds after its end, and one with none expires marker_ttl seconds after its start.
 # - A head with no checks holds no_checks_grace seconds after its push.
 def next_deadline:
   issue_state as $s
   | [ if $s.head != null and $s.head.unreadable != null then now_s else empty end,
-      if $s.working.state == "live" then (($s.working.at | epoch) + marker_ttl) else empty end,
+      if $s.working.state == "live" then
+        (if $s.working.ended != null then (($s.working.ended | epoch) + marker_grace) else (($s.working.at | epoch) + marker_ttl) end)
+      else empty end,
       if $s.head != null and $s.head.unreadable == null and $s.head.ci == "none" and $s.head.age < no_checks_grace
       then $s.head.pushed + no_checks_grace else empty end ]
   | min;

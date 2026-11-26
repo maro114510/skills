@@ -58,7 +58,7 @@
 # 6. With OE_READY_CACHE, one light read of each open pull request gives its update time, whether it conflicts,
 #    its review threads, and the state of its head's checks.
 #    An open Issue is read again only when its update time, its dependencies, the head of its pull request, that head's verdict or its time, or the light read changed,
-#    or at the time next_deadline in oe-ready.jq gives: a head moved during the read, a working marker's 2 hours, or a head's 10 minutes with no checks.
+#    or at the time next_deadline in oe-ready.jq gives: a head moved during the read, a working marker's end plus 2 minutes or its 6 hours, or a head's 10 minutes with no checks.
 #    Until then its line is the one from the run that read it, so the seconds in its reason are from that run.
 #
 # Read 5 holds the last 20 commits of an open pull request and 100 checks of each commit, and one more read per page gives the rest.
@@ -107,8 +107,8 @@ bot="$(bot_def)" || usage "Invalid git config skills.bot"
 
 # Prints the jq program that runs the entry point $1 of oe-ready.jq, with pr_heads set to $2.
 program() {
-  printf 'def now_s: %s; def no_checks_grace: %s; def marker_ttl: %s; def repair_cap: %s;\n' \
-    "${now}" "${no_checks_grace}" "${marker_ttl}" "${repair_cap}"
+  printf 'def now_s: %s; def no_checks_grace: %s; def marker_ttl: %s; def marker_grace: %s; def repair_cap: %s;\n' \
+    "${now}" "${no_checks_grace}" "${marker_ttl}" "${marker_grace}" "${repair_cap}"
   printf 'def verify_context: "%s"; def branch_prefix: "%s"; def pr_heads: {%s};\n%s\n%s\n' \
     "${verify_context}" "${branch_prefix}" "${2:-}" "${bot}"$'\n'"${rules}" "$1"
 }
