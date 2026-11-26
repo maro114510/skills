@@ -48,7 +48,7 @@ The one question the owner answers now.
 What in the repository it would remove, or none.
 ````
 
-"Wins when" is the condition under which that option is the right choice; an option that can win under no real condition is a straw man, so drop it.
+"Wins when" is the condition under which that option is the right choice.
 
 ## Commands
 
@@ -79,7 +79,7 @@ gh api graphql -f query='mutation($d:ID!,$r:DiscussionCloseReason!){closeDiscuss
 
 ### Post
 
-1. Search for the same topic as AGENTS.md says, and comment on an existing Discussion instead when one holds it.
+1. Search as AGENTS.md says.
 2. Write the body from the template into a file, and post it.
 
 ### Comment
@@ -102,6 +102,6 @@ gh api graphql -f query='mutation($d:ID!,$r:DiscussionCloseReason!){closeDiscuss
 
 ### Close
 
-1. Read the Discussion, and pick the reason AGENTS.md defines that fits. For Resolved, confirm the Issue has opened or the Design Doc has merged, and link it on the Discussion first. For Duplicate, link the other Discussion and summarize in a sentence what this one held; the original stays readable, and its text is never copied.
-2. Add the closing comment, which states the reason and, for Outdated, the observation that would reopen it.
+1. Read the Discussion, and pick the close reason as AGENTS.md defines them. Link the Issue, Design Doc pull request, or other Discussion on it first. For Duplicate, summarize in a sentence what this one held instead of copying it; the original stays readable.
+2. Add the closing comment, which states the reason AGENTS.md requires.
 3. Close the Discussion with that reason, only after the comment exists.
