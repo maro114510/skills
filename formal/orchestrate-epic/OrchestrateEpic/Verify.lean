@@ -46,7 +46,7 @@ def checkedText (epic verification : String) : Except String String := do
   return String.intercalate "\n" parts
 
 /-- Update only after reading the changed text and changing the model to match it. -/
-def recordedHash : String := "c2918738684c021e"
+def recordedHash : String := "ec5c8504feefab2f"
 
 def checkHash : IO Unit := do
   let epic ← IO.FS.readFile "../../docs/design/orchestrate-epic.md"
@@ -141,7 +141,17 @@ def breakers : List Breaker := [
   { name := "Fixed defect: a re-run request after an answer that changes no code starts an Owner",
     view := .noFault, property := .inputTakesEffect, on := ({ · with answerOutlivesRerun := true }) },
   { name := "Fixed defect: a head with no verdict takes no re-run request", view := .noFault,
-    property := .noDeadEnd, on := ({ · with rerunOnlyOnFailure := true }) }
+    property := .noDeadEnd, on := ({ · with rerunOnlyOnFailure := true }) },
+  { name := "Fixed defect: a draft whose head has a success takes no re-run request", view := .noFault,
+    property := .noDeadEnd, on := ({ · with draftTakesNoRerun := true }) },
+  { name := "Fixed defect: a success on a draft waits for a merge", view := .noFault,
+    property := .noDeadEnd, on := ({ · with draftWaitsMerge := true }) },
+  { name := "oe verdict marks ready on a success that verified nothing", view := .codeFault,
+    property := .readyOnlyWhenJudged, on := ({ · with markReadyOnAnySuccess := true }) },
+  { name := "oe verdict marks ready whatever start the marker holds", view := .codeFault,
+    property := .notReadyWhileRepaired, on := ({ · with markReadyFromAnyStart := true }) },
+  { name := "oe verdict marks ready over the person's draft", view := .codeFault,
+    property := .personDraftHolds, on := ({ · with markReadyOverPersonDraft := true }) }
 ]
 
 /-- A switch is checked on the Design Doc with the fix of each known counterexample of its view applied, so
