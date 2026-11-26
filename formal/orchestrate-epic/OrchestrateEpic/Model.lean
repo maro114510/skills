@@ -31,7 +31,11 @@ structure Verdict where
   time : Nat
   success : Bool
   src : Nat
+  /-- DD: "A success verified something when the Verifier observed at least one criterion" fails. -/
+  nothing : Bool := false
   deriving BEq, Hashable, Repr
+
+def Verdict.verified (v : Verdict) : Bool := v.success && !v.nothing
 
 structure Commit where
   sha : Nat
@@ -97,6 +101,10 @@ structure St where
   /-- DD: "An answer or a re-run request recorded through oe appends its decision to a decisions section" -/
   decided : Bool := false
   merged : Bool := false
+  /-- DD: "An Owner opens every PR as a draft, and a PR is ready for review only once oe marks it so" -/
+  ready : Bool := false
+  /-- The person made the PR's latest conversion to a draft. -/
+  personDraft : Bool := false
   deriving BEq, Hashable, Repr, Inhabited
 
 /-- A switch changes one rule. All off is the Design Doc as written. -/
@@ -126,6 +134,18 @@ structure Switches where
   /-- A Design Doc change that removes a known defect: a re-run request also reruns a failed check on the
   PR's head, so a check that failed for a cause outside the code no longer holds the Issue for good. -/
   rerunRerunsCi : Bool := false
+  /-- Breaks "Ready only when judged": oe verdict marks the PR ready on a success that verified nothing. -/
+  markReadyOnAnySuccess : Bool := false
+  /-- Breaks "Not ready while repaired": oe verdict marks the PR ready whatever start the marker holds. -/
+  markReadyFromAnyStart : Bool := false
+  /-- Breaks "The person's draft holds": oe verdict marks the PR ready over the person's conversion. -/
+  markReadyOverPersonDraft : Bool := false
+  /-- Restores a defect the Design Doc fixed: a draft whose head has a success that verified something takes
+  no re-run request, so once an Owner start converts it, nothing marks it ready again. -/
+  draftTakesNoRerun : Bool := false
+  /-- Restores a defect the Design Doc fixed: a success that oe did not mark ready, such as one that verified
+  nothing or a late one from a replaced start, waits for a merge at row 13 though the PR stays a draft. -/
+  draftWaitsMerge : Bool := false
   deriving BEq, Hashable, Repr
 
 structure Config where
@@ -275,16 +295,21 @@ def decide (cfg : Config) (s : St) : Decision :=
         -- DD row 11: "The PR's head SHA has no verdict | Start a Verifier"
         | none => ⟨11, .startVerifier⟩
         -- DD row 12: "The PR's head SHA has a failure verdict | Hold the Issue"
-        | some ⟨_, false, _⟩ => ⟨12, .hold⟩
-        -- DD row 13: "The PR's head SHA has a success verdict | Wait for an engineer to merge"
-        | some ⟨_, true, _⟩ => ⟨13, .waitMerge⟩
+        | some v =>
+          -- DD row 12: "The PR's head SHA has a failure verdict, or a success verdict while the PR is still a
+          -- draft | Hold the Issue". A success that verified nothing leaves the PR a draft.
+          if !v.success then ⟨12, .hold⟩
+          else if !cfg.sw.draftWaitsMerge && !s.ready then ⟨12, .hold⟩
+          -- DD row 13: "The PR's head SHA has a success verdict, and the PR is ready for review | Wait for
+          -- an engineer to merge"
+          else ⟨13, .waitMerge⟩
 
 /-- DD: "oe question accepts it while the Issue waits on the person and the PR's head has no success
-verdict, as Counting reads it" -/
+verdict that verified something, as Counting reads it, or the PR is a draft" -/
 def rerunAccepted (cfg : Config) (s : St) : Bool :=
   !cfg.sw.noRerun && (decide cfg s).action == .waitPerson && (head? s).isSome &&
     (if cfg.sw.rerunOnlyOnFailure then (headVerdict s).any (!·.success)
-     else !(headVerdict s).any (·.success))
+     else !(headVerdict s).any (·.verified) || (!cfg.sw.draftTakesNoRerun && !s.ready))
 
 /-! ## Events -/
 
@@ -292,7 +317,8 @@ inductive Event
   | read (d : Decision)
   | push (agent : Nat)
   | question (agent : Nat)
-  | verdict (agent : Nat) (success : Bool)
+  | verdict (agent : Nat) (success : Bool) (nothing : Bool)
+  | personDrafts
   | agentEnd (agent : Nat)
   | agentDies (agent : Nat)
   | ci (sha : Nat) (success : Bool)
@@ -306,7 +332,7 @@ inductive Event
 
 /-- The person's own inputs, which "Starts are bounded" counts between. -/
 def Event.isInput : Event → Bool
-  | .answer _ | .rerun | .merge => true
+  | .answer _ | .rerun | .merge | .personDrafts => true
   | _ => false
 
 def Event.isStart : Event → Bool
@@ -317,7 +343,9 @@ def Event.label : Event → String
   | .read d => s!"oe ready row {d.row}: {d.action.name}"
   | .push a => s!"Owner start {a} pushes"
   | .question a => s!"Owner start {a} writes a question"
-  | .verdict a ok => s!"Verifier start {a} writes a {if ok then "success" else "failure"} verdict"
+  | .verdict a ok nothing =>
+    s!"Verifier start {a} writes a {if ok then "success" else "failure"} verdict{if nothing then " that verified nothing" else ""}"
+  | .personDrafts => "the person converts the PR to a draft"
   | .agentEnd a => s!"start {a} ends, and oe end runs"
   | .agentDies a => s!"start {a} dies without writing"
   | .ci sha ok => s!"CI on commit {sha} {if ok then "succeeds" else "fails"}"
@@ -357,7 +385,10 @@ def start (cfg : Config) (s : St) (role : Role) : St :=
   let a : Agent := { id, role, sha, answerAtStart := s.answer.map (·.2), decidedAtStart := s.decided,
                      emitted := false, ended := false }
   let kept := if s.agents.length ≥ cfg.maxAgents then s.agents.drop 1 else s.agents
-  { s with agents := kept ++ [a],
+  -- DD: "oe start converts a PR that is ready for review back to a draft when it starts an Owner, and
+  -- writes the time of the conversion into the marker", so the latest conversion is oe's, not the person's.
+  let ready := s.ready && role != .owner
+  { s with agents := kept ++ [a], ready,
            repairOpen := s.repairOpen || (role == .owner && (head? s).isSome),
            marker := some { role, start := id, startAt := stamp s t, sha, endAt := none, endedBy := none,
                             graceOver := false, expired := false } }
@@ -403,8 +434,18 @@ def agentEvents (cfg : Config) (s : St) (a : Agent) : List (Event × St) :=
         if a.sha == some h.sha then
           let ok := passes cfg a h
           let (s', t) := tick s
-          [(.verdict a.id ok, setAgent (setHead s' { h with verdict := some ⟨t, ok, a.id⟩ })
-            { a with emitted := true })]
+          let write (nothing : Bool) : Event × St :=
+            -- DD: "oe verdict marks the PR ready for review right after it writes a success that verified
+            -- something, when the Verifier's start is still the marker's start and the person did not make
+            -- the PR's latest conversion to a draft"
+            let mark := ok && (!nothing || cfg.sw.markReadyOnAnySuccess) &&
+              (cfg.sw.markReadyFromAnyStart || s'.marker.any (·.start == a.id)) &&
+              (cfg.sw.markReadyOverPersonDraft || !s'.personDraft)
+            let s'' := setHead s' { h with verdict := some { time := t, success := ok, src := a.id, nothing } }
+            (.verdict a.id ok nothing,
+              setAgent { s'' with ready := s''.ready || mark } { a with emitted := true })
+          -- Any success may have verified nothing.
+          if ok then [write false, write true] else [write false]
         else []
       | none => []
   let ending : List (Event × St) :=
@@ -476,10 +517,13 @@ def personEvents (cfg : Config) (s : St) : List (Event × St) :=
           else s'
         [(.rerun, { s' with rerunAt := some t, decided := true })]
       else [answer .noCode]
-  -- DD: "Approves and merges the PR"
-  let merge := if !s.merged && (headVerdict s).any (·.success) then [(Event.merge, { s with merged := true })]
+  -- DD: "The person merges only a PR that oe marked ready"
+  let merge := if !s.merged && s.ready then [(Event.merge, { s with merged := true })] else []
+  -- DD: "Converts a PR to a draft to hold it"
+  let hold := if (head? s).isSome && !s.personDraft then
+      [(Event.personDrafts, { s with ready := false, personDraft := true })]
     else []
-  replies ++ merge
+  replies ++ merge ++ hold
 
 /-! ## Keeping the state space finite
 
@@ -559,7 +603,7 @@ def renumber (s : St) : Event → Event :=
   fun
   | .push a => .push (id a)
   | .question a => .question (id a)
-  | .verdict a ok => .verdict (id a) ok
+  | .verdict a ok nothing => .verdict (id a) ok nothing
   | .agentEnd a => .agentEnd (id a)
   | .agentDies a => .agentDies (id a)
   | .ci sha ok => .ci (shaRank s sha) ok

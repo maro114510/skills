@@ -6,16 +6,17 @@ A design change to orchestrate-epic is checked by a model before any code implem
 
 | Responsible for | Not responsible for |
 |---|---|
-| Whether the next-action table, the working marker, holds, answers, re-run requests, and verdicts of `orchestrate-epic.md` keep the properties below | Whether the properties are the right requirements, which the owner decides |
+| Whether the next-action table, the working marker, holds, answers, re-run requests, verdicts, and draft state of `orchestrate-epic.md` keep the properties below | Whether the properties are the right requirements, which the owner decides |
 | Keeping the model and the Design Doc it checks in step | Whether `oe-ready.jq` implements the design |
 | A counterexample a reviewer can read | An Issue's acceptance criteria, which CI and pr-verify observe by running |
 | | Turning GitHub's response into facts, several Issues at once, two sessions, and concurrent edits of one Issue body |
+| | A write to the draft state that fails, anything between oe verdict's head read, its status, and its mark ready, and a clone that opts out of the draft state |
 
 When finding a defect conflicts with keeping the model small, finding the defect wins only for a defect of the kinds listed under Scope.
 
 ## Scope
 
-The model holds one Issue. It keeps what the three known defects needed and nothing else:
+The model holds one Issue. It keeps what the three known defects and the draft state's properties needed and nothing else:
 
 | Kept | Because |
 |---|---|
@@ -23,6 +24,7 @@ The model holds one Issue. It keeps what the three known defects needed and noth
 | The order of events, with "newer than" read from that order and never from a flag set since a start | A re-run request stalled because an older working marker decided first |
 | An answer that asks for no code change | An answer that changes no code led to a dead end |
 | A clock that can differ between the host that writes a marker and GitHub | The marker's start time comes from the host, and the 2-minute grace after an end is about the size of a skew |
+| Whether the PR is ready for review, whether the person made its latest conversion to a draft, and a success that verified nothing | The draft state's properties read them. The person's only draft action is converting the PR to a draft to hold it |
 
 An agent may outlive its marker and write a result after a later start, so the model lets any ended or outlived start emit its result. At most 2 starts can still write at once; a later start drops the oldest, which then writes nothing, and the build prints this bound. A check can fail whatever the person's view, but only on the first commit an Owner pushes after a repair starts, and a person rerunning a failed check is not modeled.
 
@@ -35,8 +37,11 @@ Each property names the Design Doc text it comes from. The owner approves the li
 | No double start | No agent starts while the working marker is live | Invariants |
 | A result belongs to its start | A push, a question, or a verdict gives a result, or ends a marker, only for the start that produced it | Working marker |
 | A person's input takes effect | After an answer or a re-run request, the next read starts the agent it asks for, unless a fact newer than the input, or a fact about the Issue, its dependencies, the PR's state, or CI, decides first | Hold, Re-run request |
-| No dead end | For each view the person can keep, every state of an open Issue reached without the person deleting the branch or closing anything has some sequence of agent results and CI results, with the person replying only as that view says and merging a head with a success verdict, that ends in such a merge. A person who sees a defect in the code answers that it must change. A person who sees none asks for a re-run where the Issue accepts one, and otherwise answers that no code changes, after which the Owner pushes nothing. A state after the person closed a PR or deleted a branch is the person's own decision and is not checked | Purpose, Source of Truth |
+| No dead end | For each view the person can keep, every state of an open Issue reached without the person deleting the branch or closing anything has some sequence of agent results and CI results, with the person replying only as that view says and merging only a PR that oe marked ready for review, that ends in such a merge. A person who sees a defect in the code answers that it must change. A person who sees none asks for a re-run where the Issue accepts one, and otherwise answers that no code changes, after which the Owner pushes nothing. A state after the person closed a PR, deleted a branch, or converted the PR to a draft is the person's own decision and is not checked | Purpose, Source of Truth |
 | Starts are bounded | Between two inputs from the person, the number of agent starts is bounded | Repair signals, row 8 |
+| Ready only when judged | oe marks a PR ready for review only on a head with a success verdict that verified something | Draft state |
+| Not ready while repaired | From the start of an Owner until the next Verifier start, the PR is not ready for review by oe | Draft state |
+| The person's draft holds | A PR whose latest conversion to a draft the person made is never marked ready by oe | Draft state |
 
 A property is kept only with a change to the model that makes it fail, so a property that can never fail is not mistaken for one that holds. Each such change, and each known defect listed under Scope, is a switch in the model that restores it, and the build fails unless every switch breaks the property it names and every property has a switch. A property or a check weakened until it passes therefore fails the build, so the person states what must hold and the check, not a review, catches a regression.
 
