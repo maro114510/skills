@@ -160,11 +160,11 @@ For each Issue, oe ready reads this table from the top and outputs the action of
   - The block is not in the Issue body, because the next Verifier reads that body and must judge without an earlier verdict
   - A repair Owner reads the block only when its SHA is the head, as data, and reproduces each failure before changing code. When it cannot reproduce one, or the block is missing or names another SHA, it pushes nothing and asks with oe question
 - Draft state
-  - An Owner opens every PR as a draft, and a PR is ready for review only once oe marks it so on a judged head. The person merges only a PR that oe marked ready
+  - An Owner opens every PR as a draft, and oe marks it ready for review only on a judged head. The person can still mark it ready by hand and merge it any time, and merges a PR before a verdict only that way
   - A success verified something when the Verifier observed at least one criterion
   - oe verdict marks the PR ready for review right after it writes a success that verified something, when the Verifier's start is still the marker's start and the person did not make the PR's latest conversion to a draft. When marking fails, the verdict stands, the PR stays a draft, and nothing tries again
   - oe start converts a PR that is ready for review back to a draft when it starts an Owner, and writes the time of the conversion into the marker. Each later start carries that time over, so oe tells its own conversion from the person's without a bot. When the conversion fails, the Owner starts anyway
-  - A success that leaves the PR a draft holds the Issue at row 12, so the person asks for a re-run or answers. This covers a success that verified nothing, a failed mark, a late success from a replaced start, and the person's own draft
+  - A success that leaves the PR a draft holds the Issue at row 12, so the person asks for a re-run or answers. This covers a success that verified nothing, a failed mark, and a late success from a replaced start. A PR the person converted to a draft stays a draft until the person marks it ready by hand
   - A clone with git config `skills.oe.markReady` set to `false` keeps oe from changing a PR's draft state, and rows 12 and 13 then read no draft state
 
 ## Worked Examples
