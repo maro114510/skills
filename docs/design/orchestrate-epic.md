@@ -35,7 +35,7 @@ oe starts no agent, edits no code, never merges a PR, and never writes to a PR's
 
 | Part | Job | Writes to |
 |---|---|---|
-| oe ready | Reads GitHub and prints each Issue's next action, with the oe command that carries it out | nothing |
+| oe ready | Reads GitHub and prints each Issue's next action, with the oe command that carries it out and the Issue's title | nothing |
 | oe start | Runs every step that starts an Owner or a Verifier for one Issue, writes the working marker, and prints the agent's prompt and the oe end command for this start | The working marker in the Issue body, and the PR's draft state as Draft state under Source of Truth says |
 | oe wait | Blocks until oe ready's next actions change, reading GitHub as Polling and Rate limit under Decisions say | nothing |
 | oe hold | Records that an Issue waits on the person, with the reason oe ready gave | An Issue comment |

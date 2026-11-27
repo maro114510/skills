@@ -106,7 +106,7 @@ def verdict_of($sha; $rerun_at):
 # | First field | Other fields |
 # |---|---|
 # | default | Branch name |
-# | issue | Child Issue number, and its state: OPEN or CLOSED |
+# | issue | Child Issue number, its state: OPEN or CLOSED, and its title, with each tab and line break written as a space |
 def epic_lines:
   .data.repository as $r
   | if ($r | type) != "object" then error("repository not found") else . end
@@ -117,7 +117,7 @@ def epic_lines:
       | .nodes[]
       | if (.repository.nameWithOwner | ascii_downcase) != ($r.nameWithOwner | ascii_downcase)
         then error("child Issue #\(.number) is in \(.repository.nameWithOwner), not \($r.nameWithOwner)")
-        else "issue\t\(.number)\t\(.state)" end);
+        else "issue\t\(.number)\t\(.state)\t\(.title | gsub("[\t\r\n]"; " "))" end);
 
 # The facts of each child Issue that the Epic read holds, keyed by Issue number.
 # oe-ready.sh compares them with the previous run's to tell whether an open Issue changed.

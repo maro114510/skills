@@ -49,7 +49,7 @@ Answer in the orchestrate-epic session's conversation. The session records the a
 
 @test "the command oe ready prints for a hold line posts the hold" {
   run bash "${oe}" ready o/r 1
-  IFS=$'\t' read -r _ action _ command <<<"${lines[0]}"
+  IFS=$'\t' read -r _ action _ command _ <<<"${lines[0]}"
   [ "${action}" = hold ]
 
   eval "${command}" >/dev/null

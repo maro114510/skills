@@ -32,7 +32,7 @@
 # because no later run would show it as a change.
 # A baseline that holds a hold ends it at once whatever the agents run, because the session must record the hold and show it to the person.
 # Only each line's Issue number and action are compared, because a reason carries the seconds since a push,
-# which differ on every run while nothing the session can act on has changed.
+# which differ on every run while nothing the session can act on has changed, and a title changes no action.
 #
 # Output
 #
