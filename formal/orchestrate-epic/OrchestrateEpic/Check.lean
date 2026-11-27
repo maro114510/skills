@@ -82,10 +82,14 @@ inductive Property
   | inputTakesEffect
   | noDeadEnd
   | startsBounded
+  | readyOnlyWhenJudged
+  | notReadyWhileRepaired
+  | personDraftHolds
   deriving BEq, Repr, DecidableEq
 
 def Property.all : List Property :=
-  [.noDoubleStart, .resultBelongsToStart, .inputTakesEffect, .noDeadEnd, .startsBounded]
+  [.noDoubleStart, .resultBelongsToStart, .inputTakesEffect, .noDeadEnd, .startsBounded,
+   .readyOnlyWhenJudged, .notReadyWhileRepaired, .personDraftHolds]
 
 def Property.name : Property → String
   | .noDoubleStart => "No double start"
@@ -93,6 +97,9 @@ def Property.name : Property → String
   | .inputTakesEffect => "A person's input takes effect"
   | .noDeadEnd => "No dead end"
   | .startsBounded => "Starts are bounded"
+  | .readyOnlyWhenJudged => "Ready only when judged"
+  | .notReadyWhileRepaired => "Not ready while repaired"
+  | .personDraftHolds => "The person's draft holds"
 
 /-- The first state in breadth-first order where `bad` holds, with the event that leads out of it. -/
 def firstEdge (g : Graph) (bad : St → Event → Nat → Bool) : Option Path := Id.run do
@@ -139,7 +146,7 @@ def inputTakesEffect (cfg : Config) (g : Graph) : Option Path := firstEdge g (in
 /-- The events a path to the merge may use: agent results, CI results, time passing, and the person's
 replies the view allows. An agent dying and the clock moving are left out, since nobody can count on them. -/
 def Event.helps : Event → Bool
-  | .agentDies _ | .skewTo _ => false
+  | .agentDies _ | .skewTo _ | .personDrafts => false
   | _ => true
 
 /-- "some sequence of agent results, CI results, and the person's answers, re-run requests, and merges ends
@@ -162,9 +169,27 @@ def mergeable (g : Graph) : Array Bool := Id.run do
         queue := queue.push u
   return good
 
+/-- "A state after the person ... converted the PR to a draft is the person's own decision and is not
+checked" -/
+def deadEnd (g : Graph) (good : Array Bool) (i : Nat) : Bool := !good[i]! && !g.states[i]!.personDraft
+
 def noDeadEnd (_cfg : Config) (g : Graph) : Option Path :=
   let good := mergeable g
-  firstState' g fun i => !good[i]!
+  firstState' g (deadEnd g good)
+
+/-- "oe marks a PR ready for review only on a head with a success verdict that verified something" -/
+def readiedUnjudged (_g : Graph) (s : St) (_e : Event) (t : St) : Bool :=
+  !s.ready && t.ready && !(headVerdict t).any (·.verified)
+
+def readyOnlyWhenJudged (g : Graph) : Option Path :=
+  firstEdge g fun s e j => readiedUnjudged g s e g.states[j]!
+
+/-- "From the start of an Owner until the next Verifier start, the PR is not ready for review by oe": the
+marker is an Owner's from its start until a Verifier's start replaces it. -/
+def readyWhileRepaired (s : St) : Bool := s.ready && s.marker.any (·.role == .owner)
+
+/-- "A PR whose latest conversion to a draft the person made is never marked ready by oe" -/
+def readyOverPersonDraft (s : St) : Bool := s.ready && s.personDraft
 
 /-- Strongly connected components over the events that are not the person's input, by Kosaraju's
 algorithm, iterative so a long path does not overflow the stack. -/
@@ -259,7 +284,10 @@ def Property.breaksOn (p : Property) (cfg : Config) (g : Graph) (path : Path) : 
   | .noDoubleStart => lastEdge (doubleStart cfg g)
   | .resultBelongsToStart => foreignResult cfg g.states[ends]!
   | .inputTakesEffect => lastEdge (inputIgnored cfg g)
-  | .noDeadEnd => !(mergeable g)[ends]!
+  | .noDeadEnd => deadEnd g (mergeable g) ends
+  | .readyOnlyWhenJudged => lastEdge fun s e j => readiedUnjudged g s e g.states[j]!
+  | .notReadyWhileRepaired => readyWhileRepaired g.states[ends]!
+  | .personDraftHolds => readyOverPersonDraft g.states[ends]!
   | .startsBounded =>
     -- A start whose two ends lie in one component of events that are not the person's input.
     let comp := components g
@@ -273,5 +301,8 @@ def Property.check (p : Property) (cfg : Config) (g : Graph) : Option Path :=
   | .inputTakesEffect => OE.inputTakesEffect cfg g
   | .noDeadEnd => OE.noDeadEnd cfg g
   | .startsBounded => OE.startsBounded cfg g
+  | .readyOnlyWhenJudged => OE.readyOnlyWhenJudged g
+  | .notReadyWhileRepaired => firstState g readyWhileRepaired
+  | .personDraftHolds => firstState g readyOverPersonDraft
 
 end OE
