@@ -2,6 +2,8 @@ name: Check Formal Model
 
 # docs/design/design-verification.md § Operation: a change to either Design Doc can redefine a property
 # without touching the model, so those paths run the model too.
+# Not on pull_request: the build takes about 10 minutes and is no required check, so it runs after the merge
+# and on demand, and a pull request that needs it before merging starts it by hand.
 on:
   push:
     branches: [main]
@@ -10,12 +12,7 @@ on:
       - 'docs/design/design-verification.md'
       - 'formal/**'
       - '.github/workflows/check-formal-model.yml'
-  pull_request:
-    paths:
-      - 'docs/design/orchestrate-epic.md'
-      - 'docs/design/design-verification.md'
-      - 'formal/**'
-      - '.github/workflows/check-formal-model.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
