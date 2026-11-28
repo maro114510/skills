@@ -47,7 +47,7 @@ Row 6 exception: creation-time facts (owner active, partner belongs) are busines
 
 ## Step 2b. Semantic review
 
-Read `references/semantic-review.md` in full, then run its checks S1 to S6 on the same domain types.
+Read `references/semantic-review.md` in full, then run its checks S1 to S5 on the same domain types.
 It first establishes the bounded context and the authoritative domain evidence, and states the output shape and the regression examples.
 Never assume a business rule the evidence does not state: missing or conflicting evidence is an open question, not a finding.
 
@@ -55,7 +55,7 @@ Never assume a business rule the evidence does not state: missing or conflicting
 
 - Row 3, **only if** breadth is genuinely undetermined, no evidence either way: ask. If concrete code already performs an unlisted transition, that's a Step 2 finding, not this.
 - Row 4/5 shape: always ask.
-- Semantic open question from Step 2b: ask the one question that settles it; when no one can answer, list it in the report.
+- Semantic open question from Step 2b: ask the one question that settles it.
 
 Use `AskUserQuestion` with the concrete states/fields and trade-offs. Don't decide silently.
 

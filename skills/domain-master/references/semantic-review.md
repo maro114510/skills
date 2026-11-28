@@ -7,17 +7,21 @@ Structural reachability of illegal states stays with the Step 2 checklist; this 
 
 Never demand a universal glossary, a DDD architecture, or a mechanical rename.
 
+This file extends `domain-master` instead of adding a skill.
+`pr-review-pe` only checks a diff against the project's existing vocabulary, and `frame-problem` defines the vocabulary before work starts.
+Neither judges whether the model enforces the rules the vocabulary names, so no rule here repeats theirs.
+
 ## 1. Establish the Evidence
 
 Do this before judging any row, and name the bounded context the code belongs to.
 
-| Source, strongest first | Examples |
+| Source | Examples |
 |---|---|
 | A decision by a domain expert or the owner | An Issue or comment that states a rule; a Design Doc or ADR |
 | Written requirements and glossary | Acceptance criteria, a glossary page, API documentation |
 | Existing contracts and examples | Schemas, published event or API types, tests that pin a business case |
 
-- The code under review is never evidence of the rule it implements, only of what it does. A sibling module is a hint at a convention, not a rule.
+- The code under review is never evidence of the rule it implements, only of what it does.
 - Quote the line that states each rule you rely on, with its location.
 - Two sources that disagree, or no source for a rule the model depends on, make the rule an open question, never a finding. Never assume the rule.
 
@@ -27,24 +31,13 @@ Do this before judging any row, and name the bounded context the code belongs to
 |---|---|---|---|
 | S1 | Rule is modeled | The evidence states a rule, such as "an order cannot be cancelled after shipment", and the model permits what it prohibits, forbids what it permits, or has no place where the rule can hold | The evidence is silent, conflicting, or the rule is about another context |
 | S2 | Rule holds at execution | The operation that would break a stated rule runs without checking it, because only a preflight predicate such as `canCancel()` or each caller's own `if` guards it | The operation itself rejects the violating call, whether or not a predicate also exists |
-| S3 | Name keeps its promise | A type or method name promises behavior its contract does not deliver: `cancel()` only flags a record, `validate()` returns a bool nobody must read, `Money` ignores its currency | The name is imprecise but the behavior is exactly what the evidence says |
+| S3 | Name and effect keep their promise | A type or method name, or its effect, promises more than its contract delivers or means something other than the evidence's wording: `cancel()` only flags a record, `validate()` returns a bool nobody must read, `Money` ignores its currency, a refund that deletes the order it refunds | The name is imprecise but the behavior is exactly what the evidence says |
 | S4 | One meaning per label per context | Inside one bounded context, one label stands for two concepts with different rules, or two labels stand for one concept and the rules differ between them | The same label means different things in different bounded contexts; never force one shared model on them |
 | S5 | Semantic, not cosmetic | A difference changes who may do what, when, or what is true: status values, quantities, identities, permitted transitions | A difference only changes spelling, casing, or a synonym with identical rules; mention it as a note at most, and never propose a rename as a fix |
-| S6 | Behavior matches business meaning | A transition or operation does something the evidence's wording does not mean, such as a refund that deletes the order it refunds | The operation's effect is what the evidence describes |
 
 S2 and S3 find the anemic or misleading abstraction: a correctly named entity whose constraints live in callers, or a method whose name promises more than its contract enforces.
 
-Row 3 of the Step 2 checklist owns transition-table completeness against the state space.
-S1 owns whether a transition the evidence prohibits is permitted, so a transition is one finding, reported once under whichever check the evidence reaches first.
-
-## 3. Separating Synonyms, Homonyms, and Cosmetic Differences
-
-| Situation | Same context | Different contexts |
-|---|---|---|
-| Two labels, one concept, same rules | Cosmetic; note at most | Expected; no finding |
-| Two labels, one concept, different rules | S4 finding | Expected; no finding |
-| One label, two concepts | S4 finding | Expected; no finding |
-| One label, one concept, one rule set | Pass | Pass |
+## 3. Bounded Contexts
 
 A context is bounded by the evidence: separate modules, services, or glossaries that the sources treat as separate vocabularies.
 When the sources do not say whether two places share a context, that is an open question.
