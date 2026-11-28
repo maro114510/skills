@@ -56,7 +56,7 @@ gh skill install maro114510/skills --all --agent claude-code --scope user
 | `create-github-issues` | Turn a plan or TODO list into Issues, under an Epic only when tasks depend on each other. |
 | `create-pr` | Create a pull request with a useful description. |
 | `diagram-conventions` | Create or review a diagram in the right type's notation without adding or dropping meaning. |
-| `domain-master` | Review domain model and state-transition code for illegal states that bypass validation. |
+| `domain-master` | Review domain model and state-transition code for illegal states that bypass validation and for names or operations that misstate the business rules. |
 | `extreme-compact` | Compact writing down to its essential point without changing its meaning. |
 | `frame-problem` | Frame a vague problem before implementation and converge on a direction. |
 | `implement` | Implement a change with quality first: ground it in the repository, test it, and self-review it before push. |

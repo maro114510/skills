@@ -1,16 +1,16 @@
 ---
 name: domain-master
 description: >
-  Reviews domain model, entity, and state-transition code for whether an invalid state can be constructed or reached.
-  Catches bypassable validators, public fields that break invariants, and scattered transition tables —
-  "make illegal states unrepresentable" violations.
+  Reviews domain model, entity, and state-transition code for whether an invalid state can be constructed or reached,
+  and whether the model's names, operations, and invariants match the business rules.
+  Catches bypassable validators, public fields, scattered transition tables, and misleading abstractions.
 argument-hint: "[pr-number | file-path] (empty = current diff)"
 ---
 
 # domain-master
 
-Question: can an invalid state be constructed or reached despite existing validation?
-A bypassable validator is not an invariant.
+Question: can an invalid state be constructed or reached despite existing validation, and does the model mean what the business says?
+A bypassable validator is not an invariant, and a consistent name is not evidence that the model is right.
 
 ## Step 1. Scope
 
@@ -25,7 +25,7 @@ For any state/status type, find the full state space outside the diff first: lin
 A table can be internally consistent and still be incomplete.
 If none of those sources exist, say so in the report and scope row 3 to internal consistency only, not full coverage.
 
-## Step 2. Checklist
+## Step 2. Checklist (structure)
 
 Rows 1, 2, 4, 5, 7, 8 fail if a concrete line of calling code produces the bad state.
 "Callers must validate first" is not a pass.
@@ -45,13 +45,22 @@ Row 6 needs structural invariants separated from point-in-time business gates.
 
 Row 6 exception: creation-time facts (owner active, partner belongs) are business gates, not structural invariants — reconstruction skips them, correctly. Flag row 6 only for closed-set/structural fields.
 
+## Step 2b. Semantic review
+
+Read `references/semantic-review.md` in full, then run its checks S1 to S6 on the same domain types.
+It first establishes the bounded context and the authoritative domain evidence, and states the output shape and the regression examples.
+Never assume a business rule the evidence does not state: missing or conflicting evidence is an open question, not a finding.
+
 ## Step 3. Ambiguous calls go to the user
 
 - Row 3, **only if** breadth is genuinely undetermined, no evidence either way: ask. If concrete code already performs an unlisted transition, that's a Step 2 finding, not this.
 - Row 4/5 shape: always ask.
+- Semantic open question from Step 2b: ask the one question that settles it; when no one can answer, list it in the report.
 
 Use `AskUserQuestion` with the concrete states/fields and trade-offs. Don't decide silently.
 
 ## Step 4. Report
 
-The checklist table is for evaluation, not the output shape. Per finding: check #, file/line, the concrete bad-state code, fix from the table. Skip passing rows — don't reproduce the full 8-row table. No findings → say so.
+The checklist table is for evaluation, not the output shape. Per structural finding: check #, file/line, the concrete bad-state code, fix from the table.
+Per semantic finding: the five parts `references/semantic-review.md` § Output lists, then `Open questions` and `Notes` when there are any.
+Skip passing rows — don't reproduce the tables. No findings → say so.
