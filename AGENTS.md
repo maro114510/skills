@@ -74,15 +74,7 @@ Skills read them with `git config --get <key>`, so git decides between local and
     - Resolved when the work the owner decided to build has started: its Issue opened or its Design Doc merged
     - Outdated when the owner decided against it, with the observation that would reopen it
     - Duplicate when another Discussion already holds it, linking that one
-
-```bash
-# Search
-gh api graphql -f query='query($q:String!){search(type:DISCUSSION,query:$q,first:10){nodes{... on Discussion{number title url}}}}' \
-  -f q='repo:maro114510/skills <words>'
-# Post. <category> is DIC_kwDOR_3Rl84DKbjP for Ideas or DIC_kwDOR_3Rl84DKbjN for General
-gh api graphql -f query='mutation($r:ID!,$c:ID!,$t:String!,$b:String!){createDiscussion(input:{repositoryId:$r,categoryId:$c,title:$t,body:$b}){discussion{url}}}' \
-  -f r=R_kgDOR_3Rlw -f c=<category> -f t='<title>' -F b=@<body-file>
-```
+- The `discussion` skill holds the template and the steps to post, comment, rewrite the body, record a decision, and close, with the `gh` commands
 
 ## Workflow
 
