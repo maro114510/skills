@@ -71,4 +71,4 @@ A change to this file or to Step 2b keeps every outcome unchanged.
 | 6 | The DTO calls the buyer `client`, the entity calls it `customer`, the glossary treats them as one concept, and the rules are identical. | No finding; a note at most, with no rename proposed |
 | 7 | The requirement says "cancel until shipped", the glossary says "cancel until delivered", and the code allows cancellation until delivered. | Open question naming both sources; no finding and no assumed rule |
 | 8 | No source states a cancellation rule, and the code allows cancelling a shipped order. | Open question; no finding |
-| 9 | `Order.cancel()` only sets a flag while the refund and stock release live in each caller, and they disagree. | S3 finding: the name promises a cancellation that the contract does not complete |
+| 9 | Evidence: "Cancelling an order must refund the payment and release the reserved stock." `Order.cancel()` only sets a flag while the refund and stock release live in each caller, and they disagree. | S3 finding: the name promises a cancellation that the contract does not complete |
