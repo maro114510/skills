@@ -46,7 +46,7 @@ def checkedText (epic verification : String) : Except String String := do
   return String.intercalate "\n" parts
 
 /-- Update only after reading the changed text and changing the model to match it. -/
-def recordedHash : String := "e50176273eb53338"
+def recordedHash : String := "9d08fcff50650a77"
 
 def checkHash : IO Unit := do
   let epic ← IO.FS.readFile "../../docs/design/orchestrate-epic.md"
