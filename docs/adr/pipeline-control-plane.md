@@ -28,6 +28,6 @@ orchestrate-epic and `oe` are the only control plane for the implementation stag
 
 ## Consequences
 
-- One definition of work, a Ticket under an approved Epic, read from GitHub by every stage.
+- Coordinator work has one definition: a Ticket under an approved Epic, read from GitHub by every stage. Interactive repair of an existing pull request, as defined in [Development Pipeline](../design/development-pipeline.md), does not enter that control plane or add another one.
 - Intentline's separation of run success, work acceptance, and outcome acceptance is unavailable until a failure shows it is needed. The Mergeable ceiling and a person's merge stand in for it.
 - The pipeline runs on the repository owner's token. A verdict can be forged, an Owner's unmarked comment reads as a person's and could answer its own Question, and a Ticket's Holder is a record rather than a separate identity. These remain the accepted risks of `orchestrate-epic.md`.
