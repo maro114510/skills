@@ -226,13 +226,13 @@ JSON
   run --separate-stderr bash "${oe}" ready o/r 1
 
   [ "${status}" -eq 0 ]
-  IFS=$'\t' read -r n action _ start <<<"${lines[0]}"
+  IFS=$'\t' read -r n action _ start _ <<<"${lines[0]}"
   [ "${n} ${action}" = "5 start-verifier" ]
   [ "${start}" = "bash '${BATS_TEST_DIRNAME}/oe' start verifier o/r 5" ]
-  IFS=$'\t' read -r n action reason start <<<"${lines[1]}"
+  IFS=$'\t' read -r n action reason start _ <<<"${lines[1]}"
   [ "${n} ${action}" = "6 start-owner" ]
   [ "${start}" = "bash '${BATS_TEST_DIRNAME}/oe' start owner o/r 6 '${reason}'" ]
-  IFS=$'\t' read -r n action _ start <<<"${lines[2]}"
-  [ "${n} ${action}" = "7 wait-ci" ]
-  [ -z "${start}" ]
+  # read would take the title for the empty command, because a tab is whitespace to it.
+  [ "$(awk -F '\t' '{ print $1 " " $2 }' <<<"${lines[2]}")" = "7 wait-ci" ]
+  [ -z "$(awk -F '\t' '{ print $4 }' <<<"${lines[2]}")" ]
 }

@@ -114,6 +114,27 @@ JSON
   [ "$(action_of 5)" = wait-ci ]
 }
 
+@test "a title that changes between polls while every action stays the same does not end the wait" {
+  github <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{"number": 5, "title": "Old title", "branch": true, "pull_requests": [{"number": 15, "opened": "07:10", "checks": {"test": "in_progress"}}]}]
+}
+JSON
+  github_at_second_poll <<'JSON'
+{
+  "default_branch": {"checks": {"test": "success"}},
+  "issues": [{"number": 5, "title": "New title", "branch": true, "pull_requests": [{"number": 15, "opened": "07:10", "checks": {"test": "in_progress"}}]}]
+}
+JSON
+
+  run bash "${oe}" wait o/r 1 --timeout 4
+
+  [ "${status}" -eq 5 ]
+  [ "$(action_of 5)" = wait-ci ]
+  [ "$(awk -F '\t' '{ print $5 }' <<<"${lines[0]}")" = "New title" ]
+}
+
 @test "wait returns at the timeout with the unchanged next actions when nothing changes" {
   pr_15_checks_running
 

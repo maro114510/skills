@@ -86,6 +86,57 @@ JSON
   [ "${lines[2]%%$'\t'*}" = 7 ]
 }
 
+@test "every line ends with the title of its Issue, after the command" {
+  github <<'JSON'
+{"issues": [
+  {"number": 5, "title": "Add the login form"},
+  {"number": 6, "title": "Remove the old route", "closed": true},
+  {"number": 7, "title": "Rename the config key", "blocked_by": [{"number": 3, "state": "open"}]}
+]}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "${#lines[@]}" -eq 3 ]
+  [ "$(action_of 5)" = start-owner ]
+  [ "$(field_of 5 5)" = "Add the login form" ]
+  [ "$(field_of 6 5)" = "Remove the old route" ]
+  [ "$(field_of 7 5)" = "Rename the config key" ]
+}
+
+@test "a tab or a line break in a title becomes a space, so it adds neither a field nor a line" {
+  github <<'JSON'
+{"issues": [{"number": 5, "title": "Fix\tthe\r\nbug"}]}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "${#lines[@]}" -eq 1 ]
+  [ "$(field_of 5 5)" = "Fix the  bug" ]
+  [ "$(awk -F '\t' '{ print NF }' <<<"${lines[0]}")" -eq 5 ]
+}
+
+@test "a title changed between two runs shows on the line of an Issue read from the cache" {
+  github <<'JSON'
+{"issues": [{"number": 5, "title": "Old title", "branch": true, "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "in_progress"}}]}]}
+JSON
+  export OE_READY_CACHE="${BATS_TEST_TMPDIR}/cache"
+  mkdir -p "${OE_READY_CACHE}"
+  run bash "${oe}" ready o/r 1
+  [ "$(field_of 5 5)" = "Old title" ]
+  github <<'JSON'
+{"issues": [{"number": 5, "title": "New title", "branch": true, "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"test": "in_progress"}}]}]}
+JSON
+
+  run bash "${oe}" ready o/r 1
+
+  [ "${status}" -eq 0 ]
+  [ "$(action_of 5)" = wait-ci ]
+  [ "$(field_of 5 5)" = "New title" ]
+}
+
 @test "a failed check on the default branch head gives each Issue the action it gets without it" {
   github <<'JSON'
 {"issues": [{"number": 5, "closed": true}, {"number": 6}, {"number": 7, "blocked_by": [{"number": 6, "state": "open"}]}]}
@@ -182,7 +233,7 @@ JSON
   run --separate-stderr bash "${oe}" ready o/r 1
 
   [ "${status}" -eq 0 ]
-  IFS=$'\t' read -r n action reason command <<<"${lines[0]}"
+  IFS=$'\t' read -r n action reason command _ <<<"${lines[0]}"
   [ "${n}" = 5 ]
   [ "${action}" = wait-answer ]
   [ "${reason}" = 'question https://github.com/o/r/issues/5#issuecomment-1 has no answer yet:\nDecision: Which option?\n\nOptions:\n- A. Keep it\n  - No work.' ]
@@ -1135,7 +1186,7 @@ JSON
   [ -z "${output}" ]
 }
 
-@test "a failed check whose name holds a newline and tabs yields one line of four fields and no injected command" {
+@test "a failed check whose name holds a newline and tabs yields one line of five fields and no injected command" {
   github <<'JSON'
 {"issues": [{"number": 5, "branch": true, "pull_requests": [{"number": 50, "opened": "07:10", "checks": {"x\n9; touch pwned\tstart-owner\ty": "failure"}}]}]}
 JSON
@@ -1145,7 +1196,7 @@ JSON
   [ "${status}" -eq 0 ]
   [ "${#lines[@]}" -eq 1 ]
   tabs="${lines[0]//[^$'\t']/}"
-  [ "${#tabs}" -eq 3 ]
+  [ "${#tabs}" -eq 4 ]
   [ "$(action_of 5)" = start-owner ]
 }
 
@@ -1156,7 +1207,7 @@ JSON
 
   run --separate-stderr bash "${oe}" ready o/r 1
 
-  IFS=$'\t' read -r _ action reason start <<<"${lines[0]}"
+  IFS=$'\t' read -r _ action reason start _ <<<"${lines[0]}"
   [ "${action}" = start-owner ]
   [ "${reason}" != "${reason#*it\'s}" ]
   eval "set -- ${start#bash }"

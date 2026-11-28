@@ -10,6 +10,7 @@ query($owner: String!, $repo: String!, $epic: Int!) {
         totalCount
         nodes {
           number
+          title
           state
           updatedAt
           blockedBy(first: 100) { totalCount nodes { number state stateReason } }

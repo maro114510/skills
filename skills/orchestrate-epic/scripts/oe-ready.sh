@@ -19,8 +19,9 @@
 #
 # Output
 #
-# - Each line holds an Issue number, an action, a reason, and the command that the action runs, separated by tabs.
+# - Each line holds an Issue number, an action, a reason, the command that the action runs, and the Issue's title, separated by tabs.
 #   The command is oe start for an action that starts an agent, oe hold for hold, and empty for every other action, except the one below.
+#   The title comes from the Epic read, with each tab and line break written as a space.
 # - A wait-answer line holds the open hold or question in its reason, with each line break written as \n,
 #   and its command is the oe question --answer call that records the person's reply, ending in <reply>.
 # - Lines are sorted by Issue number.
@@ -182,13 +183,15 @@ epic_lines="$(jq -r "$(program epic_lines)" <<<"${epic_response}" 2>"${err}")" |
   fail "Epic read failed: $(head -n1 "${err}")"
 
 issues=()
+titles=""
 default_name=""
-while IFS=$'\t' read -r kind a b; do
+while IFS=$'\t' read -r kind a b c; do
   case "${kind}" in
   default) default_name="${a}" ;;
   issue)
     [[ "${b}" =~ ^(OPEN|CLOSED)$ ]] || fail "unknown state of Issue #${a}: ${b}"
     issues+=("${a}")
+    titles+="${a}"$'\t'"${c}"$'\n'
     ;;
   *) fail "unexpected Epic read line: ${kind}" ;;
   esac
@@ -202,12 +205,13 @@ shell_quote() {
   printf "'%s'" "${1//\'/${q}}"
 }
 
-# Prints out's lines with a fourth field: the oe start command for an action that starts an agent,
+# Prints out's lines with a fourth field and a fifth. The fourth is the oe start command for an action that starts an agent,
 # the oe hold command for hold, the oe question command that records the person's answer for wait-answer, and nothing otherwise.
+# The fifth is the Issue's title, so the session can name the Issue to the person with a link.
 # A command is complete and quoted, so a session that lost SKILL.md can run it as printed.
 # The answer command ends in <reply>, which the session replaces with the person's reply, quoted.
 with_commands() {
-  local n action reason command lines=""
+  local n action reason command title lines=""
   while IFS=$'\t' read -r n action reason; do
     [[ -n "${n}" ]] || continue
     # A command runs as printed, so a line that is not exactly what classify writes fails the read instead.
@@ -220,7 +224,8 @@ with_commands() {
     wait-answer) command="bash $(shell_quote "${dir}/oe") question ${repo} ${n} --answer <reply>" ;;
     *) command="" ;;
     esac
-    lines+="$(printf '%s\t%s\t%s\t%s' "${n}" "${action}" "${reason}" "${command}")"$'\n'
+    title="$(awk -F '\t' -v n="${n}" '$1 == n { print substr($0, length($1) + 2); exit }' <<<"${titles}")"
+    lines+="$(printf '%s\t%s\t%s\t%s\t%s' "${n}" "${action}" "${reason}" "${command}" "${title}")"$'\n'
   done <<<"$1"
   printf '%s' "${lines}"
 }

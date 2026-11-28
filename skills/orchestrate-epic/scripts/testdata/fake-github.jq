@@ -45,6 +45,7 @@
 # | Issue field | Holds | Default |
 # |---|---|---|
 # | number | The Issue number | Required |
+# | title | The Issue title, as the Epic read shows it | Issue N |
 # | closed | Whether the Issue is closed as completed | false |
 # | updated | When the Issue last changed, as the Epic read shows it | The latest comment, or 07:00 |
 # | body | The Issue body, where oe start writes its working marker | Empty |
@@ -137,7 +138,7 @@ def epic_response:
       nameWithOwner: "o/r",
       defaultBranchRef: {name: "main"},
       issue: {subIssues: {totalCount: (.issues | length),
-        nodes: [.issues[] | . as $i | {number, state: (if .closed then "CLOSED" else "OPEN" end),
+        nodes: [.issues[] | . as $i | {number, title: (.title // "Issue \(.number)"), state: (if .closed then "CLOSED" else "OPEN" end),
           updatedAt: (issue_updated | time), blockedBy: blocked_by($i),
           repository: {nameWithOwner: "o/r"}}]}}}}};
 
