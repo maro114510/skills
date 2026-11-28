@@ -105,7 +105,7 @@ Pick the first row whose tools you have, by the tool names and parameters you se
 |---|---|---|
 | Claude Code: `Agent` tool | `Agent` with `run_in_background: true`. A plugin install registers the agent as `skills:pr-owner` or `skills:pr-verify`; use the bare name when only that resolves | Bash with `run_in_background: true` |
 | OpenCode V2: `subagent` tool with an `agent` parameter | `subagent` with `agent` set to the agent type and `background: true` | `shell` with `background: true` |
-| DSH: `subagent` tool without an `agent` parameter | `subagent` with `name` set to `<role>-<n>`, `<role>` being `owner` or `verifier` and `<n>` the Issue number, `description` naming the role and the Issue, and `prompt` set to exactly what `oe start` printed. DSH has no agent types, so the prompt alone defines the agent, and the call returns its name at once while it runs in the background | `bash` with `run_in_background: true` |
+| DSH: `subagent` tool without an `agent` parameter | `subagent` with `name` set to `<role>-<n>`, `<role>` being `owner` or `verifier` and `<n>` the Issue number, `description` naming the role and the Issue, and `prompt` set to exactly what `oe start` printed. DSH has no agent types, so the prompt alone defines the agent, and the call returns its name at once while it runs in the background | `bash` with `run_in_background: true`, and `--timeout 1800` added to the `oe wait` command, because DSH puts no time limit on a background command |
 
 ### 2.3 Wait
 
@@ -117,7 +117,7 @@ bash <skill-dir>/scripts/oe wait <repo> <epic> --max-agents <cap>
 
 `<cap>` is `max-agents`, or the number of running agents when a start failed or was refused in this pass, so the wait does not return that Issue again at once.
 
-Never stop a wait to start another. A running wait sees an agent end, once its worktree is removed, and returns with the Issue's new action.
+Never stop a wait to start another, and never start a wait while one of its waits runs. A running wait returns with the Issue's new action when an agent pushes, asks, or gives a verdict, because that changes the Issue's line in `oe ready`.
 The harness wakes you when an agent ends or the wait returns, and whichever comes first is handled below.
 
 | Wake | Action |
